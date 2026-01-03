@@ -30,10 +30,6 @@ export default function PropertyForm() {
     bk_anteil_wohnung: '10',
     bk_anteil_geschaeft: '20',
     bk_anteil_garage: '20',
-    heizung_anteil_wohnung: '20',
-    heizung_anteil_geschaeft: '20',
-    betriebskosten_gesamt: '',
-    heizungskosten_gesamt: '',
   });
 
   useEffect(() => {
@@ -50,10 +46,6 @@ export default function PropertyForm() {
         bk_anteil_wohnung: existingProperty.bk_anteil_wohnung?.toString() || '10',
         bk_anteil_geschaeft: existingProperty.bk_anteil_geschaeft?.toString() || '20',
         bk_anteil_garage: existingProperty.bk_anteil_garage?.toString() || '20',
-        heizung_anteil_wohnung: existingProperty.heizung_anteil_wohnung?.toString() || '20',
-        heizung_anteil_geschaeft: existingProperty.heizung_anteil_geschaeft?.toString() || '20',
-        betriebskosten_gesamt: existingProperty.betriebskosten_gesamt?.toString() || '',
-        heizungskosten_gesamt: existingProperty.heizungskosten_gesamt?.toString() || '',
       });
     }
   }, [existingProperty]);
@@ -78,10 +70,6 @@ export default function PropertyForm() {
       bk_anteil_wohnung: parseFloat(formData.bk_anteil_wohnung) || 10,
       bk_anteil_geschaeft: parseFloat(formData.bk_anteil_geschaeft) || 20,
       bk_anteil_garage: parseFloat(formData.bk_anteil_garage) || 20,
-      heizung_anteil_wohnung: parseFloat(formData.heizung_anteil_wohnung) || 20,
-      heizung_anteil_geschaeft: parseFloat(formData.heizung_anteil_geschaeft) || 20,
-      betriebskosten_gesamt: parseFloat(formData.betriebskosten_gesamt) || 0,
-      heizungskosten_gesamt: parseFloat(formData.heizungskosten_gesamt) || 0,
     };
 
     if (isEditing && id) {
@@ -258,66 +246,6 @@ export default function PropertyForm() {
                 step="0.01"
                 value={formData.bk_anteil_garage}
                 onChange={handleChange}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Heizkosten-Anteile */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Heizkosten-Anteile (%)</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="heizung_anteil_wohnung">Wohnung</Label>
-              <Input
-                id="heizung_anteil_wohnung"
-                name="heizung_anteil_wohnung"
-                type="number"
-                step="0.01"
-                value={formData.heizung_anteil_wohnung}
-                onChange={handleChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="heizung_anteil_geschaeft">Geschäft</Label>
-              <Input
-                id="heizung_anteil_geschaeft"
-                name="heizung_anteil_geschaeft"
-                type="number"
-                step="0.01"
-                value={formData.heizung_anteil_geschaeft}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Jahreskosten */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Jahreskosten gesamt (€)</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="betriebskosten_gesamt">Betriebskosten p.a.</Label>
-              <Input
-                id="betriebskosten_gesamt"
-                name="betriebskosten_gesamt"
-                type="number"
-                step="0.01"
-                value={formData.betriebskosten_gesamt}
-                onChange={handleChange}
-                placeholder="z.B. 24500"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="heizungskosten_gesamt">Heizungskosten p.a.</Label>
-              <Input
-                id="heizungskosten_gesamt"
-                name="heizungskosten_gesamt"
-                type="number"
-                step="0.01"
-                value={formData.heizungskosten_gesamt}
-                onChange={handleChange}
-                placeholder="z.B. 18200"
               />
             </div>
           </div>
