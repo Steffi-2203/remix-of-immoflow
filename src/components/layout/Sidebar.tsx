@@ -11,6 +11,7 @@ import {
   Calculator,
   ChevronLeft,
   ChevronRight,
+  Receipt,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ const navItems: NavItem[] = [
   { label: 'Liegenschaften', icon: Building2, href: '/liegenschaften' },
   { label: 'Einheiten', icon: FolderOpen, href: '/einheiten' },
   { label: 'Zahlungen', icon: CreditCard, href: '/zahlungen' },
+  { label: 'Buchhaltung', icon: Receipt, href: '/buchhaltung' },
   { label: 'BK-Abrechnung', icon: Calculator, href: '/abrechnung' },
   { label: 'Dokumente', icon: FileText, href: '/dokumente' },
   { label: 'Reports', icon: BarChart3, href: '/reports' },

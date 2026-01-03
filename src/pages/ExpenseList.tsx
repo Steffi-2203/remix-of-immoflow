@@ -1,0 +1,455 @@
+import { useState } from 'react';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Receipt, 
+  Plus, 
+  Search, 
+  Loader2, 
+  Euro, 
+  Wrench,
+  Building2,
+  Trash2,
+  Pencil
+} from 'lucide-react';
+import { 
+  useExpenses, 
+  useExpensesByCategory,
+  useCreateExpense, 
+  useDeleteExpense,
+  expenseCategoryLabels,
+  expenseTypeLabels,
+  expenseTypesByCategory,
+  type ExpenseCategory,
+  type ExpenseType 
+} from '@/hooks/useExpenses';
+import { useProperties } from '@/hooks/useProperties';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
+
+export default function ExpenseList() {
+  const currentYear = new Date().getFullYear();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedProperty, setSelectedProperty] = useState<string>('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | ExpenseCategory>('all');
+  
+  const [newExpense, setNewExpense] = useState({
+    property_id: '',
+    category: 'betriebskosten_umlagefaehig' as ExpenseCategory,
+    expense_type: 'sonstiges' as ExpenseType,
+    bezeichnung: '',
+    betrag: '',
+    datum: format(new Date(), 'yyyy-MM-dd'),
+    beleg_nummer: '',
+    notizen: '',
+  });
+
+  const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
+  const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
+  const { data: categoryStats } = useExpensesByCategory(propertyFilter, selectedYear);
+  const { data: properties } = useProperties();
+  const createExpense = useCreateExpense();
+  const deleteExpense = useDeleteExpense();
+
+  // Filter expenses
+  const filteredExpenses = expenses?.filter(expense => {
+    if (activeTab !== 'all' && expense.category !== activeTab) return false;
+    if (!searchQuery) return true;
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      expense.bezeichnung.toLowerCase().includes(searchLower) ||
+      expense.beleg_nummer?.toLowerCase().includes(searchLower) ||
+      (expense as any).properties?.name?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleCreateExpense = async () => {
+    if (!newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag) {
+      return;
+    }
+
+    const date = new Date(newExpense.datum);
+    
+    await createExpense.mutateAsync({
+      property_id: newExpense.property_id,
+      category: newExpense.category,
+      expense_type: newExpense.expense_type,
+      bezeichnung: newExpense.bezeichnung,
+      betrag: parseFloat(newExpense.betrag),
+      datum: newExpense.datum,
+      beleg_nummer: newExpense.beleg_nummer || undefined,
+      notizen: newExpense.notizen || undefined,
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+    });
+
+    setDialogOpen(false);
+    setNewExpense({
+      property_id: '',
+      category: 'betriebskosten_umlagefaehig',
+      expense_type: 'sonstiges',
+      bezeichnung: '',
+      betrag: '',
+      datum: format(new Date(), 'yyyy-MM-dd'),
+      beleg_nummer: '',
+      notizen: '',
+    });
+  };
+
+  // Years for filter
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  return (
+    <MainLayout
+      title="Buchhaltung"
+      subtitle="Kosten erfassen und kategorisieren"
+    >
+      {/* Actions Bar */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input 
+            type="search" 
+            placeholder="Bezeichnung oder Beleg suchen..." 
+            className="pl-9"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Alle Liegenschaften" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Liegenschaften</SelectItem>
+            {properties?.map(p => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map(year => (
+              <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex-1" />
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Kosten erfassen
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Neue Kosten erfassen</DialogTitle>
+              <DialogDescription>
+                Erfassen Sie Betriebskosten oder Instandhaltungskosten.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Liegenschaft</Label>
+                <Select
+                  value={newExpense.property_id}
+                  onValueChange={(value) => setNewExpense(prev => ({ ...prev, property_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Liegenschaft wählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {properties?.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Kategorie</Label>
+                  <Select
+                    value={newExpense.category}
+                    onValueChange={(value: ExpenseCategory) => setNewExpense(prev => ({ 
+                      ...prev, 
+                      category: value,
+                      expense_type: expenseTypesByCategory[value][0] 
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="betriebskosten_umlagefaehig">Betriebskosten (umlagefähig)</SelectItem>
+                      <SelectItem value="instandhaltung">Instandhaltung</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Art</Label>
+                  <Select
+                    value={newExpense.expense_type}
+                    onValueChange={(value: ExpenseType) => setNewExpense(prev => ({ ...prev, expense_type: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {expenseTypesByCategory[newExpense.category].map(type => (
+                        <SelectItem key={type} value={type}>{expenseTypeLabels[type]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bezeichnung</Label>
+                <Input
+                  placeholder="z.B. Gebäudeversicherung 2024"
+                  value={newExpense.bezeichnung}
+                  onChange={(e) => setNewExpense(prev => ({ ...prev, bezeichnung: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Betrag (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={newExpense.betrag}
+                    onChange={(e) => setNewExpense(prev => ({ ...prev, betrag: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Datum</Label>
+                  <Input
+                    type="date"
+                    value={newExpense.datum}
+                    onChange={(e) => setNewExpense(prev => ({ ...prev, datum: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Belegnummer (optional)</Label>
+                <Input
+                  placeholder="z.B. RE-2024-001"
+                  value={newExpense.beleg_nummer}
+                  onChange={(e) => setNewExpense(prev => ({ ...prev, beleg_nummer: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notizen (optional)</Label>
+                <Textarea
+                  placeholder="Zusätzliche Informationen..."
+                  value={newExpense.notizen}
+                  onChange={(e) => setNewExpense(prev => ({ ...prev, notizen: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Abbrechen
+              </Button>
+              <Button 
+                onClick={handleCreateExpense} 
+                disabled={createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag}
+              >
+                {createExpense.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Erfassen
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Building2 className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Betriebskosten (umlagefähig)</p>
+                <p className="text-2xl font-bold">
+                  € {categoryStats?.totalBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 }) || '0,00'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                <Wrench className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Instandhaltung</p>
+                <p className="text-2xl font-bold">
+                  € {categoryStats?.totalInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 }) || '0,00'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <Euro className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Gesamtkosten {selectedYear}</p>
+                <p className="text-2xl font-bold">
+                  € {categoryStats?.total.toLocaleString('de-AT', { minimumFractionDigits: 2 }) || '0,00'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs & Table */}
+      <Card>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+          <CardHeader className="pb-0">
+            <TabsList>
+              <TabsTrigger value="all">Alle</TabsTrigger>
+              <TabsTrigger value="betriebskosten_umlagefaehig">Betriebskosten</TabsTrigger>
+              <TabsTrigger value="instandhaltung">Instandhaltung</TabsTrigger>
+            </TabsList>
+          </CardHeader>
+          
+          <CardContent className="p-0 pt-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !filteredExpenses || filteredExpenses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Keine Kosten gefunden</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Klicken Sie auf "Kosten erfassen" um eine neue Position hinzuzufügen.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Liegenschaft</TableHead>
+                    <TableHead>Bezeichnung</TableHead>
+                    <TableHead>Kategorie</TableHead>
+                    <TableHead>Art</TableHead>
+                    <TableHead>Beleg</TableHead>
+                    <TableHead className="text-right">Betrag</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredExpenses.map((expense) => (
+                    <TableRow key={expense.id}>
+                      <TableCell>
+                        {format(new Date(expense.datum), 'dd.MM.yyyy', { locale: de })}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {(expense as any).properties?.name || '-'}
+                      </TableCell>
+                      <TableCell>{expense.bezeichnung}</TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline"
+                          className={expense.category === 'betriebskosten_umlagefaehig' 
+                            ? 'border-blue-500 text-blue-700 dark:text-blue-300' 
+                            : 'border-orange-500 text-orange-700 dark:text-orange-300'
+                          }
+                        >
+                          {expense.category === 'betriebskosten_umlagefaehig' ? 'BK' : 'IH'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {expenseTypeLabels[expense.expense_type]}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {expense.beleg_nummer || '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        € {Number(expense.betrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteExpense.mutate(expense.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Tabs>
+      </Card>
+    </MainLayout>
+  );
+}
