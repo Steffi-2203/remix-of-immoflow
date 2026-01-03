@@ -1,9 +1,8 @@
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PropertyCard } from '@/components/dashboard/PropertyCard';
-import { mockProperties } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Filter, Download } from 'lucide-react';
+import { Plus, Search, Filter, Download, Loader2, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Select,
@@ -12,8 +11,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useProperties } from '@/hooks/useProperties';
+import { useUnits } from '@/hooks/useUnits';
+import { useState } from 'react';
 
 export default function PropertyList() {
+  const { data: properties, isLoading } = useProperties();
+  const { data: allUnits } = useUnits();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredProperties = properties?.filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.address.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getUnitsForProperty = (propertyId: string) => {
+    const units = allUnits?.filter((u) => u.property_id === propertyId) || [];
+    return {
+      total: units.length,
+      occupied: units.filter((u) => u.status === 'aktiv').length,
+      vacant: units.filter((u) => u.status === 'leerstand').length,
+    };
+  };
+
+  const totalUnits = allUnits?.length || 0;
+  const totalQm = properties?.reduce((sum, p) => sum + (Number(p.total_qm) || 0), 0) || 0;
+  const occupiedUnits = allUnits?.filter((u) => u.status === 'aktiv').length || 0;
+  const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Liegenschaften" subtitle="Alle verwalteten Immobilien">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout title="Liegenschaften" subtitle="Alle verwalteten Immobilien">
       {/* Actions Bar */}
@@ -25,6 +62,8 @@ export default function PropertyList() {
               type="search"
               placeholder="Liegenschaft suchen..."
               className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <Select defaultValue="all">
@@ -56,41 +95,73 @@ export default function PropertyList() {
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-2xl font-bold text-foreground">{mockProperties.length}</p>
+          <p className="text-2xl font-bold text-foreground">{filteredProperties?.length || 0}</p>
           <p className="text-sm text-muted-foreground">Liegenschaften</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-2xl font-bold text-foreground">
-            {mockProperties.reduce((sum, p) => sum + p.totalUnits, 0)}
-          </p>
+          <p className="text-2xl font-bold text-foreground">{totalUnits}</p>
           <p className="text-sm text-muted-foreground">Einheiten gesamt</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-2xl font-bold text-foreground">
-            {mockProperties.reduce((sum, p) => sum + p.totalQm, 0).toLocaleString('de-AT')} m²
+            {totalQm.toLocaleString('de-AT')} m²
           </p>
           <p className="text-sm text-muted-foreground">Gesamtfläche</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-2xl font-bold text-success">87%</p>
+          <p className="text-2xl font-bold text-success">{occupancyRate}%</p>
           <p className="text-sm text-muted-foreground">Ø Auslastung</p>
         </div>
       </div>
 
       {/* Properties Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockProperties.map((property) => (
-          <PropertyCard
-            key={property.id}
-            property={property}
-            units={{
-              total: property.totalUnits,
-              occupied: Math.floor(property.totalUnits * 0.85),
-              vacant: Math.ceil(property.totalUnits * 0.15),
-            }}
-          />
-        ))}
-      </div>
+      {filteredProperties && filteredProperties.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredProperties.map((property) => (
+            <PropertyCard
+              key={property.id}
+              property={{
+                id: property.id,
+                name: property.name,
+                address: property.address,
+                city: property.city,
+                postalCode: property.postal_code,
+                country: property.country,
+                buildingYear: property.building_year || undefined,
+                totalUnits: property.total_units,
+                totalQm: Number(property.total_qm),
+                totalMea: Number(property.total_mea),
+                bkAnteilWohnung: Number(property.bk_anteil_wohnung),
+                bkAnteilGeschaeft: Number(property.bk_anteil_geschaeft),
+                bkAnteilGarage: Number(property.bk_anteil_garage),
+                heizungAnteilWohnung: Number(property.heizung_anteil_wohnung),
+                heizungAnteilGeschaeft: Number(property.heizung_anteil_geschaeft),
+                betriebskostenGesamt: Number(property.betriebskosten_gesamt),
+                heizungskostenGesamt: Number(property.heizungskosten_gesamt),
+                createdAt: new Date(property.created_at),
+                updatedAt: new Date(property.updated_at),
+              }}
+              units={getUnitsForProperty(property.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card p-12 text-center">
+          <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-lg font-medium text-foreground mb-2">
+            Keine Liegenschaften vorhanden
+          </p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Erstellen Sie Ihre erste Liegenschaft, um zu beginnen
+          </p>
+          <Link to="/liegenschaften/neu">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Neue Liegenschaft
+            </Button>
+          </Link>
+        </div>
+      )}
     </MainLayout>
   );
 }
