@@ -85,6 +85,9 @@ export type Database = {
           tenant_id: string
           unit_id: string
           ust: number
+          ust_satz_bk: number
+          ust_satz_heizung: number
+          ust_satz_miete: number
           year: number
         }
         Insert: {
@@ -101,6 +104,9 @@ export type Database = {
           tenant_id: string
           unit_id: string
           ust?: number
+          ust_satz_bk?: number
+          ust_satz_heizung?: number
+          ust_satz_miete?: number
           year: number
         }
         Update: {
@@ -117,6 +123,9 @@ export type Database = {
           tenant_id?: string
           unit_id?: string
           ust?: number
+          ust_satz_bk?: number
+          ust_satz_heizung?: number
+          ust_satz_miete?: number
           year?: number
         }
         Relationships: [
