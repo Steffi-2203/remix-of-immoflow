@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
@@ -88,8 +88,8 @@ interface UnitWithTenants {
 export default function OperatingCostSettlement() {
   const currentYear = new Date().getFullYear();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(1); // null = ganzes Jahr
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear - 1); // Default: Vorjahr für Abrechnung
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = ganzes Jahr (Standard für Jahresabrechnung)
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: expenses, isLoading: isLoadingExpenses } = useExpenses(
@@ -310,6 +310,52 @@ export default function OperatingCostSettlement() {
   }, [units, expensesByType, totals, totalHeizkosten, monthCount]);
 
   const totalBkKosten = bkKosten.reduce((sum, e) => sum + Number(e.betrag), 0);
+
+  // Calculate verification sums - these MUST equal the total costs
+  const verificationSums = useMemo(() => {
+    if (!unitDistribution.length) return null;
+
+    // Sum of all BK costs distributed to units (Mieter + Eigentümer)
+    const sumBkVerteilt = unitDistribution.reduce((sum, u) => sum + u.totalBkCost, 0);
+    // Sum of all HK costs distributed to units (Mieter + Eigentümer)
+    const sumHkVerteilt = unitDistribution.reduce((sum, u) => sum + u.hkCost, 0);
+
+    // Costs paid by tenants (Mieter)
+    const bkMieter = unitDistribution.filter(u => !u.isLeerstandBK).reduce((sum, u) => sum + u.totalBkCost, 0);
+    const hkMieter = unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkCost, 0);
+
+    // Costs paid by owner (Eigentümer / Leerstand)
+    const bkEigentuemer = unitDistribution.filter(u => u.isLeerstandBK).reduce((sum, u) => sum + u.totalBkCost, 0);
+    const hkEigentuemer = unitDistribution.filter(u => u.isLeerstandHK).reduce((sum, u) => sum + u.hkCost, 0);
+
+    // Advance payments
+    const bkVorschuss = unitDistribution.filter(u => !u.isLeerstandBK).reduce((sum, u) => sum + u.bkVorschuss, 0);
+    const hkVorschuss = unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkVorschuss, 0);
+
+    // Saldo
+    const bkSaldoGesamt = unitDistribution.filter(u => !u.isLeerstandBK).reduce((sum, u) => sum + u.bkSaldo, 0);
+    const hkSaldoGesamt = unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkSaldo, 0);
+
+    // Verification check
+    const bkMatch = Math.abs(sumBkVerteilt - totalBkKosten) < 0.01;
+    const hkMatch = Math.abs(sumHkVerteilt - totalHeizkosten) < 0.01;
+
+    return {
+      sumBkVerteilt,
+      sumHkVerteilt,
+      bkMieter,
+      hkMieter,
+      bkEigentuemer,
+      hkEigentuemer,
+      bkVorschuss,
+      hkVorschuss,
+      bkSaldoGesamt,
+      hkSaldoGesamt,
+      bkMatch,
+      hkMatch,
+      gesamtMatch: bkMatch && hkMatch,
+    };
+  }, [unitDistribution, totalBkKosten, totalHeizkosten]);
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
@@ -543,7 +589,181 @@ export default function OperatingCostSettlement() {
             </CardContent>
           </Card>
 
-          {/* Abrechnung per Unit with Saldo */}
+          {/* Kontrollrechnung - Gesamtübersicht */}
+          {verificationSums && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {verificationSums.gesamtMatch ? (
+                    <CheckCircle className="h-5 w-5 text-success" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-destructive" />
+                  )}
+                  Gesamtbetriebskostenabrechnung {selectedYear}
+                </CardTitle>
+                <CardDescription>
+                  Kontrollrechnung: Summe der Einzelabrechnungen = Gesamtkosten
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* BK Kontrollrechnung */}
+                  <div className="space-y-3">
+                    <h4 className="font-semibold flex items-center gap-2 text-blue-700">
+                      <Euro className="h-4 w-4" />
+                      Betriebskosten
+                    </h4>
+                    <Table>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>Gesamtkosten BK (laut Buchhaltung)</TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {totalBkKosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-blue-50/50">
+                          <TableCell className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            davon Mieter (Einzelabrechnungen)
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.bkMieter.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-muted/50">
+                          <TableCell className="flex items-center gap-2">
+                            <Home className="h-4 w-4" />
+                            davon Eigentümer (Leerstand)
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.bkEigentuemer.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="border-t-2">
+                          <TableCell className="font-bold">
+                            Summe verteilt
+                            {verificationSums.bkMatch ? (
+                              <CheckCircle className="h-4 w-4 text-success inline ml-2" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-destructive inline ml-2" />
+                            )}
+                          </TableCell>
+                          <TableCell className={`text-right font-bold ${verificationSums.bkMatch ? 'text-success' : 'text-destructive'}`}>
+                            € {verificationSums.sumBkVerteilt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-blue-100/50">
+                          <TableCell>Vorschüsse erhalten (Mieter)</TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.bkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="border-t-2 bg-blue-100">
+                          <TableCell className="font-bold">Saldo Mieter (Nachz./Guthaben)</TableCell>
+                          <TableCell className={`text-right font-bold ${verificationSums.bkSaldoGesamt > 0 ? 'text-destructive' : verificationSums.bkSaldoGesamt < 0 ? 'text-success' : ''}`}>
+                            {verificationSums.bkSaldoGesamt > 0 ? '+' : ''}{verificationSums.bkSaldoGesamt < 0 ? '-' : ''}€ {Math.abs(verificationSums.bkSaldoGesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            <span className="text-xs font-normal ml-1">
+                              {verificationSums.bkSaldoGesamt > 0 ? '(Nachzahlung)' : verificationSums.bkSaldoGesamt < 0 ? '(Guthaben)' : ''}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* HK Kontrollrechnung */}
+                  <div className="space-y-3">
+                    <h4 className="font-semibold flex items-center gap-2 text-orange-700">
+                      <Flame className="h-4 w-4" />
+                      Heizkosten
+                    </h4>
+                    <Table>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>Gesamtkosten HK (laut Buchhaltung)</TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {totalHeizkosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-orange-50/50">
+                          <TableCell className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            davon Mieter/Altmieter (Einzelabrechnungen)
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.hkMieter.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-muted/50">
+                          <TableCell className="flex items-center gap-2">
+                            <Home className="h-4 w-4" />
+                            davon Eigentümer (Leerstand)
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.hkEigentuemer.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="border-t-2">
+                          <TableCell className="font-bold">
+                            Summe verteilt
+                            {verificationSums.hkMatch ? (
+                              <CheckCircle className="h-4 w-4 text-success inline ml-2" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-destructive inline ml-2" />
+                            )}
+                          </TableCell>
+                          <TableCell className={`text-right font-bold ${verificationSums.hkMatch ? 'text-success' : 'text-destructive'}`}>
+                            € {verificationSums.sumHkVerteilt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-orange-100/50">
+                          <TableCell>Vorschüsse erhalten (Mieter/Altmieter)</TableCell>
+                          <TableCell className="text-right font-medium">
+                            € {verificationSums.hkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="border-t-2 bg-orange-100">
+                          <TableCell className="font-bold">Saldo Mieter (Nachz./Guthaben)</TableCell>
+                          <TableCell className={`text-right font-bold ${verificationSums.hkSaldoGesamt > 0 ? 'text-destructive' : verificationSums.hkSaldoGesamt < 0 ? 'text-success' : ''}`}>
+                            {verificationSums.hkSaldoGesamt > 0 ? '+' : ''}{verificationSums.hkSaldoGesamt < 0 ? '-' : ''}€ {Math.abs(verificationSums.hkSaldoGesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            <span className="text-xs font-normal ml-1">
+                              {verificationSums.hkSaldoGesamt > 0 ? '(Nachzahlung)' : verificationSums.hkSaldoGesamt < 0 ? '(Guthaben)' : ''}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Gesamtsumme */}
+                <div className="mt-6 p-4 bg-muted rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Gesamtkosten</p>
+                      <p className="text-2xl font-bold">
+                        € {(totalBkKosten + totalHeizkosten).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Summe Einzelabrechnungen</p>
+                      <p className={`text-2xl font-bold ${verificationSums.gesamtMatch ? 'text-success' : 'text-destructive'}`}>
+                        € {(verificationSums.sumBkVerteilt + verificationSums.sumHkVerteilt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        {verificationSums.gesamtMatch && <CheckCircle className="h-5 w-5 inline ml-2" />}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Differenz</p>
+                      <p className={`text-2xl font-bold ${verificationSums.gesamtMatch ? 'text-success' : 'text-destructive'}`}>
+                        € {Math.abs((totalBkKosten + totalHeizkosten) - (verificationSums.sumBkVerteilt + verificationSums.sumHkVerteilt)).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
