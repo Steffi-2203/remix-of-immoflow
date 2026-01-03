@@ -240,6 +240,73 @@ export default function UnitDetail() {
     return grossAmount - (grossAmount / (1 + vatRate / 100));
   };
 
+  // One-click generation: use the active tenant's monthly amounts and default VAT rates.
+  // This way you only maintain values once (in the tenant), and invoices flow into all reports/lists.
+  const handleGenerateCurrentInvoice = async () => {
+    if (!activeTenant || !unitId) {
+      toast({
+        title: 'Fehler',
+        description: 'Kein aktiver Mieter vorhanden.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    const existing = unitInvoices.find((inv) => inv.year === year && inv.month === month);
+    if (existing) {
+      toast({
+        title: 'Schon vorhanden',
+        description: 'Für diesen Monat gibt es bereits eine Vorschreibung – ich öffne sie zum Bearbeiten.',
+      });
+      openInvoiceDialog(existing);
+      return;
+    }
+
+    const vatRates = getDefaultVatRates();
+
+    const grundmiete = Number(activeTenant.grundmiete) || 0;
+    const betriebskosten = Number(activeTenant.betriebskosten_vorschuss) || 0;
+    const heizungskosten = Number(activeTenant.heizungskosten_vorschuss) || 0;
+
+    const ust_satz_miete = Number(vatRates.ust_satz_miete) || 0;
+    const ust_satz_bk = Number(vatRates.ust_satz_bk) || 0;
+    const ust_satz_heizung = Number(vatRates.ust_satz_heizung) || 0;
+
+    const ust =
+      calculateVatFromGross(grundmiete, ust_satz_miete) +
+      calculateVatFromGross(betriebskosten, ust_satz_bk) +
+      calculateVatFromGross(heizungskosten, ust_satz_heizung);
+
+    const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
+
+    try {
+      const faellig_am = format(new Date(year, month - 1, 5), 'yyyy-MM-dd');
+
+      await createInvoice.mutateAsync({
+        tenant_id: activeTenant.id,
+        unit_id: unitId,
+        month,
+        year,
+        grundmiete,
+        betriebskosten,
+        heizungskosten,
+        ust: Math.round(ust * 100) / 100,
+        gesamtbetrag,
+        faellig_am,
+        ust_satz_miete,
+        ust_satz_bk,
+        ust_satz_heizung,
+      } as any);
+    } catch (error) {
+      // Detailed error for debugging in case inserts don't show up
+      console.error('Generate current invoice error:', error);
+    }
+  };
+
   const handleSaveInvoice = async () => {
     if (!activeTenant || !unitId) {
       toast({
@@ -256,12 +323,13 @@ export default function UnitDetail() {
     const ust_satz_bk = parseFloat(invoiceForm.ust_satz_bk) || 0;
     const heizungskosten = parseFloat(invoiceForm.heizungskosten) || 0;
     const ust_satz_heizung = parseFloat(invoiceForm.ust_satz_heizung) || 0;
-    
+
     // Calculate total VAT from all gross amounts
-    const ust = calculateVatFromGross(grundmiete, ust_satz_miete) +
-                calculateVatFromGross(betriebskosten, ust_satz_bk) +
-                calculateVatFromGross(heizungskosten, ust_satz_heizung);
-    
+    const ust =
+      calculateVatFromGross(grundmiete, ust_satz_miete) +
+      calculateVatFromGross(betriebskosten, ust_satz_bk) +
+      calculateVatFromGross(heizungskosten, ust_satz_heizung);
+
     const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
 
     try {
@@ -567,10 +635,23 @@ export default function UnitDetail() {
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-foreground">Vorschreibungen</h3>
             {activeTenant && (
-              <Button onClick={() => openInvoiceDialog()}>
-                <Plus className="h-4 w-4 mr-2" />
-                Vorschreibung erstellen
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleGenerateCurrentInvoice}
+                  disabled={createInvoice.isPending}
+                >
+                  {createInvoice.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Receipt className="h-4 w-4 mr-2" />
+                  )}
+                  Für aktuellen Monat generieren
+                </Button>
+                <Button variant="outline" onClick={() => openInvoiceDialog()}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Manuell
+                </Button>
+              </div>
             )}
           </div>
 
@@ -673,13 +754,28 @@ export default function UnitDetail() {
                 <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">Noch keine Vorschreibungen vorhanden</p>
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
-                  {activeTenant ? 'Erstellen Sie manuell eine Vorschreibung' : 'Fügen Sie zuerst einen Mieter hinzu'}
+                  {activeTenant
+                    ? 'Ein Klick: Vorschreibung aus den Mietdaten des Mieters generieren.'
+                    : 'Fügen Sie zuerst einen Mieter hinzu'}
                 </p>
                 {activeTenant && (
-                  <Button onClick={() => openInvoiceDialog()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Vorschreibung erstellen
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={handleGenerateCurrentInvoice}
+                      disabled={createInvoice.isPending}
+                    >
+                      {createInvoice.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Receipt className="h-4 w-4 mr-2" />
+                      )}
+                      Für aktuellen Monat generieren
+                    </Button>
+                    <Button variant="outline" onClick={() => openInvoiceDialog()}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Manuell
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
