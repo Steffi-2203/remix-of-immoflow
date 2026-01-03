@@ -17,6 +17,7 @@ export type Database = {
       expenses: {
         Row: {
           beleg_nummer: string | null
+          beleg_url: string | null
           betrag: number
           bezeichnung: string
           category: Database["public"]["Enums"]["expense_category"]
@@ -32,6 +33,7 @@ export type Database = {
         }
         Insert: {
           beleg_nummer?: string | null
+          beleg_url?: string | null
           betrag?: number
           bezeichnung: string
           category: Database["public"]["Enums"]["expense_category"]
@@ -47,6 +49,7 @@ export type Database = {
         }
         Update: {
           beleg_nummer?: string | null
+          beleg_url?: string | null
           betrag?: number
           bezeichnung?: string
           category?: Database["public"]["Enums"]["expense_category"]
