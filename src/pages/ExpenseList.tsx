@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,10 @@ import {
   Wrench,
   Building2,
   Trash2,
-  Pencil
+  Pencil,
+  FileText,
+  Upload,
+  ExternalLink
 } from 'lucide-react';
 import { 
   useExpenses, 
@@ -56,8 +59,12 @@ import {
 import { useProperties } from '@/hooks/useProperties';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ExpenseList() {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -75,6 +82,8 @@ export default function ExpenseList() {
     beleg_nummer: '',
     notizen: '',
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
   const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
@@ -95,37 +104,107 @@ export default function ExpenseList() {
     );
   });
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        toast({
+          title: 'Ungültiges Format',
+          description: 'Bitte nur PDF-Dateien hochladen.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        toast({
+          title: 'Datei zu groß',
+          description: 'Maximale Dateigröße: 10 MB.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const filePath = `${newExpense.property_id}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('expense-receipts')
+      .upload(filePath, file);
+
+    if (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: 'Upload fehlgeschlagen',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('expense-receipts')
+      .getPublicUrl(filePath);
+
+    return urlData.publicUrl;
+  };
+
   const handleCreateExpense = async () => {
     if (!newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag) {
       return;
     }
 
-    const date = new Date(newExpense.datum);
-    
-    await createExpense.mutateAsync({
-      property_id: newExpense.property_id,
-      category: newExpense.category,
-      expense_type: newExpense.expense_type,
-      bezeichnung: newExpense.bezeichnung,
-      betrag: parseFloat(newExpense.betrag),
-      datum: newExpense.datum,
-      beleg_nummer: newExpense.beleg_nummer || undefined,
-      notizen: newExpense.notizen || undefined,
-      year: date.getFullYear(),
-      month: date.getMonth() + 1,
-    });
+    setUploading(true);
+    let beleg_url: string | undefined;
 
-    setDialogOpen(false);
-    setNewExpense({
-      property_id: '',
-      category: 'betriebskosten_umlagefaehig',
-      expense_type: 'sonstiges',
-      bezeichnung: '',
-      betrag: '',
-      datum: format(new Date(), 'yyyy-MM-dd'),
-      beleg_nummer: '',
-      notizen: '',
-    });
+    try {
+      // Upload file if selected
+      if (selectedFile) {
+        const url = await uploadFile(selectedFile);
+        if (url) {
+          beleg_url = url;
+        }
+      }
+
+      const date = new Date(newExpense.datum);
+      
+      await createExpense.mutateAsync({
+        property_id: newExpense.property_id,
+        category: newExpense.category,
+        expense_type: newExpense.expense_type,
+        bezeichnung: newExpense.bezeichnung,
+        betrag: parseFloat(newExpense.betrag),
+        datum: newExpense.datum,
+        beleg_nummer: newExpense.beleg_nummer || undefined,
+        notizen: newExpense.notizen || undefined,
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        beleg_url,
+      } as any);
+
+      setDialogOpen(false);
+      setSelectedFile(null);
+      setNewExpense({
+        property_id: '',
+        category: 'betriebskosten_umlagefaehig',
+        expense_type: 'sonstiges',
+        bezeichnung: '',
+        betrag: '',
+        datum: format(new Date(), 'yyyy-MM-dd'),
+        beleg_nummer: '',
+        notizen: '',
+      });
+
+      toast({
+        title: 'Kosten erfasst',
+        description: beleg_url ? 'Rechnung wurde hochgeladen.' : 'Eintrag wurde erstellt.',
+      });
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Years for filter
@@ -295,6 +374,42 @@ export default function ExpenseList() {
                   onChange={(e) => setNewExpense(prev => ({ ...prev, notizen: e.target.value }))}
                 />
               </div>
+
+              {/* PDF Upload */}
+              <div className="space-y-2">
+                <Label>Rechnungsbeleg (PDF)</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {selectedFile ? selectedFile.name : 'PDF hochladen'}
+                  </Button>
+                  {selectedFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedFile(null)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Max. 10 MB, nur PDF-Format
+                </p>
+              </div>
             </div>
 
             <DialogFooter>
@@ -303,10 +418,10 @@ export default function ExpenseList() {
               </Button>
               <Button 
                 onClick={handleCreateExpense} 
-                disabled={createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag}
+                disabled={uploading || createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag}
               >
-                {createExpense.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Erfassen
+                {(uploading || createExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {uploading ? 'Hochladen...' : 'Erfassen'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -397,7 +512,8 @@ export default function ExpenseList() {
                     <TableHead>Bezeichnung</TableHead>
                     <TableHead>Kategorie</TableHead>
                     <TableHead>Art</TableHead>
-                    <TableHead>Beleg</TableHead>
+                    <TableHead>Beleg-Nr.</TableHead>
+                    <TableHead>Scan</TableHead>
                     <TableHead className="text-right">Betrag</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
@@ -428,6 +544,21 @@ export default function ExpenseList() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {expense.beleg_nummer || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {(expense as any).beleg_url ? (
+                          <a
+                            href={(expense as any).beleg_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            <FileText className="h-4 w-4" />
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         € {Number(expense.betrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
