@@ -14,6 +14,7 @@ import TenantForm from "./pages/TenantForm";
 import PaymentList from "./pages/PaymentList";
 import ExpenseList from "./pages/ExpenseList";
 import Reports from "./pages/Reports";
+import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
@@ -39,7 +40,7 @@ const App = () => (
           <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<TenantForm />} />
           <Route path="/zahlungen" element={<PaymentList />} />
           <Route path="/buchhaltung" element={<ExpenseList />} />
-          <Route path="/abrechnung" element={<ComingSoon title="BK-Abrechnung" subtitle="Betriebskostenabrechnung erstellen" />} />
+          <Route path="/abrechnung" element={<OperatingCostSettlement />} />
           <Route path="/dokumente" element={<ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/einstellungen" element={<ComingSoon title="Einstellungen" subtitle="System- und Benutzereinstellungen" />} />
