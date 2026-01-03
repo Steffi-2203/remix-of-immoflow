@@ -125,18 +125,12 @@ export default function Reports() {
   const yearInvoices = invoices?.filter(inv => inv.year === selectedYear) || [];
   const annualRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
 
-  // Calculate USt from invoices
-  const ustFromInvoices = periodInvoices.reduce((sum, inv) => sum + Number(inv.ust || 0), 0);
-
   // Calculate input VAT from expenses (Vorsteuer)
   const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
     // Assume 20% VAT on expenses for simplicity
     const betrag = Number(exp.betrag || 0);
     return sum + (betrag - betrag / 1.2);
   }, 0);
-
-  // VAT liability
-  const vatLiability = ustFromInvoices - vorsteuerFromExpenses;
 
   // Simple yield calculation based on property value or total qm
   const totalQm = selectedPropertyId === 'all'
@@ -174,6 +168,9 @@ export default function Reports() {
   }, 0);
 
   const totalUst = ustMiete + ustBk + ustHeizung;
+
+  // VAT liability: USt (was ans Finanzamt geht) - Vorsteuer (was abgezogen werden kann)
+  const vatLiability = totalUst - vorsteuerFromExpenses;
 
   // Period label for display
   const periodLabel = reportPeriod === 'yearly' 
