@@ -18,11 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { 
+  generateTenantSettlementPdf, 
+  generateAllTenantSettlementsPdf, 
+  generateGesamtabrechnungPdf 
+} from '@/utils/bkAbrechnungPdfExport';
 
 // Distribution key mapping for expense types (without heating - handled separately)
 const expenseDistributionKeys: Record<string, 'mea' | 'qm' | 'personen'> = {
@@ -760,6 +766,65 @@ export default function OperatingCostSettlement() {
                     </div>
                   </div>
                 </div>
+
+                {/* PDF Export Buttons */}
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button 
+                    onClick={() => {
+                      if (!selectedProperty || !verificationSums) return;
+                      generateGesamtabrechnungPdf(
+                        {
+                          name: selectedProperty.name,
+                          address: selectedProperty.address,
+                          city: selectedProperty.city,
+                          postal_code: selectedProperty.postal_code,
+                        },
+                        unitDistribution,
+                        selectedYear,
+                        expensesByType,
+                        totalBkKosten,
+                        totalHeizkosten,
+                        totals,
+                        expenseDistributionKeys,
+                        verificationSums
+                      );
+                      toast.success('Gesamtabrechnung PDF erstellt');
+                    }}
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Gesamtabrechnung PDF
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      if (!selectedProperty) return;
+                      const unitsWithTenants = unitDistribution.filter(u => !u.isLeerstandBK || !u.isLeerstandHK);
+                      if (unitsWithTenants.length === 0) {
+                        toast.error('Keine Mieter für Einzelabrechnungen vorhanden');
+                        return;
+                      }
+                      generateAllTenantSettlementsPdf(
+                        {
+                          name: selectedProperty.name,
+                          address: selectedProperty.address,
+                          city: selectedProperty.city,
+                          postal_code: selectedProperty.postal_code,
+                        },
+                        unitDistribution,
+                        selectedYear,
+                        expensesByType,
+                        totalBkKosten,
+                        totalHeizkosten,
+                        totals,
+                        expenseDistributionKeys
+                      );
+                      toast.success(`${unitsWithTenants.length} Einzelabrechnungen werden erstellt...`);
+                    }}
+                  >
+                    <Files className="h-4 w-4 mr-2" />
+                    Alle Einzelabrechnungen ({unitDistribution.filter(u => !u.isLeerstandBK || !u.isLeerstandHK).length})
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -770,16 +835,12 @@ export default function OperatingCostSettlement() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Calculator className="h-5 w-5" />
-                    Abrechnung pro Einheit
+                    Einzelabrechnungen pro Einheit
                   </CardTitle>
                   <CardDescription>
-                    Anteilige Kosten, Vorauszahlungen und Saldo ({monthCount} {monthCount === 1 ? 'Monat' : 'Monate'})
+                    Anteilige Kosten, Vorauszahlungen und Saldo ({monthCount} {monthCount === 1 ? 'Monat' : 'Monate'}) - Klicken Sie auf eine Zeile für PDF-Export
                   </CardDescription>
                 </div>
-                <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -802,11 +863,12 @@ export default function OperatingCostSettlement() {
                         <TableHead className="text-right bg-orange-50">HK Anteil</TableHead>
                         <TableHead className="text-right bg-orange-50">HK Vorschuss</TableHead>
                         <TableHead className="text-right bg-orange-50">HK Saldo</TableHead>
+                        <TableHead className="text-right">PDF</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {unitDistribution.map(unit => (
-                        <TableRow key={unit.id} className={unit.isLeerstand ? 'bg-muted/30' : ''}>
+                        <TableRow key={unit.id} className={`${unit.isLeerstand ? 'bg-muted/30' : ''}`}>
                           <TableCell className="font-medium">
                             {unit.top_nummer}
                           </TableCell>
@@ -888,6 +950,35 @@ export default function OperatingCostSettlement() {
                               </span>
                             )}
                           </TableCell>
+                          {/* PDF Button */}
+                          <TableCell className="text-right">
+                            {(!unit.isLeerstandBK || !unit.isLeerstandHK) && selectedProperty && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  generateTenantSettlementPdf(
+                                    {
+                                      name: selectedProperty.name,
+                                      address: selectedProperty.address,
+                                      city: selectedProperty.city,
+                                      postal_code: selectedProperty.postal_code,
+                                    },
+                                    unit,
+                                    selectedYear,
+                                    expensesByType,
+                                    totalBkKosten,
+                                    totalHeizkosten,
+                                    totals,
+                                    expenseDistributionKeys
+                                  );
+                                  toast.success(`PDF für Top ${unit.top_nummer} erstellt`);
+                                }}
+                              >
+                                <FileDown className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                       {/* Summenzeile */}
@@ -914,6 +1005,7 @@ export default function OperatingCostSettlement() {
                         <TableCell className="text-right font-medium bg-orange-50/50">
                           € {unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
+                        <TableCell></TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
