@@ -110,9 +110,11 @@ export default function UnitDetail() {
     month: (new Date().getMonth() + 1).toString(),
     year: new Date().getFullYear().toString(),
     grundmiete: '',
+    ust_satz_miete: '0',
     betriebskosten: '',
+    ust_satz_bk: '10',
     heizungskosten: '',
-    ust: '0',
+    ust_satz_heizung: '20',
     faellig_am: format(new Date(new Date().getFullYear(), new Date().getMonth(), 5), 'yyyy-MM-dd'),
   });
   
@@ -168,9 +170,11 @@ export default function UnitDetail() {
         month: invoice.month.toString(),
         year: invoice.year.toString(),
         grundmiete: invoice.grundmiete.toString(),
+        ust_satz_miete: ((invoice as any).ust_satz_miete ?? 0).toString(),
         betriebskosten: invoice.betriebskosten.toString(),
+        ust_satz_bk: ((invoice as any).ust_satz_bk ?? 10).toString(),
         heizungskosten: invoice.heizungskosten.toString(),
-        ust: invoice.ust.toString(),
+        ust_satz_heizung: ((invoice as any).ust_satz_heizung ?? 20).toString(),
         faellig_am: invoice.faellig_am,
       });
     } else {
@@ -180,13 +184,21 @@ export default function UnitDetail() {
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
         grundmiete: activeTenant?.grundmiete?.toString() || '',
+        ust_satz_miete: '0',
         betriebskosten: activeTenant?.betriebskosten_vorschuss?.toString() || '',
+        ust_satz_bk: '10',
         heizungskosten: activeTenant?.heizungskosten_vorschuss?.toString() || '',
-        ust: '0',
+        ust_satz_heizung: '20',
         faellig_am: format(new Date(new Date().getFullYear(), new Date().getMonth(), 5), 'yyyy-MM-dd'),
       });
     }
     setInvoiceDialogOpen(true);
+  };
+
+  // Helper to calculate VAT from gross amount
+  const calculateVatFromGross = (grossAmount: number, vatRate: number): number => {
+    if (vatRate === 0) return 0;
+    return grossAmount - (grossAmount / (1 + vatRate / 100));
   };
 
   const handleSaveInvoice = async () => {
@@ -200,10 +212,18 @@ export default function UnitDetail() {
     }
 
     const grundmiete = parseFloat(invoiceForm.grundmiete) || 0;
+    const ust_satz_miete = parseFloat(invoiceForm.ust_satz_miete) || 0;
     const betriebskosten = parseFloat(invoiceForm.betriebskosten) || 0;
+    const ust_satz_bk = parseFloat(invoiceForm.ust_satz_bk) || 0;
     const heizungskosten = parseFloat(invoiceForm.heizungskosten) || 0;
-    const ust = parseFloat(invoiceForm.ust) || 0;
-    const gesamtbetrag = grundmiete + betriebskosten + heizungskosten + ust;
+    const ust_satz_heizung = parseFloat(invoiceForm.ust_satz_heizung) || 0;
+    
+    // Calculate total VAT from all gross amounts
+    const ust = calculateVatFromGross(grundmiete, ust_satz_miete) +
+                calculateVatFromGross(betriebskosten, ust_satz_bk) +
+                calculateVatFromGross(heizungskosten, ust_satz_heizung);
+    
+    const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
 
     try {
       if (editingInvoice) {
@@ -214,10 +234,13 @@ export default function UnitDetail() {
           grundmiete,
           betriebskosten,
           heizungskosten,
-          ust,
+          ust: Math.round(ust * 100) / 100,
           gesamtbetrag,
           faellig_am: invoiceForm.faellig_am,
-        });
+          ust_satz_miete,
+          ust_satz_bk,
+          ust_satz_heizung,
+        } as any);
       } else {
         await createInvoice.mutateAsync({
           tenant_id: activeTenant.id,
@@ -227,10 +250,13 @@ export default function UnitDetail() {
           grundmiete,
           betriebskosten,
           heizungskosten,
-          ust,
+          ust: Math.round(ust * 100) / 100,
           gesamtbetrag,
           faellig_am: invoiceForm.faellig_am,
-        });
+          ust_satz_miete,
+          ust_satz_bk,
+          ust_satz_heizung,
+        } as any);
       }
       setInvoiceDialogOpen(false);
     } catch (error) {
@@ -720,49 +746,102 @@ export default function UnitDetail() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Grundmiete (€)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={invoiceForm.grundmiete}
-                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, grundmiete: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Betriebskosten (€)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={invoiceForm.betriebskosten}
-                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, betriebskosten: e.target.value }))}
-                />
+            {/* Miete mit MwSt */}
+            <div className="space-y-2">
+              <Label className="font-semibold">Miete (brutto)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Betrag €</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={invoiceForm.grundmiete}
+                    onChange={(e) => setInvoiceForm(prev => ({ ...prev, grundmiete: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">MwSt %</Label>
+                  <Select
+                    value={invoiceForm.ust_satz_miete}
+                    onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, ust_satz_miete: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="10">10%</SelectItem>
+                      <SelectItem value="20">20%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Heizungskosten (€)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={invoiceForm.heizungskosten}
-                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, heizungskosten: e.target.value }))}
-                />
+            {/* Betriebskosten mit MwSt */}
+            <div className="space-y-2">
+              <Label className="font-semibold">Betriebskosten (brutto)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Betrag €</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={invoiceForm.betriebskosten}
+                    onChange={(e) => setInvoiceForm(prev => ({ ...prev, betriebskosten: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">MwSt %</Label>
+                  <Select
+                    value={invoiceForm.ust_satz_bk}
+                    onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, ust_satz_bk: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="10">10%</SelectItem>
+                      <SelectItem value="20">20%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>USt (€)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={invoiceForm.ust}
-                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, ust: e.target.value }))}
-                />
+            </div>
+
+            {/* Heizungskosten mit MwSt */}
+            <div className="space-y-2">
+              <Label className="font-semibold">Heizungskosten (brutto)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Betrag €</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={invoiceForm.heizungskosten}
+                    onChange={(e) => setInvoiceForm(prev => ({ ...prev, heizungskosten: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">MwSt %</Label>
+                  <Select
+                    value={invoiceForm.ust_satz_heizung}
+                    onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, ust_satz_heizung: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="10">10%</SelectItem>
+                      <SelectItem value="20">20%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -775,18 +854,50 @@ export default function UnitDetail() {
               />
             </div>
 
-            <div className="rounded-lg border p-3 bg-muted/50">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Gesamtbetrag</span>
-                <span className="text-lg font-bold">
-                  € {(
-                    (parseFloat(invoiceForm.grundmiete) || 0) +
-                    (parseFloat(invoiceForm.betriebskosten) || 0) +
-                    (parseFloat(invoiceForm.heizungskosten) || 0) +
-                    (parseFloat(invoiceForm.ust) || 0)
-                  ).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+            {/* Zusammenfassung */}
+            <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
+              {(() => {
+                const grundmiete = parseFloat(invoiceForm.grundmiete) || 0;
+                const ust_satz_miete = parseFloat(invoiceForm.ust_satz_miete) || 0;
+                const betriebskosten = parseFloat(invoiceForm.betriebskosten) || 0;
+                const ust_satz_bk = parseFloat(invoiceForm.ust_satz_bk) || 0;
+                const heizungskosten = parseFloat(invoiceForm.heizungskosten) || 0;
+                const ust_satz_heizung = parseFloat(invoiceForm.ust_satz_heizung) || 0;
+                
+                const calcVat = (gross: number, rate: number) => rate === 0 ? 0 : gross - (gross / (1 + rate / 100));
+                const vatMiete = calcVat(grundmiete, ust_satz_miete);
+                const vatBk = calcVat(betriebskosten, ust_satz_bk);
+                const vatHeizung = calcVat(heizungskosten, ust_satz_heizung);
+                const totalVat = vatMiete + vatBk + vatHeizung;
+                const totalGross = grundmiete + betriebskosten + heizungskosten;
+                
+                return (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">USt Miete ({ust_satz_miete}%)</span>
+                      <span>€ {vatMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">USt BK ({ust_satz_bk}%)</span>
+                      <span>€ {vatBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">USt Heizung ({ust_satz_heizung}%)</span>
+                      <span>€ {vatHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Gesamt USt</span>
+                        <span className="font-medium">€ {totalVat.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Gesamtbetrag (brutto)</span>
+                        <span className="text-lg font-bold">€ {totalGross.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
