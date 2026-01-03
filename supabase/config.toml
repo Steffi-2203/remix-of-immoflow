@@ -1,1 +1,4 @@
 project_id = "cpbefoumpngamibpdtxu"
+
+[functions.generate-monthly-invoices]
+verify_jwt = false
