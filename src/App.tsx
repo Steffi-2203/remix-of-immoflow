@@ -8,9 +8,8 @@ import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyForm from "./pages/PropertyForm";
 import UnitList from "./pages/UnitList";
+import UnitDetail from "./pages/UnitDetail";
 import UnitForm from "./pages/UnitForm";
-import TenantList from "./pages/TenantList";
-import InvoiceList from "./pages/InvoiceList";
 import Reports from "./pages/Reports";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
@@ -32,8 +31,7 @@ const App = () => (
           <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<UnitForm />} />
           <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<UnitForm />} />
           <Route path="/einheiten" element={<UnitList />} />
-          <Route path="/mieter" element={<TenantList />} />
-          <Route path="/vorschreibungen" element={<InvoiceList />} />
+          <Route path="/einheiten/:propertyId/:unitId" element={<UnitDetail />} />
           <Route path="/zahlungen" element={<ComingSoon title="Zahlungen" subtitle="Zahlungseingänge und SEPA-Einzüge" />} />
           <Route path="/abrechnung" element={<ComingSoon title="BK-Abrechnung" subtitle="Betriebskostenabrechnung erstellen" />} />
           <Route path="/dokumente" element={<ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" />} />

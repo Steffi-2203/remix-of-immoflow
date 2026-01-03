@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Database } from '@/integrations/supabase/types';
+import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-type UnitInsert = Database['public']['Tables']['units']['Insert'];
+export type Unit = Tables<'units'>;
+export type UnitInsert = TablesInsert<'units'>;
+export type UnitUpdate = TablesUpdate<'units'>;
 
 export function useUnits(propertyId?: string) {
   return useQuery({
@@ -73,7 +75,7 @@ export function useUpdateUnit() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<UnitInsert> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: UnitUpdate & { id: string }) => {
       const { data, error } = await supabase
         .from('units')
         .update(updates)
@@ -92,6 +94,29 @@ export function useUpdateUnit() {
     onError: (error) => {
       toast.error('Fehler beim Aktualisieren der Einheit');
       console.error('Update unit error:', error);
+    },
+  });
+}
+
+export function useDeleteUnit() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('units')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['units'] });
+      toast.success('Einheit erfolgreich gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen der Einheit');
+      console.error('Delete unit error:', error);
     },
   });
 }
