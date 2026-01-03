@@ -6,7 +6,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
+import PropertyForm from "./pages/PropertyForm";
 import UnitList from "./pages/UnitList";
+import UnitForm from "./pages/UnitForm";
 import TenantList from "./pages/TenantList";
 import Reports from "./pages/Reports";
 import ComingSoon from "./pages/ComingSoon";
@@ -23,8 +25,11 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/liegenschaften" element={<PropertyList />} />
+          <Route path="/liegenschaften/neu" element={<PropertyForm />} />
           <Route path="/liegenschaften/:id" element={<PropertyDetail />} />
-          <Route path="/liegenschaften/neu" element={<ComingSoon title="Neue Liegenschaft" subtitle="Liegenschaft anlegen" />} />
+          <Route path="/liegenschaften/:id/bearbeiten" element={<PropertyForm />} />
+          <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<UnitForm />} />
+          <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<UnitForm />} />
           <Route path="/einheiten" element={<UnitList />} />
           <Route path="/mieter" element={<TenantList />} />
           <Route path="/vorschreibungen" element={<ComingSoon title="Vorschreibungen" subtitle="Monatliche Mietvorschreibungen" />} />
