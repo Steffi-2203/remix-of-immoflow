@@ -16,10 +16,33 @@ interface Tenant {
   status: string;
 }
 
+interface Unit {
+  id: string;
+  type: string;
+}
+
 interface GenerateInvoicesRequest {
   year?: number;
   month?: number;
 }
+
+// USt-Sätze basierend auf Einheitstyp (Österreich):
+// Wohnung: Miete 10%, BK 10%, Heizung 20%
+// Geschäft/Garage/Stellplatz/Lager: Miete 20%, BK 20%, Heizung 20%
+const getVatRates = (unitType: string) => {
+  const isCommercial = ['geschaeft', 'garage', 'stellplatz', 'lager'].includes(unitType);
+  return {
+    ust_satz_miete: isCommercial ? 20 : 10,
+    ust_satz_bk: isCommercial ? 20 : 10,
+    ust_satz_heizung: 20, // Heizung immer 20%
+  };
+};
+
+// Berechnet USt aus Bruttobetrag
+const calculateVatFromGross = (grossAmount: number, vatRate: number): number => {
+  if (vatRate === 0) return 0;
+  return grossAmount - (grossAmount / (1 + vatRate / 100));
+};
 
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
@@ -76,6 +99,25 @@ serve(async (req: Request): Promise<Response> => {
 
     console.log(`Found ${tenants.length} active tenants`);
 
+    // Fetch unit types for all tenants
+    const unitIds = [...new Set(tenants.map(t => t.unit_id))];
+    const { data: units, error: unitsError } = await supabase
+      .from("units")
+      .select("id, type")
+      .in("id", unitIds);
+
+    if (unitsError) {
+      throw new Error(`Failed to fetch units: ${unitsError.message}`);
+    }
+
+    // Create a map of unit_id to unit type
+    const unitTypeMap = new Map<string, string>();
+    (units || []).forEach((unit: Unit) => {
+      unitTypeMap.set(unit.id, unit.type);
+    });
+
+    console.log(`Fetched ${units?.length || 0} units for type lookup`);
+
     // Check for existing invoices for this month
     const { data: existingInvoices, error: existingError } = await supabase
       .from("monthly_invoices")
@@ -113,13 +155,22 @@ serve(async (req: Request): Promise<Response> => {
 
     // Create invoices for all active tenants
     const invoices = tenantsToInvoice.map((tenant: Tenant) => {
+      const unitType = unitTypeMap.get(tenant.unit_id) || 'wohnung';
+      const vatRates = getVatRates(unitType);
+      
       const grundmiete = Number(tenant.grundmiete) || 0;
       const betriebskosten = Number(tenant.betriebskosten_vorschuss) || 0;
       const heizungskosten = Number(tenant.heizungskosten_vorschuss) || 0;
-      const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
       
-      // Calculate USt (10% for residential rent in Austria)
-      const ust = gesamtbetrag * 0.10;
+      // Beträge sind Bruttobeträge, USt wird herausgerechnet
+      const ustMiete = calculateVatFromGross(grundmiete, vatRates.ust_satz_miete);
+      const ustBk = calculateVatFromGross(betriebskosten, vatRates.ust_satz_bk);
+      const ustHeizung = calculateVatFromGross(heizungskosten, vatRates.ust_satz_heizung);
+      const ust = ustMiete + ustBk + ustHeizung;
+      
+      const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
+
+      console.log(`Creating invoice for tenant ${tenant.id}: unit type=${unitType}, ust_satz_miete=${vatRates.ust_satz_miete}%, ust_satz_bk=${vatRates.ust_satz_bk}%, ust=${ust.toFixed(2)}`);
 
       return {
         tenant_id: tenant.id,
@@ -129,8 +180,11 @@ serve(async (req: Request): Promise<Response> => {
         grundmiete,
         betriebskosten,
         heizungskosten,
-        gesamtbetrag: gesamtbetrag + ust,
-        ust,
+        gesamtbetrag,
+        ust: Math.round(ust * 100) / 100,
+        ust_satz_miete: vatRates.ust_satz_miete,
+        ust_satz_bk: vatRates.ust_satz_bk,
+        ust_satz_heizung: vatRates.ust_satz_heizung,
         status: "offen",
         faellig_am: dueDateStr,
       };
