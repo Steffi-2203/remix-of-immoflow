@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, Lock } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +29,9 @@ import {
   generateAllTenantSettlementsPdf, 
   generateGesamtabrechnungPdf 
 } from '@/utils/bkAbrechnungPdfExport';
+import { useSaveSettlement, useExistingSettlement, useFinalizeSettlement } from '@/hooks/useSettlements';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 // Distribution key mapping for expense types (without heating - handled separately)
 const expenseDistributionKeys: Record<string, 'mea' | 'qm' | 'personen'> = {
@@ -70,6 +73,7 @@ const distributionKeyLabels: Record<string, string> = {
 interface TenantInfo {
   id: string;
   name: string;
+  email: string | null;
   mietbeginn: string;
   mietende: string | null;
   status: string;
@@ -96,6 +100,7 @@ export default function OperatingCostSettlement() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear - 1); // Default: Vorjahr für Abrechnung
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = ganzes Jahr (Standard für Jahresabrechnung)
+  const [sendEmails, setSendEmails] = useState<boolean>(true);
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: expenses, isLoading: isLoadingExpenses } = useExpenses(
@@ -103,6 +108,15 @@ export default function OperatingCostSettlement() {
     selectedYear,
     selectedMonth || undefined
   );
+
+  // Check for existing settlement
+  const { data: existingSettlement } = useExistingSettlement(
+    selectedPropertyId || undefined,
+    selectedYear
+  );
+
+  const saveSettlement = useSaveSettlement();
+  const finalizeSettlement = useFinalizeSettlement();
 
   // Fetch ALL units with current tenant and year tenants (including past tenants)
   const { data: units, isLoading: isLoadingUnits } = useQuery({
@@ -124,7 +138,7 @@ export default function OperatingCostSettlement() {
       const unitIds = unitsData.map(u => u.id);
       const { data: tenantsData } = await supabase
         .from('tenants')
-        .select('id, first_name, last_name, unit_id, mietbeginn, mietende, status, betriebskosten_vorschuss, heizungskosten_vorschuss')
+        .select('id, first_name, last_name, email, unit_id, mietbeginn, mietende, status, betriebskosten_vorschuss, heizungskosten_vorschuss')
         .in('unit_id', unitIds);
 
       // Group tenants by unit
@@ -133,6 +147,7 @@ export default function OperatingCostSettlement() {
         const tenant: TenantInfo = {
           id: t.id,
           name: `${t.first_name} ${t.last_name}`,
+          email: t.email,
           mietbeginn: t.mietbeginn,
           mietende: t.mietende,
           status: t.status,
@@ -311,6 +326,10 @@ export default function OperatingCostSettlement() {
         isLeerstand: isLeerstandBK && isLeerstandHK,
         bkMieter: currentTenant?.name || null,
         hkMieter: yearTenant?.name || null,
+        // For saving to database
+        bkTenantId: currentTenant?.id || null,
+        hkTenantId: yearTenant?.id || null,
+        tenantEmail: currentTenant?.email || yearTenant?.email || null,
       };
     });
   }, [units, expensesByType, totals, totalHeizkosten, monthCount]);
@@ -824,6 +843,109 @@ export default function OperatingCostSettlement() {
                     <Files className="h-4 w-4 mr-2" />
                     Alle Einzelabrechnungen ({unitDistribution.filter(u => !u.isLeerstandBK || !u.isLeerstandHK).length})
                   </Button>
+                </div>
+
+                {/* Speichern und E-Mail Optionen */}
+                <div className="mt-6 p-4 border rounded-lg bg-card">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="sendEmails" 
+                        checked={sendEmails}
+                        onCheckedChange={(checked) => setSendEmails(checked === true)}
+                      />
+                      <Label htmlFor="sendEmails" className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        E-Mails an Mieter senden (bei hinterlegter E-Mail)
+                      </Label>
+                    </div>
+                    
+                    <div className="flex gap-2 ml-auto">
+                      <Button
+                        onClick={() => {
+                          if (!selectedProperty || !verificationSums) return;
+                          
+                          const items = unitDistribution.map(u => ({
+                            unitId: u.id,
+                            tenantId: u.bkTenantId || u.hkTenantId,
+                            tenantName: u.bkMieter || u.hkMieter || 'Eigentümer',
+                            tenantEmail: u.tenantEmail,
+                            isLeerstandBK: u.isLeerstandBK,
+                            isLeerstandHK: u.isLeerstandHK,
+                            bkAnteil: u.totalBkCost,
+                            hkAnteil: u.hkCost,
+                            bkVorschuss: u.bkVorschuss,
+                            hkVorschuss: u.hkVorschuss,
+                            bkSaldo: u.bkSaldo,
+                            hkSaldo: u.hkSaldo,
+                            gesamtSaldo: u.gesamtSaldo,
+                          }));
+
+                          saveSettlement.mutate({
+                            propertyId: selectedPropertyId,
+                            propertyName: selectedProperty.name,
+                            propertyAddress: `${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}`,
+                            year: selectedYear,
+                            totalBk: totalBkKosten,
+                            totalHk: totalHeizkosten,
+                            bkMieter: verificationSums.bkMieter,
+                            hkMieter: verificationSums.hkMieter,
+                            bkEigentuemer: verificationSums.bkEigentuemer,
+                            hkEigentuemer: verificationSums.hkEigentuemer,
+                            items,
+                            sendEmails,
+                          });
+                        }}
+                        disabled={saveSettlement.isPending || existingSettlement?.status === 'abgeschlossen'}
+                      >
+                        {saveSettlement.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        {existingSettlement ? 'Aktualisieren' : 'Speichern'}
+                        {sendEmails && ` + E-Mails`}
+                      </Button>
+
+                      {existingSettlement && existingSettlement.status !== 'abgeschlossen' && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            finalizeSettlement.mutate({ settlementId: existingSettlement.id });
+                          }}
+                          disabled={finalizeSettlement.isPending}
+                        >
+                          {finalizeSettlement.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Lock className="h-4 w-4 mr-2" />
+                          )}
+                          Finalisieren
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {existingSettlement && (
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      <Badge variant={existingSettlement.status === 'abgeschlossen' ? 'default' : 'secondary'}>
+                        {existingSettlement.status === 'entwurf' && 'Entwurf'}
+                        {existingSettlement.status === 'berechnet' && 'Berechnet'}
+                        {existingSettlement.status === 'versendet' && 'Versendet'}
+                        {existingSettlement.status === 'abgeschlossen' && 'Abgeschlossen'}
+                      </Badge>
+                      {existingSettlement.finalized_at && (
+                        <span className="text-muted-foreground">
+                          Finalisiert am {new Date(existingSettlement.finalized_at).toLocaleDateString('de-AT')}
+                        </span>
+                      )}
+                      {existingSettlement.status === 'abgeschlossen' && (
+                        <span className="text-muted-foreground italic">
+                          (Änderungen nicht mehr möglich)
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
