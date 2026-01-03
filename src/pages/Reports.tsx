@@ -177,28 +177,22 @@ export default function Reports() {
   const totalHeizungskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
   const totalGesamtbetrag = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
 
-  // Calculate USt breakdown from gross amounts
-  const ustMiete = periodInvoices.reduce((sum, inv) => {
-    const grundmiete = Number(inv.grundmiete || 0);
-    const ustSatzMiete = Number(inv.ust_satz_miete || 0);
-    if (ustSatzMiete === 0) return sum;
-    return sum + (grundmiete - grundmiete / (1 + ustSatzMiete / 100));
-  }, 0);
+  // Calculate Netto totals using helper function
+  const nettoMieteTotal = periodInvoices.reduce((sum, inv) => 
+    sum + calculateNetFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
+  const nettoBkTotal = periodInvoices.reduce((sum, inv) => 
+    sum + calculateNetFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
+  const nettoHkTotal = periodInvoices.reduce((sum, inv) => 
+    sum + calculateNetFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
+  const totalNetto = nettoMieteTotal + nettoBkTotal + nettoHkTotal;
 
-  const ustBk = periodInvoices.reduce((sum, inv) => {
-    const betriebskosten = Number(inv.betriebskosten || 0);
-    const ustSatzBk = Number(inv.ust_satz_bk || 10);
-    if (ustSatzBk === 0) return sum;
-    return sum + (betriebskosten - betriebskosten / (1 + ustSatzBk / 100));
-  }, 0);
-
-  const ustHeizung = periodInvoices.reduce((sum, inv) => {
-    const heizungskosten = Number(inv.heizungskosten || 0);
-    const ustSatzHeizung = Number(inv.ust_satz_heizung || 20);
-    if (ustSatzHeizung === 0) return sum;
-    return sum + (heizungskosten - heizungskosten / (1 + ustSatzHeizung / 100));
-  }, 0);
-
+  // Calculate USt breakdown from gross amounts using helper function
+  const ustMiete = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
+  const ustBk = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
+  const ustHeizung = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
   const totalUst = ustMiete + ustBk + ustHeizung;
 
   // VAT liability: USt (was ans Finanzamt geht) - Vorsteuer (was abgezogen werden kann)
@@ -400,37 +394,49 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Einnahmen aus Vorschreibungen */}
+          {/* Einnahmen aus Vorschreibungen - Netto und Brutto */}
           <div className="mb-6">
-            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Vorschreibungen (brutto)</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Vorschreibungen</h4>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Grundmiete</p>
                 <p className="text-lg font-bold text-foreground">
                   €{totalGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                  <p>Netto: €{nettoMieteTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>USt: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Betriebskosten</p>
                 <p className="text-lg font-bold text-foreground">
                   €{totalBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                  <p>Netto: €{nettoBkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>USt: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Heizungskosten</p>
                 <p className="text-lg font-bold text-foreground">
                   €{totalHeizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                  <p>Netto: €{nettoHkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>USt: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <p className="text-xs text-muted-foreground">Gesamt Vorschreibung</p>
+                <p className="text-xs text-muted-foreground">Gesamt</p>
                 <p className="text-lg font-bold text-primary">
                   €{totalGesamtbetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt: €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                  <p>Netto: €{totalNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>USt: €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -591,25 +597,25 @@ export default function Reports() {
                   <TableRow className="bg-muted/50 font-semibold">
                     <TableCell colSpan={2}>Summe</TableCell>
                     <TableCell className="text-right">
-                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{nettoMieteTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">
-                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{nettoBkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">
-                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{nettoHkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">
-                      €{(totalGesamtbetrag - totalUst).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{totalNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-primary">
                       €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
