@@ -37,6 +37,13 @@ import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useExpenses } from '@/hooks/useExpenses';
+import { toast } from 'sonner';
+import {
+  generateRenditeReport,
+  generateLeerstandReport,
+  generateUmsatzReport,
+  generateUstVoranmeldung,
+} from '@/utils/reportPdfExport';
 
 // Berechnet Netto aus Brutto
 const calculateNetFromGross = (gross: number, vatRate: number): number => {
@@ -203,6 +210,73 @@ export default function Reports() {
     ? `Jahr ${selectedYear}` 
     : `${monthNames[selectedMonth - 1]} ${selectedYear}`;
 
+  // Report generation handler
+  const handleGenerateReport = (reportId: string) => {
+    if (!properties || !allUnits || !allTenants || !allInvoices || !allExpenses) {
+      toast.error('Daten werden noch geladen...');
+      return;
+    }
+
+    try {
+      switch (reportId) {
+        case 'rendite':
+          generateRenditeReport(
+            properties,
+            allUnits,
+            allInvoices,
+            selectedPropertyId,
+            selectedYear,
+            reportPeriod,
+            selectedMonth
+          );
+          toast.success('Renditereport wurde erstellt');
+          break;
+        case 'leerstand':
+          generateLeerstandReport(
+            properties,
+            allUnits,
+            allTenants,
+            selectedPropertyId,
+            selectedYear
+          );
+          toast.success('Leerstandsreport wurde erstellt');
+          break;
+        case 'umsatz':
+          generateUmsatzReport(
+            properties,
+            allUnits,
+            allTenants,
+            allInvoices,
+            selectedPropertyId,
+            selectedYear,
+            reportPeriod,
+            selectedMonth
+          );
+          toast.success('Umsatzreport wurde erstellt');
+          break;
+        case 'ust':
+          generateUstVoranmeldung(
+            properties,
+            allUnits,
+            allTenants,
+            allInvoices,
+            allExpenses,
+            selectedPropertyId,
+            selectedYear,
+            reportPeriod,
+            selectedMonth
+          );
+          toast.success('USt-Voranmeldung wurde erstellt');
+          break;
+        default:
+          toast.error('Report nicht gefunden');
+      }
+    } catch (error) {
+      console.error('Error generating report:', error);
+      toast.error('Fehler beim Erstellen des Reports');
+    }
+  };
+
   if (isLoading) {
     return (
       <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
@@ -352,7 +426,7 @@ export default function Reports() {
       <h2 className="text-lg font-semibold text-foreground mb-4">Verfügbare Reports</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         {reports.map((report) => (
-          <Card key={report.id} className="hover:shadow-card-hover transition-shadow cursor-pointer">
+          <Card key={report.id} className="hover:shadow-card-hover transition-shadow">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
               <div className="flex items-start gap-4">
                 <div className={`rounded-lg p-2.5 ${report.color}`}>
@@ -366,7 +440,7 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 mt-2">
-                <Button size="sm">
+                <Button size="sm" onClick={() => handleGenerateReport(report.id)}>
                   <Download className="h-4 w-4 mr-2" />
                   Generieren
                 </Button>
@@ -387,7 +461,7 @@ export default function Reports() {
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
-            <Button>
+            <Button onClick={() => handleGenerateReport('ust')}>
               <Download className="h-4 w-4 mr-2" />
               PDF Export
             </Button>
