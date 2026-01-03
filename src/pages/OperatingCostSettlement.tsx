@@ -61,7 +61,17 @@ const distributionKeyLabels: Record<string, string> = {
   personen: 'Personen',
 };
 
-interface UnitWithTenant {
+interface TenantInfo {
+  id: string;
+  name: string;
+  mietbeginn: string;
+  mietende: string | null;
+  status: string;
+  bk_vorschuss_monatlich: number;
+  hk_vorschuss_monatlich: number;
+}
+
+interface UnitWithTenants {
   id: string;
   top_nummer: string;
   type: string;
@@ -69,10 +79,10 @@ interface UnitWithTenant {
   mea: number;
   vs_personen: number | null;
   status: string;
-  tenant_id: string | null;
-  tenant_name: string | null;
-  bk_vorschuss_monatlich: number;
-  hk_vorschuss_monatlich: number;
+  // Current tenant at settlement time (for BK)
+  current_tenant: TenantInfo | null;
+  // Tenants who lived there during the year (for HK) - could be multiple
+  year_tenants: TenantInfo[];
 }
 
 export default function OperatingCostSettlement() {
@@ -88,9 +98,9 @@ export default function OperatingCostSettlement() {
     selectedMonth || undefined
   );
 
-  // Fetch ALL units (including vacancies) with tenant info and advance payments
+  // Fetch ALL units with current tenant and year tenants (including past tenants)
   const { data: units, isLoading: isLoadingUnits } = useQuery({
-    queryKey: ['units-with-tenants-advances', selectedPropertyId],
+    queryKey: ['units-with-tenants-advances', selectedPropertyId, selectedYear],
     queryFn: async () => {
       if (!selectedPropertyId) return [];
       
@@ -104,19 +114,48 @@ export default function OperatingCostSettlement() {
       if (unitsError) throw unitsError;
       if (!unitsData) return [];
 
-      // Get active tenants for this property's units with advance payment info
+      // Get ALL tenants for this property's units (including past tenants)
       const unitIds = unitsData.map(u => u.id);
       const { data: tenantsData } = await supabase
         .from('tenants')
-        .select('id, first_name, last_name, unit_id, betriebskosten_vorschuss, heizungskosten_vorschuss')
-        .in('unit_id', unitIds)
-        .eq('status', 'aktiv');
+        .select('id, first_name, last_name, unit_id, mietbeginn, mietende, status, betriebskosten_vorschuss, heizungskosten_vorschuss')
+        .in('unit_id', unitIds);
 
-      // Map tenants to units
-      const tenantMap = new Map(tenantsData?.map(t => [t.unit_id, t]) || []);
+      // Group tenants by unit
+      const tenantsByUnit = new Map<string, TenantInfo[]>();
+      tenantsData?.forEach(t => {
+        const tenant: TenantInfo = {
+          id: t.id,
+          name: `${t.first_name} ${t.last_name}`,
+          mietbeginn: t.mietbeginn,
+          mietende: t.mietende,
+          status: t.status,
+          bk_vorschuss_monatlich: Number(t.betriebskosten_vorschuss || 0),
+          hk_vorschuss_monatlich: Number(t.heizungskosten_vorschuss || 0),
+        };
+        const existing = tenantsByUnit.get(t.unit_id) || [];
+        existing.push(tenant);
+        tenantsByUnit.set(t.unit_id, existing);
+      });
+
+      const yearStart = `${selectedYear}-01-01`;
+      const yearEnd = `${selectedYear}-12-31`;
 
       return unitsData.map(u => {
-        const tenant = tenantMap.get(u.id);
+        const allTenants = tenantsByUnit.get(u.id) || [];
+        
+        // Current tenant = active tenant (for BK assignment)
+        const currentTenant = allTenants.find(t => t.status === 'aktiv') || null;
+        
+        // Year tenants = tenants who lived there during the selected year (for HK)
+        // A tenant lived during the year if:
+        // - mietbeginn <= yearEnd AND (mietende is null OR mietende >= yearStart)
+        const yearTenants = allTenants.filter(t => {
+          const beginn = t.mietbeginn;
+          const ende = t.mietende;
+          return beginn <= yearEnd && (ende === null || ende >= yearStart);
+        });
+
         return {
           id: u.id,
           top_nummer: u.top_nummer,
@@ -125,10 +164,8 @@ export default function OperatingCostSettlement() {
           mea: Number(u.mea),
           vs_personen: u.vs_personen,
           status: u.status,
-          tenant_id: tenant?.id || null,
-          tenant_name: tenant ? `${tenant.first_name} ${tenant.last_name}` : null,
-          bk_vorschuss_monatlich: Number(tenant?.betriebskosten_vorschuss || 0),
-          hk_vorschuss_monatlich: Number(tenant?.heizungskosten_vorschuss || 0),
+          current_tenant: currentTenant,
+          year_tenants: yearTenants,
         };
       });
     },
@@ -179,6 +216,8 @@ export default function OperatingCostSettlement() {
   const totalHeizkosten = hkKosten.reduce((sum, e) => sum + Number(e.betrag), 0);
 
   // Calculate distribution per unit (BK and HK separately)
+  // BK: Current tenant pays (or owner if vacant)
+  // HK: Year tenant (Altmieter) pays - the one who lived during the year
   const unitDistribution = useMemo(() => {
     if (!units || units.length === 0) return [];
 
@@ -222,16 +261,34 @@ export default function OperatingCostSettlement() {
         hkCost = (Number(unit.qm) / totals.qm) * totalHeizkosten;
       }
 
-      // Calculate advance payments for the period
-      const bkVorschussGesamt = unit.bk_vorschuss_monatlich * monthCount;
-      const hkVorschussGesamt = unit.hk_vorschuss_monatlich * monthCount;
+      // Determine who pays what:
+      // BK: Current tenant at settlement time (or owner if no current tenant)
+      const currentTenant = unit.current_tenant;
+      const isLeerstandBK = !currentTenant;
 
-      // Calculate balance (Guthaben/Nachzahlung)
-      // Positive = tenant pays more (Nachzahlung)
-      // Negative = tenant gets back (Guthaben)
-      const isLeerstand = unit.status === 'leerstand' || !unit.tenant_id;
-      const bkSaldo = isLeerstand ? 0 : Math.round((totalBkCost - bkVorschussGesamt) * 100) / 100;
-      const hkSaldo = isLeerstand ? 0 : Math.round((hkCost - hkVorschussGesamt) * 100) / 100;
+      // HK: Year tenant (Altmieter) - whoever lived during the year
+      // If there are multiple year tenants, use the earliest one (Altmieter)
+      // If no year tenants, HK also goes to owner
+      const yearTenant = unit.year_tenants.length > 0 
+        ? unit.year_tenants.sort((a, b) => a.mietbeginn.localeCompare(b.mietbeginn))[0]
+        : null;
+      const isLeerstandHK = !yearTenant;
+
+      // Calculate advance payments for the period
+      // BK advance from current tenant
+      const bkVorschussGesamt = currentTenant 
+        ? currentTenant.bk_vorschuss_monatlich * monthCount 
+        : 0;
+      // HK advance from year tenant (Altmieter)
+      const hkVorschussGesamt = yearTenant 
+        ? yearTenant.hk_vorschuss_monatlich * monthCount 
+        : 0;
+
+      // Calculate balance
+      // BK: Only if there's a current tenant
+      const bkSaldo = isLeerstandBK ? 0 : Math.round((totalBkCost - bkVorschussGesamt) * 100) / 100;
+      // HK: Only if there's a year tenant
+      const hkSaldo = isLeerstandHK ? 0 : Math.round((hkCost - hkVorschussGesamt) * 100) / 100;
 
       return {
         ...unit,
@@ -243,7 +300,11 @@ export default function OperatingCostSettlement() {
         bkSaldo,
         hkSaldo,
         gesamtSaldo: bkSaldo + hkSaldo,
-        isLeerstand,
+        isLeerstandBK,
+        isLeerstandHK,
+        isLeerstand: isLeerstandBK && isLeerstandHK,
+        bkMieter: currentTenant?.name || null,
+        hkMieter: yearTenant?.name || null,
       };
     });
   }, [units, expensesByType, totals, totalHeizkosten, monthCount]);
@@ -512,7 +573,8 @@ export default function OperatingCostSettlement() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Top</TableHead>
-                        <TableHead>Mieter</TableHead>
+                        <TableHead className="bg-blue-50">BK Mieter</TableHead>
+                        <TableHead className="bg-orange-50">HK Mieter (Altmieter)</TableHead>
                         <TableHead className="text-right">qm</TableHead>
                         <TableHead className="text-right bg-blue-50">BK Anteil</TableHead>
                         <TableHead className="text-right bg-blue-50">BK Vorschuss</TableHead>
@@ -520,7 +582,6 @@ export default function OperatingCostSettlement() {
                         <TableHead className="text-right bg-orange-50">HK Anteil</TableHead>
                         <TableHead className="text-right bg-orange-50">HK Vorschuss</TableHead>
                         <TableHead className="text-right bg-orange-50">HK Saldo</TableHead>
-                        <TableHead className="text-right font-bold">Gesamt Saldo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -528,76 +589,81 @@ export default function OperatingCostSettlement() {
                         <TableRow key={unit.id} className={unit.isLeerstand ? 'bg-muted/30' : ''}>
                           <TableCell className="font-medium">
                             {unit.top_nummer}
-                            {unit.isLeerstand && (
-                              <Badge variant="outline" className="ml-2 text-xs">Leerstand</Badge>
+                          </TableCell>
+                          {/* BK Mieter */}
+                          <TableCell className="bg-blue-50/30">
+                            {unit.bkMieter || (
+                              <span className="text-muted-foreground italic flex items-center gap-1">
+                                <Badge variant="outline" className="text-xs">Leerstand</Badge>
+                                Eigentümer
+                              </span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {unit.tenant_name || (
-                              <span className="text-muted-foreground italic">
-                                {unit.isLeerstand ? 'Eigentümer' : '—'}
+                          {/* HK Mieter (Altmieter) */}
+                          <TableCell className="bg-orange-50/30">
+                            {unit.hkMieter || (
+                              <span className="text-muted-foreground italic flex items-center gap-1">
+                                <Badge variant="outline" className="text-xs">Leerstand</Badge>
+                                Eigentümer
                               </span>
+                            )}
+                            {unit.hkMieter && unit.bkMieter && unit.hkMieter !== unit.bkMieter && (
+                              <Badge variant="secondary" className="ml-1 text-xs">Alt</Badge>
                             )}
                           </TableCell>
                           <TableCell className="text-right">{Number(unit.qm).toLocaleString('de-AT')}</TableCell>
                           {/* BK */}
                           <TableCell className="text-right bg-blue-50/50">
                             € {unit.totalBkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            {unit.isLeerstandBK && (
+                              <span className="text-xs block text-muted-foreground">(Eigentümer)</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right bg-blue-50/50">
-                            {unit.isLeerstand ? (
+                            {unit.isLeerstandBK ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               `€ ${unit.bkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}`
                             )}
                           </TableCell>
                           <TableCell className="text-right bg-blue-50/50">
-                            {unit.isLeerstand ? (
+                            {unit.isLeerstandBK ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               <span className={`flex items-center justify-end gap-1 ${unit.bkSaldo > 0 ? 'text-destructive' : unit.bkSaldo < 0 ? 'text-success' : ''}`}>
                                 {unit.bkSaldo > 0 && <TrendingUp className="h-3 w-3" />}
                                 {unit.bkSaldo < 0 && <TrendingDown className="h-3 w-3" />}
                                 € {Math.abs(unit.bkSaldo).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                <span className="text-xs font-normal ml-1">
+                                  {unit.bkSaldo > 0 ? '(Nachz.)' : unit.bkSaldo < 0 ? '(Guthaben)' : ''}
+                                </span>
                               </span>
                             )}
                           </TableCell>
                           {/* HK */}
                           <TableCell className="text-right bg-orange-50/50">
                             € {unit.hkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            {unit.isLeerstandHK && (
+                              <span className="text-xs block text-muted-foreground">(Eigentümer)</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right bg-orange-50/50">
-                            {unit.isLeerstand ? (
+                            {unit.isLeerstandHK ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               `€ ${unit.hkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}`
                             )}
                           </TableCell>
                           <TableCell className="text-right bg-orange-50/50">
-                            {unit.isLeerstand ? (
+                            {unit.isLeerstandHK ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               <span className={`flex items-center justify-end gap-1 ${unit.hkSaldo > 0 ? 'text-destructive' : unit.hkSaldo < 0 ? 'text-success' : ''}`}>
                                 {unit.hkSaldo > 0 && <TrendingUp className="h-3 w-3" />}
                                 {unit.hkSaldo < 0 && <TrendingDown className="h-3 w-3" />}
                                 € {Math.abs(unit.hkSaldo).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                              </span>
-                            )}
-                          </TableCell>
-                          {/* Gesamt */}
-                          <TableCell className="text-right font-bold">
-                            {unit.isLeerstand ? (
-                              <span className="text-muted-foreground">
-                                € {(unit.totalBkCost + unit.hkCost).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                                <span className="text-xs block font-normal">(Eigentümer)</span>
-                              </span>
-                            ) : (
-                              <span className={`flex items-center justify-end gap-1 ${unit.gesamtSaldo > 0 ? 'text-destructive' : unit.gesamtSaldo < 0 ? 'text-success' : ''}`}>
-                                {unit.gesamtSaldo > 0 && <TrendingUp className="h-4 w-4" />}
-                                {unit.gesamtSaldo < 0 && <TrendingDown className="h-4 w-4" />}
-                                € {Math.abs(unit.gesamtSaldo).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                                 <span className="text-xs font-normal ml-1">
-                                  {unit.gesamtSaldo > 0 ? '(Nachz.)' : unit.gesamtSaldo < 0 ? '(Guthaben)' : ''}
+                                  {unit.hkSaldo > 0 ? '(Nachz.)' : unit.hkSaldo < 0 ? '(Guthaben)' : ''}
                                 </span>
                               </span>
                             )}
@@ -608,27 +674,25 @@ export default function OperatingCostSettlement() {
                       <TableRow className="border-t-2 bg-muted/50">
                         <TableCell className="font-bold">Summe</TableCell>
                         <TableCell></TableCell>
+                        <TableCell></TableCell>
                         <TableCell className="text-right font-medium">{totals.qm.toLocaleString('de-AT')}</TableCell>
                         <TableCell className="text-right font-medium bg-blue-50/50">
                           € {unitDistribution.reduce((sum, u) => sum + u.totalBkCost, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-medium bg-blue-50/50">
-                          € {unitDistribution.filter(u => !u.isLeerstand).reduce((sum, u) => sum + u.bkVorschuss, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          € {unitDistribution.filter(u => !u.isLeerstandBK).reduce((sum, u) => sum + u.bkVorschuss, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-medium bg-blue-50/50">
-                          € {unitDistribution.filter(u => !u.isLeerstand).reduce((sum, u) => sum + u.bkSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          € {unitDistribution.filter(u => !u.isLeerstandBK).reduce((sum, u) => sum + u.bkSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-medium bg-orange-50/50">
                           € {unitDistribution.reduce((sum, u) => sum + u.hkCost, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-medium bg-orange-50/50">
-                          € {unitDistribution.filter(u => !u.isLeerstand).reduce((sum, u) => sum + u.hkVorschuss, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          € {unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkVorschuss, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right font-medium bg-orange-50/50">
-                          € {unitDistribution.filter(u => !u.isLeerstand).reduce((sum, u) => sum + u.hkSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          € {unitDistribution.filter(u => !u.isLeerstand).reduce((sum, u) => sum + u.gesamtSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          € {unitDistribution.filter(u => !u.isLeerstandHK).reduce((sum, u) => sum + u.hkSaldo, 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -640,11 +704,15 @@ export default function OperatingCostSettlement() {
               <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-destructive" />
-                  <span>Nachzahlung (Mieter zahlt mehr)</span>
+                  <span>Nachzahlung</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingDown className="h-4 w-4 text-success" />
-                  <span>Guthaben (Mieter erhält zurück)</span>
+                  <span>Guthaben</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">Alt</Badge>
+                  <span>Altmieter (zahlt nur HK)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">Leerstand</Badge>
