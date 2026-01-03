@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
 export type Invoice = Tables<'monthly_invoices'>;
@@ -46,6 +47,57 @@ export function useInvoicesByTenant(tenantId: string) {
       return data;
     },
     enabled: !!tenantId,
+  });
+}
+
+export function useCreateInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (invoice: InvoiceInsert) => {
+      const { data, error } = await supabase
+        .from('monthly_invoices')
+        .insert(invoice)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Vorschreibung erfolgreich erstellt');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Erstellen der Vorschreibung');
+      console.error('Create invoice error:', error);
+    },
+  });
+}
+
+export function useUpdateInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: InvoiceUpdate & { id: string }) => {
+      const { data, error } = await supabase
+        .from('monthly_invoices')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Vorschreibung aktualisiert');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Aktualisieren der Vorschreibung');
+      console.error('Update invoice error:', error);
+    },
   });
 }
 
@@ -115,6 +167,11 @@ export function useDeleteInvoice() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Vorschreibung gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen der Vorschreibung');
+      console.error('Delete invoice error:', error);
     },
   });
 }

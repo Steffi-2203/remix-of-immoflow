@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -12,6 +15,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   ArrowLeft,
   Edit,
@@ -29,7 +48,7 @@ import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useTenantsByUnit, Tenant } from '@/hooks/useTenants';
-import { useInvoices, useUpdateInvoiceStatus, Invoice } from '@/hooks/useInvoices';
+import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice, useDeleteInvoice, Invoice } from '@/hooks/useInvoices';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -85,12 +104,27 @@ export default function UnitDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [invoiceForm, setInvoiceForm] = useState({
+    month: (new Date().getMonth() + 1).toString(),
+    year: new Date().getFullYear().toString(),
+    grundmiete: '',
+    betriebskosten: '',
+    heizungskosten: '',
+    ust: '0',
+    faellig_am: format(new Date(new Date().getFullYear(), new Date().getMonth(), 5), 'yyyy-MM-dd'),
+  });
+  
   const { data: unit, isLoading: isLoadingUnit } = useUnit(unitId);
   const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId);
   const { data: tenants, isLoading: isLoadingTenants } = useTenantsByUnit(unitId);
   const { data: allInvoices } = useInvoices();
   const deleteUnit = useDeleteUnit();
   const updateInvoiceStatus = useUpdateInvoiceStatus();
+  const createInvoice = useCreateInvoice();
+  const updateInvoice = useUpdateInvoice();
+  const deleteInvoice = useDeleteInvoice();
 
   // Filter invoices for this unit
   const unitInvoices = allInvoices?.filter(inv => inv.unit_id === unitId) || [];
@@ -125,6 +159,87 @@ export default function UnitDetail() {
         variant: 'destructive',
       });
     }
+  };
+
+  const openInvoiceDialog = (invoice?: Invoice) => {
+    if (invoice) {
+      setEditingInvoice(invoice);
+      setInvoiceForm({
+        month: invoice.month.toString(),
+        year: invoice.year.toString(),
+        grundmiete: invoice.grundmiete.toString(),
+        betriebskosten: invoice.betriebskosten.toString(),
+        heizungskosten: invoice.heizungskosten.toString(),
+        ust: invoice.ust.toString(),
+        faellig_am: invoice.faellig_am,
+      });
+    } else {
+      setEditingInvoice(null);
+      // Pre-fill from active tenant if available
+      setInvoiceForm({
+        month: (new Date().getMonth() + 1).toString(),
+        year: new Date().getFullYear().toString(),
+        grundmiete: activeTenant?.grundmiete?.toString() || '',
+        betriebskosten: activeTenant?.betriebskosten_vorschuss?.toString() || '',
+        heizungskosten: activeTenant?.heizungskosten_vorschuss?.toString() || '',
+        ust: '0',
+        faellig_am: format(new Date(new Date().getFullYear(), new Date().getMonth(), 5), 'yyyy-MM-dd'),
+      });
+    }
+    setInvoiceDialogOpen(true);
+  };
+
+  const handleSaveInvoice = async () => {
+    if (!activeTenant || !unitId) {
+      toast({
+        title: 'Fehler',
+        description: 'Kein aktiver Mieter vorhanden.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const grundmiete = parseFloat(invoiceForm.grundmiete) || 0;
+    const betriebskosten = parseFloat(invoiceForm.betriebskosten) || 0;
+    const heizungskosten = parseFloat(invoiceForm.heizungskosten) || 0;
+    const ust = parseFloat(invoiceForm.ust) || 0;
+    const gesamtbetrag = grundmiete + betriebskosten + heizungskosten + ust;
+
+    try {
+      if (editingInvoice) {
+        await updateInvoice.mutateAsync({
+          id: editingInvoice.id,
+          month: parseInt(invoiceForm.month),
+          year: parseInt(invoiceForm.year),
+          grundmiete,
+          betriebskosten,
+          heizungskosten,
+          ust,
+          gesamtbetrag,
+          faellig_am: invoiceForm.faellig_am,
+        });
+      } else {
+        await createInvoice.mutateAsync({
+          tenant_id: activeTenant.id,
+          unit_id: unitId,
+          month: parseInt(invoiceForm.month),
+          year: parseInt(invoiceForm.year),
+          grundmiete,
+          betriebskosten,
+          heizungskosten,
+          ust,
+          gesamtbetrag,
+          faellig_am: invoiceForm.faellig_am,
+        });
+      }
+      setInvoiceDialogOpen(false);
+    } catch (error) {
+      console.error('Invoice save error:', error);
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    await deleteInvoice.mutateAsync(invoiceId);
   };
 
   if (isLoadingUnit || isLoadingProperty || isLoadingTenants) {
@@ -382,6 +497,12 @@ export default function UnitDetail() {
         <TabsContent value="invoices" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-foreground">Vorschreibungen</h3>
+            {activeTenant && (
+              <Button onClick={() => openInvoiceDialog()}>
+                <Plus className="h-4 w-4 mr-2" />
+                Vorschreibung erstellen
+              </Button>
+            )}
           </div>
 
           {unitInvoices.length > 0 ? (
@@ -431,16 +552,45 @@ export default function UnitDetail() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {invoice.status === 'offen' && (
+                          <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleMarkAsPaid(invoice.id)}
+                              onClick={() => openInvoiceDialog(invoice)}
                             >
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Bezahlt
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          )}
+                            {invoice.status === 'offen' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleMarkAsPaid(invoice.id)}
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Vorschreibung löschen?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Diese Aktion kann nicht rückgängig gemacht werden.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteInvoice(invoice.id)}>
+                                    Löschen
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -453,9 +603,15 @@ export default function UnitDetail() {
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">Noch keine Vorschreibungen vorhanden</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Vorschreibungen werden automatisch generiert
+                <p className="text-sm text-muted-foreground mt-1 mb-4">
+                  {activeTenant ? 'Erstellen Sie manuell eine Vorschreibung' : 'Fügen Sie zuerst einen Mieter hinzu'}
                 </p>
+                {activeTenant && (
+                  <Button onClick={() => openInvoiceDialog()}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Vorschreibung erstellen
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}
@@ -506,6 +662,150 @@ export default function UnitDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invoice Dialog */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingInvoice ? 'Vorschreibung bearbeiten' : 'Neue Vorschreibung erstellen'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingInvoice 
+                ? 'Bearbeiten Sie die Vorschreibungsdaten. Nach der BK-Abrechnung werden diese automatisch angepasst.'
+                : 'Erstellen Sie eine manuelle Vorschreibung. Diese wird später durch die BK-Abrechnung angepasst.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Monat</Label>
+                <Select
+                  value={invoiceForm.month}
+                  onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, month: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={(i + 1).toString()}>
+                        {format(new Date(2000, i), 'MMMM', { locale: de })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Jahr</Label>
+                <Select
+                  value={invoiceForm.year}
+                  onValueChange={(value) => setInvoiceForm(prev => ({ ...prev, year: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 5 }, (_, i) => {
+                      const year = new Date().getFullYear() - 2 + i;
+                      return (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Grundmiete (€)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={invoiceForm.grundmiete}
+                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, grundmiete: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Betriebskosten (€)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={invoiceForm.betriebskosten}
+                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, betriebskosten: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Heizungskosten (€)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={invoiceForm.heizungskosten}
+                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, heizungskosten: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>USt (€)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={invoiceForm.ust}
+                  onChange={(e) => setInvoiceForm(prev => ({ ...prev, ust: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fällig am</Label>
+              <Input
+                type="date"
+                value={invoiceForm.faellig_am}
+                onChange={(e) => setInvoiceForm(prev => ({ ...prev, faellig_am: e.target.value }))}
+              />
+            </div>
+
+            <div className="rounded-lg border p-3 bg-muted/50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Gesamtbetrag</span>
+                <span className="text-lg font-bold">
+                  € {(
+                    (parseFloat(invoiceForm.grundmiete) || 0) +
+                    (parseFloat(invoiceForm.betriebskosten) || 0) +
+                    (parseFloat(invoiceForm.heizungskosten) || 0) +
+                    (parseFloat(invoiceForm.ust) || 0)
+                  ).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleSaveInvoice} 
+              disabled={createInvoice.isPending || updateInvoice.isPending}
+            >
+              {(createInvoice.isPending || updateInvoice.isPending) && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {editingInvoice ? 'Aktualisieren' : 'Erstellen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
