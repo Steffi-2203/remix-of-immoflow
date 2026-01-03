@@ -195,10 +195,11 @@ export default function UnitList() {
                   <TableHead>Liegenschaft</TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Fläche</TableHead>
-                  <TableHead>MEA</TableHead>
                   <TableHead>Mieter</TableHead>
-                  <TableHead>Miete</TableHead>
-                  <TableHead>Vorschreibungen</TableHead>
+                  <TableHead className="text-right">Grundmiete</TableHead>
+                  <TableHead className="text-right">BK</TableHead>
+                  <TableHead className="text-right">HK</TableHead>
+                  <TableHead className="text-right">Vorschreibung</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -209,9 +210,11 @@ export default function UnitList() {
                   const unitInvoices = getInvoicesForUnit(unit.id);
                   const openInvoices = unitInvoices.filter(i => i.status === 'offen').length;
                   const Icon = unitTypeIcons[unit.type] || Building2;
-                  const totalRent = tenant
-                    ? Number(tenant.grundmiete) + Number(tenant.betriebskosten_vorschuss) + Number(tenant.heizungskosten_vorschuss)
-                    : 0;
+                  
+                  const grundmiete = tenant ? Number(tenant.grundmiete) : 0;
+                  const bk = tenant ? Number(tenant.betriebskosten_vorschuss) : 0;
+                  const hk = tenant ? Number(tenant.heizungskosten_vorschuss) : 0;
+                  const totalRent = grundmiete + bk + hk;
 
                   return (
                     <TableRow 
@@ -234,7 +237,6 @@ export default function UnitList() {
                         <Badge variant="secondary">{unitTypeLabels[unit.type]}</Badge>
                       </TableCell>
                       <TableCell>{Number(unit.qm).toLocaleString('de-AT')} m²</TableCell>
-                      <TableCell>{Number(unit.mea)}‰</TableCell>
                       <TableCell>
                         {tenant ? (
                           <div className="flex items-center gap-2">
@@ -245,25 +247,41 @@ export default function UnitList() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         {tenant ? (
-                          <span className="font-medium">
-                            € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-muted-foreground">
+                            € {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Receipt className="h-4 w-4 text-muted-foreground" />
-                          <span>{unitInvoices.length}</span>
-                          {openInvoices > 0 && (
-                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                              {openInvoices} offen
-                            </Badge>
-                          )}
-                        </div>
+                      <TableCell className="text-right">
+                        {tenant ? (
+                          <span className="text-muted-foreground">
+                            € {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {tenant ? (
+                          <span className="text-muted-foreground">
+                            € {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {tenant ? (
+                          <span className="font-semibold text-foreground">
+                            € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={statusStyles[unit.status]}>
