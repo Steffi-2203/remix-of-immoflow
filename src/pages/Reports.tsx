@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   TrendingUp,
   Home,
@@ -11,6 +19,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
+  Building2,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -49,12 +58,31 @@ const reports = [
 ];
 
 export default function Reports() {
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
+  
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
-  const { data: units, isLoading: isLoadingUnits } = useUnits();
-  const { data: invoices, isLoading: isLoadingInvoices } = useInvoices();
-  const { data: expenses, isLoading: isLoadingExpenses } = useExpenses();
+  const { data: allUnits, isLoading: isLoadingUnits } = useUnits();
+  const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
+  const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
 
   const isLoading = isLoadingProperties || isLoadingUnits || isLoadingInvoices || isLoadingExpenses;
+
+  // Filter data by selected property
+  const units = selectedPropertyId === 'all' 
+    ? allUnits 
+    : allUnits?.filter(u => u.property_id === selectedPropertyId);
+  
+  const expenses = selectedPropertyId === 'all'
+    ? allExpenses
+    : allExpenses?.filter(e => e.property_id === selectedPropertyId);
+
+  // Get unit IDs for filtering invoices
+  const unitIds = units?.map(u => u.id) || [];
+  const invoices = selectedPropertyId === 'all'
+    ? allInvoices
+    : allInvoices?.filter(inv => unitIds.includes(inv.unit_id));
+
+  const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
   // Calculate real statistics
   const currentYear = new Date().getFullYear();
@@ -92,9 +120,12 @@ export default function Reports() {
   // VAT liability
   const vatLiability = ustFromInvoices - vorsteuerFromExpenses;
 
-  // Simple yield calculation
-  const totalPropertyValue = (properties?.length || 0) * 500000; // Rough estimate
-  const annualYield = totalPropertyValue > 0 ? (annualRevenue / totalPropertyValue) * 100 : 0;
+  // Simple yield calculation based on property value or total qm
+  const totalQm = selectedPropertyId === 'all'
+    ? properties?.reduce((sum, p) => sum + Number(p.total_qm || 0), 0) || 0
+    : Number(selectedProperty?.total_qm || 0);
+  const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
+  const annualYield = estimatedPropertyValue > 0 ? (annualRevenue / estimatedPropertyValue) * 100 : 0;
 
   // Get month names for USt section
   const monthNames = [
@@ -139,6 +170,32 @@ export default function Reports() {
 
   return (
     <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
+      {/* Property Filter */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Liegenschaft:</span>
+        </div>
+        <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Liegenschaft wählen" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Liegenschaften</SelectItem>
+            {properties?.map((property) => (
+              <SelectItem key={property.id} value={property.id}>
+                {property.name} - {property.address}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedPropertyId !== 'all' && selectedProperty && (
+          <span className="text-sm text-muted-foreground">
+            {Number(selectedProperty.total_qm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
+          </span>
+        )}
+      </div>
+
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>
@@ -152,7 +209,7 @@ export default function Reports() {
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {properties?.length || 0} Liegenschaften
+                {totalQm.toLocaleString('de-AT')} m²
               </div>
             </div>
           </CardContent>
