@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      expenses: {
+        Row: {
+          beleg_nummer: string | null
+          betrag: number
+          bezeichnung: string
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at: string
+          datum: string
+          expense_type: Database["public"]["Enums"]["expense_type"]
+          id: string
+          month: number
+          notizen: string | null
+          property_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          beleg_nummer?: string | null
+          betrag?: number
+          bezeichnung: string
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          datum: string
+          expense_type?: Database["public"]["Enums"]["expense_type"]
+          id?: string
+          month: number
+          notizen?: string | null
+          property_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          beleg_nummer?: string | null
+          betrag?: number
+          bezeichnung?: string
+          category?: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          datum?: string
+          expense_type?: Database["public"]["Enums"]["expense_type"]
+          id?: string
+          month?: number
+          notizen?: string | null
+          property_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_invoices: {
         Row: {
           betriebskosten: number
@@ -497,6 +553,23 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      expense_category: "betriebskosten_umlagefaehig" | "instandhaltung"
+      expense_type:
+        | "versicherung"
+        | "grundsteuer"
+        | "muellabfuhr"
+        | "wasser_abwasser"
+        | "heizung"
+        | "strom_allgemein"
+        | "hausbetreuung"
+        | "lift"
+        | "gartenpflege"
+        | "schneeraeumung"
+        | "verwaltung"
+        | "ruecklage"
+        | "reparatur"
+        | "sanierung"
+        | "sonstiges"
       invoice_status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig"
       payment_type: "sepa" | "ueberweisung" | "bar" | "sonstiges"
       settlement_status: "entwurf" | "berechnet" | "versendet" | "abgeschlossen"
@@ -635,6 +708,24 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      expense_category: ["betriebskosten_umlagefaehig", "instandhaltung"],
+      expense_type: [
+        "versicherung",
+        "grundsteuer",
+        "muellabfuhr",
+        "wasser_abwasser",
+        "heizung",
+        "strom_allgemein",
+        "hausbetreuung",
+        "lift",
+        "gartenpflege",
+        "schneeraeumung",
+        "verwaltung",
+        "ruecklage",
+        "reparatur",
+        "sanierung",
+        "sonstiges",
+      ],
       invoice_status: ["offen", "bezahlt", "teilbezahlt", "ueberfaellig"],
       payment_type: ["sepa", "ueberweisung", "bar", "sonstiges"],
       settlement_status: ["entwurf", "berechnet", "versendet", "abgeschlossen"],
