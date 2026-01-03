@@ -8,11 +8,14 @@ import {
   FileText,
   Download,
   Calendar,
-  BarChart3,
-  PieChart,
   ArrowUpRight,
   ArrowDownRight,
+  Loader2,
 } from 'lucide-react';
+import { useProperties } from '@/hooks/useProperties';
+import { useUnits } from '@/hooks/useUnits';
+import { useInvoices } from '@/hooks/useInvoices';
+import { useExpenses } from '@/hooks/useExpenses';
 
 const reports = [
   {
@@ -41,11 +44,99 @@ const reports = [
     title: 'USt-Voranmeldung',
     description: 'Umsatzsteuer vs. Vorsteuer für das Finanzamt',
     icon: FileText,
-    color: 'bg-accent/10 text-accent',
+    color: 'bg-accent/10 text-accent-foreground',
   },
 ];
 
 export default function Reports() {
+  const { data: properties, isLoading: isLoadingProperties } = useProperties();
+  const { data: units, isLoading: isLoadingUnits } = useUnits();
+  const { data: invoices, isLoading: isLoadingInvoices } = useInvoices();
+  const { data: expenses, isLoading: isLoadingExpenses } = useExpenses();
+
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingInvoices || isLoadingExpenses;
+
+  // Calculate real statistics
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  // Vacancy rate
+  const totalUnits = units?.length || 0;
+  const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
+  const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
+
+  // Annual revenue from invoices
+  const yearInvoices = invoices?.filter(inv => inv.year === currentYear) || [];
+  const annualRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  
+  // Monthly revenue estimate (from paid invoices this year)
+  const paidInvoices = yearInvoices.filter(inv => inv.status === 'bezahlt');
+  const paidRevenue = paidInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+
+  // Calculate VAT from invoices (USt) - current month
+  const currentMonthInvoices = invoices?.filter(
+    inv => inv.year === currentYear && inv.month === currentMonth
+  ) || [];
+  const ustFromInvoices = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.ust || 0), 0);
+
+  // Calculate input VAT from expenses (Vorsteuer) - current month  
+  const currentMonthExpenses = expenses?.filter(
+    exp => exp.year === currentYear && exp.month === currentMonth
+  ) || [];
+  const vorsteuerFromExpenses = currentMonthExpenses.reduce((sum, exp) => {
+    // Assume 20% VAT on expenses for simplicity
+    const betrag = Number(exp.betrag || 0);
+    return sum + (betrag - betrag / 1.2);
+  }, 0);
+
+  // VAT liability
+  const vatLiability = ustFromInvoices - vorsteuerFromExpenses;
+
+  // Simple yield calculation
+  const totalPropertyValue = (properties?.length || 0) * 500000; // Rough estimate
+  const annualYield = totalPropertyValue > 0 ? (annualRevenue / totalPropertyValue) * 100 : 0;
+
+  // Get month names for USt section
+  const monthNames = [
+    'Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+  ];
+  const currentMonthName = monthNames[currentMonth - 1];
+
+  // Calculate USt breakdown
+  const ustMiete = currentMonthInvoices.reduce((sum, inv) => {
+    const grundmiete = Number(inv.grundmiete || 0);
+    const ustSatzMiete = Number((inv as any).ust_satz_miete || 0);
+    if (ustSatzMiete === 0) return sum;
+    return sum + (grundmiete - grundmiete / (1 + ustSatzMiete / 100));
+  }, 0);
+
+  const ustBk = currentMonthInvoices.reduce((sum, inv) => {
+    const betriebskosten = Number(inv.betriebskosten || 0);
+    const ustSatzBk = Number((inv as any).ust_satz_bk || 10);
+    if (ustSatzBk === 0) return sum;
+    return sum + (betriebskosten - betriebskosten / (1 + ustSatzBk / 100));
+  }, 0);
+
+  const ustHeizung = currentMonthInvoices.reduce((sum, inv) => {
+    const heizungskosten = Number(inv.heizungskosten || 0);
+    const ustSatzHeizung = Number((inv as any).ust_satz_heizung || 20);
+    if (ustSatzHeizung === 0) return sum;
+    return sum + (heizungskosten - heizungskosten / (1 + ustSatzHeizung / 100));
+  }, 0);
+
+  const totalUst = ustMiete + ustBk + ustHeizung;
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
       {/* Quick Stats */}
@@ -54,12 +145,14 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Jahresrendite</p>
-                <p className="text-2xl font-bold text-foreground mt-1">4.8%</p>
+                <p className="text-sm text-muted-foreground">Jahresrendite (geschätzt)</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {annualYield.toFixed(1)}%
+                </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                +0.3%
+                {properties?.length || 0} Liegenschaften
               </div>
             </div>
           </CardContent>
@@ -69,11 +162,13 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Leerstandsquote</p>
-                <p className="text-2xl font-bold text-foreground mt-1">10.5%</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  {vacancyRate.toFixed(1)}%
+                </p>
               </div>
-              <div className="flex items-center gap-1 text-destructive text-sm">
-                <ArrowDownRight className="h-4 w-4" />
-                +2.1%
+              <div className={`flex items-center gap-1 text-sm ${vacancyRate > 10 ? 'text-destructive' : 'text-success'}`}>
+                {vacancyRate > 10 ? <ArrowDownRight className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                {vacantUnits} von {totalUnits}
               </div>
             </div>
           </CardContent>
@@ -82,12 +177,14 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Jahresumsatz</p>
-                <p className="text-2xl font-bold text-foreground mt-1">€548.160</p>
+                <p className="text-sm text-muted-foreground">Jahresumsatz {currentYear}</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  €{annualRevenue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                +5.2%
+                {yearInvoices.length} Vorschreibungen
               </div>
             </div>
           </CardContent>
@@ -97,9 +194,11 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">USt-Zahllast</p>
-                <p className="text-2xl font-bold text-foreground mt-1">€8.420</p>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  €{vatLiability.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <div className="text-xs text-muted-foreground">Dezember 2024</div>
+              <div className="text-xs text-muted-foreground">{currentMonthName} {currentYear}</div>
             </div>
           </CardContent>
         </Card>
@@ -142,7 +241,7 @@ export default function Reports() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>USt-Voranmeldung Dezember 2024</CardTitle>
+              <CardTitle>USt-Voranmeldung {currentMonthName} {currentYear}</CardTitle>
               <CardDescription>Vorschau für das Finanzamt</CardDescription>
             </div>
             <Button>
@@ -154,26 +253,34 @@ export default function Reports() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Umsatzsteuer (10%/20%)</p>
-              <p className="text-2xl font-bold text-foreground mt-2">€12.840,00</p>
-              <div className="mt-2 text-xs text-muted-foreground">
-                <p>Wohnungen (10%): €4.560,00</p>
-                <p>Geschäfte (20%): €8.280,00</p>
+              <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Einnahmen)</p>
+              <p className="text-2xl font-bold text-foreground mt-2">
+                €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                <p>Miete: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>BK (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Heizung (20%): €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
             <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Vorsteuer (Ausgaben)</p>
-              <p className="text-2xl font-bold text-foreground mt-2">€4.420,00</p>
+              <p className="text-sm text-muted-foreground">Vorsteuer (aus Ausgaben)</p>
+              <p className="text-2xl font-bold text-foreground mt-2">
+                €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p>Betriebskosten: €2.850,00</p>
-                <p>Instandhaltung: €1.570,00</p>
+                <p>{currentMonthExpenses.length} Ausgaben in {currentMonthName}</p>
               </div>
             </div>
-            <div className="rounded-lg border border-success/30 bg-success/5 p-4">
-              <p className="text-sm text-muted-foreground">Zahllast</p>
-              <p className="text-2xl font-bold text-success mt-2">€8.420,00</p>
+            <div className={`rounded-lg border p-4 ${vatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
+              <p className="text-sm text-muted-foreground">
+                {vatLiability >= 0 ? 'Zahllast' : 'Gutschrift'}
+              </p>
+              <p className={`text-2xl font-bold mt-2 ${vatLiability >= 0 ? 'text-success' : 'text-primary'}`}>
+                €{Math.abs(vatLiability).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p>Fällig bis: 15.02.2025</p>
+                <p>Fällig bis: 15.{(currentMonth + 1).toString().padStart(2, '0')}.{currentYear}</p>
               </div>
             </div>
           </div>
