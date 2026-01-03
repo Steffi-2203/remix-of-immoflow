@@ -4,7 +4,8 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowLeft, Save, Loader2, Home, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
@@ -25,6 +26,41 @@ const unitTypes = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
+// All 20 distribution keys with their labels and units
+const distributionKeyFields = [
+  { key: 'vs_qm', label: 'Quadratmeter', unit: 'm²', description: 'Nutzfläche' },
+  { key: 'vs_mea', label: 'MEA', unit: '‰', description: 'Miteigentumsanteile' },
+  { key: 'vs_personen', label: 'Personenanzahl', unit: 'Pers.', description: 'Bewohner' },
+  { key: 'vs_heizung_verbrauch', label: 'Heizungsverbrauch', unit: 'kWh', description: 'Heizverbrauch' },
+  { key: 'vs_wasser_verbrauch', label: 'Wasserverbrauch', unit: 'm³', description: 'Wasserverbrauch' },
+  { key: 'vs_lift_wohnung', label: 'Lift Wohnung', unit: 'Anteil', description: 'Liftkosten Wohnung' },
+  { key: 'vs_lift_geschaeft', label: 'Lift Geschäft', unit: 'Anteil', description: 'Liftkosten Geschäft' },
+  { key: 'vs_muell', label: 'Müllentsorgung', unit: 'Anteil', description: 'Müllgebühren' },
+  { key: 'vs_strom_allgemein', label: 'Allgemeinstrom', unit: 'Anteil', description: 'Strom Allgemein' },
+  { key: 'vs_versicherung', label: 'Versicherung', unit: 'Anteil', description: 'Gebäudeversicherung' },
+  { key: 'vs_hausbetreuung', label: 'Hausbetreuung', unit: 'Anteil', description: 'Hausbetreuung' },
+  { key: 'vs_garten', label: 'Gartenpflege', unit: 'Anteil', description: 'Gartenpflege' },
+  { key: 'vs_schneeraeumung', label: 'Schneeräumung', unit: 'Anteil', description: 'Winterdienst' },
+  { key: 'vs_kanal', label: 'Kanalgebühren', unit: 'Anteil', description: 'Kanal' },
+  { key: 'vs_grundsteuer', label: 'Grundsteuer', unit: 'Anteil', description: 'Grundsteuer' },
+  { key: 'vs_verwaltung', label: 'Verwaltungskosten', unit: 'Anteil', description: 'Verwaltung' },
+  { key: 'vs_ruecklage', label: 'Rücklage', unit: 'Anteil', description: 'Instandhaltung' },
+  { key: 'vs_sonstiges_1', label: 'Sonstiges 1', unit: 'Anteil', description: 'Frei definierbar' },
+  { key: 'vs_sonstiges_2', label: 'Sonstiges 2', unit: 'Anteil', description: 'Frei definierbar' },
+  { key: 'vs_sonstiges_3', label: 'Sonstiges 3', unit: 'Anteil', description: 'Frei definierbar' },
+];
+
+type UnitType = 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
+
+interface FormData {
+  top_nummer: string;
+  type: UnitType;
+  floor: string;
+  qm: string;
+  mea: string;
+  [key: string]: string | UnitType;
+}
+
 export default function UnitForm() {
   const { propertyId, unitId } = useParams();
   const navigate = useNavigate();
@@ -35,25 +71,53 @@ export default function UnitForm() {
   const createUnit = useCreateUnit();
   const updateUnit = useUpdateUnit();
 
-  const [formData, setFormData] = useState({
-    top_nummer: '',
-    type: 'wohnung' as 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges',
-    floor: '',
-    qm: '',
-    mea: '',
+  const [formData, setFormData] = useState<FormData>(() => {
+    const initial: FormData = {
+      top_nummer: '',
+      type: 'wohnung',
+      floor: '',
+      qm: '',
+      mea: '',
+    };
+    // Initialize all distribution key fields
+    distributionKeyFields.forEach(field => {
+      initial[field.key] = '';
+    });
+    return initial;
   });
 
   useEffect(() => {
     if (existingUnit) {
-      setFormData({
+      const newFormData: FormData = {
         top_nummer: existingUnit.top_nummer || '',
         type: existingUnit.type || 'wohnung',
         floor: existingUnit.floor?.toString() || '',
         qm: existingUnit.qm?.toString() || '',
         mea: existingUnit.mea?.toString() || '',
+      };
+      
+      // Set distribution key values from existing unit
+      distributionKeyFields.forEach(field => {
+        const value = (existingUnit as any)[field.key];
+        newFormData[field.key] = value?.toString() || '';
       });
+      
+      setFormData(newFormData);
     }
   }, [existingUnit]);
+
+  // Auto-sync qm and mea to distribution keys when they change
+  useEffect(() => {
+    if (formData.qm && !formData.vs_qm) {
+      setFormData(prev => ({ ...prev, vs_qm: prev.qm }));
+    }
+  }, [formData.qm]);
+
+  useEffect(() => {
+    if (formData.mea && !formData.vs_mea) {
+      setFormData(prev => ({ ...prev, vs_mea: prev.mea }));
+    }
+  }, [formData.mea]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -63,16 +127,24 @@ export default function UnitForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const unitData = {
+    const unitData: any = {
       property_id: propertyId!,
       top_nummer: formData.top_nummer,
-      type: formData.type as any,
+      type: formData.type,
       floor: formData.floor ? parseInt(formData.floor) : null,
       qm: parseFloat(formData.qm) || 0,
       mea: parseFloat(formData.mea) || 0,
-      vs_qm: parseFloat(formData.qm) || 0,
-      vs_mea: parseFloat(formData.mea) || 0,
     };
+
+    // Add all distribution key values
+    distributionKeyFields.forEach(field => {
+      const value = formData[field.key];
+      if (field.key === 'vs_personen') {
+        unitData[field.key] = value ? parseInt(value as string) : 0;
+      } else {
+        unitData[field.key] = value ? parseFloat(value as string) : 0;
+      }
+    });
 
     if (isEditing && unitId) {
       await updateUnit.mutateAsync({ id: unitId, ...unitData });
@@ -110,78 +182,122 @@ export default function UnitForm() {
         </Link>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Einheitsdaten</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="top_nummer">Top-Nummer *</Label>
-              <Input
-                id="top_nummer"
-                name="top_nummer"
-                value={formData.top_nummer}
-                onChange={handleChange}
-                placeholder="z.B. Top 1, Garage 2"
-                required
-              />
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Unit Data */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="h-5 w-5" />
+              Einheitsdaten
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="top_nummer">Top-Nummer *</Label>
+                <Input
+                  id="top_nummer"
+                  name="top_nummer"
+                  value={formData.top_nummer}
+                  onChange={handleChange}
+                  placeholder="z.B. Top 1, Garage 2"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="type">Typ *</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value as UnitType }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Typ wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unitTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="floor">Stockwerk</Label>
+                <Input
+                  id="floor"
+                  name="floor"
+                  type="number"
+                  value={formData.floor}
+                  onChange={handleChange}
+                  placeholder="z.B. 0, 1, -1"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="qm">Nutzfläche (m²) *</Label>
+                <Input
+                  id="qm"
+                  name="qm"
+                  type="number"
+                  step="0.01"
+                  value={formData.qm}
+                  onChange={handleChange}
+                  placeholder="z.B. 78.50"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mea">MEA (‰) *</Label>
+                <Input
+                  id="mea"
+                  name="mea"
+                  type="number"
+                  step="0.01"
+                  value={formData.mea}
+                  onChange={handleChange}
+                  placeholder="z.B. 79"
+                  required
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">Typ *</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value as any }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Typ wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unitTypes.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          </CardContent>
+        </Card>
+
+        {/* Distribution Keys */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Verteilerschlüssel (20 Schlüssel)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Geben Sie die Werte für die Betriebskostenverteilung dieser Einheit ein. 
+              Die Verteilung erfolgt anteilig zu den Gesamtwerten der Liegenschaft.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {distributionKeyFields.map((field) => (
+                <div key={field.key} className="space-y-2">
+                  <Label htmlFor={field.key} className="text-sm">
+                    {field.label}
+                    <span className="text-muted-foreground ml-1">({field.unit})</span>
+                  </Label>
+                  <Input
+                    id={field.key}
+                    name={field.key}
+                    type="number"
+                    step={field.key === 'vs_personen' ? '1' : '0.01'}
+                    min="0"
+                    value={formData[field.key] as string}
+                    onChange={handleChange}
+                    placeholder="0"
+                  />
+                </div>
+              ))}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="floor">Stockwerk</Label>
-              <Input
-                id="floor"
-                name="floor"
-                type="number"
-                value={formData.floor}
-                onChange={handleChange}
-                placeholder="z.B. 0, 1, -1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="qm">Fläche (m²) *</Label>
-              <Input
-                id="qm"
-                name="qm"
-                type="number"
-                step="0.01"
-                value={formData.qm}
-                onChange={handleChange}
-                placeholder="z.B. 78.50"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mea">MEA (‰) *</Label>
-              <Input
-                id="mea"
-                name="mea"
-                type="number"
-                step="0.01"
-                value={formData.mea}
-                onChange={handleChange}
-                placeholder="z.B. 79"
-                required
-              />
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <div className="flex items-center justify-end gap-4">
           <Button

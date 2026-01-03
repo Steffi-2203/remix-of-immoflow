@@ -247,9 +247,11 @@ export default function PropertyDetail() {
                     <TableHead>Typ</TableHead>
                     <TableHead>Fläche</TableHead>
                     <TableHead>MEA</TableHead>
+                    <TableHead>Personen</TableHead>
                     <TableHead>Mieter</TableHead>
                     <TableHead>Gesamtmiete</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -263,11 +265,12 @@ export default function PropertyDetail() {
                       : 0;
 
                     return (
-                      <TableRow key={unit.id} className="hover:bg-muted/30 cursor-pointer">
+                      <TableRow key={unit.id} className="hover:bg-muted/30">
                         <TableCell className="font-medium">{unit.top_nummer}</TableCell>
                         <TableCell>{unitTypeLabels[unit.type] || unit.type}</TableCell>
                         <TableCell>{Number(unit.qm).toLocaleString('de-AT')} m²</TableCell>
                         <TableCell>{Number(unit.mea)}‰</TableCell>
+                        <TableCell>{unit.vs_personen || 0}</TableCell>
                         <TableCell>
                           {activeTenant ? (
                             <div>
@@ -296,6 +299,13 @@ export default function PropertyDetail() {
                           <span className={cn('status-badge', statusStyles[unit.status])}>
                             {statusLabels[unit.status] || unit.status}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          <Link to={`/liegenschaften/${id}/einheiten/${unit.id}/bearbeiten`}>
+                            <Button variant="ghost" size="sm">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Link>
                         </TableCell>
                       </TableRow>
                     );
