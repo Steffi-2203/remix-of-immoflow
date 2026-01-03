@@ -87,52 +87,47 @@ export default function OperatingCostSettlement() {
     selectedMonth || undefined
   );
 
-  // Fetch units with tenants for the selected property
+  // Fetch ALL units (including vacancies) with optional tenant info
   const { data: units, isLoading: isLoadingUnits } = useQuery({
     queryKey: ['units-with-tenants', selectedPropertyId],
     queryFn: async () => {
       if (!selectedPropertyId) return [];
       
-      const { data, error } = await supabase
+      // Get all units first
+      const { data: unitsData, error: unitsError } = await supabase
         .from('units')
-        .select(`
-          id,
-          top_nummer,
-          type,
-          qm,
-          mea,
-          vs_personen,
-          tenants!inner(id, first_name, last_name, status)
-        `)
-        .eq('property_id', selectedPropertyId);
+        .select('id, top_nummer, type, qm, mea, vs_personen, status')
+        .eq('property_id', selectedPropertyId)
+        .order('top_nummer');
+      
+      if (unitsError) throw unitsError;
+      if (!unitsData) return [];
 
-      if (error) {
-        // Try without inner join if no tenants
-        const { data: unitsOnly, error: unitsError } = await supabase
-          .from('units')
-          .select('id, top_nummer, type, qm, mea, vs_personen')
-          .eq('property_id', selectedPropertyId);
-        
-        if (unitsError) throw unitsError;
-        return unitsOnly?.map(u => ({
-          ...u,
-          tenant_id: null,
-          tenant_name: null,
-        })) || [];
-      }
+      // Get active tenants for this property's units
+      const unitIds = unitsData.map(u => u.id);
+      const { data: tenantsData } = await supabase
+        .from('tenants')
+        .select('id, first_name, last_name, unit_id')
+        .in('unit_id', unitIds)
+        .eq('status', 'aktiv');
 
-      return data?.map(u => ({
-        id: u.id,
-        top_nummer: u.top_nummer,
-        type: u.type,
-        qm: Number(u.qm),
-        mea: Number(u.mea),
-        vs_personen: u.vs_personen,
-        tenant_id: (u.tenants as any)?.[0]?.status === 'aktiv' ? (u.tenants as any)?.[0]?.id : null,
-        tenant_name: (u.tenants as any)?.[0]?.status === 'aktiv' 
-          ? `${(u.tenants as any)?.[0]?.first_name} ${(u.tenants as any)?.[0]?.last_name}`
-          : null,
-      })) || [];
+      // Map tenants to units
+      const tenantMap = new Map(tenantsData?.map(t => [t.unit_id, t]) || []);
+
+      return unitsData.map(u => {
+        const tenant = tenantMap.get(u.id);
+        return {
+          id: u.id,
+          top_nummer: u.top_nummer,
+          type: u.type,
+          qm: Number(u.qm),
+          mea: Number(u.mea),
+          vs_personen: u.vs_personen,
+          status: u.status,
+          tenant_id: tenant?.id || null,
+          tenant_name: tenant ? `${tenant.first_name} ${tenant.last_name}` : null,
+        };
+      });
     },
     enabled: !!selectedPropertyId,
   });
