@@ -134,7 +134,13 @@ export default function Reports() {
   ];
   const currentMonthName = monthNames[currentMonth - 1];
 
-  // Calculate USt breakdown
+  // Calculate gross totals per category from invoices
+  const totalGrundmiete = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+  const totalBetriebskosten = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+  const totalHeizungskosten = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  const totalGesamtbetrag = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+
+  // Calculate USt breakdown from gross amounts
   const ustMiete = currentMonthInvoices.reduce((sum, inv) => {
     const grundmiete = Number(inv.grundmiete || 0);
     const ustSatzMiete = Number((inv as any).ust_satz_miete || 0);
@@ -299,7 +305,10 @@ export default function Reports() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>USt-Voranmeldung {currentMonthName} {currentYear}</CardTitle>
-              <CardDescription>Vorschau für das Finanzamt</CardDescription>
+              <CardDescription>
+                Basierend auf {currentMonthInvoices.length} Vorschreibungen
+                {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
+              </CardDescription>
             </div>
             <Button>
               <Download className="h-4 w-4 mr-2" />
@@ -308,15 +317,51 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Einnahmen aus Vorschreibungen */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Vorschreibungen (brutto)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Grundmiete</p>
+                <p className="text-lg font-bold text-foreground">
+                  €{totalGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground">davon USt: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Betriebskosten</p>
+                <p className="text-lg font-bold text-foreground">
+                  €{totalBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground">davon USt (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Heizungskosten</p>
+                <p className="text-lg font-bold text-foreground">
+                  €{totalHeizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground">davon USt (20%): €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs text-muted-foreground">Gesamt Vorschreibung</p>
+                <p className="text-lg font-bold text-primary">
+                  €{totalGesamtbetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground">davon USt: €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* USt Berechnung */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Einnahmen)</p>
+              <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Vorschreibungen)</p>
               <p className="text-2xl font-bold text-foreground mt-2">
                 €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                <p>Miete: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>BK (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Miete (0%/10%/20%): €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Betriebskosten (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
                 <p>Heizung (20%): €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
