@@ -22,7 +22,6 @@ import {
   Users,
   Receipt,
   CheckCircle2,
-  Clock,
   CreditCard,
   Trash2,
 } from 'lucide-react';
@@ -275,7 +274,7 @@ export default function UnitDetail() {
         <TabsContent value="tenants" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-foreground">Mieter</h3>
-            <Link to={`/einheiten/${unitId}/mieter/neu`}>
+            <Link to={`/einheiten/${propertyId}/${unitId}/mieter/neu`}>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Mieter hinzufügen
@@ -298,6 +297,7 @@ export default function UnitDetail() {
                       <TableHead className="text-right">Gesamt</TableHead>
                       <TableHead>SEPA</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -345,6 +345,13 @@ export default function UnitDetail() {
                               {statusLabels[tenant.status] || tenant.status}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <Link to={`/einheiten/${propertyId}/${unitId}/mieter/${tenant.id}/bearbeiten`}>
+                              <Button variant="ghost" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -360,7 +367,7 @@ export default function UnitDetail() {
                 <p className="text-sm text-muted-foreground mt-1 mb-4">
                   Fügen Sie einen Mieter für diese Einheit hinzu
                 </p>
-                <Link to={`/einheiten/${unitId}/mieter/neu`}>
+                <Link to={`/einheiten/${propertyId}/${unitId}/mieter/neu`}>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
                     Mieter hinzufügen
