@@ -3,8 +3,6 @@ import { cn } from '@/lib/utils';
 import {
   Building2,
   Home,
-  Users,
-  Receipt,
   FileText,
   BarChart3,
   Settings,
@@ -28,8 +26,6 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', icon: Home, href: '/' },
   { label: 'Liegenschaften', icon: Building2, href: '/liegenschaften' },
   { label: 'Einheiten', icon: FolderOpen, href: '/einheiten' },
-  { label: 'Mieter', icon: Users, href: '/mieter' },
-  { label: 'Vorschreibungen', icon: Receipt, href: '/vorschreibungen' },
   { label: 'Zahlungen', icon: CreditCard, href: '/zahlungen' },
   { label: 'BK-Abrechnung', icon: Calculator, href: '/abrechnung' },
   { label: 'Dokumente', icon: FileText, href: '/dokumente' },

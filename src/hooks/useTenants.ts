@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Database } from '@/integrations/supabase/types';
+import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-type TenantInsert = Database['public']['Tables']['tenants']['Insert'];
+export type Tenant = Tables<'tenants'>;
+export type TenantInsert = TablesInsert<'tenants'>;
+export type TenantUpdate = TablesUpdate<'tenants'>;
 
 export function useTenants() {
   return useQuery({
@@ -86,7 +88,7 @@ export function useUpdateTenant() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<TenantInsert> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: TenantUpdate & { id: string }) => {
       const { data, error } = await supabase
         .from('tenants')
         .update(updates)
@@ -105,6 +107,30 @@ export function useUpdateTenant() {
     onError: (error) => {
       toast.error('Fehler beim Aktualisieren des Mieters');
       console.error('Update tenant error:', error);
+    },
+  });
+}
+
+export function useDeleteTenant() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('tenants')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['units'] });
+      toast.success('Mieter erfolgreich gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen des Mieters');
+      console.error('Delete tenant error:', error);
     },
   });
 }
