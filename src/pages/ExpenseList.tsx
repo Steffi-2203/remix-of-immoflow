@@ -49,12 +49,14 @@ import {
   useExpenses, 
   useExpensesByCategory,
   useCreateExpense, 
+  useUpdateExpense,
   useDeleteExpense,
   expenseCategoryLabels,
   expenseTypeLabels,
   expenseTypesByCategory,
   type ExpenseCategory,
-  type ExpenseType 
+  type ExpenseType,
+  type Expense
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
 import { format } from 'date-fns';
@@ -65,6 +67,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function ExpenseList() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
   const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -84,12 +87,29 @@ export default function ExpenseList() {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  
+  // Edit state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<(Expense & { properties?: { name: string }, beleg_url?: string }) | null>(null);
+  const [editForm, setEditForm] = useState({
+    property_id: '',
+    category: 'betriebskosten_umlagefaehig' as ExpenseCategory,
+    expense_type: 'sonstiges' as ExpenseType,
+    bezeichnung: '',
+    betrag: '',
+    datum: '',
+    beleg_nummer: '',
+    notizen: '',
+    beleg_url: '',
+  });
+  const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null);
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
   const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
   const { data: categoryStats } = useExpensesByCategory(propertyFilter, selectedYear);
   const { data: properties } = useProperties();
   const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
 
   // Filter expenses
@@ -104,7 +124,7 @@ export default function ExpenseList() {
     );
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type !== 'application/pdf') {
@@ -123,13 +143,17 @@ export default function ExpenseList() {
         });
         return;
       }
-      setSelectedFile(file);
+      if (isEdit) {
+        setEditSelectedFile(file);
+      } else {
+        setSelectedFile(file);
+      }
     }
   };
 
-  const uploadFile = async (file: File): Promise<string | null> => {
+  const uploadFile = async (file: File, propertyId: string): Promise<string | null> => {
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const filePath = `${newExpense.property_id}/${fileName}`;
+    const filePath = `${propertyId}/${fileName}`;
 
     const { error } = await supabase.storage
       .from('expense-receipts')
@@ -163,7 +187,7 @@ export default function ExpenseList() {
     try {
       // Upload file if selected
       if (selectedFile) {
-        const url = await uploadFile(selectedFile);
+        const url = await uploadFile(selectedFile, newExpense.property_id);
         if (url) {
           beleg_url = url;
         }
@@ -207,7 +231,70 @@ export default function ExpenseList() {
     }
   };
 
-  // Years for filter
+  // Open edit dialog
+  const openEditDialog = (expense: Expense & { properties?: { name: string }, beleg_url?: string }) => {
+    setEditingExpense(expense);
+    setEditForm({
+      property_id: expense.property_id,
+      category: expense.category,
+      expense_type: expense.expense_type,
+      bezeichnung: expense.bezeichnung,
+      betrag: expense.betrag.toString(),
+      datum: expense.datum,
+      beleg_nummer: expense.beleg_nummer || '',
+      notizen: expense.notizen || '',
+      beleg_url: expense.beleg_url || '',
+    });
+    setEditSelectedFile(null);
+    setEditDialogOpen(true);
+  };
+
+  // Handle update expense
+  const handleUpdateExpense = async () => {
+    if (!editingExpense || !editForm.bezeichnung || !editForm.betrag) {
+      return;
+    }
+
+    setUploading(true);
+    let beleg_url: string | undefined = editForm.beleg_url || undefined;
+
+    try {
+      // Upload new file if selected
+      if (editSelectedFile) {
+        const url = await uploadFile(editSelectedFile, editForm.property_id);
+        if (url) {
+          beleg_url = url;
+        }
+      }
+
+      const date = new Date(editForm.datum);
+      
+      await updateExpense.mutateAsync({
+        id: editingExpense.id,
+        category: editForm.category,
+        expense_type: editForm.expense_type,
+        bezeichnung: editForm.bezeichnung,
+        betrag: parseFloat(editForm.betrag),
+        datum: editForm.datum,
+        beleg_nummer: editForm.beleg_nummer || undefined,
+        notizen: editForm.notizen || undefined,
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        beleg_url,
+      } as any);
+
+      setEditDialogOpen(false);
+      setEditingExpense(null);
+      setEditSelectedFile(null);
+
+      toast({
+        title: 'Kosten aktualisiert',
+        description: editSelectedFile ? 'Rechnung wurde hochgeladen.' : 'Änderungen wurden gespeichert.',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   return (
@@ -383,7 +470,7 @@ export default function ExpenseList() {
                     ref={fileInputRef}
                     type="file"
                     accept="application/pdf"
-                    onChange={handleFileChange}
+                    onChange={(e) => handleFileChange(e, false)}
                     className="hidden"
                   />
                   <Button
@@ -564,14 +651,24 @@ export default function ExpenseList() {
                         € {Number(expense.betrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteExpense.mutate(expense.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => openEditDialog(expense as any)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteExpense.mutate(expense.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -581,6 +678,189 @@ export default function ExpenseList() {
           </CardContent>
         </Tabs>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Kosten bearbeiten</DialogTitle>
+            <DialogDescription>
+              Bearbeiten Sie die Ausgabe oder fügen Sie einen Rechnungsbeleg hinzu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Liegenschaft</Label>
+              <Input
+                value={editingExpense?.properties?.name || '-'}
+                disabled
+                className="bg-muted"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Kategorie</Label>
+                <Select
+                  value={editForm.category}
+                  onValueChange={(value: ExpenseCategory) => setEditForm(prev => ({ 
+                    ...prev, 
+                    category: value,
+                    expense_type: expenseTypesByCategory[value][0] 
+                  }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="betriebskosten_umlagefaehig">Betriebskosten (umlagefähig)</SelectItem>
+                    <SelectItem value="instandhaltung">Instandhaltung</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Art</Label>
+                <Select
+                  value={editForm.expense_type}
+                  onValueChange={(value: ExpenseType) => setEditForm(prev => ({ ...prev, expense_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {expenseTypesByCategory[editForm.category].map(type => (
+                      <SelectItem key={type} value={type}>{expenseTypeLabels[type]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Bezeichnung</Label>
+              <Input
+                placeholder="z.B. Gebäudeversicherung 2024"
+                value={editForm.bezeichnung}
+                onChange={(e) => setEditForm(prev => ({ ...prev, bezeichnung: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Betrag (€)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={editForm.betrag}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, betrag: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Datum</Label>
+                <Input
+                  type="date"
+                  value={editForm.datum}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, datum: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Belegnummer (optional)</Label>
+              <Input
+                placeholder="z.B. RE-2024-001"
+                value={editForm.beleg_nummer}
+                onChange={(e) => setEditForm(prev => ({ ...prev, beleg_nummer: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notizen (optional)</Label>
+              <Textarea
+                placeholder="Zusätzliche Informationen..."
+                value={editForm.notizen}
+                onChange={(e) => setEditForm(prev => ({ ...prev, notizen: e.target.value }))}
+              />
+            </div>
+
+            {/* PDF Upload / Existing PDF */}
+            <div className="space-y-2">
+              <Label>Rechnungsbeleg (PDF)</Label>
+              
+              {/* Show existing PDF if available */}
+              {editForm.beleg_url && !editSelectedFile && (
+                <div className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <a
+                    href={editForm.beleg_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex-1 truncate"
+                  >
+                    Vorhandener Beleg anzeigen
+                  </a>
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <input
+                  ref={editFileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => handleFileChange(e, true)}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => editFileInputRef.current?.click()}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {editSelectedFile 
+                    ? editSelectedFile.name 
+                    : editForm.beleg_url 
+                      ? 'Neuen Beleg hochladen' 
+                      : 'PDF hochladen'
+                  }
+                </Button>
+                {editSelectedFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setEditSelectedFile(null)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Max. 10 MB, nur PDF-Format
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleUpdateExpense} 
+              disabled={uploading || updateExpense.isPending || !editForm.bezeichnung || !editForm.betrag}
+            >
+              {(uploading || updateExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {uploading ? 'Hochladen...' : 'Speichern'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
