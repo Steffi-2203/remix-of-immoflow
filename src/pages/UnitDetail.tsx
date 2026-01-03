@@ -115,7 +115,7 @@ export default function UnitDetail() {
     month: (new Date().getMonth() + 1).toString(),
     year: new Date().getFullYear().toString(),
     grundmiete: '',
-    ust_satz_miete: '10', // 10% für Wohnungsmiete in Österreich
+    ust_satz_miete: '10', // Default, wird durch getDefaultVatRates() überschrieben
     betriebskosten: '',
     ust_satz_bk: '10',
     heizungskosten: '',
@@ -190,7 +190,19 @@ export default function UnitDetail() {
     }
   };
 
+  // USt-Sätze basierend auf Objekttyp: Wohnung 10%/10%/20%, Geschäft/Garage 20%/20%/20%
+  const getDefaultVatRates = () => {
+    const isCommercial = unit?.type === 'geschaeft' || unit?.type === 'garage' || unit?.type === 'stellplatz' || unit?.type === 'lager';
+    return {
+      ust_satz_miete: isCommercial ? '20' : '10',
+      ust_satz_bk: isCommercial ? '20' : '10',
+      ust_satz_heizung: '20', // Heizung immer 20%
+    };
+  };
+
   const openInvoiceDialog = (invoice?: Invoice) => {
+    const defaultVatRates = getDefaultVatRates();
+    
     if (invoice) {
       setEditingInvoice(invoice);
       setInvoiceForm({
@@ -206,16 +218,16 @@ export default function UnitDetail() {
       });
     } else {
       setEditingInvoice(null);
-      // Pre-fill from active tenant if available
+      // Pre-fill from active tenant if available, USt-Sätze basierend auf Objekttyp
       setInvoiceForm({
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
         grundmiete: activeTenant?.grundmiete?.toString() || '',
-        ust_satz_miete: '10', // 10% für Wohnungsmiete in Österreich
+        ust_satz_miete: defaultVatRates.ust_satz_miete,
         betriebskosten: activeTenant?.betriebskosten_vorschuss?.toString() || '',
-        ust_satz_bk: '10',
+        ust_satz_bk: defaultVatRates.ust_satz_bk,
         heizungskosten: activeTenant?.heizungskosten_vorschuss?.toString() || '',
-        ust_satz_heizung: '20',
+        ust_satz_heizung: defaultVatRates.ust_satz_heizung,
         faellig_am: format(new Date(new Date().getFullYear(), new Date().getMonth(), 5), 'yyyy-MM-dd'),
       });
     }
