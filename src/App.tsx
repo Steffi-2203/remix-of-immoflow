@@ -11,6 +11,7 @@ import UnitList from "./pages/UnitList";
 import UnitDetail from "./pages/UnitDetail";
 import UnitForm from "./pages/UnitForm";
 import TenantForm from "./pages/TenantForm";
+import PaymentList from "./pages/PaymentList";
 import Reports from "./pages/Reports";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
@@ -35,7 +36,7 @@ const App = () => (
           <Route path="/einheiten/:propertyId/:unitId" element={<UnitDetail />} />
           <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<TenantForm />} />
           <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<TenantForm />} />
-          <Route path="/zahlungen" element={<ComingSoon title="Zahlungen" subtitle="Zahlungseingänge und SEPA-Einzüge" />} />
+          <Route path="/zahlungen" element={<PaymentList />} />
           <Route path="/abrechnung" element={<ComingSoon title="BK-Abrechnung" subtitle="Betriebskostenabrechnung erstellen" />} />
           <Route path="/dokumente" element={<ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" />} />
           <Route path="/reports" element={<Reports />} />
