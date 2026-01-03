@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -42,7 +43,10 @@ import {
   Receipt,
   Upload,
   FileSpreadsheet,
-  X
+  X,
+  AlertTriangle,
+  Clock,
+  Users
 } from 'lucide-react';
 import { usePayments, useCreatePayment } from '@/hooks/usePayments';
 import * as XLSX from 'xlsx';
@@ -50,7 +54,7 @@ import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useInvoices, useUpdateInvoiceStatus } from '@/hooks/useInvoices';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 const paymentTypeLabels: Record<string, string> = {
@@ -411,6 +415,91 @@ export default function PaymentList() {
     }).reduce((sum, p) => sum + Number(p.betrag), 0) || 0,
   };
 
+  // Calculate open items (offene Posten) per tenant
+  const openItemsPerTenant = useMemo(() => {
+    if (!tenants || !invoices || !payments) return [];
+
+    const activeTenants = tenants.filter(t => t.status === 'aktiv');
+    
+    return activeTenants.map(tenant => {
+      // Get all invoices for this tenant
+      const tenantInvoices = invoices.filter(i => i.tenant_id === tenant.id);
+      const openInvoices = tenantInvoices.filter(i => i.status === 'offen' || i.status === 'teilbezahlt' || i.status === 'ueberfaellig');
+      
+      // Calculate total Soll (what should be paid)
+      const totalSoll = tenantInvoices.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0);
+      
+      // Calculate total Ist (what was paid)
+      const tenantPayments = payments.filter(p => p.tenant_id === tenant.id);
+      const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.betrag), 0);
+      
+      // Saldo (negative = owes money)
+      const saldo = totalIst - totalSoll;
+      
+      // Find oldest overdue invoice for Mahnstatus
+      const today = new Date();
+      let oldestOverdueDays = 0;
+      let oldestOverdueInvoice: any = null;
+      
+      openInvoices.forEach(inv => {
+        const dueDate = new Date(inv.faellig_am);
+        if (dueDate < today) {
+          const daysDue = differenceInDays(today, dueDate);
+          if (daysDue > oldestOverdueDays) {
+            oldestOverdueDays = daysDue;
+            oldestOverdueInvoice = inv;
+          }
+        }
+      });
+
+      // Determine Mahnstatus
+      let mahnstatus = 'aktuell';
+      if (oldestOverdueDays > 30) {
+        mahnstatus = '2. Mahnung';
+      } else if (oldestOverdueDays > 14) {
+        mahnstatus = '1. Mahnung';
+      } else if (oldestOverdueDays > 0) {
+        mahnstatus = 'Zahlungserinnerung';
+      }
+
+      // Get unit info
+      const unit = units?.find(u => u.id === tenant.unit_id);
+
+      return {
+        tenant,
+        unit,
+        openInvoices,
+        totalSoll,
+        totalIst,
+        saldo,
+        oldestOverdueDays,
+        oldestOverdueInvoice,
+        mahnstatus,
+      };
+    }).filter(item => item.saldo < 0 || item.openInvoices.length > 0)
+      .sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
+  }, [tenants, invoices, payments, units]);
+
+  // Get invoice details for payment breakdown
+  const getPaymentBreakdown = (payment: any) => {
+    if (!payment.invoice_id) return null;
+    const invoice = invoices?.find(i => i.id === payment.invoice_id);
+    if (!invoice) return null;
+    
+    return {
+      miete: Number(invoice.grundmiete),
+      bk: Number(invoice.betriebskosten),
+      hk: Number(invoice.heizungskosten),
+      ust: Number(invoice.ust),
+    };
+  };
+
+  const openItemsStats = {
+    totalTenants: openItemsPerTenant.length,
+    totalOpenAmount: openItemsPerTenant.reduce((sum, item) => sum + Math.abs(Math.min(0, item.saldo)), 0),
+    overdueCount: openItemsPerTenant.filter(item => item.oldestOverdueDays > 0).length,
+  };
+
   return (
     <MainLayout
       title="Zahlungseingänge"
@@ -638,8 +727,25 @@ export default function PaymentList() {
         </Card>
       </div>
 
-      {/* Payments Table */}
-      <Card>
+      {/* Tabs for Payments and Open Items */}
+      <Tabs defaultValue="payments" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="payments" className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
+            Zahlungseingänge
+          </TabsTrigger>
+          <TabsTrigger value="openitems" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Offene Posten
+            {openItemsStats.totalTenants > 0 && (
+              <Badge variant="destructive" className="ml-1">{openItemsStats.totalTenants}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payments">
+          {/* Payments Table */}
+          <Card>
         <CardContent className="p-0">
           {paymentsLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -659,18 +765,19 @@ export default function PaymentList() {
                 <TableRow>
                   <TableHead>Eingangsdatum</TableHead>
                   <TableHead>Mieter</TableHead>
-                  <TableHead>Top / Liegenschaft</TableHead>
-                  <TableHead>Referenz</TableHead>
-                  <TableHead>Zahlungsart</TableHead>
-                  <TableHead className="text-right">Betrag</TableHead>
-                  <TableHead>Zugeordnet</TableHead>
+                  <TableHead>Top</TableHead>
+                  <TableHead className="text-right">Miete brutto</TableHead>
+                  <TableHead className="text-right">BK brutto</TableHead>
+                  <TableHead className="text-right">HK brutto</TableHead>
+                  <TableHead className="text-right">Gesamt</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPayments.map((payment) => {
                   const tenant = (payment as any).tenants;
                   const unit = tenant?.units;
-                  const property = unit?.properties;
+                  const breakdown = getPaymentBreakdown(payment);
 
                   return (
                     <TableRow key={payment.id}>
@@ -681,22 +788,18 @@ export default function PaymentList() {
                         {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
                       </TableCell>
                       <TableCell>
-                        {unit ? (
-                          <div>
-                            <span className="font-medium">{unit.top_nummer}</span>
-                            <span className="text-muted-foreground text-sm ml-2">{property?.name}</span>
-                          </div>
-                        ) : '-'}
+                        {unit ? unit.top_nummer : '-'}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {payment.referenz || '-'}
+                      <TableCell className="text-right">
+                        {breakdown ? `€ ${breakdown.miete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}` : '-'}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {paymentTypeLabels[payment.zahlungsart] || payment.zahlungsart}
-                        </Badge>
+                      <TableCell className="text-right">
+                        {breakdown ? `€ ${breakdown.bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}` : '-'}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right">
+                        {breakdown ? `€ ${breakdown.hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}` : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-bold">
                         € {Number(payment.betrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
@@ -706,7 +809,7 @@ export default function PaymentList() {
                             Zugeordnet
                           </Badge>
                         ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
+                          <Badge variant="secondary">Offen</Badge>
                         )}
                       </TableCell>
                     </TableRow>
@@ -717,8 +820,118 @@ export default function PaymentList() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
 
-      {/* Import Dialog */}
+        {/* Open Items Tab */}
+        <TabsContent value="openitems">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                    <Users className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Mieter mit Rückstand</p>
+                    <p className="text-2xl font-bold">{openItemsStats.totalTenants}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                    <Euro className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Offener Gesamtbetrag</p>
+                    <p className="text-2xl font-bold text-red-600">€ {openItemsStats.totalOpenAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                    <Clock className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Überfällig</p>
+                    <p className="text-2xl font-bold text-orange-600">{openItemsStats.overdueCount}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {openItemsPerTenant.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
+                  <p className="text-muted-foreground">Keine offenen Posten</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Alle Mieter sind auf dem aktuellen Stand.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mieter</TableHead>
+                      <TableHead>Top</TableHead>
+                      <TableHead className="text-right">Soll</TableHead>
+                      <TableHead className="text-right">Gezahlt</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
+                      <TableHead>Tage überfällig</TableHead>
+                      <TableHead>Mahnstatus</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {openItemsPerTenant.map((item) => (
+                      <TableRow key={item.tenant.id}>
+                        <TableCell className="font-medium">
+                          {item.tenant.first_name} {item.tenant.last_name}
+                        </TableCell>
+                        <TableCell>{item.unit?.top_nummer || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          € {item.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          € {item.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-red-600">
+                          € {item.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>
+                          {item.oldestOverdueDays > 0 ? (
+                            <span className="text-orange-600 font-medium">{item.oldestOverdueDays} Tage</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.mahnstatus === 'aktuell' ? (
+                            <Badge variant="secondary">Aktuell</Badge>
+                          ) : item.mahnstatus === 'Zahlungserinnerung' ? (
+                            <Badge className="bg-yellow-100 text-yellow-800">Zahlungserinnerung</Badge>
+                          ) : item.mahnstatus === '1. Mahnung' ? (
+                            <Badge className="bg-orange-100 text-orange-800">1. Mahnung</Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800">2. Mahnung</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
