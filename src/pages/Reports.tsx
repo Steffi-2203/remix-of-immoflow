@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   TrendingUp,
   Home,
@@ -57,8 +58,17 @@ const reports = [
   },
 ];
 
+const monthNames = [
+  'Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+];
+
 export default function Reports() {
+  const currentDate = new Date();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
+  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
   
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: allUnits, isLoading: isLoadingUnits } = useUnits();
@@ -66,6 +76,9 @@ export default function Reports() {
   const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
 
   const isLoading = isLoadingProperties || isLoadingUnits || isLoadingInvoices || isLoadingExpenses;
+
+  // Generate year options (last 5 years)
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
 
   // Filter data by selected property
   const units = selectedPropertyId === 'all' 
@@ -84,34 +97,39 @@ export default function Reports() {
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
-  // Calculate real statistics
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
+  // Filter invoices by selected period
+  const periodInvoices = invoices?.filter(inv => {
+    if (reportPeriod === 'yearly') {
+      return inv.year === selectedYear;
+    }
+    return inv.year === selectedYear && inv.month === selectedMonth;
+  }) || [];
+
+  // Filter expenses by selected period
+  const periodExpenses = expenses?.filter(exp => {
+    if (reportPeriod === 'yearly') {
+      return exp.year === selectedYear;
+    }
+    return exp.year === selectedYear && exp.month === selectedMonth;
+  }) || [];
 
   // Vacancy rate
   const totalUnits = units?.length || 0;
   const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  // Annual revenue from invoices
-  const yearInvoices = invoices?.filter(inv => inv.year === currentYear) || [];
-  const annualRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  // Revenue from invoices for selected period
+  const periodRevenue = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
   
-  // Monthly revenue estimate (from paid invoices this year)
-  const paidInvoices = yearInvoices.filter(inv => inv.status === 'bezahlt');
-  const paidRevenue = paidInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  // Annual revenue (always for selected year)
+  const yearInvoices = invoices?.filter(inv => inv.year === selectedYear) || [];
+  const annualRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
 
-  // Calculate VAT from invoices (USt) - current month
-  const currentMonthInvoices = invoices?.filter(
-    inv => inv.year === currentYear && inv.month === currentMonth
-  ) || [];
-  const ustFromInvoices = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.ust || 0), 0);
+  // Calculate USt from invoices
+  const ustFromInvoices = periodInvoices.reduce((sum, inv) => sum + Number(inv.ust || 0), 0);
 
-  // Calculate input VAT from expenses (Vorsteuer) - current month  
-  const currentMonthExpenses = expenses?.filter(
-    exp => exp.year === currentYear && exp.month === currentMonth
-  ) || [];
-  const vorsteuerFromExpenses = currentMonthExpenses.reduce((sum, exp) => {
+  // Calculate input VAT from expenses (Vorsteuer)
+  const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
     // Assume 20% VAT on expenses for simplicity
     const betrag = Number(exp.betrag || 0);
     return sum + (betrag - betrag / 1.2);
@@ -127,42 +145,40 @@ export default function Reports() {
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   const annualYield = estimatedPropertyValue > 0 ? (annualRevenue / estimatedPropertyValue) * 100 : 0;
 
-  // Get month names for USt section
-  const monthNames = [
-    'Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni',
-    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-  ];
-  const currentMonthName = monthNames[currentMonth - 1];
-
   // Calculate gross totals per category from invoices
-  const totalGrundmiete = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-  const totalBetriebskosten = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-  const totalHeizungskosten = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
-  const totalGesamtbetrag = currentMonthInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  const totalGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+  const totalBetriebskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+  const totalHeizungskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  const totalGesamtbetrag = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
 
   // Calculate USt breakdown from gross amounts
-  const ustMiete = currentMonthInvoices.reduce((sum, inv) => {
+  const ustMiete = periodInvoices.reduce((sum, inv) => {
     const grundmiete = Number(inv.grundmiete || 0);
-    const ustSatzMiete = Number((inv as any).ust_satz_miete || 0);
+    const ustSatzMiete = Number(inv.ust_satz_miete || 0);
     if (ustSatzMiete === 0) return sum;
     return sum + (grundmiete - grundmiete / (1 + ustSatzMiete / 100));
   }, 0);
 
-  const ustBk = currentMonthInvoices.reduce((sum, inv) => {
+  const ustBk = periodInvoices.reduce((sum, inv) => {
     const betriebskosten = Number(inv.betriebskosten || 0);
-    const ustSatzBk = Number((inv as any).ust_satz_bk || 10);
+    const ustSatzBk = Number(inv.ust_satz_bk || 10);
     if (ustSatzBk === 0) return sum;
     return sum + (betriebskosten - betriebskosten / (1 + ustSatzBk / 100));
   }, 0);
 
-  const ustHeizung = currentMonthInvoices.reduce((sum, inv) => {
+  const ustHeizung = periodInvoices.reduce((sum, inv) => {
     const heizungskosten = Number(inv.heizungskosten || 0);
-    const ustSatzHeizung = Number((inv as any).ust_satz_heizung || 20);
+    const ustSatzHeizung = Number(inv.ust_satz_heizung || 20);
     if (ustSatzHeizung === 0) return sum;
     return sum + (heizungskosten - heizungskosten / (1 + ustSatzHeizung / 100));
   }, 0);
 
   const totalUst = ustMiete + ustBk + ustHeizung;
+
+  // Period label for display
+  const periodLabel = reportPeriod === 'yearly' 
+    ? `Jahr ${selectedYear}` 
+    : `${monthNames[selectedMonth - 1]} ${selectedYear}`;
 
   if (isLoading) {
     return (
@@ -176,25 +192,67 @@ export default function Reports() {
 
   return (
     <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
-      {/* Property Filter */}
-      <div className="flex items-center gap-4 mb-6">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        {/* Property Filter */}
         <div className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Liegenschaft:</span>
+          <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+            <SelectTrigger className="w-[250px]">
+              <SelectValue placeholder="Liegenschaft wählen" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Liegenschaften</SelectItem>
+              {properties?.map((property) => (
+                <SelectItem key={property.id} value={property.id}>
+                  {property.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Liegenschaft wählen" />
+
+        {/* Period Toggle */}
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-muted-foreground" />
+          <Tabs value={reportPeriod} onValueChange={(v) => setReportPeriod(v as 'monthly' | 'yearly')}>
+            <TabsList>
+              <TabsTrigger value="monthly">Monatlich</TabsTrigger>
+              <TabsTrigger value="yearly">Jährlich</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Year Selection */}
+        <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+          <SelectTrigger className="w-[120px]">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Alle Liegenschaften</SelectItem>
-            {properties?.map((property) => (
-              <SelectItem key={property.id} value={property.id}>
-                {property.name} - {property.address}
+            {yearOptions.map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                {year}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {/* Month Selection (only visible if monthly) */}
+        {reportPeriod === 'monthly' && (
+          <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthNames.map((month, index) => (
+                <SelectItem key={index + 1} value={(index + 1).toString()}>
+                  {month}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {selectedPropertyId !== 'all' && selectedProperty && (
           <span className="text-sm text-muted-foreground">
             {Number(selectedProperty.total_qm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
@@ -240,14 +298,14 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Jahresumsatz {currentYear}</p>
+                <p className="text-sm text-muted-foreground">Umsatz {periodLabel}</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{annualRevenue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{periodRevenue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {yearInvoices.length} Vorschreibungen
+                {periodInvoices.length} Vorschreibungen
               </div>
             </div>
           </CardContent>
@@ -261,7 +319,7 @@ export default function Reports() {
                   €{vatLiability.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="text-xs text-muted-foreground">{currentMonthName} {currentYear}</div>
+              <div className="text-xs text-muted-foreground">{periodLabel}</div>
             </div>
           </CardContent>
         </Card>
@@ -285,10 +343,6 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 mt-2">
-                <Button variant="outline" size="sm">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Zeitraum wählen
-                </Button>
                 <Button size="sm">
                   <Download className="h-4 w-4 mr-2" />
                   Generieren
@@ -304,9 +358,9 @@ export default function Reports() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>USt-Voranmeldung {currentMonthName} {currentYear}</CardTitle>
+              <CardTitle>USt-Voranmeldung {periodLabel}</CardTitle>
               <CardDescription>
-                Basierend auf {currentMonthInvoices.length} Vorschreibungen
+                Basierend auf {periodInvoices.length} Vorschreibungen
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
@@ -333,14 +387,14 @@ export default function Reports() {
                 <p className="text-lg font-bold text-foreground">
                   €{totalBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground">davon USt: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Heizungskosten</p>
                 <p className="text-lg font-bold text-foreground">
                   €{totalHeizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <p className="text-xs text-muted-foreground">davon USt (20%): €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground">davon USt: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <p className="text-xs text-muted-foreground">Gesamt Vorschreibung</p>
@@ -360,9 +414,9 @@ export default function Reports() {
                 €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                <p>Miete (0%/10%/20%): €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>Betriebskosten (10%): €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>Heizung (20%): €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Miete: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Betriebskosten: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Heizung: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
             <div className="rounded-lg border border-border p-4">
@@ -371,7 +425,7 @@ export default function Reports() {
                 €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p>{currentMonthExpenses.length} Ausgaben in {currentMonthName}</p>
+                <p>{periodExpenses.length} Ausgaben in {periodLabel}</p>
               </div>
             </div>
             <div className={`rounded-lg border p-4 ${vatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
@@ -382,7 +436,9 @@ export default function Reports() {
                 €{Math.abs(vatLiability).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p>Fällig bis: 15.{(currentMonth + 1).toString().padStart(2, '0')}.{currentYear}</p>
+                {reportPeriod === 'monthly' && (
+                  <p>Fällig bis: 15.{(selectedMonth + 1 > 12 ? 1 : selectedMonth + 1).toString().padStart(2, '0')}.{selectedMonth === 12 ? selectedYear + 1 : selectedYear}</p>
+                )}
               </div>
             </div>
           </div>
