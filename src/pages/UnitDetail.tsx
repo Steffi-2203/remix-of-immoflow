@@ -115,7 +115,7 @@ export default function UnitDetail() {
     month: (new Date().getMonth() + 1).toString(),
     year: new Date().getFullYear().toString(),
     grundmiete: '',
-    ust_satz_miete: '0',
+    ust_satz_miete: '10', // 10% für Wohnungsmiete in Österreich
     betriebskosten: '',
     ust_satz_bk: '10',
     heizungskosten: '',
@@ -211,7 +211,7 @@ export default function UnitDetail() {
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
         grundmiete: activeTenant?.grundmiete?.toString() || '',
-        ust_satz_miete: '0',
+        ust_satz_miete: '10', // 10% für Wohnungsmiete in Österreich
         betriebskosten: activeTenant?.betriebskosten_vorschuss?.toString() || '',
         ust_satz_bk: '10',
         heizungskosten: activeTenant?.heizungskosten_vorschuss?.toString() || '',
