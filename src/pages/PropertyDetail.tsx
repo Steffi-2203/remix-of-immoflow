@@ -1,6 +1,5 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { distributionKeys } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -332,18 +331,53 @@ export default function PropertyDetail() {
 
         <TabsContent value="distribution" className="space-y-4">
           <div className="rounded-xl border border-border bg-card p-6">
-            <h3 className="font-semibold text-foreground mb-4">Verteilerschlüssel (20 Schlüssel)</h3>
+            <h3 className="font-semibold text-foreground mb-4">Verteilerschlüssel-Summen aller Einheiten</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Übersicht der aufsummierten Verteilerschlüssel aller {units?.length || 0} Einheiten dieser Liegenschaft.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {distributionKeys.map((key) => (
-                <div
-                  key={key.id}
-                  className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors"
-                >
-                  <p className="font-medium text-sm text-foreground">{key.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{key.unit}</p>
-                  <p className="text-xs text-muted-foreground">{key.description}</p>
-                </div>
-              ))}
+              {[
+                { key: 'vs_qm', label: 'Quadratmeter', unit: 'm²', fallback: 'qm' },
+                { key: 'vs_mea', label: 'MEA', unit: '‰', fallback: 'mea' },
+                { key: 'vs_personen', label: 'Personenanzahl', unit: 'Pers.', fallback: null },
+                { key: 'vs_heizung_verbrauch', label: 'Heizungsverbrauch', unit: 'kWh', fallback: null },
+                { key: 'vs_wasser_verbrauch', label: 'Wasserverbrauch', unit: 'm³', fallback: null },
+                { key: 'vs_lift_wohnung', label: 'Lift Wohnung', unit: 'Anteil', fallback: null },
+                { key: 'vs_lift_geschaeft', label: 'Lift Geschäft', unit: 'Anteil', fallback: null },
+                { key: 'vs_muell', label: 'Müllentsorgung', unit: 'Anteil', fallback: null },
+                { key: 'vs_strom_allgemein', label: 'Allgemeinstrom', unit: 'Anteil', fallback: null },
+                { key: 'vs_versicherung', label: 'Versicherung', unit: 'Anteil', fallback: null },
+                { key: 'vs_hausbetreuung', label: 'Hausbetreuung', unit: 'Anteil', fallback: null },
+                { key: 'vs_garten', label: 'Gartenpflege', unit: 'Anteil', fallback: null },
+                { key: 'vs_schneeraeumung', label: 'Schneeräumung', unit: 'Anteil', fallback: null },
+                { key: 'vs_kanal', label: 'Kanalgebühren', unit: 'Anteil', fallback: null },
+                { key: 'vs_grundsteuer', label: 'Grundsteuer', unit: 'Anteil', fallback: null },
+                { key: 'vs_verwaltung', label: 'Verwaltungskosten', unit: 'Anteil', fallback: null },
+                { key: 'vs_ruecklage', label: 'Rücklage', unit: 'Anteil', fallback: null },
+                { key: 'vs_sonstiges_1', label: 'Sonstiges 1', unit: 'Anteil', fallback: null },
+                { key: 'vs_sonstiges_2', label: 'Sonstiges 2', unit: 'Anteil', fallback: null },
+                { key: 'vs_sonstiges_3', label: 'Sonstiges 3', unit: 'Anteil', fallback: null },
+              ].map((field) => {
+                const sum = units?.reduce((acc, unit) => {
+                  const value = (unit as any)[field.key] ?? (field.fallback ? (unit as any)[field.fallback] : 0);
+                  return acc + (Number(value) || 0);
+                }, 0) || 0;
+                
+                return (
+                  <div
+                    key={field.key}
+                    className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <p className="text-sm text-muted-foreground">{field.label}</p>
+                    <p className="text-xl font-bold text-foreground mt-1">
+                      {field.key === 'vs_personen' 
+                        ? sum.toLocaleString('de-AT')
+                        : sum.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      <span className="text-sm font-normal text-muted-foreground ml-1">{field.unit}</span>
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </TabsContent>
