@@ -1,0 +1,79 @@
+import { Link } from 'react-router-dom';
+import { Building2, MapPin, Home, Users, ArrowRight } from 'lucide-react';
+import { Property } from '@/types';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+
+interface PropertyCardProps {
+  property: Property;
+  units?: { total: number; occupied: number; vacant: number };
+}
+
+export function PropertyCard({ property, units = { total: 12, occupied: 10, vacant: 2 } }: PropertyCardProps) {
+  const occupancyRate = (units.occupied / units.total) * 100;
+
+  return (
+    <Link
+      to={`/liegenschaften/${property.id}`}
+      className="group block rounded-xl border border-border bg-card p-5 shadow-card transition-all hover:shadow-card-hover hover:border-primary/30"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-primary/10 p-2.5">
+            <Building2 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              {property.name}
+            </h3>
+            <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              <span>{property.postalCode} {property.city}</span>
+            </div>
+          </div>
+        </div>
+        <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+
+      <div className="mt-5 grid grid-cols-3 gap-4">
+        <div className="text-center">
+          <p className="text-2xl font-bold text-foreground">{units.total}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Einheiten</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-success">{units.occupied}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Vermietet</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-warning">{units.vacant}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Leerstand</p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="text-muted-foreground">Auslastung</span>
+          <span className="font-medium text-foreground">{occupancyRate.toFixed(0)}%</span>
+        </div>
+        <div className="h-2 rounded-full bg-secondary overflow-hidden">
+          <div
+            className={cn(
+              'h-full rounded-full transition-all',
+              occupancyRate >= 90 ? 'bg-success' : occupancyRate >= 70 ? 'bg-primary' : 'bg-warning'
+            )}
+            style={{ width: `${occupancyRate}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-2 flex-wrap">
+        <Badge variant="secondary" className="text-xs">
+          {property.totalQm.toLocaleString('de-AT')} m²
+        </Badge>
+        <Badge variant="secondary" className="text-xs">
+          BJ {property.buildingYear}
+        </Badge>
+      </div>
+    </Link>
+  );
+}
