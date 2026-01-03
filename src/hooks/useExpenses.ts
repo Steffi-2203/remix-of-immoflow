@@ -53,9 +53,9 @@ export interface ExpenseUpdate extends Partial<ExpenseInsert> {
   id: string;
 }
 
-export function useExpenses(propertyId?: string, year?: number) {
+export function useExpenses(propertyId?: string, year?: number, month?: number) {
   return useQuery({
-    queryKey: ['expenses', propertyId, year],
+    queryKey: ['expenses', propertyId, year, month],
     queryFn: async () => {
       let query = supabase
         .from('expenses')
@@ -67,6 +67,9 @@ export function useExpenses(propertyId?: string, year?: number) {
       }
       if (year) {
         query = query.eq('year', year);
+      }
+      if (month) {
+        query = query.eq('month', month);
       }
       
       const { data, error } = await query;
