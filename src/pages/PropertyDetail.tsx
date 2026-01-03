@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,9 @@ import {
 import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
+import { usePropertyDocuments, useUploadPropertyDocument, useDeletePropertyDocument, PROPERTY_DOCUMENT_TYPES } from '@/hooks/usePropertyDocuments';
+import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
+import { DocumentList } from '@/components/documents/DocumentList';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,15 +66,39 @@ const statusStyles: Record<string, string> = {
 export default function PropertyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
   const { data: units, isLoading: isLoadingUnits } = useUnits(id);
+  const { data: documents, isLoading: isLoadingDocuments } = usePropertyDocuments(id);
   const deleteProperty = useDeleteProperty();
+  const uploadDocument = useUploadPropertyDocument();
+  const deleteDocument = useDeletePropertyDocument();
 
   const handleDelete = async () => {
     if (id) {
       await deleteProperty.mutateAsync(id);
       navigate('/liegenschaften');
     }
+  };
+
+  const handleUploadDocument = async (file: File, type: string, name: string) => {
+    if (!id) return;
+    await uploadDocument.mutateAsync({
+      propertyId: id,
+      file,
+      documentType: type,
+      documentName: name,
+    });
+  };
+
+  const handleDeleteDocument = (doc: { id: string; file_url: string }) => {
+    if (!id) return;
+    deleteDocument.mutate({
+      id: doc.id,
+      propertyId: id,
+      fileUrl: doc.file_url,
+    });
   };
 
   if (isLoadingProperty || isLoadingUnits) {
@@ -438,21 +466,39 @@ export default function PropertyDetail() {
 
         <TabsContent value="documents" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Dokumente</h3>
-            <Button>
+            <h3 className="font-semibold text-foreground">
+              Dokumente ({documents?.length || 0})
+            </h3>
+            <Button onClick={() => setUploadDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Dokument hochladen
             </Button>
           </div>
-          <div className="rounded-xl border border-border bg-card p-12 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Noch keine Dokumente hochgeladen</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Laden Sie Energieausweis, Grundbuchauszug und andere wichtige Dokumente hoch
-            </p>
-          </div>
+          
+          {isLoadingDocuments ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <DocumentList
+              documents={documents || []}
+              documentTypes={PROPERTY_DOCUMENT_TYPES}
+              onDelete={handleDeleteDocument}
+              isDeleting={deleteDocument.isPending}
+              emptyMessage="Noch keine Dokumente hochgeladen"
+              emptyDescription="Laden Sie Energieausweis, Gebäudepläne und andere wichtige Dokumente hoch"
+            />
+          )}
         </TabsContent>
       </Tabs>
+
+      <DocumentUploadDialog
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        documentTypes={PROPERTY_DOCUMENT_TYPES}
+        onUpload={handleUploadDocument}
+        isUploading={uploadDocument.isPending}
+      />
     </MainLayout>
   );
 }

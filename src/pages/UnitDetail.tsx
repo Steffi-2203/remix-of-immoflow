@@ -43,12 +43,16 @@ import {
   CheckCircle2,
   CreditCard,
   Trash2,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useTenantsByUnit, Tenant } from '@/hooks/useTenants';
 import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice, useDeleteInvoice, Invoice } from '@/hooks/useInvoices';
+import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DOCUMENT_TYPES } from '@/hooks/useUnitDocuments';
+import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
+import { DocumentList } from '@/components/documents/DocumentList';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -105,6 +109,7 @@ export default function UnitDetail() {
   const { toast } = useToast();
   
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [invoiceForm, setInvoiceForm] = useState({
     month: (new Date().getMonth() + 1).toString(),
@@ -122,11 +127,14 @@ export default function UnitDetail() {
   const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId);
   const { data: tenants, isLoading: isLoadingTenants } = useTenantsByUnit(unitId);
   const { data: allInvoices } = useInvoices();
+  const { data: documents, isLoading: isLoadingDocuments } = useUnitDocuments(unitId);
   const deleteUnit = useDeleteUnit();
   const updateInvoiceStatus = useUpdateInvoiceStatus();
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
   const deleteInvoice = useDeleteInvoice();
+  const uploadDocument = useUploadUnitDocument();
+  const deleteDocument = useDeleteUnitDocument();
 
   // Filter invoices for this unit
   const unitInvoices = allInvoices?.filter(inv => inv.unit_id === unitId) || [];
@@ -141,6 +149,25 @@ export default function UnitDetail() {
       await deleteUnit.mutateAsync(unitId);
       navigate(`/liegenschaften/${propertyId}`);
     }
+  };
+
+  const handleUploadDocument = async (file: File, type: string, name: string) => {
+    if (!unitId) return;
+    await uploadDocument.mutateAsync({
+      unitId,
+      file,
+      documentType: type,
+      documentName: name,
+    });
+  };
+
+  const handleDeleteDocument = (doc: { id: string; file_url: string }) => {
+    if (!unitId) return;
+    deleteDocument.mutate({
+      id: doc.id,
+      unitId,
+      fileUrl: doc.file_url,
+    });
   };
 
   const handleMarkAsPaid = async (invoiceId: string) => {
@@ -407,6 +434,10 @@ export default function UnitDetail() {
           <TabsTrigger value="invoices">
             <Receipt className="h-4 w-4 mr-2" />
             Vorschreibungen ({unitInvoices.length})
+          </TabsTrigger>
+          <TabsTrigger value="documents">
+            <FileText className="h-4 w-4 mr-2" />
+            Dokumente ({documents?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="distribution">Verteilerschlüssel</TabsTrigger>
         </TabsList>
@@ -735,7 +766,43 @@ export default function UnitDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-foreground">
+              Dokumente ({documents?.length || 0})
+            </h3>
+            <Button onClick={() => setDocumentDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Dokument hochladen
+            </Button>
+          </div>
+          
+          {isLoadingDocuments ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <DocumentList
+              documents={documents || []}
+              documentTypes={UNIT_DOCUMENT_TYPES}
+              onDelete={handleDeleteDocument}
+              isDeleting={deleteDocument.isPending}
+              emptyMessage="Noch keine Dokumente hochgeladen"
+              emptyDescription="Laden Sie Mietverträge, Übergabeprotokolle und andere wichtige Dokumente hoch"
+            />
+          )}
+        </TabsContent>
       </Tabs>
+
+      <DocumentUploadDialog
+        open={documentDialogOpen}
+        onOpenChange={setDocumentDialogOpen}
+        documentTypes={UNIT_DOCUMENT_TYPES}
+        onUpload={handleUploadDocument}
+        isUploading={uploadDocument.isPending}
+      />
 
       {/* Invoice Dialog */}
       <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
