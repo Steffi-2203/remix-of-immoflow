@@ -1,16 +1,24 @@
 import { Link } from 'react-router-dom';
 import { Building2, MapPin, Home, Users, ArrowRight } from 'lucide-react';
-import { Property } from '@/types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 interface PropertyCardProps {
-  property: Property;
+  property: {
+    id: string;
+    name: string;
+    address: string;
+    postal_code: string;
+    city: string;
+    total_qm: number;
+    total_mea: number;
+    building_year: number | null;
+  };
   units?: { total: number; occupied: number; vacant: number };
 }
 
-export function PropertyCard({ property, units = { total: 12, occupied: 10, vacant: 2 } }: PropertyCardProps) {
-  const occupancyRate = (units.occupied / units.total) * 100;
+export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant: 0 } }: PropertyCardProps) {
+  const occupancyRate = units.total > 0 ? (units.occupied / units.total) * 100 : 0;
 
   return (
     <Link
@@ -28,7 +36,7 @@ export function PropertyCard({ property, units = { total: 12, occupied: 10, vaca
             </h3>
             <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
               <MapPin className="h-3.5 w-3.5" />
-              <span>{property.postalCode} {property.city}</span>
+              <span>{property.postal_code} {property.city}</span>
             </div>
           </div>
         </div>
@@ -68,11 +76,13 @@ export function PropertyCard({ property, units = { total: 12, occupied: 10, vaca
 
       <div className="mt-4 flex items-center gap-2 flex-wrap">
         <Badge variant="secondary" className="text-xs">
-          {property.totalQm.toLocaleString('de-AT')} m²
+          {Number(property.total_qm).toLocaleString('de-AT')} m²
         </Badge>
-        <Badge variant="secondary" className="text-xs">
-          BJ {property.buildingYear}
-        </Badge>
+        {property.building_year && (
+          <Badge variant="secondary" className="text-xs">
+            BJ {property.building_year}
+          </Badge>
+        )}
       </div>
     </Link>
   );
