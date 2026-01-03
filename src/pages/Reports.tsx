@@ -11,6 +11,15 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import {
   TrendingUp,
   Home,
   Euro,
@@ -21,11 +30,33 @@ import {
   ArrowDownRight,
   Loader2,
   Building2,
+  Receipt,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
+import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useExpenses } from '@/hooks/useExpenses';
+
+// Berechnet Netto aus Brutto
+const calculateNetFromGross = (gross: number, vatRate: number): number => {
+  if (vatRate === 0) return gross;
+  return gross / (1 + vatRate / 100);
+};
+
+// Berechnet USt aus Brutto
+const calculateVatFromGross = (gross: number, vatRate: number): number => {
+  if (vatRate === 0) return 0;
+  return gross - (gross / (1 + vatRate / 100));
+};
+
+const unitTypeLabels: Record<string, string> = {
+  wohnung: 'Wohnung',
+  geschaeft: 'Geschäft',
+  garage: 'Garage',
+  stellplatz: 'Stellplatz',
+  lager: 'Lager',
+};
 
 const reports = [
   {
@@ -72,10 +103,11 @@ export default function Reports() {
   
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: allUnits, isLoading: isLoadingUnits } = useUnits();
+  const { data: allTenants, isLoading: isLoadingTenants } = useTenants();
   const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
   const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingInvoices || isLoadingExpenses;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses;
 
   // Generate year options (last 5 years)
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
@@ -439,6 +471,157 @@ export default function Reports() {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Detaillierte USt-Übersicht pro Rechnung */}
+      <Card className="mt-8">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg p-2.5 bg-accent/10">
+              <Receipt className="h-5 w-5 text-accent-foreground" />
+            </div>
+            <div>
+              <CardTitle>USt-Berechnung pro Rechnung</CardTitle>
+              <CardDescription>
+                Detaillierte Aufschlüsselung mit Netto- und Bruttobeträgen für {periodLabel}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {periodInvoices.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Keine Vorschreibungen für {periodLabel} vorhanden.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[200px]">Mieter / Einheit</TableHead>
+                    <TableHead className="text-right">Typ</TableHead>
+                    <TableHead className="text-right">Miete Netto</TableHead>
+                    <TableHead className="text-right">USt Miete</TableHead>
+                    <TableHead className="text-right">BK Netto</TableHead>
+                    <TableHead className="text-right">USt BK</TableHead>
+                    <TableHead className="text-right">HK Netto</TableHead>
+                    <TableHead className="text-right">USt HK</TableHead>
+                    <TableHead className="text-right font-semibold">Gesamt Netto</TableHead>
+                    <TableHead className="text-right font-semibold">Gesamt USt</TableHead>
+                    <TableHead className="text-right font-semibold">Gesamt Brutto</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {periodInvoices.map((invoice) => {
+                    const unit = allUnits?.find(u => u.id === invoice.unit_id);
+                    const tenant = allTenants?.find(t => t.id === invoice.tenant_id);
+                    const property = properties?.find(p => p.id === unit?.property_id);
+                    
+                    const grundmiete = Number(invoice.grundmiete || 0);
+                    const betriebskosten = Number(invoice.betriebskosten || 0);
+                    const heizungskosten = Number(invoice.heizungskosten || 0);
+                    const ustSatzMiete = Number(invoice.ust_satz_miete || 0);
+                    const ustSatzBk = Number(invoice.ust_satz_bk || 10);
+                    const ustSatzHeizung = Number(invoice.ust_satz_heizung || 20);
+                    
+                    const nettoMiete = calculateNetFromGross(grundmiete, ustSatzMiete);
+                    const nettoBk = calculateNetFromGross(betriebskosten, ustSatzBk);
+                    const nettoHk = calculateNetFromGross(heizungskosten, ustSatzHeizung);
+                    
+                    const ustMieteRow = calculateVatFromGross(grundmiete, ustSatzMiete);
+                    const ustBkRow = calculateVatFromGross(betriebskosten, ustSatzBk);
+                    const ustHkRow = calculateVatFromGross(heizungskosten, ustSatzHeizung);
+                    
+                    const gesamtNetto = nettoMiete + nettoBk + nettoHk;
+                    const gesamtUst = ustMieteRow + ustBkRow + ustHkRow;
+                    const gesamtBrutto = grundmiete + betriebskosten + heizungskosten;
+                    
+                    return (
+                      <TableRow key={invoice.id}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {property?.name} - Top {unit?.top_nummer}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={unit?.type === 'wohnung' ? 'secondary' : 'default'}>
+                            {unitTypeLabels[unit?.type || 'wohnung'] || unit?.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          €{nettoMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-xs text-muted-foreground ml-1">({ustSatzMiete}%)</span>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          €{ustMieteRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          €{nettoBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-xs text-muted-foreground ml-1">({ustSatzBk}%)</span>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          €{ustBkRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          €{nettoHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-xs text-muted-foreground ml-1">({ustSatzHeizung}%)</span>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          €{ustHkRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          €{gesamtNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-primary">
+                          €{gesamtUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          €{gesamtBrutto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {/* Summenzeile */}
+                  <TableRow className="bg-muted/50 font-semibold">
+                    <TableCell colSpan={2}>Summe</TableCell>
+                    <TableCell className="text-right">
+                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{periodInvoices.reduce((sum, inv) => sum + calculateNetFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{(totalGesamtbetrag - totalUst).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right text-primary">
+                      €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right font-bold">
+                      €{totalGesamtbetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </MainLayout>
