@@ -647,10 +647,10 @@ export default function UnitDetail() {
         <TabsContent value="distribution" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Verteilerschlüssel für diese Einheit</CardTitle>
+              <CardTitle>Verteilerschlüssel für diese Einheit (20 Schlüssel)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 <div className="p-3 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Quadratmeter</p>
                   <p className="font-medium">{Number(unit.vs_qm || unit.qm).toLocaleString('de-AT')} m²</p>
@@ -665,23 +665,71 @@ export default function UnitDetail() {
                 </div>
                 <div className="p-3 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Heizungsverbrauch</p>
-                  <p className="font-medium">{Number(unit.vs_heizung_verbrauch || 0).toLocaleString('de-AT')}</p>
+                  <p className="font-medium">{Number(unit.vs_heizung_verbrauch || 0).toLocaleString('de-AT')} kWh</p>
                 </div>
                 <div className="p-3 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Wasserverbrauch</p>
-                  <p className="font-medium">{Number(unit.vs_wasser_verbrauch || 0).toLocaleString('de-AT')}</p>
+                  <p className="font-medium">{Number(unit.vs_wasser_verbrauch || 0).toLocaleString('de-AT')} m³</p>
                 </div>
                 <div className="p-3 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">Lift (Wohnung)</p>
+                  <p className="text-sm text-muted-foreground">Lift Wohnung</p>
                   <p className="font-medium">{Number(unit.vs_lift_wohnung || 0).toLocaleString('de-AT')}</p>
                 </div>
                 <div className="p-3 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">Müll</p>
+                  <p className="text-sm text-muted-foreground">Lift Geschäft</p>
+                  <p className="font-medium">{Number(unit.vs_lift_geschaeft || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Müllentsorgung</p>
                   <p className="font-medium">{Number(unit.vs_muell || 0).toLocaleString('de-AT')}</p>
                 </div>
                 <div className="p-3 rounded-lg border">
-                  <p className="text-sm text-muted-foreground">Strom Allgemein</p>
+                  <p className="text-sm text-muted-foreground">Allgemeinstrom</p>
                   <p className="font-medium">{Number(unit.vs_strom_allgemein || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Versicherung</p>
+                  <p className="font-medium">{Number(unit.vs_versicherung || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Hausbetreuung</p>
+                  <p className="font-medium">{Number(unit.vs_hausbetreuung || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Gartenpflege</p>
+                  <p className="font-medium">{Number(unit.vs_garten || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Schneeräumung</p>
+                  <p className="font-medium">{Number(unit.vs_schneeraeumung || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Kanalgebühren</p>
+                  <p className="font-medium">{Number(unit.vs_kanal || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Grundsteuer</p>
+                  <p className="font-medium">{Number(unit.vs_grundsteuer || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Verwaltungskosten</p>
+                  <p className="font-medium">{Number(unit.vs_verwaltung || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Rücklage</p>
+                  <p className="font-medium">{Number(unit.vs_ruecklage || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Sonstiges 1</p>
+                  <p className="font-medium">{Number(unit.vs_sonstiges_1 || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Sonstiges 2</p>
+                  <p className="font-medium">{Number(unit.vs_sonstiges_2 || 0).toLocaleString('de-AT')}</p>
+                </div>
+                <div className="p-3 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">Sonstiges 3</p>
+                  <p className="font-medium">{Number(unit.vs_sonstiges_3 || 0).toLocaleString('de-AT')}</p>
                 </div>
               </div>
             </CardContent>
