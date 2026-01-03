@@ -150,29 +150,50 @@ export type Database = {
       }
       operating_cost_settlements: {
         Row: {
+          bk_eigentuemer: number
+          bk_mieter: number
           created_at: string
+          finalized_at: string | null
           gesamtkosten: number
+          hk_eigentuemer: number
+          hk_mieter: number
           id: string
           property_id: string
           status: Database["public"]["Enums"]["settlement_status"]
+          total_bk: number
+          total_hk: number
           updated_at: string
           year: number
         }
         Insert: {
+          bk_eigentuemer?: number
+          bk_mieter?: number
           created_at?: string
+          finalized_at?: string | null
           gesamtkosten?: number
+          hk_eigentuemer?: number
+          hk_mieter?: number
           id?: string
           property_id: string
           status?: Database["public"]["Enums"]["settlement_status"]
+          total_bk?: number
+          total_hk?: number
           updated_at?: string
           year: number
         }
         Update: {
+          bk_eigentuemer?: number
+          bk_mieter?: number
           created_at?: string
+          finalized_at?: string | null
           gesamtkosten?: number
+          hk_eigentuemer?: number
+          hk_mieter?: number
           id?: string
           property_id?: string
           status?: Database["public"]["Enums"]["settlement_status"]
+          total_bk?: number
+          total_hk?: number
           updated_at?: string
           year?: number
         }
@@ -334,6 +355,91 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settlement_items: {
+        Row: {
+          bk_anteil: number
+          bk_saldo: number
+          bk_vorschuss: number
+          created_at: string
+          email_sent_at: string | null
+          email_status: string | null
+          gesamt_saldo: number
+          hk_anteil: number
+          hk_saldo: number
+          hk_vorschuss: number
+          id: string
+          is_leerstand_bk: boolean
+          is_leerstand_hk: boolean
+          settlement_id: string
+          tenant_email: string | null
+          tenant_id: string | null
+          tenant_name: string
+          unit_id: string
+        }
+        Insert: {
+          bk_anteil?: number
+          bk_saldo?: number
+          bk_vorschuss?: number
+          created_at?: string
+          email_sent_at?: string | null
+          email_status?: string | null
+          gesamt_saldo?: number
+          hk_anteil?: number
+          hk_saldo?: number
+          hk_vorschuss?: number
+          id?: string
+          is_leerstand_bk?: boolean
+          is_leerstand_hk?: boolean
+          settlement_id: string
+          tenant_email?: string | null
+          tenant_id?: string | null
+          tenant_name: string
+          unit_id: string
+        }
+        Update: {
+          bk_anteil?: number
+          bk_saldo?: number
+          bk_vorschuss?: number
+          created_at?: string
+          email_sent_at?: string | null
+          email_status?: string | null
+          gesamt_saldo?: number
+          hk_anteil?: number
+          hk_saldo?: number
+          hk_vorschuss?: number
+          id?: string
+          is_leerstand_bk?: boolean
+          is_leerstand_hk?: boolean
+          settlement_id?: string
+          tenant_email?: string | null
+          tenant_id?: string | null
+          tenant_name?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlement_items_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "operating_cost_settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
