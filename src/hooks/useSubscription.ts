@@ -2,44 +2,56 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { SUBSCRIPTION_TIERS, SubscriptionTierKey } from '@/config/stripe';
+import { useAuth } from './useAuth';
 
 // Re-export for backwards compatibility
 export const STRIPE_PLANS = SUBSCRIPTION_TIERS;
 export type PlanKey = SubscriptionTierKey;
 
-interface SubscriptionStatus {
-  subscribed: boolean;
-  subscription_tier: string | null;
-  subscription_end: string | null;
-  product_id: string | null;
-}
-
 export function useSubscription() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  const { data: subscription, isLoading, refetch } = useQuery({
-    queryKey: ['subscription-status'],
-    queryFn: async (): Promise<SubscriptionStatus> => {
-      // Check if user is authenticated first
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        return {
-          subscribed: false,
-          subscription_tier: null,
-          subscription_end: null,
-          product_id: null,
-        };
-      }
-
-      const { data, error } = await supabase.functions.invoke('check-subscription');
+  // Query profile to get organization_id
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
       
       if (error) {
-        console.error('Error checking subscription:', error);
-        throw error;
+        console.error('Profile fetch error:', error);
+        return null;
       }
-      
       return data;
     },
+    enabled: !!user?.id
+  });
+
+  // Query organization for subscription data
+  const { data: organization, isLoading, refetch } = useQuery({
+    queryKey: ['organization-subscription', profile?.organization_id],
+    queryFn: async () => {
+      if (!profile?.organization_id) return null;
+      
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', profile.organization_id)
+        .single();
+      
+      if (error) {
+        console.error('Organization fetch error:', error);
+        return null;
+      }
+      return data;
+    },
+    enabled: !!profile?.organization_id,
     staleTime: 1000 * 60, // 1 minute
     refetchOnWindowFocus: true,
   });
@@ -98,12 +110,18 @@ export function useSubscription() {
     portalMutation.mutate();
   };
 
+  // Determine subscription status from organization data
+  const subscriptionStatus = organization?.subscription_status || 'trial';
+  const subscriptionTier = organization?.subscription_tier || 'starter';
+  const isSubscribed = subscriptionStatus === 'active';
+
   return {
-    subscription,
+    organization,
     isLoading,
-    isSubscribed: subscription?.subscribed ?? false,
-    subscriptionTier: subscription?.subscription_tier,
-    subscriptionEnd: subscription?.subscription_end,
+    isSubscribed,
+    subscriptionTier,
+    subscriptionStatus,
+    subscriptionEnd: organization?.trial_ends_at || null,
     startCheckout,
     openCustomerPortal,
     isCheckoutLoading: checkoutMutation.isPending,
