@@ -26,6 +26,7 @@ import Upgrade from "./pages/Upgrade";
 import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import SystemTest from "./pages/SystemTest";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,7 @@ const App = () => (
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+            <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

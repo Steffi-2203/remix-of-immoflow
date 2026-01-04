@@ -1,4 +1,4 @@
-import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
+import { Bell, Search, User, LogOut, Settings, FlaskConical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsAdmin } from '@/hooks/useAdmin';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -21,6 +22,7 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { data: isAdmin } = useIsAdmin();
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -79,6 +81,12 @@ export function Header({ title, subtitle }: HeaderProps) {
               <Settings className="mr-2 h-4 w-4" />
               Einstellungen
             </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => navigate('/admin/system-test')}>
+                <FlaskConical className="mr-2 h-4 w-4" />
+                System testen
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               className="text-destructive focus:text-destructive"
