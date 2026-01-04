@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscriptionLimits, calculateTrialDaysRemaining } from "@/hooks/useOrganization";
 import { useProperties, useCreateProperty, useDeleteProperty } from "@/hooks/useProperties";
 import { useUnits, useCreateUnit } from "@/hooks/useUnits";
 import { Link } from "react-router-dom";
@@ -11,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
+import { TrialExpiredModal } from "@/components/dashboard/TrialExpiredModal";
+import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { supabase } from "@/integrations/supabase/client";
 
 // Subscription limits
 const LIMITS = {
@@ -19,14 +23,14 @@ const LIMITS = {
   enterprise: { properties: 999, unitsPerProperty: 999 },
 };
 
-function UnitsSection({ propertyId, maxUnits }: { propertyId: string; maxUnits: number }) {
+function UnitsSection({ propertyId, maxUnits, isExpired }: { propertyId: string; maxUnits: number; isExpired: boolean }) {
   const { data: units, isLoading } = useUnits(propertyId);
   const createUnit = useCreateUnit();
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [newUnit, setNewUnit] = useState({ top_nummer: '' });
 
   const unitsList = units || [];
-  const canAddUnit = unitsList.length < maxUnits;
+  const canAddUnit = unitsList.length < maxUnits && !isExpired;
 
   if (isLoading) {
     return <div className="mt-4 pt-4 border-t"><Skeleton className="h-20 w-full" /></div>;
@@ -38,7 +42,9 @@ function UnitsSection({ propertyId, maxUnits }: { propertyId: string; maxUnits: 
         <h4 className="font-semibold text-sm">
           Einheiten ({unitsList.length} von {maxUnits})
         </h4>
-        {canAddUnit ? (
+        {isExpired ? (
+          <span className="text-sm text-destructive">Abo abgelaufen</span>
+        ) : canAddUnit ? (
           <Button
             size="sm"
             variant="outline"
@@ -112,7 +118,8 @@ function UnitsSection({ propertyId, maxUnits }: { propertyId: string; maxUnits: 
 
 export default function SimpleDashboard() {
   const { user } = useAuth();
-  const { organization, isLoading, subscriptionStatus, subscriptionTier } = useSubscription();
+  const { organization, isLoading, subscriptionStatus, subscriptionTier, refetch } = useSubscription();
+  const { trialDaysRemaining, isTrialExpiringSoon, status } = useSubscriptionLimits();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const createProperty = useCreateProperty();
   const deleteProperty = useDeleteProperty();
@@ -121,17 +128,27 @@ export default function SimpleDashboard() {
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
-  // Debug logging - must be before any returns
+  // Check for expired trials on mount
+  useEffect(() => {
+    const checkTrialExpiration = async () => {
+      try {
+        await supabase.functions.invoke('check-trial-expiration');
+        refetch();
+      } catch (error) {
+        console.error('Error checking trial expiration:', error);
+      }
+    };
+    
+    checkTrialExpiration();
+  }, [refetch]);
+
   const propertiesList = properties || [];
   const currentLimits = LIMITS[subscriptionTier as keyof typeof LIMITS] || LIMITS.starter;
   const currentPropertyCount = propertiesList.length;
   const maxProperties = currentLimits.properties;
-  const canAddProperty = currentPropertyCount < maxProperties;
-
-  useEffect(() => {
-    console.log('Properties geladen:', properties);
-    console.log('Properties Count:', currentPropertyCount, 'Max:', maxProperties, 'Can Add:', canAddProperty);
-  }, [properties, currentPropertyCount, maxProperties, canAddProperty]);
+  
+  const isExpired = subscriptionStatus === 'expired';
+  const canAddProperty = currentPropertyCount < maxProperties && !isExpired;
 
   if (isLoading) {
     return (
@@ -174,7 +191,20 @@ export default function SimpleDashboard() {
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
+      {/* Trial Expired Modal */}
+      <TrialExpiredModal open={isExpired} />
+      
       <div className="max-w-4xl">
+        {/* Trial Banner */}
+        {subscriptionStatus === 'trial' && trialDaysRemaining > 0 && (
+          <div className="mb-6">
+            <TrialBanner 
+              daysRemaining={trialDaysRemaining} 
+              isExpiringSoon={isTrialExpiringSoon} 
+            />
+          </div>
+        )}
+
         {/* Header mit Aktionen */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Property Partner Pro</h1>
@@ -219,23 +249,16 @@ export default function SimpleDashboard() {
         {/* Properties Section */}
         <Card>
           <CardHeader>
-            {/* DEBUG INFO - temporär */}
-            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 rounded text-sm">
-              <p className="font-semibold">DEBUG INFO:</p>
-              <p>Properties Array: {properties ? `${properties.length} Einträge` : 'undefined oder null'}</p>
-              <p>Current Count: {currentPropertyCount}</p>
-              <p>Max Properties: {maxProperties}</p>
-              <p>Can Add: {canAddProperty ? 'JA' : 'NEIN'}</p>
-              <p>Subscription Tier: {subscriptionTier}</p>
-              <p>Loading: {propertiesLoading ? 'JA' : 'NEIN'}</p>
-            </div>
-            
             <div className="flex justify-between items-center">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
                 Meine Liegenschaften ({currentPropertyCount} von {maxProperties})
               </CardTitle>
-              {canAddProperty ? (
+              {isExpired ? (
+                <Button variant="destructive" asChild>
+                  <Link to="/pricing">Abo abgelaufen - Jetzt upgraden</Link>
+                </Button>
+              ) : canAddProperty ? (
                 <Button onClick={() => setShowAddForm(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Neue Liegenschaft
@@ -359,6 +382,7 @@ export default function SimpleDashboard() {
                       <UnitsSection
                         propertyId={property.id}
                         maxUnits={currentLimits.unitsPerProperty}
+                        isExpired={isExpired}
                       />
                     )}
                   </div>
