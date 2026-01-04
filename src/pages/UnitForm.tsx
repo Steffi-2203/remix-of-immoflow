@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, Loader2, Home, BarChart3 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Save, Loader2, Home, BarChart3, Crown, AlertTriangle } from 'lucide-react';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
+import { useSubscriptionLimits } from '@/hooks/useOrganization';
+import { toast } from 'sonner';
+import { z } from 'zod';
 import {
   Select,
   SelectContent,
@@ -16,6 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
+// Validation schema
+const unitSchema = z.object({
+  top_nummer: z.string().min(1, 'Top-Nummer ist erforderlich').max(50, 'Max. 50 Zeichen'),
+  qm: z.string().min(1, 'Nutzfläche ist erforderlich'),
+  mea: z.string().min(1, 'MEA ist erforderlich'),
+});
 
 const unitTypes = [
   { value: 'wohnung', label: 'Wohnung' },
@@ -70,6 +80,14 @@ export default function UnitForm() {
   const { data: existingUnit, isLoading: isLoadingUnit } = useUnit(unitId);
   const createUnit = useCreateUnit();
   const updateUnit = useUpdateUnit();
+  const { canAddUnit, maxLimits, currentUsage, getRemainingUnits } = useSubscriptionLimits();
+  
+  const [validationError, setValidationError] = useState<string | null>(null);
+  
+  // Check if can add unit to this property
+  const canAddUnitToProperty = propertyId ? canAddUnit(propertyId) : false;
+  const remainingUnits = propertyId ? getRemainingUnits(propertyId) : 0;
+  const currentUnitsInProperty = propertyId ? (currentUsage.units[propertyId] || 0) : 0;
 
   const [formData, setFormData] = useState<FormData>(() => {
     const initial: FormData = {
@@ -122,14 +140,29 @@ export default function UnitForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setValidationError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+    
+    // Validate form data
+    const result = unitSchema.safeParse(formData);
+    if (!result.success) {
+      setValidationError(result.error.errors[0].message);
+      return;
+    }
+    
+    // Check subscription limits for new units
+    if (!isEditing && !canAddUnitToProperty) {
+      toast.error('Limit erreicht! Bitte upgraden Sie Ihren Plan.');
+      return;
+    }
 
     const unitData: any = {
       property_id: propertyId!,
-      top_nummer: formData.top_nummer,
+      top_nummer: formData.top_nummer.trim(),
       type: formData.type,
       floor: formData.floor ? parseInt(formData.floor) : null,
       qm: parseFloat(formData.qm) || 0,
@@ -146,13 +179,16 @@ export default function UnitForm() {
       }
     });
 
-    if (isEditing && unitId) {
-      await updateUnit.mutateAsync({ id: unitId, ...unitData });
-    } else {
-      await createUnit.mutateAsync(unitData);
+    try {
+      if (isEditing && unitId) {
+        await updateUnit.mutateAsync({ id: unitId, ...unitData });
+      } else {
+        await createUnit.mutateAsync(unitData);
+      }
+      navigate(`/liegenschaften/${propertyId}`);
+    } catch (error) {
+      // Error handling is done in the hooks
     }
-
-    navigate(`/liegenschaften/${propertyId}`);
   };
 
   const isSubmitting = createUnit.isPending || updateUnit.isPending;
@@ -182,7 +218,33 @@ export default function UnitForm() {
         </Link>
       </div>
 
+      {/* Limit Warning for new units */}
+      {!isEditing && !canAddUnitToProperty && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              Limit erreicht! Sie haben bereits {currentUnitsInProperty} von {maxLimits.unitsPerProperty} Einheiten in dieser Liegenschaft.
+            </span>
+            <Link to="/upgrade">
+              <Button size="sm" variant="outline" className="ml-4">
+                <Crown className="h-4 w-4 mr-2" />
+                Plan upgraden
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Validation Error */}
+        {validationError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{validationError}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Basic Unit Data */}
         <Card>
           <CardHeader>
@@ -307,7 +369,10 @@ export default function UnitForm() {
           >
             Abbrechen
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button 
+            type="submit" 
+            disabled={isSubmitting || (!isEditing && !canAddUnitToProperty)}
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
