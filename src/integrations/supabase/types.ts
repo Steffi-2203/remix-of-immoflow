@@ -83,6 +83,8 @@ export type Database = {
           grundmiete: number
           heizungskosten: number
           id: string
+          mahnstufe: number
+          mahnung_am: string | null
           month: number
           status: Database["public"]["Enums"]["invoice_status"]
           tenant_id: string
@@ -92,6 +94,7 @@ export type Database = {
           ust_satz_heizung: number
           ust_satz_miete: number
           year: number
+          zahlungserinnerung_am: string | null
         }
         Insert: {
           betriebskosten?: number
@@ -102,6 +105,8 @@ export type Database = {
           grundmiete?: number
           heizungskosten?: number
           id?: string
+          mahnstufe?: number
+          mahnung_am?: string | null
           month: number
           status?: Database["public"]["Enums"]["invoice_status"]
           tenant_id: string
@@ -111,6 +116,7 @@ export type Database = {
           ust_satz_heizung?: number
           ust_satz_miete?: number
           year: number
+          zahlungserinnerung_am?: string | null
         }
         Update: {
           betriebskosten?: number
@@ -121,6 +127,8 @@ export type Database = {
           grundmiete?: number
           heizungskosten?: number
           id?: string
+          mahnstufe?: number
+          mahnung_am?: string | null
           month?: number
           status?: Database["public"]["Enums"]["invoice_status"]
           tenant_id?: string
@@ -130,6 +138,7 @@ export type Database = {
           ust_satz_heizung?: number
           ust_satz_miete?: number
           year?: number
+          zahlungserinnerung_am?: string | null
         }
         Relationships: [
           {
