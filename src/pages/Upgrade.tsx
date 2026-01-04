@@ -1,12 +1,11 @@
 import { MainLayout } from '@/components/layout/MainLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Crown, Building2, Home, Zap } from 'lucide-react';
+import { Check, Crown, Zap } from 'lucide-react';
 import { useSubscriptionLimits, TIER_LIMITS, TIER_LABELS } from '@/hooks/useOrganization';
 import { useSubscription } from '@/hooks/useSubscription';
 import { cn } from '@/lib/utils';
-import { STRIPE_PRICE_IDS } from '@/config/stripe';
 
 const plans = [
   {
