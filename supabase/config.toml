@@ -29,3 +29,9 @@ verify_jwt = true
 
 [functions.reactivate-subscription]
 verify_jwt = true
+
+[functions.send-dunning]
+verify_jwt = true
+
+[functions.ocr-invoice]
+verify_jwt = true

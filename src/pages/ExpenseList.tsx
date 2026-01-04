@@ -43,7 +43,9 @@ import {
   Pencil,
   FileText,
   Upload,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Sparkles
 } from 'lucide-react';
 import { 
   useExpenses, 
@@ -59,6 +61,7 @@ import {
   type Expense
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
+import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -68,11 +71,13 @@ export default function ExpenseList() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const ocrFileInputRef = useRef<HTMLInputElement>(null);
   const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedProperty, setSelectedProperty] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | ExpenseCategory>('all');
   
   const [newExpense, setNewExpense] = useState({
@@ -103,6 +108,10 @@ export default function ExpenseList() {
     beleg_url: '',
   });
   const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null);
+
+  // OCR state
+  const [ocrFile, setOcrFile] = useState<File | null>(null);
+  const ocrInvoice = useOCRInvoice();
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
   const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
@@ -295,6 +304,48 @@ export default function ExpenseList() {
       setUploading(false);
     }
   };
+
+  // Handle OCR file selection
+  const handleOcrFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Accept images for OCR
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Ungültiges Format',
+        description: 'Bitte ein Bild der Rechnung hochladen (JPG, PNG).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setOcrFile(file);
+    setOcrDialogOpen(true);
+
+    try {
+      const result = await ocrInvoice.mutateAsync(file);
+      
+      // Pre-fill the form with OCR data
+      setNewExpense(prev => ({
+        ...prev,
+        bezeichnung: result.beschreibung || result.lieferant || '',
+        betrag: result.betrag?.toString() || '',
+        datum: result.datum || format(new Date(), 'yyyy-MM-dd'),
+        beleg_nummer: result.rechnungsnummer || '',
+        category: result.kategorie || 'betriebskosten_umlagefaehig',
+        expense_type: result.expense_type as ExpenseType || 'sonstiges',
+        notizen: result.iban ? `IBAN: ${result.iban}` : '',
+      }));
+
+      setOcrDialogOpen(false);
+      setDialogOpen(true);
+    } catch (error) {
+      setOcrDialogOpen(false);
+      console.error('OCR failed:', error);
+    }
+  };
+
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   return (
@@ -302,6 +353,27 @@ export default function ExpenseList() {
       title="Buchhaltung"
       subtitle="Kosten erfassen und kategorisieren"
     >
+      {/* OCR Processing Dialog */}
+      <Dialog open={ocrDialogOpen} onOpenChange={setOcrDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Rechnung wird analysiert
+            </DialogTitle>
+            <DialogDescription>
+              Die Rechnung wird mit KI analysiert und die Daten automatisch extrahiert.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-8">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <p className="text-sm text-muted-foreground">
+              {ocrFile?.name}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Actions Bar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1 sm:max-w-sm">
@@ -339,6 +411,24 @@ export default function ExpenseList() {
         </Select>
 
         <div className="flex-1" />
+
+        {/* OCR Scan Button */}
+        <input
+          ref={ocrFileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleOcrFileChange}
+          className="hidden"
+        />
+        <Button
+          variant="outline"
+          onClick={() => ocrFileInputRef.current?.click()}
+          disabled={ocrInvoice.isPending}
+        >
+          <Camera className="h-4 w-4 mr-2" />
+          Rechnung scannen
+        </Button>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

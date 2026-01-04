@@ -17,12 +17,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { Receipt, Plus, Loader2, Euro, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Receipt, Plus, Loader2, Euro, CheckCircle2, Clock, MoreHorizontal, Mail, AlertTriangle } from 'lucide-react';
 import { useInvoices, useGenerateInvoices, useUpdateInvoiceStatus } from '@/hooks/useInvoices';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
+import { useSendDunning, getDunningStatusLabel, getNextDunningAction } from '@/hooks/useDunning';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -68,6 +82,7 @@ export default function InvoiceList() {
   const { data: properties } = useProperties();
   const generateInvoices = useGenerateInvoices();
   const updateStatus = useUpdateInvoiceStatus();
+  const sendDunning = useSendDunning();
 
   const getTenant = (tenantId: string) => tenants?.find(t => t.id === tenantId);
   const getUnit = (unitId: string) => units?.find(u => u.id === unitId);
@@ -111,6 +126,34 @@ export default function InvoiceList() {
         variant: 'destructive',
       });
     }
+  };
+
+  const handleSendDunning = async (invoice: any, level: 1 | 2) => {
+    const tenant = getTenant(invoice.tenant_id);
+    const unit = getUnit(invoice.unit_id);
+    const property = unit ? getProperty(unit.property_id) : null;
+
+    if (!tenant?.email) {
+      toast({
+        title: 'Keine E-Mail',
+        description: 'Für diesen Mieter ist keine E-Mail-Adresse hinterlegt.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    await sendDunning.mutateAsync({
+      invoiceId: invoice.id,
+      dunningLevel: level,
+      tenantEmail: tenant.email,
+      tenantName: `${tenant.first_name} ${tenant.last_name}`,
+      propertyName: property?.name || '',
+      unitNumber: unit?.top_nummer || '',
+      amount: Number(invoice.gesamtbetrag),
+      dueDate: invoice.faellig_am,
+      invoiceMonth: invoice.month,
+      invoiceYear: invoice.year,
+    });
   };
 
   // Calculate statistics
@@ -266,6 +309,7 @@ export default function InvoiceList() {
                   <TableHead className="text-right">Gesamt</TableHead>
                   <TableHead>Fällig am</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Mahnung</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -274,6 +318,9 @@ export default function InvoiceList() {
                   const tenant = getTenant(invoice.tenant_id);
                   const unit = getUnit(invoice.unit_id);
                   const property = unit ? getProperty(unit.property_id) : null;
+                  const mahnstufe = (invoice as any).mahnstufe || 0;
+                  const nextAction = getNextDunningAction(mahnstufe);
+                  const isOpenOrOverdue = invoice.status === 'offen' || invoice.status === 'ueberfaellig';
 
                   return (
                     <TableRow key={invoice.id}>
@@ -312,17 +359,76 @@ export default function InvoiceList() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {invoice.status === 'offen' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleMarkAsPaid(invoice.id)}
-                            disabled={updateStatus.isPending}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Bezahlt
-                          </Button>
-                        )}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              {mahnstufe === 0 ? (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              ) : mahnstufe === 1 ? (
+                                <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Erinnerung
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Mahnung
+                                </Badge>
+                              )}
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{getDunningStatusLabel(mahnstufe)}</p>
+                              {(invoice as any).zahlungserinnerung_am && (
+                                <p className="text-xs text-muted-foreground">
+                                  Erinnerung: {format(new Date((invoice as any).zahlungserinnerung_am), 'dd.MM.yyyy')}
+                                </p>
+                              )}
+                              {(invoice as any).mahnung_am && (
+                                <p className="text-xs text-muted-foreground">
+                                  Mahnung: {format(new Date((invoice as any).mahnung_am), 'dd.MM.yyyy')}
+                                </p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {invoice.status !== 'bezahlt' && (
+                              <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice.id)}>
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Als bezahlt markieren
+                              </DropdownMenuItem>
+                            )}
+                            {isOpenOrOverdue && nextAction && tenant?.email && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => handleSendDunning(invoice, nextAction.level)}
+                                  disabled={sendDunning.isPending}
+                                >
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  {nextAction.label}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {isOpenOrOverdue && !tenant?.email && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem disabled>
+                                  <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                                  <span className="text-muted-foreground">Keine E-Mail hinterlegt</span>
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );
