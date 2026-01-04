@@ -121,6 +121,18 @@ export default function SimpleDashboard() {
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
+  // Debug logging - must be before any returns
+  const propertiesList = properties || [];
+  const currentLimits = LIMITS[subscriptionTier as keyof typeof LIMITS] || LIMITS.starter;
+  const currentPropertyCount = propertiesList.length;
+  const maxProperties = currentLimits.properties;
+  const canAddProperty = currentPropertyCount < maxProperties;
+
+  useEffect(() => {
+    console.log('Properties geladen:', properties);
+    console.log('Properties Count:', currentPropertyCount, 'Max:', maxProperties, 'Can Add:', canAddProperty);
+  }, [properties, currentPropertyCount, maxProperties, canAddProperty]);
+
   if (isLoading) {
     return (
       <MainLayout title="Dashboard" subtitle="Übersicht">
@@ -159,18 +171,6 @@ export default function SimpleDashboard() {
     professional: "Professional",
     enterprise: "Enterprise",
   };
-
-  const propertiesList = properties || [];
-  const currentLimits = LIMITS[subscriptionTier as keyof typeof LIMITS] || LIMITS.starter;
-  const currentPropertyCount = propertiesList.length;
-  const maxProperties = currentLimits.properties;
-  const canAddProperty = currentPropertyCount < maxProperties;
-
-  // Debug logging
-  useEffect(() => {
-    console.log('Properties geladen:', properties);
-    console.log('Properties Count:', currentPropertyCount, 'Max:', maxProperties, 'Can Add:', canAddProperty);
-  }, [properties, currentPropertyCount, maxProperties, canAddProperty]);
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
