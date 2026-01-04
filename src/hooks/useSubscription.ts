@@ -20,6 +20,17 @@ export function useSubscription() {
   const { data: subscription, isLoading, refetch } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: async (): Promise<SubscriptionStatus> => {
+      // Check if user is authenticated first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        return {
+          subscribed: false,
+          subscription_tier: null,
+          subscription_end: null,
+          product_id: null,
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke('check-subscription');
       
       if (error) {
