@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Check, Crown, Building2, Home, Zap } from 'lucide-react';
 import { useSubscriptionLimits, TIER_LIMITS, TIER_LABELS } from '@/hooks/useOrganization';
+import { useSubscription } from '@/hooks/useSubscription';
 import { cn } from '@/lib/utils';
+import { STRIPE_PRICE_IDS } from '@/config/stripe';
 
 const plans = [
   {
@@ -53,6 +55,12 @@ const plans = [
 
 export default function Upgrade() {
   const { subscriptionTier: currentTier, status } = useSubscriptionLimits();
+  const { startCheckout, isCheckoutLoading } = useSubscription();
+
+  const handleUpgrade = (tier: 'starter' | 'professional' | 'enterprise') => {
+    const planKey = tier === 'enterprise' ? 'premium' : tier;
+    startCheckout(planKey as 'starter' | 'professional' | 'premium');
+  };
 
   return (
     <MainLayout title="Plan Upgraden" subtitle="Wählen Sie den passenden Plan für Ihre Bedürfnisse">
@@ -123,9 +131,13 @@ export default function Upgrade() {
                       Aktueller Plan
                     </Button>
                   ) : isPlanUpgrade ? (
-                    <Button className="w-full">
+                    <Button 
+                      className="w-full" 
+                      onClick={() => handleUpgrade(plan.tier)}
+                      disabled={isCheckoutLoading}
+                    >
                       <Crown className="h-4 w-4 mr-2" />
-                      Upgrade auf {TIER_LABELS[plan.tier]}
+                      {isCheckoutLoading ? 'Wird geladen...' : `Upgrade auf ${TIER_LABELS[plan.tier]}`}
                     </Button>
                   ) : (
                     <Button className="w-full" variant="outline" disabled>
