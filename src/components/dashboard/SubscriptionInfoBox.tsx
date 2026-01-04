@@ -11,7 +11,7 @@ interface SubscriptionInfoBoxProps {
 }
 
 export function SubscriptionInfoBox({ propertiesCount, unitsCount }: SubscriptionInfoBoxProps) {
-  const { tier, limits, tierLabel, status, statusLabel, trialEndsAt } = useSubscriptionLimits();
+  const { subscriptionTier: tier, maxLimits, tierLabel, status, statusLabel, trialEndsAt } = useSubscriptionLimits();
   
   const trialDaysRemaining = calculateTrialDaysRemaining(trialEndsAt);
   const isTrialExpiringSoon = status === 'trial' && trialDaysRemaining <= 3;
@@ -68,7 +68,7 @@ export function SubscriptionInfoBox({ propertiesCount, unitsCount }: Subscriptio
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">
                 <span className="font-medium">{propertiesCount}</span>
-                <span className="text-muted-foreground"> von {limits.maxProperties} Liegenschaften</span>
+                <span className="text-muted-foreground"> von {maxLimits.properties} Liegenschaften</span>
               </span>
             </div>
             <div className="flex items-center gap-2">

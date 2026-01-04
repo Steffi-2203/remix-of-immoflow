@@ -12,8 +12,8 @@ const plans = [
     price: 'Kostenlos',
     priceNote: '14 Tage Testphase',
     features: [
-      `Max. ${TIER_LIMITS.starter.maxProperties} Liegenschaft`,
-      `Max. ${TIER_LIMITS.starter.maxUnitsPerProperty} Einheiten pro Liegenschaft`,
+      `Max. ${TIER_LIMITS.starter.properties} Liegenschaft`,
+      `Max. ${TIER_LIMITS.starter.unitsPerProperty} Einheiten pro Liegenschaft`,
       'Mieter- & Mietvertragsverwaltung',
       'Grundlegende Berichte',
       'E-Mail Support',
@@ -24,8 +24,8 @@ const plans = [
     price: '€29',
     priceNote: 'pro Monat',
     features: [
-      `Max. ${TIER_LIMITS.professional.maxProperties} Liegenschaften`,
-      `Max. ${TIER_LIMITS.professional.maxUnitsPerProperty} Einheiten pro Liegenschaft`,
+      `Max. ${TIER_LIMITS.professional.properties} Liegenschaften`,
+      `Max. ${TIER_LIMITS.professional.unitsPerProperty} Einheiten pro Liegenschaft`,
       'Mieter- & Mietvertragsverwaltung',
       'Betriebskostenabrechnung',
       'Erweiterte Berichte',
@@ -39,8 +39,8 @@ const plans = [
     price: '€49',
     priceNote: 'pro Monat',
     features: [
-      `Max. ${TIER_LIMITS.enterprise.maxProperties} Liegenschaft`,
-      `Max. ${TIER_LIMITS.enterprise.maxUnitsPerProperty} Einheiten pro Liegenschaft`,
+      `Max. ${TIER_LIMITS.enterprise.properties} Liegenschaft`,
+      `Max. ${TIER_LIMITS.enterprise.unitsPerProperty} Einheiten pro Liegenschaft`,
       'Alle Professional-Features',
       'Automatische Rechnungserstellung',
       'SEPA-Lastschrift Integration',
@@ -52,7 +52,7 @@ const plans = [
 ];
 
 export default function Upgrade() {
-  const { tier: currentTier, status } = useSubscriptionLimits();
+  const { subscriptionTier: currentTier, status } = useSubscriptionLimits();
 
   return (
     <MainLayout title="Plan Upgraden" subtitle="Wählen Sie den passenden Plan für Ihre Bedürfnisse">

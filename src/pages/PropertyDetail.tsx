@@ -69,7 +69,7 @@ export default function PropertyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const { limits } = useSubscriptionLimits();
+  const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
   const { data: units, isLoading: isLoadingUnits } = useUnits(id);
@@ -79,7 +79,7 @@ export default function PropertyDetail() {
   const deleteDocument = useDeletePropertyDocument();
   
   // Check if unit limit is reached for this property
-  const canAddUnit = (units?.length || 0) < limits.maxUnitsPerProperty;
+  const canAddUnit = id ? canAddUnitToProperty(id) : false;
 
   const handleDelete = async () => {
     if (id) {
@@ -265,7 +265,7 @@ export default function PropertyDetail() {
             <div>
               <h3 className="font-semibold text-foreground">Alle Einheiten</h3>
               <p className="text-sm text-muted-foreground">
-                {units?.length || 0} von {limits.maxUnitsPerProperty} Einheiten
+                {units?.length || 0} von {maxLimits.unitsPerProperty} Einheiten
               </p>
             </div>
             {canAddUnit ? (
