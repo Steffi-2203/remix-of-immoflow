@@ -14,17 +14,32 @@ import { supabase } from '@/integrations/supabase/client';
 import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSubscription } from '@/hooks/useSubscription';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Index = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { maxLimits, canAddProperty } = useSubscriptionLimits();
+  const { refetch: refetchSubscription } = useSubscription();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle payment success
+  useEffect(() => {
+    const payment = searchParams.get('payment');
+    if (payment === 'success') {
+      toast.success('Zahlung erfolgreich! Ihr Abonnement ist jetzt aktiv.');
+      refetchSubscription();
+      // Clean up URL
+      searchParams.delete('payment');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, refetchSubscription]);
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: tenants, isLoading: tenantsLoading } = useTenants();

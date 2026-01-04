@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,8 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useSubscriptionLimits, TIER_LABELS } from '@/hooks/useOrganization';
 import { useSubscription, STRIPE_PLANS, PlanKey } from '@/hooks/useSubscription';
-import { useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
 import { toast } from 'sonner';
 
 const plans = [
@@ -63,16 +63,12 @@ export default function Pricing() {
   const { subscriptionTier, status, isLoading: orgLoading } = useSubscriptionLimits();
   const { startCheckout, isCheckoutLoading, refetch } = useSubscription();
 
-  // Handle success/cancel from Stripe
+  // Handle cancel from Stripe
   useEffect(() => {
-    if (searchParams.get('success') === 'true') {
-      toast.success('Zahlung erfolgreich! Ihr Abo ist jetzt aktiv.');
-      refetch();
-    }
-    if (searchParams.get('canceled') === 'true') {
+    if (searchParams.get('payment') === 'cancelled') {
       toast.info('Zahlung abgebrochen.');
     }
-  }, [searchParams, refetch]);
+  }, [searchParams]);
 
   const handleSelectPlan = (tier: PlanKey) => {
     startCheckout(tier);
