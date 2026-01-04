@@ -1,13 +1,23 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Save, Loader2, Crown, AlertTriangle } from 'lucide-react';
 import { useProperty, useCreateProperty, useUpdateProperty } from '@/hooks/useProperties';
-import { useEffect } from 'react';
+import { useSubscriptionLimits } from '@/hooks/useOrganization';
+import { toast } from 'sonner';
+import { z } from 'zod';
+
+// Validation schema
+const propertySchema = z.object({
+  name: z.string().min(1, 'Bezeichnung ist erforderlich').max(100, 'Max. 100 Zeichen'),
+  address: z.string().min(1, 'Adresse ist erforderlich').max(200, 'Max. 200 Zeichen'),
+  city: z.string().min(1, 'Stadt ist erforderlich').max(100, 'Max. 100 Zeichen'),
+  postal_code: z.string().min(1, 'PLZ ist erforderlich').max(20, 'Max. 20 Zeichen'),
+});
 
 export default function PropertyForm() {
   const { id } = useParams();
@@ -17,7 +27,9 @@ export default function PropertyForm() {
   const { data: existingProperty, isLoading: isLoadingProperty } = useProperty(id);
   const createProperty = useCreateProperty();
   const updateProperty = useUpdateProperty();
+  const { canAddProperty, maxLimits, currentUsage, isLoading: isLoadingLimits } = useSubscriptionLimits();
   
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -53,17 +65,32 @@ export default function PropertyForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setValidationError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+    
+    // Validate form data
+    const result = propertySchema.safeParse(formData);
+    if (!result.success) {
+      setValidationError(result.error.errors[0].message);
+      return;
+    }
+    
+    // Check subscription limits for new properties
+    if (!isEditing && !canAddProperty) {
+      toast.error('Limit erreicht! Bitte upgraden Sie Ihren Plan.');
+      return;
+    }
     
     const propertyData = {
-      name: formData.name,
-      address: formData.address,
-      city: formData.city,
-      postal_code: formData.postal_code,
-      country: formData.country,
+      name: formData.name.trim(),
+      address: formData.address.trim(),
+      city: formData.city.trim(),
+      postal_code: formData.postal_code.trim(),
+      country: formData.country.trim(),
       building_year: formData.building_year ? parseInt(formData.building_year) : null,
       total_qm: parseFloat(formData.total_qm) || 0,
       total_mea: parseFloat(formData.total_mea) || 1000,
@@ -72,13 +99,16 @@ export default function PropertyForm() {
       bk_anteil_garage: parseFloat(formData.bk_anteil_garage) || 20,
     };
 
-    if (isEditing && id) {
-      await updateProperty.mutateAsync({ id, ...propertyData });
-    } else {
-      await createProperty.mutateAsync(propertyData);
+    try {
+      if (isEditing && id) {
+        await updateProperty.mutateAsync({ id, ...propertyData });
+      } else {
+        await createProperty.mutateAsync(propertyData);
+      }
+      navigate('/liegenschaften');
+    } catch (error) {
+      // Error handling is done in the hooks
     }
-    
-    navigate('/liegenschaften');
   };
 
   const isSubmitting = createProperty.isPending || updateProperty.isPending;
@@ -108,7 +138,33 @@ export default function PropertyForm() {
         </Link>
       </div>
 
+      {/* Limit Warning for new properties */}
+      {!isEditing && !canAddProperty && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              Limit erreicht! Sie haben bereits {currentUsage.properties} von {maxLimits.properties} Liegenschaften.
+            </span>
+            <Link to="/upgrade">
+              <Button size="sm" variant="outline" className="ml-4">
+                <Crown className="h-4 w-4 mr-2" />
+                Plan upgraden
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Validation Error */}
+        {validationError && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{validationError}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Grunddaten */}
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold text-foreground mb-4">Grunddaten</h3>
@@ -256,7 +312,10 @@ export default function PropertyForm() {
           <Button type="button" variant="outline" onClick={() => navigate('/liegenschaften')}>
             Abbrechen
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button 
+            type="submit" 
+            disabled={isSubmitting || (!isEditing && !canAddProperty)}
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

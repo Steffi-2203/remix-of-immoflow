@@ -2,7 +2,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { PropertyCard } from '@/components/dashboard/PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Filter, Download, Loader2, Building2 } from 'lucide-react';
+import { Plus, Search, Filter, Download, Loader2, Building2, Crown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Select,
@@ -13,11 +13,13 @@ import {
 } from '@/components/ui/select';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
+import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { useState } from 'react';
 
 export default function PropertyList() {
   const { data: properties, isLoading } = useProperties();
   const { data: allUnits } = useUnits();
+  const { canAddProperty, maxLimits, currentUsage } = useSubscriptionLimits();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredProperties = properties?.filter(
@@ -83,19 +85,30 @@ export default function PropertyList() {
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
-          <Link to="/liegenschaften/neu">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Neue Liegenschaft
-            </Button>
-          </Link>
+          {canAddProperty ? (
+            <Link to="/liegenschaften/neu">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Neue Liegenschaft
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/upgrade">
+              <Button variant="secondary">
+                <Crown className="h-4 w-4 mr-2" />
+                Plan upgraden
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-2xl font-bold text-foreground">{filteredProperties?.length || 0}</p>
+          <p className="text-2xl font-bold text-foreground">
+            {currentUsage.properties} / {maxLimits.properties}
+          </p>
           <p className="text-sm text-muted-foreground">Liegenschaften</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
@@ -143,12 +156,21 @@ export default function PropertyList() {
           <p className="text-sm text-muted-foreground mb-4">
             Erstellen Sie Ihre erste Liegenschaft, um zu beginnen
           </p>
-          <Link to="/liegenschaften/neu">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Neue Liegenschaft
-            </Button>
-          </Link>
+          {canAddProperty ? (
+            <Link to="/liegenschaften/neu">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Neue Liegenschaft
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/upgrade">
+              <Button variant="secondary">
+                <Crown className="h-4 w-4 mr-2" />
+                Plan upgraden für mehr Liegenschaften
+              </Button>
+            </Link>
+          )}
         </div>
       )}
     </MainLayout>
