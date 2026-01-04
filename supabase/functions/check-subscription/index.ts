@@ -81,9 +81,30 @@ serve(async (req) => {
 
     if (hasActiveSub) {
       const subscription = subscriptions.data[0];
-      subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-      productId = subscription.items.data[0].price.product as string;
-      subscriptionTier = PRODUCT_TO_TIER[productId] || null;
+      
+      // Safely parse subscription end date
+      try {
+        if (subscription.current_period_end && typeof subscription.current_period_end === 'number') {
+          subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        } else {
+          logStep("Invalid current_period_end", { value: subscription.current_period_end });
+          subscriptionEnd = null;
+        }
+      } catch (dateError) {
+        logStep("Error parsing subscription end date", { error: String(dateError) });
+        subscriptionEnd = null;
+      }
+      
+      // Safely get product ID
+      try {
+        const priceProduct = subscription.items?.data?.[0]?.price?.product;
+        productId = typeof priceProduct === 'string' ? priceProduct : null;
+      } catch (productError) {
+        logStep("Error getting product ID", { error: String(productError) });
+        productId = null;
+      }
+      
+      subscriptionTier = productId ? (PRODUCT_TO_TIER[productId] || null) : null;
       
       logStep("Active subscription found", { 
         subscriptionId: subscription.id, 
