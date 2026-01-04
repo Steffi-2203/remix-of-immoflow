@@ -1,17 +1,21 @@
-import { Building2, CreditCard, User, Mail, Calendar, ArrowRight } from 'lucide-react';
+import { Building2, CreditCard, User, Mail, Calendar, ArrowRight, Loader2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useOrganization, useSubscriptionLimits, TIER_LABELS, STATUS_LABELS, calculateTrialDaysRemaining } from '@/hooks/useOrganization';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function Settings() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { data: organization, isLoading: isLoadingOrg } = useOrganization();
   const { 
@@ -25,6 +29,21 @@ export default function Settings() {
     trialDaysRemaining,
     isLoading 
   } = useSubscriptionLimits();
+  
+  const { 
+    isSubscribed, 
+    openCustomerPortal, 
+    isPortalLoading,
+    refetch: refetchSubscription 
+  } = useSubscription();
+
+  // Handle success from Stripe checkout
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Zahlung erfolgreich! Ihr Abo ist jetzt aktiv.');
+      refetchSubscription();
+    }
+  }, [searchParams, refetchSubscription]);
 
   const getStatusVariant = () => {
     switch (status) {
@@ -168,15 +187,38 @@ export default function Settings() {
 
             <Separator />
 
-            {/* Change Plan Button */}
-            <Button 
-              onClick={() => navigate('/pricing')} 
-              className="w-full"
-              variant="outline"
-            >
-              Plan ändern
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            {/* Subscription Management Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={() => navigate('/pricing')} 
+                className="flex-1"
+                variant="outline"
+              >
+                Plan ändern
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              
+              {isSubscribed && (
+                <Button 
+                  onClick={openCustomerPortal} 
+                  className="flex-1"
+                  variant="secondary"
+                  disabled={isPortalLoading}
+                >
+                  {isPortalLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Wird geladen...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Abo verwalten
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
