@@ -207,6 +207,36 @@ export type Database = {
           },
         ]
       }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          subscription_status: Database["public"]["Enums"]["subscription_status"]
+          subscription_tier: Database["public"]["Enums"]["subscription_tier"]
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          subscription_tier?: Database["public"]["Enums"]["subscription_tier"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           betrag: number
@@ -264,6 +294,7 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          organization_id: string | null
           updated_at: string
         }
         Insert: {
@@ -271,6 +302,7 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          organization_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -278,9 +310,18 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          organization_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       properties: {
         Row: {
@@ -784,6 +825,8 @@ export type Database = {
       invoice_status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig"
       payment_type: "sepa" | "ueberweisung" | "bar" | "sonstiges"
       settlement_status: "entwurf" | "berechnet" | "versendet" | "abgeschlossen"
+      subscription_status: "trial" | "active" | "cancelled" | "expired"
+      subscription_tier: "starter" | "professional" | "enterprise"
       tenant_status: "aktiv" | "leerstand" | "beendet"
       unit_type:
         | "wohnung"
@@ -941,6 +984,8 @@ export const Constants = {
       invoice_status: ["offen", "bezahlt", "teilbezahlt", "ueberfaellig"],
       payment_type: ["sepa", "ueberweisung", "bar", "sonstiges"],
       settlement_status: ["entwurf", "berechnet", "versendet", "abgeschlossen"],
+      subscription_status: ["trial", "active", "cancelled", "expired"],
+      subscription_tier: ["starter", "professional", "enterprise"],
       tenant_status: ["aktiv", "leerstand", "beendet"],
       unit_type: [
         "wohnung",

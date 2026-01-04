@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Building2, Loader2, Mail, Lock, User } from 'lucide-react';
+import { Building2, Loader2, Mail, Lock, User, Building } from 'lucide-react';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein');
@@ -23,6 +23,7 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
 
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
@@ -32,6 +33,11 @@ export default function Register() {
 
   const validateForm = () => {
     setError(null);
+    
+    if (!companyName.trim()) {
+      setError('Bitte geben Sie einen Firmennamen ein');
+      return false;
+    }
     
     try {
       emailSchema.parse(email);
@@ -67,7 +73,7 @@ export default function Register() {
     setError(null);
     setSuccess(null);
 
-    const { error, data } = await signUp(email, password, fullName);
+    const { error, data } = await signUp(email, password, fullName, companyName);
     
     if (error) {
       if (error.message.includes('User already registered')) {
@@ -117,6 +123,22 @@ export default function Register() {
                 <AlertDescription>{success}</AlertDescription>
               </Alert>
             )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="companyName">Firmenname / Hausverwaltung *</Label>
+              <div className="relative">
+                <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="companyName"
+                  type="text"
+                  placeholder="Name Ihrer Hausverwaltung"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
             
             <div className="space-y-2">
               <Label htmlFor="fullName">Name</Label>
