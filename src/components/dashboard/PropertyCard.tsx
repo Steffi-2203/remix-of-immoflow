@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Building2, MapPin, Home, Users, ArrowRight } from 'lucide-react';
+import { Building2, MapPin, Home, Users, ArrowRight, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
-interface PropertyCardProps {
+export interface PropertyCardProps {
   property: {
     id: string;
     name: string;
@@ -15,10 +15,12 @@ interface PropertyCardProps {
     building_year: number | null;
   };
   units?: { total: number; occupied: number; vacant: number };
+  maxUnitsPerProperty?: number;
 }
 
-export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant: 0 } }: PropertyCardProps) {
+export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant: 0 }, maxUnitsPerProperty }: PropertyCardProps) {
   const occupancyRate = units.total > 0 ? (units.occupied / units.total) * 100 : 0;
+  const isAtUnitLimit = maxUnitsPerProperty ? units.total >= maxUnitsPerProperty : false;
 
   return (
     <Link
@@ -46,7 +48,9 @@ export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant
       <div className="mt-5 grid grid-cols-3 gap-4">
         <div className="text-center">
           <p className="text-2xl font-bold text-foreground">{units.total}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Einheiten</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {maxUnitsPerProperty ? `von ${maxUnitsPerProperty}` : 'Einheiten'}
+          </p>
         </div>
         <div className="text-center">
           <p className="text-2xl font-bold text-success">{units.occupied}</p>
@@ -81,6 +85,12 @@ export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant
         {property.building_year && (
           <Badge variant="secondary" className="text-xs">
             BJ {property.building_year}
+          </Badge>
+        )}
+        {isAtUnitLimit && (
+          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+            <Crown className="h-3 w-3 mr-1" />
+            Limit erreicht
           </Badge>
         )}
       </div>
