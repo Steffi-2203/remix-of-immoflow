@@ -1,7 +1,7 @@
 project_id = "cpbefoumpngamibpdtxu"
 
 [functions.generate-monthly-invoices]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-settlement-email]
-verify_jwt = false
+verify_jwt = true

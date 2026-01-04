@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from './useAuth';
 
 export interface PropertyInsert {
   name: string;
@@ -55,9 +56,13 @@ export function useProperty(id: string | undefined) {
 
 export function useCreateProperty() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   
   return useMutation({
     mutationFn: async (property: PropertyInsert) => {
+      if (!user) throw new Error('Not authenticated');
+      
+      // First create the property
       const { data, error } = await supabase
         .from('properties')
         .insert(property)
@@ -65,10 +70,26 @@ export function useCreateProperty() {
         .single();
       
       if (error) throw error;
+      
+      // Then assign the current user as manager
+      const { error: assignError } = await supabase
+        .from('property_managers')
+        .insert({
+          user_id: user.id,
+          property_id: data.id,
+        });
+      
+      if (assignError) {
+        // Cleanup: delete the property if we can't assign ownership
+        await supabase.from('properties').delete().eq('id', data.id);
+        throw assignError;
+      }
+      
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['property_managers'] });
       toast.success('Liegenschaft erfolgreich erstellt');
     },
     onError: (error) => {

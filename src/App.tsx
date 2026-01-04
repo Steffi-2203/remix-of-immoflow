@@ -3,7 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
+import Auth from "./pages/Auth";
 import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyForm from "./pages/PropertyForm";
@@ -27,23 +29,27 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/liegenschaften" element={<PropertyList />} />
-          <Route path="/liegenschaften/neu" element={<PropertyForm />} />
-          <Route path="/liegenschaften/:id" element={<PropertyDetail />} />
-          <Route path="/liegenschaften/:id/bearbeiten" element={<PropertyForm />} />
-          <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<UnitForm />} />
-          <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<UnitForm />} />
-          <Route path="/einheiten" element={<UnitList />} />
-          <Route path="/einheiten/:propertyId/:unitId" element={<UnitDetail />} />
-          <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<TenantForm />} />
-          <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<TenantForm />} />
-          <Route path="/zahlungen" element={<PaymentList />} />
-          <Route path="/buchhaltung" element={<ExpenseList />} />
-          <Route path="/abrechnung" element={<OperatingCostSettlement />} />
-          <Route path="/dokumente" element={<ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/einstellungen" element={<ComingSoon title="Einstellungen" subtitle="System- und Benutzereinstellungen" />} />
+          {/* Public routes */}
+          <Route path="/auth" element={<Auth />} />
+          
+          {/* Protected routes */}
+          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/liegenschaften" element={<ProtectedRoute><PropertyList /></ProtectedRoute>} />
+          <Route path="/liegenschaften/neu" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
+          <Route path="/liegenschaften/:id" element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
+          <Route path="/liegenschaften/:id/bearbeiten" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
+          <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<ProtectedRoute><UnitForm /></ProtectedRoute>} />
+          <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<ProtectedRoute><UnitForm /></ProtectedRoute>} />
+          <Route path="/einheiten" element={<ProtectedRoute><UnitList /></ProtectedRoute>} />
+          <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedRoute><UnitDetail /></ProtectedRoute>} />
+          <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
+          <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
+          <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
+          <Route path="/buchhaltung" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
+          <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
+          <Route path="/dokumente" element={<ProtectedRoute><ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+          <Route path="/einstellungen" element={<ProtectedRoute><ComingSoon title="Einstellungen" subtitle="System- und Benutzereinstellungen" /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
