@@ -1,10 +1,13 @@
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useSubscriptionLimits, TIER_LABELS } from '@/hooks/useOrganization';
-import { useNavigate } from 'react-router-dom';
+import { useSubscription, STRIPE_PLANS, PlanKey } from '@/hooks/useSubscription';
+import { useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 
 const plans = [
   {
@@ -56,18 +59,30 @@ const plans = [
 ];
 
 export default function Pricing() {
-  const navigate = useNavigate();
-  const { subscriptionTier, status, isLoading } = useSubscriptionLimits();
+  const [searchParams] = useSearchParams();
+  const { subscriptionTier, status, isLoading: orgLoading } = useSubscriptionLimits();
+  const { startCheckout, isCheckoutLoading, refetch } = useSubscription();
 
-  const handleSelectPlan = (tier: string) => {
-    alert('Stripe Integration folgt');
+  // Handle success/cancel from Stripe
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Zahlung erfolgreich! Ihr Abo ist jetzt aktiv.');
+      refetch();
+    }
+    if (searchParams.get('canceled') === 'true') {
+      toast.info('Zahlung abgebrochen.');
+    }
+  }, [searchParams, refetch]);
+
+  const handleSelectPlan = (tier: PlanKey) => {
+    startCheckout(tier);
   };
 
   return (
     <MainLayout title="Preise" subtitle="Wählen Sie den passenden Plan für Ihre Bedürfnisse">
       <div className="max-w-5xl mx-auto">
         {/* Current Plan Info */}
-        {!isLoading && status !== 'trial' && (
+        {!orgLoading && status !== 'trial' && (
           <div className="mb-8 p-4 bg-muted rounded-lg text-center">
             <p className="text-muted-foreground">
               Ihr aktueller Plan: <span className="font-semibold text-foreground">{TIER_LABELS[subscriptionTier]}</span>
@@ -122,8 +137,16 @@ export default function Pricing() {
                       className="w-full" 
                       variant={plan.popular ? 'default' : 'outline'}
                       onClick={() => handleSelectPlan(plan.tier)}
+                      disabled={isCheckoutLoading}
                     >
-                      {status === 'trial' || !subscriptionTier ? 'Jetzt starten' : 'Upgraden'}
+                      {isCheckoutLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Wird geladen...
+                        </>
+                      ) : (
+                        status === 'trial' || !subscriptionTier ? 'Jetzt starten' : 'Upgraden'
+                      )}
                     </Button>
                   )}
                 </CardFooter>
