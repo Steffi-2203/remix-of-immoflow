@@ -142,7 +142,7 @@ export default function Landing() {
               </div>
             </div>
             <div className="bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl p-8 text-center">
-              <div className="text-6xl font-bold text-primary mb-2">30</div>
+              <div className="text-6xl font-bold text-primary mb-2">14</div>
               <div className="text-lg text-muted-foreground mb-4">Tage kostenlos testen</div>
               <p className="text-sm text-muted-foreground mb-6">
                 Keine Kreditkarte erforderlich. Jederzeit kündbar.
