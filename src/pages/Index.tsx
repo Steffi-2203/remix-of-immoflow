@@ -24,7 +24,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 const Index = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { limits } = useSubscriptionLimits();
+  const { maxLimits, canAddProperty } = useSubscriptionLimits();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
@@ -145,8 +145,7 @@ const Index = () => {
     );
   }
 
-  // Check if property limit is reached
-  const canAddProperty = managedProperties.length < limits.maxProperties;
+  // canAddProperty is now provided by the hook
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht Ihrer Immobilienverwaltung">
@@ -251,7 +250,7 @@ const Index = () => {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Meine Liegenschaften</h2>
             <p className="text-sm text-muted-foreground">
-              {managedProperties.length} von {limits.maxProperties} Liegenschaften
+              {managedProperties.length} von {maxLimits.properties} Liegenschaften
             </p>
           </div>
           {canAddProperty ? (
@@ -277,7 +276,7 @@ const Index = () => {
                 key={property.id}
                 property={property}
                 units={propertyUnits[property.id] || { total: 0, occupied: 0, vacant: 0 }}
-                maxUnitsPerProperty={limits.maxUnitsPerProperty}
+                maxUnitsPerProperty={maxLimits.unitsPerProperty}
               />
             ))}
           </div>
