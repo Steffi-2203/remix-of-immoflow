@@ -4,8 +4,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
 import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyForm from "./pages/PropertyForm";
@@ -30,10 +32,12 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           {/* Public routes */}
-          <Route path="/auth" element={<Auth />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           
           {/* Protected routes */}
-          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/liegenschaften" element={<ProtectedRoute><PropertyList /></ProtectedRoute>} />
           <Route path="/liegenschaften/neu" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
           <Route path="/liegenschaften/:id" element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
