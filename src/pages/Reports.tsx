@@ -31,6 +31,7 @@ import {
   Loader2,
   Building2,
   Receipt,
+  AlertCircle,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -43,6 +44,7 @@ import {
   generateLeerstandReport,
   generateUmsatzReport,
   generateUstVoranmeldung,
+  generateOffenePostenReport,
 } from '@/utils/reportPdfExport';
 
 // Berechnet Netto aus Brutto
@@ -93,6 +95,13 @@ const reports = [
     description: 'Umsatzsteuer vs. Vorsteuer für das Finanzamt',
     icon: FileText,
     color: 'bg-accent/10 text-accent-foreground',
+  },
+  {
+    id: 'offeneposten',
+    title: 'Offene Posten Liste',
+    description: 'Übersicht aller unbezahlten Rechnungen',
+    icon: AlertCircle,
+    color: 'bg-destructive/10 text-destructive',
   },
 ];
 
@@ -267,6 +276,17 @@ export default function Reports() {
             selectedMonth
           );
           toast.success('USt-Voranmeldung wurde erstellt');
+          break;
+        case 'offeneposten':
+          generateOffenePostenReport(
+            properties,
+            allUnits,
+            allTenants,
+            allInvoices as any,
+            selectedPropertyId,
+            selectedYear
+          );
+          toast.success('Offene Posten Liste wurde erstellt');
           break;
         default:
           toast.error('Report nicht gefunden');
@@ -702,6 +722,139 @@ export default function Reports() {
               </Table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Offene Posten Vorschau */}
+      <Card className="mt-8">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg p-2.5 bg-destructive/10">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <CardTitle>Offene Posten {selectedYear}</CardTitle>
+                <CardDescription>
+                  Unbezahlte Rechnungen
+                  {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
+                </CardDescription>
+              </div>
+            </div>
+            <Button onClick={() => handleGenerateReport('offeneposten')}>
+              <Download className="h-4 w-4 mr-2" />
+              PDF Export
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const openInvoices = (invoices || []).filter(inv => {
+              const matchesUnit = unitIds.includes(inv.unit_id);
+              const isOpen = inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig';
+              return matchesUnit && isOpen && inv.year === selectedYear;
+            }).sort((a, b) => new Date(a.faellig_am).getTime() - new Date(b.faellig_am).getTime());
+            
+            const today = new Date();
+            const totalOpen = openInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+            const overdueInvoices = openInvoices.filter(inv => new Date(inv.faellig_am) < today);
+            const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+
+            if (openInvoices.length === 0) {
+              return (
+                <div className="text-center py-8 text-muted-foreground">
+                  Keine offenen Posten für {selectedYear} vorhanden.
+                </div>
+              );
+            }
+
+            return (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Offene Posten gesamt</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{totalOpen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{openInvoices.length} Rechnungen</p>
+                  </div>
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                    <p className="text-xs text-muted-foreground">Davon überfällig</p>
+                    <p className="text-lg font-bold text-destructive">
+                      €{totalOverdue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{overdueInvoices.length} Rechnungen</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Durchschn. Betrag</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{(totalOpen / openInvoices.length).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[180px]">Mieter / Einheit</TableHead>
+                        <TableHead>Monat</TableHead>
+                        <TableHead>Fällig am</TableHead>
+                        <TableHead>Überfällig</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Betrag</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {openInvoices.slice(0, 10).map((invoice) => {
+                        const unit = allUnits?.find(u => u.id === invoice.unit_id);
+                        const tenant = allTenants?.find(t => t.id === invoice.tenant_id);
+                        const property = properties?.find(p => p.id === unit?.property_id);
+                        const dueDate = new Date(invoice.faellig_am);
+                        const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+                        
+                        return (
+                          <TableRow key={invoice.id}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt'}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {property?.name} - Top {unit?.top_nummer}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{invoice.month}/{invoice.year}</TableCell>
+                            <TableCell>{dueDate.toLocaleDateString('de-AT')}</TableCell>
+                            <TableCell>
+                              {daysOverdue > 0 ? (
+                                <span className="text-destructive font-medium">{daysOverdue} Tage</span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={invoice.status === 'ueberfaellig' ? 'destructive' : invoice.status === 'teilbezahlt' ? 'secondary' : 'outline'}>
+                                {invoice.status === 'offen' ? 'Offen' : invoice.status === 'teilbezahlt' ? 'Teilbezahlt' : 'Überfällig'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              €{Number(invoice.gesamtbetrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                  {openInvoices.length > 10 && (
+                    <p className="text-sm text-muted-foreground text-center mt-4">
+                      ... und {openInvoices.length - 10} weitere offene Posten. PDF für vollständige Liste exportieren.
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
     </MainLayout>

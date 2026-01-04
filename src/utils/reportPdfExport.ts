@@ -550,3 +550,110 @@ export const generateUstVoranmeldung = (
 
   doc.save(`USt-Voranmeldung_${periodLabel.replace(' ', '_')}.pdf`);
 };
+
+// ====== OFFENE POSTEN REPORT ======
+interface OpenItemInvoice {
+  id: string;
+  tenant_id: string;
+  unit_id: string;
+  year: number;
+  month: number;
+  grundmiete: number;
+  betriebskosten: number;
+  heizungskosten: number;
+  gesamtbetrag: number;
+  status: string;
+  faellig_am: string;
+}
+
+export const generateOffenePostenReport = (
+  properties: PropertyData[],
+  units: UnitData[],
+  tenants: TenantData[],
+  invoices: OpenItemInvoice[],
+  selectedPropertyId: string,
+  selectedYear: number
+) => {
+  const doc = new jsPDF('landscape');
+  const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+  
+  addHeader(
+    doc, 
+    'Offene Posten Liste', 
+    `Stand: ${new Date().toLocaleDateString('de-AT')}`,
+    selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
+  );
+
+  // Filter units
+  const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
+  const unitIds = targetUnits.map(u => u.id);
+  
+  // Filter for open invoices
+  const openInvoices = invoices.filter(inv => {
+    const matchesUnit = unitIds.includes(inv.unit_id);
+    const isOpen = inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig';
+    return matchesUnit && isOpen && inv.year === selectedYear;
+  });
+
+  // Sort by due date
+  openInvoices.sort((a, b) => new Date(a.faellig_am).getTime() - new Date(b.faellig_am).getTime());
+
+  const today = new Date();
+  
+  // Table data
+  const tableData = openInvoices.map(invoice => {
+    const unit = targetUnits.find(u => u.id === invoice.unit_id);
+    const tenant = tenants.find(t => t.id === invoice.tenant_id);
+    const property = properties.find(p => p.id === unit?.property_id);
+    const dueDate = new Date(invoice.faellig_am);
+    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    const statusLabel = invoice.status === 'offen' ? 'Offen' 
+      : invoice.status === 'teilbezahlt' ? 'Teilbezahlt' 
+      : invoice.status === 'ueberfaellig' ? 'Überfällig' : invoice.status;
+    
+    return [
+      property?.name || '-',
+      `Top ${unit?.top_nummer || '-'}`,
+      tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt',
+      `${invoice.month}/${invoice.year}`,
+      new Date(invoice.faellig_am).toLocaleDateString('de-AT'),
+      daysOverdue > 0 ? `${daysOverdue} Tage` : '-',
+      statusLabel,
+      formatCurrency(Number(invoice.gesamtbetrag)),
+    ];
+  });
+
+  // Totals
+  const totalOpen = openInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+  const overdueInvoices = openInvoices.filter(inv => new Date(inv.faellig_am) < today);
+  const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+
+  // Summary
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Offene Posten gesamt: ${formatCurrency(totalOpen)} | Davon überfällig: ${formatCurrency(totalOverdue)} (${overdueInvoices.length} Rechnungen)`, 14, 40);
+
+  autoTable(doc, {
+    startY: 48,
+    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Monat', 'Fällig am', 'Überfällig', 'Status', 'Betrag']],
+    body: tableData,
+    foot: [[`Gesamt: ${openInvoices.length} offene Posten`, '', '', '', '', '', '', formatCurrency(totalOpen)]],
+    theme: 'striped',
+    headStyles: { fillColor: [239, 68, 68] },
+    footStyles: { fillColor: [254, 226, 226], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { fontSize: 9 },
+    didParseCell: (data) => {
+      // Highlight overdue rows
+      if (data.section === 'body' && data.column.index === 5) {
+        const daysText = data.cell.text[0];
+        if (daysText && daysText !== '-') {
+          data.cell.styles.textColor = [239, 68, 68];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    },
+  });
+
+  doc.save(`Offene_Posten_${selectedYear}.pdf`);
+};
