@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import NewDashboard from "./pages/NewDashboard";
+import SimpleDashboard from "./pages/SimpleDashboard";
 import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyForm from "./pages/PropertyForm";
@@ -42,7 +42,7 @@ const App = () => (
             <Route path="/register" element={<Register />} />
             
             {/* Protected routes */}
-            <Route path="/dashboard" element={<ProtectedRoute><NewDashboard /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><SimpleDashboard /></ProtectedRoute>} />
             <Route path="/liegenschaften" element={<ProtectedRoute><PropertyList /></ProtectedRoute>} />
             <Route path="/liegenschaften/neu" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
             <Route path="/liegenschaften/:id" element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
