@@ -23,11 +23,13 @@ import {
   Percent,
   Loader2,
   Trash2,
+  Crown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { usePropertyDocuments, useUploadPropertyDocument, useDeletePropertyDocument, PROPERTY_DOCUMENT_TYPES } from '@/hooks/usePropertyDocuments';
+import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
 import {
@@ -67,6 +69,7 @@ export default function PropertyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const { limits } = useSubscriptionLimits();
   
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
   const { data: units, isLoading: isLoadingUnits } = useUnits(id);
@@ -74,6 +77,9 @@ export default function PropertyDetail() {
   const deleteProperty = useDeleteProperty();
   const uploadDocument = useUploadPropertyDocument();
   const deleteDocument = useDeletePropertyDocument();
+  
+  // Check if unit limit is reached for this property
+  const canAddUnit = (units?.length || 0) < limits.maxUnitsPerProperty;
 
   const handleDelete = async () => {
     if (id) {
@@ -256,13 +262,27 @@ export default function PropertyDetail() {
 
         <TabsContent value="units" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Alle Einheiten ({units?.length || 0})</h3>
-            <Link to={`/liegenschaften/${id}/einheiten/neu`}>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Einheit hinzufügen
-              </Button>
-            </Link>
+            <div>
+              <h3 className="font-semibold text-foreground">Alle Einheiten</h3>
+              <p className="text-sm text-muted-foreground">
+                {units?.length || 0} von {limits.maxUnitsPerProperty} Einheiten
+              </p>
+            </div>
+            {canAddUnit ? (
+              <Link to={`/liegenschaften/${id}/einheiten/neu`}>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Einheit hinzufügen
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/upgrade">
+                <Button variant="secondary">
+                  <Crown className="h-4 w-4 mr-2" />
+                  Plan upgraden
+                </Button>
+              </Link>
+            )}
           </div>
 
           {units && units.length > 0 ? (
@@ -347,12 +367,21 @@ export default function PropertyDetail() {
               <p className="text-sm text-muted-foreground mt-1 mb-4">
                 Fügen Sie die erste Einheit hinzu
               </p>
-              <Link to={`/liegenschaften/${id}/einheiten/neu`}>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Einheit hinzufügen
-                </Button>
-              </Link>
+              {canAddUnit ? (
+                <Link to={`/liegenschaften/${id}/einheiten/neu`}>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Einheit hinzufügen
+                  </Button>
+                </Link>
+              ) : (
+                <Link to="/upgrade">
+                  <Button variant="secondary">
+                    <Crown className="h-4 w-4 mr-2" />
+                    Plan upgraden für mehr Einheiten
+                  </Button>
+                </Link>
+              )}
             </div>
           )}
         </TabsContent>
