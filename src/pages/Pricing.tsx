@@ -41,7 +41,7 @@ const plans = [
     popular: true,
   },
   {
-    tier: 'enterprise' as const,
+    tier: 'premium' as const,
     name: 'Premium',
     price: 49,
     description: 'Für anspruchsvolle Vermieter',
