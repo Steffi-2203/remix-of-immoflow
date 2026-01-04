@@ -7,24 +7,61 @@ import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
-import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Index = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
   const { data: invoices, isLoading: invoicesLoading } = useInvoices();
+  const [claimingPropertyId, setClaimingPropertyId] = useState<string | null>(null);
+
+  // Check which properties the user already manages
+  const { data: myPropertyIds } = useQuery({
+    queryKey: ['my_property_managers', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('property_managers')
+        .select('property_id')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return data.map(pm => pm.property_id);
+    },
+    enabled: !!user,
+  });
 
   const isLoading = propertiesLoading || unitsLoading || tenantsLoading || invoicesLoading;
 
-  // Calculate real stats
+  // Separate properties into managed and unassigned
+  const { managedProperties, unassignedProperties } = useMemo(() => {
+    const myIds = new Set(myPropertyIds || []);
+    const managed = properties?.filter(p => myIds.has(p.id)) || [];
+    const unassigned = properties?.filter(p => !myIds.has(p.id)) || [];
+    return { managedProperties: managed, unassignedProperties: unassigned };
+  }, [properties, myPropertyIds]);
+
+  // Calculate real stats (only for managed properties)
   const stats = useMemo(() => {
-    const activeTenants = tenants?.filter(t => t.status === 'aktiv') || [];
-    const occupiedUnits = units?.filter(u => u.status === 'aktiv').length || 0;
+    const managedUnitIds = new Set(
+      units?.filter(u => managedProperties.some(p => p.id === u.property_id)).map(u => u.id) || []
+    );
+    
+    const activeTenants = tenants?.filter(t => t.status === 'aktiv' && managedUnitIds.has(t.unit_id)) || [];
+    const managedUnits = units?.filter(u => managedProperties.some(p => p.id === u.property_id)) || [];
+    const occupiedUnits = managedUnits.filter(u => u.status === 'aktiv').length;
     
     // Monthly revenue from active tenants
     const monthlyRevenue = activeTenants.reduce((sum, t) => 
@@ -32,22 +69,23 @@ const Index = () => {
     );
 
     // Open invoices
-    const openInvoices = invoices?.filter(i => i.status === 'offen' || i.status === 'teilbezahlt') || [];
+    const managedInvoices = invoices?.filter(i => managedUnitIds.has(i.unit_id)) || [];
+    const openInvoices = managedInvoices.filter(i => i.status === 'offen' || i.status === 'teilbezahlt');
     
     // Overdue invoices
-    const overdueInvoices = invoices?.filter(i => i.status === 'ueberfaellig') || [];
+    const overdueInvoices = managedInvoices.filter(i => i.status === 'ueberfaellig');
     const overdueAmount = overdueInvoices.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0);
 
     return {
-      totalProperties: properties?.length || 0,
-      totalUnits: units?.length || 0,
+      totalProperties: managedProperties.length,
+      totalUnits: managedUnits.length,
       occupiedUnits,
       totalTenants: activeTenants.length,
       monthlyRevenue,
       openInvoices: openInvoices.length,
       overdueAmount,
     };
-  }, [properties, units, tenants, invoices]);
+  }, [managedProperties, units, tenants, invoices]);
 
   // Calculate units per property
   const propertyUnits = useMemo(() => {
@@ -66,6 +104,34 @@ const Index = () => {
     return unitsByProperty;
   }, [properties, units]);
 
+  const handleClaimProperty = async (propertyId: string) => {
+    if (!user) {
+      toast.error('Sie müssen angemeldet sein');
+      return;
+    }
+
+    setClaimingPropertyId(propertyId);
+    try {
+      const { error } = await supabase
+        .from('property_managers')
+        .insert({
+          user_id: user.id,
+          property_id: propertyId,
+        });
+
+      if (error) throw error;
+
+      toast.success('Liegenschaft erfolgreich übernommen');
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['my_property_managers'] });
+    } catch (error) {
+      console.error('Claim property error:', error);
+      toast.error('Fehler beim Übernehmen der Liegenschaft');
+    } finally {
+      setClaimingPropertyId(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <MainLayout title="Dashboard" subtitle="Übersicht Ihrer Immobilienverwaltung">
@@ -78,6 +144,57 @@ const Index = () => {
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht Ihrer Immobilienverwaltung">
+      {/* Unassigned Properties Alert */}
+      {unassignedProperties.length > 0 && (
+        <Alert className="mb-6 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+          <UserPlus className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            Es gibt {unassignedProperties.length} Liegenschaft(en) ohne Verwalter. Klicken Sie auf "Übernehmen" um diese zu Ihrem Konto hinzuzufügen.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Unassigned Properties Section */}
+      {unassignedProperties.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Nicht zugewiesene Liegenschaften</h2>
+              <p className="text-sm text-muted-foreground">Diese Liegenschaften haben noch keinen Verwalter</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {unassignedProperties.map((property) => (
+              <Card key={property.id} className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/10">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{property.name}</CardTitle>
+                  <CardDescription>{property.address}, {property.postal_code} {property.city}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {propertyUnits[property.id]?.total || 0} Einheiten
+                    </span>
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleClaimProperty(property.id)}
+                      disabled={claimingPropertyId === property.id}
+                    >
+                      {claimingPropertyId === property.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <UserPlus className="h-4 w-4 mr-2" />
+                      )}
+                      Übernehmen
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         <StatCard
@@ -120,7 +237,7 @@ const Index = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Liegenschaften</h2>
+            <h2 className="text-lg font-semibold text-foreground">Meine Liegenschaften</h2>
             <p className="text-sm text-muted-foreground">Ihre verwalteten Immobilien</p>
           </div>
           <Link to="/liegenschaften/neu">
@@ -130,9 +247,9 @@ const Index = () => {
             </Button>
           </Link>
         </div>
-        {properties && properties.length > 0 ? (
+        {managedProperties.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {properties.map((property) => (
+            {managedProperties.map((property) => (
               <PropertyCard
                 key={property.id}
                 property={property}
