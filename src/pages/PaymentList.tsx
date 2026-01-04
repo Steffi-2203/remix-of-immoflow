@@ -46,9 +46,11 @@ import {
   X,
   AlertTriangle,
   Clock,
-  Users
+  Users,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
-import { usePayments, useCreatePayment } from '@/hooks/usePayments';
+import { usePayments, useCreatePayment, useDeletePayment } from '@/hooks/usePayments';
 import * as XLSX from 'xlsx';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -97,7 +99,28 @@ export default function PaymentList() {
   const { data: units } = useUnits();
   const { data: invoices } = useInvoices();
   const createPayment = useCreatePayment();
+  const deletePayment = useDeletePayment();
   const updateInvoiceStatus = useUpdateInvoiceStatus();
+
+  // Handle payment deletion (storno)
+  const handleDeletePayment = async (payment: any) => {
+    if (!confirm('Möchten Sie diese Zahlung wirklich stornieren/löschen?')) return;
+    
+    try {
+      // If payment was linked to an invoice, reopen that invoice
+      if (payment.invoice_id) {
+        await updateInvoiceStatus.mutateAsync({
+          id: payment.invoice_id,
+          status: 'offen',
+          bezahltAm: null,
+        });
+      }
+      
+      await deletePayment.mutateAsync(payment.id);
+    } catch (error) {
+      console.error('Delete payment error:', error);
+    }
+  };
 
   // Match a referenz to tenant and invoice
   const matchReferenz = (referenz: string) => {
@@ -771,6 +794,7 @@ export default function PaymentList() {
                   <TableHead className="text-right">HK brutto</TableHead>
                   <TableHead className="text-right">Gesamt</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -811,6 +835,17 @@ export default function PaymentList() {
                         ) : (
                           <Badge variant="secondary">Offen</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeletePayment(payment)}
+                          title="Zahlung stornieren"
+                          disabled={deletePayment.isPending}
+                        >
+                          <RotateCcw className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
