@@ -4,7 +4,7 @@ project_id = "cpbefoumpngamibpdtxu"
 verify_jwt = true
 
 [functions.send-settlement-email]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-checkout]
 verify_jwt = false
@@ -16,4 +16,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.stripe-webhook]
+verify_jwt = false
+
+[functions.cleanup-expired-trials]
 verify_jwt = false
