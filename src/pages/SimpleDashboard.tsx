@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -162,7 +162,15 @@ export default function SimpleDashboard() {
 
   const propertiesList = properties || [];
   const currentLimits = LIMITS[subscriptionTier as keyof typeof LIMITS] || LIMITS.starter;
-  const canAddProperty = propertiesList.length < currentLimits.properties;
+  const currentPropertyCount = propertiesList.length;
+  const maxProperties = currentLimits.properties;
+  const canAddProperty = currentPropertyCount < maxProperties;
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Properties geladen:', properties);
+    console.log('Properties Count:', currentPropertyCount, 'Max:', maxProperties, 'Can Add:', canAddProperty);
+  }, [properties, currentPropertyCount, maxProperties, canAddProperty]);
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
@@ -211,10 +219,21 @@ export default function SimpleDashboard() {
         {/* Properties Section */}
         <Card>
           <CardHeader>
+            {/* DEBUG INFO - temporär */}
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 rounded text-sm">
+              <p className="font-semibold">DEBUG INFO:</p>
+              <p>Properties Array: {properties ? `${properties.length} Einträge` : 'undefined oder null'}</p>
+              <p>Current Count: {currentPropertyCount}</p>
+              <p>Max Properties: {maxProperties}</p>
+              <p>Can Add: {canAddProperty ? 'JA' : 'NEIN'}</p>
+              <p>Subscription Tier: {subscriptionTier}</p>
+              <p>Loading: {propertiesLoading ? 'JA' : 'NEIN'}</p>
+            </div>
+            
             <div className="flex justify-between items-center">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                Meine Liegenschaften ({propertiesList.length} von {currentLimits.properties})
+                Meine Liegenschaften ({currentPropertyCount} von {maxProperties})
               </CardTitle>
               {canAddProperty ? (
                 <Button onClick={() => setShowAddForm(true)}>
