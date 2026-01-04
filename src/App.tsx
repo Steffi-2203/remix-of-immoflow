@@ -21,6 +21,8 @@ import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import ComingSoon from "./pages/ComingSoon";
 import Upgrade from "./pages/Upgrade";
+import Pricing from "./pages/Pricing";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,7 +56,8 @@ const App = () => (
           <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
           <Route path="/dokumente" element={<ProtectedRoute><ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-          <Route path="/einstellungen" element={<ProtectedRoute><ComingSoon title="Einstellungen" subtitle="System- und Benutzereinstellungen" /></ProtectedRoute>} />
+          <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
           <Route path="/upgrade" element={<ProtectedRoute><Upgrade /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
