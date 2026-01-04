@@ -1,30 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SUBSCRIPTION_TIERS, SubscriptionTierKey } from '@/config/stripe';
 
-// Stripe product and price mappings
-export const STRIPE_PLANS = {
-  starter: {
-    productId: 'prod_TjJF402Fz7UoVB',
-    priceId: 'price_1SlqclHqzD0fpNciXFKIu0o1',
-    name: 'Starter',
-    price: 29,
-  },
-  professional: {
-    productId: 'prod_TjJFK60F3qLg02',
-    priceId: 'price_1SlqczHqzD0fpNcicovxDN0m',
-    name: 'Professional',
-    price: 59,
-  },
-  enterprise: {
-    productId: 'prod_TjJFbvPbDQsy3j',
-    priceId: 'price_1SlqdMHqzD0fpNcib7LpU0ra',
-    name: 'Premium',
-    price: 49,
-  },
-} as const;
-
-export type PlanKey = keyof typeof STRIPE_PLANS;
+// Re-export for backwards compatibility
+export const STRIPE_PLANS = SUBSCRIPTION_TIERS;
+export type PlanKey = SubscriptionTierKey;
 
 interface SubscriptionStatus {
   subscribed: boolean;
