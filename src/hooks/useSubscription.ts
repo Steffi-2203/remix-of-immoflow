@@ -54,8 +54,11 @@ export function useSubscription() {
       return data;
     },
     onSuccess: (data) => {
-      if (data?.url) {
-        window.location.href = data.url;
+      const url = data?.url;
+      if (url) {
+        // Stripe Checkout cannot be embedded in the preview iframe; open in a new tab.
+        const win = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!win) window.location.href = url; // fallback if popup blocked
       }
     },
     onError: (error) => {
@@ -72,8 +75,10 @@ export function useSubscription() {
       return data;
     },
     onSuccess: (data) => {
-      if (data?.url) {
-        window.location.href = data.url;
+      const url = data?.url;
+      if (url) {
+        const win = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!win) window.location.href = url;
       }
     },
     onError: (error) => {
