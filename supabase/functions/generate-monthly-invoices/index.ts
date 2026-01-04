@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +44,23 @@ const calculateVatFromGross = (grossAmount: number, vatRate: number): number => 
   return grossAmount - (grossAmount / (1 + vatRate / 100));
 };
 
+// Verify JWT token and get user
+const verifyAuth = async (req: Request, supabase: SupabaseClient) => {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return { user: null, error: 'Missing authorization header' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+
+  if (error || !user) {
+    return { user: null, error: 'Invalid or expired token' };
+  }
+
+  return { user, error: null };
+};
+
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -55,6 +72,21 @@ serve(async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify authentication
+    const { user, error: authError } = await verifyAuth(req, supabase);
+    if (authError || !user) {
+      console.error("Authentication failed:", authError);
+      return new Response(
+        JSON.stringify({ success: false, error: authError || 'Authentication required' }),
+        { 
+          status: 401, 
+          headers: { "Content-Type": "application/json", ...corsHeaders } 
+        }
+      );
+    }
+
+    console.log(`User ${user.id} generating invoices`);
 
     // Get year and month from request body or use current date
     let year: number;
@@ -73,10 +105,69 @@ serve(async (req: Request): Promise<Response> => {
 
     console.log(`Generating invoices for ${month}/${year}`);
 
-    // Fetch all active tenants
+    // Get user's managed property IDs
+    const { data: managedProperties, error: propError } = await supabase
+      .from("property_managers")
+      .select("property_id")
+      .eq("user_id", user.id);
+
+    if (propError) {
+      throw new Error(`Failed to fetch managed properties: ${propError.message}`);
+    }
+
+    if (!managedProperties || managedProperties.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "No managed properties found",
+          created: 0 
+        }),
+        { 
+          status: 200, 
+          headers: { "Content-Type": "application/json", ...corsHeaders } 
+        }
+      );
+    }
+
+    const propertyIds = managedProperties.map(p => p.property_id);
+
+    // Fetch units for managed properties
+    const { data: units, error: unitsError } = await supabase
+      .from("units")
+      .select("id, type, property_id")
+      .in("property_id", propertyIds);
+
+    if (unitsError) {
+      throw new Error(`Failed to fetch units: ${unitsError.message}`);
+    }
+
+    if (!units || units.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "No units found",
+          created: 0 
+        }),
+        { 
+          status: 200, 
+          headers: { "Content-Type": "application/json", ...corsHeaders } 
+        }
+      );
+    }
+
+    const unitIds = units.map(u => u.id);
+
+    // Create a map of unit_id to unit type
+    const unitTypeMap = new Map<string, string>();
+    units.forEach((unit: Unit) => {
+      unitTypeMap.set(unit.id, unit.type);
+    });
+
+    // Fetch all active tenants for these units
     const { data: tenants, error: tenantsError } = await supabase
       .from("tenants")
       .select("id, unit_id, grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss, status")
+      .in("unit_id", unitIds)
       .eq("status", "aktiv");
 
     if (tenantsError) {
@@ -98,25 +189,6 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     console.log(`Found ${tenants.length} active tenants`);
-
-    // Fetch unit types for all tenants
-    const unitIds = [...new Set(tenants.map(t => t.unit_id))];
-    const { data: units, error: unitsError } = await supabase
-      .from("units")
-      .select("id, type")
-      .in("id", unitIds);
-
-    if (unitsError) {
-      throw new Error(`Failed to fetch units: ${unitsError.message}`);
-    }
-
-    // Create a map of unit_id to unit type
-    const unitTypeMap = new Map<string, string>();
-    (units || []).forEach((unit: Unit) => {
-      unitTypeMap.set(unit.id, unit.type);
-    });
-
-    console.log(`Fetched ${units?.length || 0} units for type lookup`);
 
     // Check for existing invoices for this month
     const { data: existingInvoices, error: existingError } = await supabase
