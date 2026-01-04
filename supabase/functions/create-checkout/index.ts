@@ -67,8 +67,8 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
-      success_url: `${origin}/settings?success=true`,
-      cancel_url: `${origin}/pricing?canceled=true`,
+      success_url: `${origin}/dashboard?payment=success`,
+      cancel_url: `${origin}/pricing?payment=cancelled`,
       metadata: {
         supabase_user_id: user.id,
       },
