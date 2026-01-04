@@ -1,7 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building2, Home, Crown, Clock, AlertTriangle } from 'lucide-react';
+import { Building2, Home, Star, Clock, AlertTriangle } from 'lucide-react';
 import { useSubscriptionLimits, calculateTrialDaysRemaining } from '@/hooks/useOrganization';
 import { Link } from 'react-router-dom';
 
@@ -38,7 +38,7 @@ export function SubscriptionInfoBox({ propertiesCount, unitsCount }: Subscriptio
           {/* Plan Info */}
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-full bg-primary/10">
-              <Crown className="h-6 w-6 text-primary" />
+              <Star className="h-6 w-6 text-primary" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export function SubscriptionInfoBox({ propertiesCount, unitsCount }: Subscriptio
           {(tier !== 'enterprise' || status === 'trial' || status === 'expired') && (
             <Link to="/upgrade">
               <Button variant="default" size="sm">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden
               </Button>
             </Link>

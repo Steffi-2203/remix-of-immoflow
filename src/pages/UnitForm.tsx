@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, Home, BarChart3, Crown, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Home, BarChart3, Star, AlertTriangle } from 'lucide-react';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useSubscriptionLimits } from '@/hooks/useOrganization';
@@ -228,7 +228,7 @@ export default function UnitForm() {
             </span>
             <Link to="/upgrade">
               <Button size="sm" variant="outline" className="ml-4">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden
               </Button>
             </Link>

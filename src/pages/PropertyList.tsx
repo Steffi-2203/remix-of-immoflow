@@ -2,7 +2,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { PropertyCard } from '@/components/dashboard/PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Filter, Download, Loader2, Building2, Crown } from 'lucide-react';
+import { Plus, Search, Filter, Download, Loader2, Building2, Star } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Select,
@@ -95,7 +95,7 @@ export default function PropertyList() {
           ) : (
             <Link to="/upgrade">
               <Button variant="secondary">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden
               </Button>
             </Link>
@@ -166,7 +166,7 @@ export default function PropertyList() {
           ) : (
             <Link to="/upgrade">
               <Button variant="secondary">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden für mehr Liegenschaften
               </Button>
             </Link>
