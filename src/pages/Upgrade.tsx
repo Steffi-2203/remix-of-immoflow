@@ -2,7 +2,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, Crown, Zap } from 'lucide-react';
+import { Check, Star, Zap } from 'lucide-react';
 import { useSubscriptionLimits, TIER_LIMITS, TIER_LABELS } from '@/hooks/useOrganization';
 import { useSubscription } from '@/hooks/useSubscription';
 import { cn } from '@/lib/utils';
@@ -69,7 +69,7 @@ export default function Upgrade() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Crown className="h-5 w-5 text-primary" />
+                <Star className="h-5 w-5 text-primary" />
                 <span className="text-sm">
                   Aktueller Plan: <strong>{TIER_LABELS[currentTier]}</strong>
                   {status === 'trial' && (
@@ -135,7 +135,7 @@ export default function Upgrade() {
                       onClick={() => handleUpgrade(plan.tier)}
                       disabled={isCheckoutLoading}
                     >
-                      <Crown className="h-4 w-4 mr-2" />
+                      <Star className="h-4 w-4 mr-2" />
                       {isCheckoutLoading ? 'Wird geladen...' : `Upgrade auf ${TIER_LABELS[plan.tier]}`}
                     </Button>
                   ) : (

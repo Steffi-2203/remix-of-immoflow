@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Building2, MapPin, Home, Users, ArrowRight, Crown } from 'lucide-react';
+import { Building2, MapPin, Home, Users, ArrowRight, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
@@ -89,7 +89,7 @@ export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant
         )}
         {isAtUnitLimit && (
           <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-            <Crown className="h-3 w-3 mr-1" />
+            <Star className="h-3 w-3 mr-1" />
             Limit erreicht
           </Badge>
         )}

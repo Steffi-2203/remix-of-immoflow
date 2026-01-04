@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, Crown, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Star, AlertTriangle } from 'lucide-react';
 import { useProperty, useCreateProperty, useUpdateProperty } from '@/hooks/useProperties';
 import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { toast } from 'sonner';
@@ -148,7 +148,7 @@ export default function PropertyForm() {
             </span>
             <Link to="/upgrade">
               <Button size="sm" variant="outline" className="ml-4">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden
               </Button>
             </Link>

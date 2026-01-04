@@ -11,7 +11,7 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useAuth } from '@/hooks/useAuth';
 import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus, Crown } from 'lucide-react';
+import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -278,7 +278,7 @@ const Index = () => {
           ) : (
             <Link to="/upgrade">
               <Button variant="secondary">
-                <Crown className="h-4 w-4 mr-2" />
+                <Star className="h-4 w-4 mr-2" />
                 Plan upgraden
               </Button>
             </Link>
@@ -309,7 +309,7 @@ const Index = () => {
             ) : (
               <Link to="/upgrade">
                 <Button className="mt-4" variant="secondary">
-                  <Crown className="h-4 w-4 mr-2" />
+                  <Star className="h-4 w-4 mr-2" />
                   Plan upgraden für mehr Liegenschaften
                 </Button>
               </Link>
