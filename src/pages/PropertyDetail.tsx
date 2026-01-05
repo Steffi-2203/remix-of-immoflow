@@ -350,7 +350,7 @@ export default function PropertyDetail() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
-                            <Link to={`/einheiten/${unit.id}?tab=documents`}>
+                            <Link to={`/einheiten/${id}/${unit.id}?tab=documents`}>
                               <Button variant="ghost" size="sm" title="Dokumente">
                                 <FileText className="h-4 w-4" />
                               </Button>
