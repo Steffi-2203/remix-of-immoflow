@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -105,8 +105,13 @@ const invoiceStatusStyles: Record<string, string> = {
 
 export default function UnitDetail() {
   const { propertyId, unitId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // Read initial tab from URL query param
+  const initialTab = searchParams.get('tab') || 'tenants';
+  const [activeTab, setActiveTab] = useState(initialTab);
   
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
@@ -506,7 +511,7 @@ export default function UnitDetail() {
       </div>
 
       {/* Tabs for Tenants and Invoices */}
-      <Tabs defaultValue="tenants" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="tenants">
             <Users className="h-4 w-4 mr-2" />
