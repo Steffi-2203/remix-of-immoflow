@@ -28,6 +28,9 @@ import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import SystemTest from "./pages/SystemTest";
 import NotFound from "./pages/NotFound";
+import Impressum from "./pages/Impressum";
+import Datenschutz from "./pages/Datenschutz";
+import AGB from "./pages/AGB";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +46,9 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/impressum" element={<Impressum />} />
+            <Route path="/datenschutz" element={<Datenschutz />} />
+            <Route path="/agb" element={<AGB />} />
             
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><SimpleDashboard /></ProtectedRoute>} />
