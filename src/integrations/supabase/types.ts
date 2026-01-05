@@ -14,13 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_categories: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_system: boolean | null
+          name: string
+          organization_id: string | null
+          parent_id: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_system?: boolean | null
+          name: string
+          organization_id?: string | null
+          parent_id?: string | null
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_system?: boolean | null
+          name?: string
+          organization_id?: string | null
+          parent_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_categories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "account_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_accounts: {
         Row: {
           account_name: string
           bank_name: string | null
           created_at: string | null
+          current_balance: number | null
           iban: string | null
           id: string
+          last_synced_at: string | null
+          opening_balance: number | null
+          opening_balance_date: string | null
           organization_id: string | null
           updated_at: string | null
         }
@@ -28,8 +77,12 @@ export type Database = {
           account_name: string
           bank_name?: string | null
           created_at?: string | null
+          current_balance?: number | null
           iban?: string | null
           id?: string
+          last_synced_at?: string | null
+          opening_balance?: number | null
+          opening_balance_date?: string | null
           organization_id?: string | null
           updated_at?: string | null
         }
@@ -37,8 +90,12 @@ export type Database = {
           account_name?: string
           bank_name?: string | null
           created_at?: string | null
+          current_balance?: number | null
           iban?: string | null
           id?: string
+          last_synced_at?: string | null
+          opening_balance?: number | null
+          opening_balance_date?: string | null
           organization_id?: string | null
           updated_at?: string | null
         }
@@ -774,17 +831,61 @@ export type Database = {
           },
         ]
       }
+      transaction_splits: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          transaction_id: string | null
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_splits_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "account_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transaction_splits_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           amount: number
           bank_account_id: string | null
           booking_date: string | null
+          category_id: string | null
           counterpart_iban: string | null
           counterpart_name: string | null
           created_at: string
           currency: string
           description: string | null
           id: string
+          is_split: boolean | null
           match_confidence: number | null
           matched_at: string | null
           matched_by: string | null
@@ -793,6 +894,7 @@ export type Database = {
           property_id: string | null
           reference: string | null
           status: string
+          tags: string[] | null
           tenant_id: string | null
           transaction_date: string
           unit_id: string | null
@@ -802,12 +904,14 @@ export type Database = {
           amount: number
           bank_account_id?: string | null
           booking_date?: string | null
+          category_id?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null
           created_at?: string
           currency?: string
           description?: string | null
           id?: string
+          is_split?: boolean | null
           match_confidence?: number | null
           matched_at?: string | null
           matched_by?: string | null
@@ -816,6 +920,7 @@ export type Database = {
           property_id?: string | null
           reference?: string | null
           status?: string
+          tags?: string[] | null
           tenant_id?: string | null
           transaction_date: string
           unit_id?: string | null
@@ -825,12 +930,14 @@ export type Database = {
           amount?: number
           bank_account_id?: string | null
           booking_date?: string | null
+          category_id?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null
           created_at?: string
           currency?: string
           description?: string | null
           id?: string
+          is_split?: boolean | null
           match_confidence?: number | null
           matched_at?: string | null
           matched_by?: string | null
@@ -839,6 +946,7 @@ export type Database = {
           property_id?: string | null
           reference?: string | null
           status?: string
+          tags?: string[] | null
           tenant_id?: string | null
           transaction_date?: string
           unit_id?: string | null
@@ -850,6 +958,13 @@ export type Database = {
             columns: ["bank_account_id"]
             isOneToOne: false
             referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "account_categories"
             referencedColumns: ["id"]
           },
           {
@@ -1050,6 +1165,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_bank_balance: {
+        Args: { account_id: string; as_of_date?: string }
+        Returns: number
+      }
       get_managed_property_ids: {
         Args: { _user_id: string }
         Returns: string[]

@@ -4,21 +4,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, Building, User, Euro, Brain, Sparkles, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { 
+  Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, 
+  Building, User, Euro, Brain, Sparkles, Trash2, Plus, Wallet, TrendingUp, TrendingDown,
+  PiggyBank, Calculator, FileText, Edit2, BarChart3
+} from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subYears } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { parseCSV, autoMatchTransaction, ParsedTransaction } from '@/utils/bankImportUtils';
-import { useTransactions, useCreateTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
+import { useTransactions, useCreateTransactions, useUpdateTransaction, useTransactionSummary } from '@/hooks/useTransactions';
 import { useLearnedMatches, useCreateLearnedMatch, useDeleteLearnedMatch } from '@/hooks/useLearnedMatches';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useBankAccounts, useCreateBankAccount, useUpdateBankAccount, useDeleteBankAccount, useBankBalance } from '@/hooks/useBankAccounts';
+import { useAccountCategories, useCreateAccountCategory, useDeleteAccountCategory } from '@/hooks/useAccountCategories';
+import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
   id: string;
@@ -30,6 +38,16 @@ interface ImportTransaction extends ParsedTransaction {
   learnablePatterns?: string[];
   selected: boolean;
   wasManuallyAssigned?: boolean;
+  categoryId?: string | null;
+  categorySuggestions?: Array<{ categoryId: string; confidence: number }>;
+}
+
+interface NewBankAccount {
+  name: string;
+  iban: string;
+  bankName: string;
+  openingBalance: string;
+  openingDate: string;
 }
 
 export default function Banking() {
@@ -40,6 +58,16 @@ export default function Banking() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newAccount, setNewAccount] = useState<NewBankAccount>({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '' });
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryType, setNewCategoryType] = useState<'income' | 'expense'>('expense');
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string | null>(null);
+  const [actualBalance, setActualBalance] = useState('');
+  const [reportPeriod, setReportPeriod] = useState('current-month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   
   const { data: transactions = [], isLoading: transactionsLoading } = useTransactions();
   const { data: units = [] } = useUnits();
@@ -47,10 +75,42 @@ export default function Banking() {
   const { data: properties = [] } = useProperties();
   const { data: organization } = useOrganization();
   const { data: learnedMatches = [] } = useLearnedMatches();
+  const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useBankAccounts();
+  const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
+  
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
   const createLearnedMatch = useCreateLearnedMatch();
   const deleteLearnedMatch = useDeleteLearnedMatch();
+  const createBankAccount = useCreateBankAccount();
+  const updateBankAccount = useUpdateBankAccount();
+  const deleteBankAccount = useDeleteBankAccount();
+  const createCategory = useCreateAccountCategory();
+  const deleteCategory = useDeleteAccountCategory();
+
+  // Calculate date range for reports
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    switch (reportPeriod) {
+      case 'current-month':
+        return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: format(endOfMonth(now), 'yyyy-MM-dd') };
+      case 'last-month':
+        const lastMonth = subMonths(now, 1);
+        return { start: format(startOfMonth(lastMonth), 'yyyy-MM-dd'), end: format(endOfMonth(lastMonth), 'yyyy-MM-dd') };
+      case 'current-year':
+        return { start: format(startOfYear(now), 'yyyy-MM-dd'), end: format(endOfYear(now), 'yyyy-MM-dd') };
+      case 'last-year':
+        const lastYear = subYears(now, 1);
+        return { start: format(startOfYear(lastYear), 'yyyy-MM-dd'), end: format(endOfYear(lastYear), 'yyyy-MM-dd') };
+      case 'custom':
+        return { start: customStartDate, end: customEndDate };
+      default:
+        return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: format(endOfMonth(now), 'yyyy-MM-dd') };
+    }
+  }, [reportPeriod, customStartDate, customEndDate]);
+
+  const { data: transactionSummary } = useTransactionSummary(dateRange.start, dateRange.end);
+  const { data: selectedAccountBalance } = useBankBalance(selectedBankAccountId || undefined);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -88,9 +148,26 @@ export default function Banking() {
         match_count: m.match_count,
       }));
       
-      // Auto-match transactions with fuzzy matching and learned patterns
+      // Convert categories to CategoryInfo format
+      const categoryInfos: CategoryInfo[] = categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+      }));
+      
+      // Auto-match transactions with fuzzy matching, learned patterns, and auto-categorization
       const matchedTransactions: ImportTransaction[] = parsed.map((t, index) => {
         const match = autoMatchTransaction(t, units, tenants, learnedPatterns);
+        
+        // Auto-categorize
+        const categorization = categorizeTransaction(
+          t.description,
+          t.reference || '',
+          t.counterpartName || '',
+          t.amount,
+          categoryInfos
+        );
+        
         return {
           ...t,
           id: `import-${index}`,
@@ -102,6 +179,8 @@ export default function Banking() {
           learnablePatterns: match.learnablePatterns,
           selected: true,
           wasManuallyAssigned: false,
+          categoryId: categorization.categoryId,
+          categorySuggestions: categorization.suggestions,
         };
       });
       
@@ -113,7 +192,7 @@ export default function Banking() {
     }
     
     setIsProcessing(false);
-  }, [units, tenants, learnedMatches]);
+  }, [units, tenants, learnedMatches, categories]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -153,6 +232,12 @@ export default function Banking() {
       return t;
     }));
   }, [tenants]);
+
+  const handleCategoryChange = useCallback((transactionId: string, categoryId: string | null) => {
+    setImportTransactions(prev => prev.map(t => 
+      t.id === transactionId ? { ...t, categoryId } : t
+    ));
+  }, []);
 
   const handleToggleSelect = useCallback((transactionId: string) => {
     setImportTransactions(prev => prev.map(t => 
@@ -214,13 +299,59 @@ export default function Banking() {
         counterpart_iban: t.counterpartIban || null,
         status,
         match_confidence: t.confidence,
+        category_id: t.categoryId || null,
+        bank_account_id: selectedBankAccountId,
       };
     });
     
     await createTransactions.mutateAsync(toInsert);
     setShowImportDialog(false);
     setImportTransactions([]);
-  }, [importTransactions, organization, createTransactions, createLearnedMatch]);
+  }, [importTransactions, organization, createTransactions, createLearnedMatch, selectedBankAccountId]);
+
+  const handleCreateAccount = useCallback(async () => {
+    if (!newAccount.name.trim()) {
+      toast.error('Bitte Kontoname eingeben');
+      return;
+    }
+    
+    try {
+      await createBankAccount.mutateAsync({
+        organization_id: organization?.id || null,
+        account_name: newAccount.name.trim(),
+        iban: newAccount.iban.trim() || null,
+        bank_name: newAccount.bankName.trim() || null,
+        opening_balance: newAccount.openingBalance ? parseFloat(newAccount.openingBalance.replace(',', '.')) : 0,
+        opening_balance_date: newAccount.openingDate || null,
+      });
+      setShowAddAccount(false);
+      setNewAccount({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '' });
+    } catch (error) {
+      console.error('Error creating account:', error);
+    }
+  }, [newAccount, organization, createBankAccount]);
+
+  const handleCreateCategory = useCallback(async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Bitte Kategorienamen eingeben');
+      return;
+    }
+    
+    try {
+      await createCategory.mutateAsync({
+        organization_id: organization?.id || null,
+        name: newCategoryName.trim(),
+        type: newCategoryType,
+        is_system: false,
+        parent_id: null,
+      });
+      setShowAddCategory(false);
+      setNewCategoryName('');
+      setNewCategoryType('expense');
+    } catch (error) {
+      console.error('Error creating category:', error);
+    }
+  }, [newCategoryName, newCategoryType, organization, createCategory]);
 
   const getUnitInfo = useCallback((unitId: string | null) => {
     if (!unitId) return null;
@@ -255,16 +386,48 @@ export default function Banking() {
     const total = transactions.length;
     const matched = transactions.filter(t => t.status === 'matched').length;
     const unmatched = transactions.filter(t => t.status === 'unmatched').length;
-    const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
-    const matchedAmount = transactions.filter(t => t.status === 'matched').reduce((sum, t) => sum + t.amount, 0);
+    const totalAmount = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
+    const matchedAmount = transactions.filter(t => t.status === 'matched').reduce((sum, t) => sum + Number(t.amount), 0);
     
     return { total, matched, unmatched, totalAmount, matchedAmount };
   }, [transactions]);
 
+  // Calculate balance check
+  const balanceCheck = useMemo(() => {
+    if (!selectedBankAccountId) return null;
+    const account = bankAccounts.find(a => a.id === selectedBankAccountId);
+    if (!account) return null;
+    
+    const calculatedBalance = selectedAccountBalance ?? 0;
+    const actualBalanceNum = actualBalance ? parseFloat(actualBalance.replace(',', '.')) : null;
+    const difference = actualBalanceNum !== null ? actualBalanceNum - calculatedBalance : null;
+    
+    return {
+      openingBalance: Number(account.opening_balance) || 0,
+      openingDate: account.opening_balance_date,
+      calculatedBalance,
+      actualBalance: actualBalanceNum,
+      difference,
+      isMatch: difference !== null && Math.abs(difference) < 0.01,
+    };
+  }, [selectedBankAccountId, bankAccounts, selectedAccountBalance, actualBalance]);
+
+  // Calculate totals for selected account
+  const accountTotals = useMemo(() => {
+    if (!selectedBankAccountId) return { income: 0, expenses: 0 };
+    const accountTransactions = transactions.filter(t => t.bank_account_id === selectedBankAccountId);
+    const income = accountTransactions.filter(t => Number(t.amount) > 0).reduce((sum, t) => sum + Number(t.amount), 0);
+    const expenses = accountTransactions.filter(t => Number(t.amount) < 0).reduce((sum, t) => sum + Number(t.amount), 0);
+    return { income, expenses };
+  }, [selectedBankAccountId, transactions]);
+
+  const formatCurrency = (amount: number) => 
+    new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(amount);
+
   return (
     <MainLayout 
-      title="Bank-Import" 
-      subtitle="Kontoauszüge importieren und Zahlungen zuordnen"
+      title="Banking & Buchhaltung" 
+      subtitle="Kontoauszüge importieren, kategorisieren und auswerten"
     >
       <div className="space-y-6">
         {/* Statistics */}
@@ -307,9 +470,7 @@ export default function Banking() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Gesamtbetrag</p>
-                  <p className="text-2xl font-bold">
-                    {new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(stats.totalAmount)}
-                  </p>
+                  <p className="text-2xl font-bold">{formatCurrency(stats.totalAmount)}</p>
                 </div>
                 <Euro className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -318,17 +479,29 @@ export default function Banking() {
         </div>
 
         <Tabs defaultValue="import">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="import">Import</TabsTrigger>
             <TabsTrigger value="transactions">Transaktionen ({stats.total})</TabsTrigger>
+            <TabsTrigger value="accounts">
+              <Wallet className="h-4 w-4 mr-1" />
+              Konten ({bankAccounts.length})
+            </TabsTrigger>
+            <TabsTrigger value="categories">
+              <PiggyBank className="h-4 w-4 mr-1" />
+              Kategorien ({categories.length})
+            </TabsTrigger>
+            <TabsTrigger value="reports">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Berichte
+            </TabsTrigger>
             <TabsTrigger value="learned">
               <Brain className="h-4 w-4 mr-1" />
               Gelernte Muster ({learnedMatches.length})
             </TabsTrigger>
           </TabsList>
 
+          {/* Import Tab */}
           <TabsContent value="import" className="space-y-4">
-            {/* Upload Area */}
             <Card>
               <CardHeader>
                 <CardTitle>Kontoauszug hochladen</CardTitle>
@@ -336,7 +509,27 @@ export default function Banking() {
                   Laden Sie eine CSV-Datei von Ihrer Bank hoch. Unterstützte Formate: CSV (österreichische Banken)
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Bank account selection for import */}
+                {bankAccounts.length > 0 && (
+                  <div className="flex items-center gap-4">
+                    <Label>Ziel-Bankkonto:</Label>
+                    <Select value={selectedBankAccountId || ''} onValueChange={setSelectedBankAccountId}>
+                      <SelectTrigger className="w-[300px]">
+                        <SelectValue placeholder="Bankkonto auswählen (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Kein Konto</SelectItem>
+                        {bankAccounts.map(account => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.account_name} {account.iban && `(${account.iban.slice(-4)})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -382,7 +575,6 @@ export default function Banking() {
               </CardContent>
             </Card>
 
-            {/* Instructions */}
             <Card>
               <CardHeader>
                 <CardTitle>Anleitung</CardTitle>
@@ -390,9 +582,9 @@ export default function Banking() {
               <CardContent className="prose prose-sm max-w-none">
                 <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
                   <li>Laden Sie den Kontoauszug als CSV-Datei von Ihrem Online-Banking herunter</li>
+                  <li>Wählen Sie optional das Ziel-Bankkonto aus</li>
                   <li>Ziehen Sie die Datei in den Upload-Bereich oder wählen Sie sie aus</li>
-                  <li>ImmoFlow erkennt automatisch die Spalten (Datum, Betrag, Verwendungszweck)</li>
-                  <li>Transaktionen werden automatisch Einheiten zugeordnet (z.B. "Miete Top 3" → Einheit Top 3)</li>
+                  <li>Transaktionen werden automatisch Einheiten und Kategorien zugeordnet</li>
                   <li>Überprüfen und korrigieren Sie die Zuordnungen bei Bedarf</li>
                   <li>Bestätigen Sie den Import</li>
                 </ol>
@@ -400,8 +592,8 @@ export default function Banking() {
             </Card>
           </TabsContent>
 
+          {/* Transactions Tab */}
           <TabsContent value="transactions" className="space-y-4">
-            {/* Filter */}
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -429,7 +621,6 @@ export default function Banking() {
               </CardContent>
             </Card>
 
-            {/* Transactions Table */}
             <Card>
               <CardContent className="pt-6">
                 {transactionsLoading ? (
@@ -448,6 +639,7 @@ export default function Banking() {
                       <TableRow>
                         <TableHead>Datum</TableHead>
                         <TableHead>Beschreibung</TableHead>
+                        <TableHead>Kategorie</TableHead>
                         <TableHead>Zuordnung</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Betrag</TableHead>
@@ -457,6 +649,7 @@ export default function Banking() {
                       {filteredTransactions.map((transaction) => {
                         const unitInfo = getUnitInfo(transaction.unit_id);
                         const tenantName = getTenantName(transaction.tenant_id);
+                        const category = categories.find(c => c.id === transaction.category_id);
                         
                         return (
                           <TableRow key={transaction.id}>
@@ -472,6 +665,15 @@ export default function Banking() {
                                   {transaction.description}
                                 </p>
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {category ? (
+                                <Badge variant={category.type === 'income' ? 'default' : 'secondary'}>
+                                  {category.name}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {unitInfo ? (
@@ -502,14 +704,456 @@ export default function Banking() {
                                  transaction.status === 'unmatched' ? 'Offen' : 'Ignoriert'}
                               </Badge>
                             </TableCell>
-                            <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {new Intl.NumberFormat('de-AT', { style: 'currency', currency: transaction.currency }).format(transaction.amount)}
+                            <TableCell className={`text-right font-medium ${Number(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {formatCurrency(Number(transaction.amount))}
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Bank Accounts Tab */}
+          <TabsContent value="accounts" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5" />
+                  Bank-Konten
+                </CardTitle>
+                <CardDescription>
+                  Verwalten Sie Ihre Bankkonten mit Anfangsbestand für die Kontostands-Berechnung
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {bankAccountsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    {bankAccounts.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>Noch keine Bankkonten angelegt</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {bankAccounts.map(account => (
+                          <div key={account.id} className="p-4 border rounded-lg">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h3 className="font-semibold">{account.account_name}</h3>
+                                {account.iban && (
+                                  <p className="text-sm text-muted-foreground">IBAN: {account.iban}</p>
+                                )}
+                                {account.bank_name && (
+                                  <p className="text-sm text-muted-foreground">{account.bank_name}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => deleteBankAccount.mutate(account.id)}
+                                  disabled={deleteBankAccount.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            {account.opening_balance_date && (
+                              <div className="mt-3 pt-3 border-t text-sm">
+                                <span className="text-muted-foreground">
+                                  Anfangsbestand ({format(new Date(account.opening_balance_date), 'dd.MM.yyyy')}):
+                                </span>{' '}
+                                <span className="font-medium">{formatCurrency(Number(account.opening_balance) || 0)}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {showAddAccount ? (
+                      <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                        <h3 className="font-semibold">Neues Bank-Konto</h3>
+                        <Input
+                          placeholder="Kontoname (z.B. Haupt-Girokonto)"
+                          value={newAccount.name}
+                          onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
+                        />
+                        <Input
+                          placeholder="IBAN (optional)"
+                          value={newAccount.iban}
+                          onChange={(e) => setNewAccount({...newAccount, iban: e.target.value})}
+                        />
+                        <Input
+                          placeholder="Bank (z.B. Erste Bank)"
+                          value={newAccount.bankName}
+                          onChange={(e) => setNewAccount({...newAccount, bankName: e.target.value})}
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-sm text-muted-foreground">Anfangsbestand</Label>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0,00"
+                              value={newAccount.openingBalance}
+                              onChange={(e) => setNewAccount({...newAccount, openingBalance: e.target.value})}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm text-muted-foreground">Datum Anfangsbestand</Label>
+                            <Input
+                              type="date"
+                              value={newAccount.openingDate}
+                              onChange={(e) => setNewAccount({...newAccount, openingDate: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={handleCreateAccount} disabled={createBankAccount.isPending}>
+                            {createBankAccount.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Konto erstellen
+                          </Button>
+                          <Button variant="outline" onClick={() => setShowAddAccount(false)}>
+                            Abbrechen
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={() => setShowAddAccount(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Neues Bank-Konto hinzufügen
+                      </Button>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Balance Check */}
+            {bankAccounts.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5" />
+                    Plausibilitäts-Check
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Label>Konto auswählen:</Label>
+                    <Select value={selectedBankAccountId || ''} onValueChange={setSelectedBankAccountId}>
+                      <SelectTrigger className="w-[300px]">
+                        <SelectValue placeholder="Bankkonto auswählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map(account => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.account_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {balanceCheck && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Anfangsbestand</p>
+                          <p className="text-lg font-semibold">{formatCurrency(balanceCheck.openingBalance)}</p>
+                          {balanceCheck.openingDate && (
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(balanceCheck.openingDate), 'dd.MM.yyyy')}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">+ Einnahmen</p>
+                          <p className="text-lg font-semibold text-green-600">
+                            + {formatCurrency(accountTotals.income)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">- Ausgaben</p>
+                          <p className="text-lg font-semibold text-red-600">
+                            {formatCurrency(accountTotals.expenses)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t">
+                        <div className="flex justify-between items-center">
+                          <p className="font-semibold">Berechneter Kontostand:</p>
+                          <p className="text-2xl font-bold">{formatCurrency(balanceCheck.calculatedBalance)}</p>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-3">
+                          <Label className="text-sm">Tatsächlicher Kontostand (lt. Bank):</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0,00"
+                            className="w-32"
+                            value={actualBalance}
+                            onChange={(e) => setActualBalance(e.target.value)}
+                          />
+                          <span>€</span>
+                        </div>
+
+                        {balanceCheck.actualBalance !== null && (
+                          <div className={`mt-3 p-3 rounded ${
+                            balanceCheck.isMatch 
+                              ? 'bg-green-100 border border-green-300 dark:bg-green-900/30 dark:border-green-700'
+                              : 'bg-red-100 border border-red-300 dark:bg-red-900/30 dark:border-red-700'
+                          }`}>
+                            <p className="font-semibold">
+                              {balanceCheck.isMatch 
+                                ? '✓ Kontostand stimmt überein!'
+                                : '✗ Differenz gefunden!'}
+                            </p>
+                            {!balanceCheck.isMatch && balanceCheck.difference !== null && (
+                              <p className="text-sm mt-1">
+                                Differenz: {formatCurrency(balanceCheck.difference)}
+                                <br />
+                                <span className="text-xs text-muted-foreground">
+                                  Bitte prüfen Sie ob alle Transaktionen erfasst sind oder ob der Anfangsbestand korrekt ist.
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Categories Tab */}
+          <TabsContent value="categories" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PiggyBank className="h-5 w-5" />
+                  Kontenplan / Kategorien
+                </CardTitle>
+                <CardDescription>
+                  System-Kategorien und benutzerdefinierte Kategorien für die Buchhaltung
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {categoriesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : (
+                  <>
+                    {/* Income Categories */}
+                    <div>
+                      <h3 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Einnahmen
+                      </h3>
+                      <div className="space-y-1">
+                        {categories.filter(c => c.type === 'income').map(category => (
+                          <div key={category.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                            <span className="text-sm">{category.name}</span>
+                            {category.is_system ? (
+                              <Badge variant="outline" className="text-xs">System</Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => deleteCategory.mutate(category.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Expense Categories */}
+                    <div>
+                      <h3 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4" />
+                        Ausgaben
+                      </h3>
+                      <div className="space-y-1">
+                        {categories.filter(c => c.type === 'expense').map(category => (
+                          <div key={category.id} className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                            <span className="text-sm">{category.name}</span>
+                            {category.is_system ? (
+                              <Badge variant="outline" className="text-xs">System</Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => deleteCategory.mutate(category.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Add custom category */}
+                    {showAddCategory ? (
+                      <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                        <h3 className="font-semibold">Neue Kategorie</h3>
+                        <Input
+                          placeholder="Kategorie-Name (z.B. Internet & Telefon)"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                        />
+                        <Select value={newCategoryType} onValueChange={(v) => setNewCategoryType(v as 'income' | 'expense')}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="expense">Ausgabe</SelectItem>
+                            <SelectItem value="income">Einnahme</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                          <Button onClick={handleCreateCategory} disabled={createCategory.isPending}>
+                            {createCategory.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Erstellen
+                          </Button>
+                          <Button variant="outline" onClick={() => setShowAddCategory(false)}>
+                            Abbrechen
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button variant="outline" className="w-full" onClick={() => setShowAddCategory(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Eigene Kategorie erstellen
+                      </Button>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Reports Tab */}
+          <TabsContent value="reports" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Einnahmen/Ausgaben Übersicht
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Period selector */}
+                <div className="flex flex-wrap gap-3 items-center">
+                  <Select value={reportPeriod} onValueChange={setReportPeriod}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="current-month">Aktueller Monat</SelectItem>
+                      <SelectItem value="last-month">Letzter Monat</SelectItem>
+                      <SelectItem value="current-year">Aktuelles Jahr</SelectItem>
+                      <SelectItem value="last-year">Letztes Jahr</SelectItem>
+                      <SelectItem value="custom">Benutzerdefiniert</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {reportPeriod === 'custom' && (
+                    <>
+                      <Input
+                        type="date"
+                        className="w-[150px]"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                      />
+                      <span>bis</span>
+                      <Input
+                        type="date"
+                        className="w-[150px]"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                      />
+                    </>
+                  )}
+                </div>
+
+                {transactionSummary && (
+                  <div className="space-y-4">
+                    {/* Income breakdown */}
+                    <div>
+                      <h3 className="font-semibold text-green-700 mb-2 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Einnahmen
+                      </h3>
+                      <div className="space-y-1">
+                        {transactionSummary.incomeByCategory.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                            <span className="text-sm">{item.categoryName}</span>
+                            <span className="font-medium text-green-700">
+                              + {formatCurrency(item.total)}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between items-center p-2 bg-green-100 dark:bg-green-800/30 rounded font-semibold">
+                          <span>Gesamt Einnahmen</span>
+                          <span className="text-green-700">+ {formatCurrency(transactionSummary.totalIncome)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expense breakdown */}
+                    <div>
+                      <h3 className="font-semibold text-red-700 mb-2 flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4" />
+                        Ausgaben
+                      </h3>
+                      <div className="space-y-1">
+                        {transactionSummary.expensesByCategory.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                            <span className="text-sm">{item.categoryName}</span>
+                            <span className="font-medium text-red-700">
+                              {formatCurrency(item.total)}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between items-center p-2 bg-red-100 dark:bg-red-800/30 rounded font-semibold">
+                          <span>Gesamt Ausgaben</span>
+                          <span className="text-red-700">{formatCurrency(transactionSummary.totalExpenses)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Balance */}
+                    <div className={`flex justify-between items-center p-3 rounded font-bold text-lg ${
+                      transactionSummary.balance >= 0 
+                        ? 'bg-green-100 dark:bg-green-800/30' 
+                        : 'bg-red-100 dark:bg-red-800/30'
+                    }`}>
+                      <span>Saldo</span>
+                      <span className={transactionSummary.balance >= 0 ? 'text-green-700' : 'text-red-700'}>
+                        {formatCurrency(transactionSummary.balance)}
+                      </span>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -617,11 +1261,11 @@ export default function Banking() {
 
       {/* Import Preview Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Import-Vorschau</DialogTitle>
             <DialogDescription>
-              {importTransactions.length} Transaktionen erkannt. Überprüfen Sie die Zuordnungen.
+              {importTransactions.length} Transaktionen erkannt. Überprüfen Sie die Zuordnungen und Kategorien.
             </DialogDescription>
           </DialogHeader>
 
@@ -658,7 +1302,8 @@ export default function Banking() {
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Datum</TableHead>
                 <TableHead>Beschreibung</TableHead>
-                <TableHead>Zuordnung</TableHead>
+                <TableHead>Kategorie</TableHead>
+                <TableHead>Einheit</TableHead>
                 <TableHead className="text-right">Betrag</TableHead>
               </TableRow>
             </TableHeader>
@@ -700,11 +1345,46 @@ export default function Banking() {
                   </TableCell>
                   <TableCell>
                     <Select
+                      value={transaction.categoryId || 'none'}
+                      onValueChange={(value) => handleCategoryChange(transaction.id, value === 'none' ? null : value)}
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Kategorie" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Keine Kategorie</SelectItem>
+                        {categories
+                          .filter(c => transaction.amount > 0 ? c.type === 'income' : c.type === 'expense')
+                          .map(c => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {transaction.categorySuggestions && transaction.categorySuggestions.length > 0 && !transaction.categoryId && (
+                      <div className="mt-1 text-xs">
+                        <span className="text-muted-foreground">Vorschläge: </span>
+                        {transaction.categorySuggestions.slice(0, 2).map((sug, i) => {
+                          const sugCat = categories.find(c => c.id === sug.categoryId);
+                          return sugCat ? (
+                            <button
+                              key={i}
+                              onClick={() => handleCategoryChange(transaction.id, sug.categoryId)}
+                              className="text-blue-600 hover:underline mr-2"
+                            >
+                              {sugCat.name} ({Math.round(sug.confidence * 100)}%)
+                            </button>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Select
                       value={transaction.matchedUnitId || 'none'}
                       onValueChange={(value) => handleMatchChange(transaction.id, value === 'none' ? null : value)}
                     >
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Einheit auswählen" />
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Einheit" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Keine Zuordnung</SelectItem>
@@ -722,7 +1402,7 @@ export default function Banking() {
                     </Select>
                   </TableCell>
                   <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(transaction.amount)}
+                    {formatCurrency(transaction.amount)}
                   </TableCell>
                 </TableRow>
               ))}
