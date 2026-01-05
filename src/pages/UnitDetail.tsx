@@ -55,6 +55,7 @@ import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DO
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { UnitTransactions } from '@/components/units/UnitTransactions';
+import { RentExpectationCard } from '@/components/units/RentExpectationCard';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -511,6 +512,13 @@ export default function UnitDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Rent Expectation Card */}
+      {unitId && (
+        <div className="mb-6">
+          <RentExpectationCard unitId={unitId} />
+        </div>
+      )}
 
       {/* Tabs for Tenants and Invoices */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
