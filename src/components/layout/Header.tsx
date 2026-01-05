@@ -30,7 +30,7 @@ export function Header({ title, subtitle }: HeaderProps) {
       toast.error('Fehler beim Abmelden');
     } else {
       toast.success('Erfolgreich abgemeldet');
-      navigate('/auth');
+      navigate('/');
     }
   };
 
