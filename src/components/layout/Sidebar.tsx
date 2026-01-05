@@ -54,9 +54,9 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
         {!collapsed && <div className="flex items-center gap-2">
-            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-10 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-12 w-auto" />
           </div>}
-        {collapsed && <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-8 w-8 object-contain" />}
+        {collapsed && <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-10 w-10 object-contain" />}
         <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
