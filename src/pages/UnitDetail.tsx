@@ -48,7 +48,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
-import { useTenantsByUnit, Tenant } from '@/hooks/useTenants';
+import { useTenantsByUnit, useDeleteTenant, Tenant } from '@/hooks/useTenants';
 import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice, useDeleteInvoice, Invoice } from '@/hooks/useInvoices';
 import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DOCUMENT_TYPES } from '@/hooks/useUnitDocuments';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
@@ -135,6 +135,7 @@ export default function UnitDetail() {
   const deleteInvoice = useDeleteInvoice();
   const uploadDocument = useUploadUnitDocument();
   const deleteDocument = useDeleteUnitDocument();
+  const deleteTenant = useDeleteTenant();
 
   // Filter invoices for this unit
   const unitInvoices = allInvoices?.filter(inv => inv.unit_id === unitId) || [];
@@ -598,11 +599,38 @@ export default function UnitDetail() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Link to={`/einheiten/${propertyId}/${unitId}/mieter/${tenant.id}/bearbeiten`}>
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </Link>
+                            <div className="flex items-center gap-1">
+                              <Link to={`/einheiten/${propertyId}/${unitId}/mieter/${tenant.id}/bearbeiten`}>
+                                <Button variant="ghost" size="sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Mieter wirklich löschen?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Sind Sie sicher, dass Sie den Mieter <strong>{tenant.first_name} {tenant.last_name}</strong> löschen möchten?
+                                      Diese Aktion kann nicht rückgängig gemacht werden. Alle zugehörigen Vorschreibungen werden ebenfalls gelöscht.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteTenant.mutate(tenant.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Ja, Mieter löschen
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
