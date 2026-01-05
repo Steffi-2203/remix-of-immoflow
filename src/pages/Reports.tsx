@@ -654,25 +654,6 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Datenabgleich-Hinweis wenn Buchhaltung und Zahlungen nicht übereinstimmen */}
-      {Math.abs(totalIncomeFromTransactions - totalPaymentsAmount) > 1 && totalPaymentsAmount > 0 && (
-        <Card className="mb-4 border-warning/50 bg-warning/5">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
-              <div>
-                <p className="font-medium text-warning">Hinweis: Daten nicht synchronisiert</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Buchhaltung zeigt <strong>€{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</strong> Einnahmen, 
-                  aber es wurden <strong>€{totalPaymentsAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</strong> an Mietzahlungen erfasst.
-                  Für konsistente Reports sollten Zahlungen auch in der Buchhaltung erfasst werden.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Einnahmen/Ausgaben aus Buchhaltung */}
       <Card className="mb-8">
         <CardHeader>
