@@ -13,10 +13,15 @@ export type PropertyDocument = {
 
 export const PROPERTY_DOCUMENT_TYPES = [
   { value: 'energieausweis', label: 'Energieausweis' },
+  { value: 'wohnungsplaene', label: 'Wohnungspläne' },
   { value: 'gebaeudeplan', label: 'Gebäudeplan' },
   { value: 'grundbuchauszug', label: 'Grundbuchauszug' },
   { value: 'lageplan', label: 'Lageplan' },
   { value: 'versicherungspolizze', label: 'Versicherungspolizze' },
+  { value: 'nutzungsvertrag', label: 'Nutzungsvertrag' },
+  { value: 'hausverwaltung', label: 'Hausverwaltung' },
+  { value: 'protokolle', label: 'Protokolle' },
+  { value: 'benutzerdefiniert', label: 'Benutzerdefiniert' },
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 

@@ -136,10 +136,11 @@ export default function ExpenseList() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type !== 'application/pdf') {
+      // Allow PDF and images
+      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
         toast({
           title: 'Ungültiges Format',
-          description: 'Bitte nur PDF-Dateien hochladen.',
+          description: 'Bitte PDF oder Bilddateien hochladen.',
           variant: 'destructive',
         });
         return;
@@ -554,12 +555,12 @@ export default function ExpenseList() {
 
               {/* PDF Upload */}
               <div className="space-y-2">
-                <Label>Rechnungsbeleg (PDF)</Label>
+                <Label>Rechnungsbeleg (optional)</Label>
                 <div className="flex items-center gap-2">
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="application/pdf"
+                    accept="application/pdf,image/*"
                     onChange={(e) => handleFileChange(e, false)}
                     className="hidden"
                   />
@@ -570,7 +571,7 @@ export default function ExpenseList() {
                     className="w-full"
                   >
                     <Upload className="h-4 w-4 mr-2" />
-                    {selectedFile ? selectedFile.name : 'PDF hochladen'}
+                    {selectedFile ? selectedFile.name : 'Beleg hochladen (optional)'}
                   </Button>
                   {selectedFile && (
                     <Button
@@ -584,7 +585,7 @@ export default function ExpenseList() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Max. 10 MB, nur PDF-Format
+                  PDF oder Bild, max. 10 MB - nicht erforderlich
                 </p>
               </div>
             </div>

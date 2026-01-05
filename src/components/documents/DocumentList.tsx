@@ -64,8 +64,15 @@ export function DocumentList({
       ruecknahmeprotokoll: 'bg-warning/10 text-warning',
       emailverkehr: 'bg-accent/10 text-accent-foreground',
       energieausweis: 'bg-success/10 text-success',
+      wohnungsplaene: 'bg-primary/10 text-primary',
       gebaeudeplan: 'bg-primary/10 text-primary',
       grundbuchauszug: 'bg-warning/10 text-warning',
+      lageplan: 'bg-accent/10 text-accent-foreground',
+      versicherungspolizze: 'bg-destructive/10 text-destructive',
+      nutzungsvertrag: 'bg-success/10 text-success',
+      hausverwaltung: 'bg-primary/10 text-primary',
+      protokolle: 'bg-accent/10 text-accent-foreground',
+      benutzerdefiniert: 'bg-secondary text-secondary-foreground',
     };
     return colors[type] || 'bg-muted text-muted-foreground';
   };
