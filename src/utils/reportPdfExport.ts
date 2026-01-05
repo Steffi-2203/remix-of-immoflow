@@ -76,6 +76,25 @@ export interface PaymentData {
   invoice_id?: string | null;
 }
 
+export interface TransactionData {
+  id: string;
+  amount: number;
+  transaction_date: string;
+  category_id: string | null;
+  property_id: string | null;
+  unit_id: string | null;
+  description: string | null;
+}
+
+export interface CategoryData {
+  id: string;
+  name: string;
+  type: string;
+}
+
+// Kategorien für Instandhaltung (mindern Rendite)
+const INSTANDHALTUNG_CATEGORIES = ['Instandhaltung', 'Reparaturen'];
+
 const unitTypeLabels: Record<string, string> = {
   wohnung: 'Wohnung',
   geschaeft: 'Geschäft',
@@ -138,6 +157,8 @@ export const generateRenditeReport = (
   properties: PropertyData[],
   units: UnitData[],
   invoices: InvoiceData[],
+  transactions: TransactionData[],
+  categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
@@ -159,24 +180,45 @@ export const generateRenditeReport = (
 
   // Filter properties
   const targetProperties = selectedPropertyId === 'all' ? properties : properties.filter(p => p.id === selectedPropertyId);
+
+  // Get category IDs for income and maintenance
+  const mieteinnahmenCategoryId = categories.find(c => c.name === 'Mieteinnahmen')?.id;
+  const instandhaltungCategoryIds = categories
+    .filter(c => INSTANDHALTUNG_CATEGORIES.includes(c.name))
+    .map(c => c.id);
   
   // Calculate data per property
   const tableData = targetProperties.map(property => {
     const propertyUnits = units.filter(u => u.property_id === property.id);
-    const unitIds = propertyUnits.map(u => u.id);
     
-    const propertyInvoices = invoices.filter(inv => {
-      const matchesUnit = unitIds.includes(inv.unit_id);
+    // Filter transactions for this property and period
+    const propertyTransactions = transactions.filter(t => {
+      const date = new Date(t.transaction_date);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const matchesProp = t.property_id === property.id;
+      
       if (reportPeriod === 'yearly') {
-        return matchesUnit && inv.year === selectedYear;
+        return matchesProp && year === selectedYear;
       }
-      return matchesUnit && inv.year === selectedYear && inv.month === selectedMonth;
+      return matchesProp && year === selectedYear && month === selectedMonth;
     });
-    
-    const revenue = propertyInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
-    const annualRevenue = reportPeriod === 'monthly' ? revenue * 12 : revenue;
+
+    // Calculate income from transactions
+    const mieteinnahmen = propertyTransactions
+      .filter(t => t.amount > 0 && t.category_id === mieteinnahmenCategoryId)
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    // Calculate maintenance costs from transactions
+    const instandhaltung = propertyTransactions
+      .filter(t => t.amount < 0 && instandhaltungCategoryIds.includes(t.category_id || ''))
+      .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+    // Nettoertrag = Mieteinnahmen - Instandhaltung
+    const nettoertrag = mieteinnahmen - instandhaltung;
+    const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
     const estimatedValue = Number(property.total_qm) * 3000;
-    const yieldPercent = estimatedValue > 0 ? (annualRevenue / estimatedValue) * 100 : 0;
+    const yieldPercent = estimatedValue > 0 ? (annualNettoertrag / estimatedValue) * 100 : 0;
     const vacantUnits = propertyUnits.filter(u => u.status === 'leerstand').length;
     const occupancyRate = propertyUnits.length > 0 ? ((propertyUnits.length - vacantUnits) / propertyUnits.length) * 100 : 0;
     
@@ -184,7 +226,9 @@ export const generateRenditeReport = (
       property.name,
       `${Number(property.total_qm).toLocaleString('de-AT')} m²`,
       property.total_units.toString(),
-      formatCurrency(revenue),
+      formatCurrency(mieteinnahmen),
+      formatCurrency(instandhaltung),
+      formatCurrency(nettoertrag),
       formatPercent(yieldPercent),
       formatPercent(occupancyRate),
     ];
@@ -193,23 +237,51 @@ export const generateRenditeReport = (
   // Total row
   const totalQm = targetProperties.reduce((sum, p) => sum + Number(p.total_qm), 0);
   const totalUnits = targetProperties.reduce((sum, p) => sum + p.total_units, 0);
-  const totalRevenue = tableData.reduce((sum, row) => {
-    const val = row[3].replace('€ ', '').replace(/\./g, '').replace(',', '.');
-    return sum + parseFloat(val);
-  }, 0);
+  
+  // Calculate totals from transactions
+  const allPropertyIds = targetProperties.map(p => p.id);
+  const allPeriodTransactions = transactions.filter(t => {
+    const date = new Date(t.transaction_date);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const matchesProp = allPropertyIds.includes(t.property_id || '');
+    
+    if (reportPeriod === 'yearly') {
+      return matchesProp && year === selectedYear;
+    }
+    return matchesProp && year === selectedYear && month === selectedMonth;
+  });
+
+  const totalMieteinnahmen = allPeriodTransactions
+    .filter(t => t.amount > 0 && t.category_id === mieteinnahmenCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalInstandhaltung = allPeriodTransactions
+    .filter(t => t.amount < 0 && instandhaltungCategoryIds.includes(t.category_id || ''))
+    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const totalNettoertrag = totalMieteinnahmen - totalInstandhaltung;
+  const annualTotalNettoertrag = reportPeriod === 'monthly' ? totalNettoertrag * 12 : totalNettoertrag;
   const totalValue = totalQm * 3000;
-  const annualTotalRevenue = reportPeriod === 'monthly' ? totalRevenue * 12 : totalRevenue;
-  const totalYield = totalValue > 0 ? (annualTotalRevenue / totalValue) * 100 : 0;
+  const totalYield = totalValue > 0 ? (annualTotalNettoertrag / totalValue) * 100 : 0;
 
   autoTable(doc, {
     startY: 45,
-    head: [['Liegenschaft', 'Fläche', 'Einheiten', `Umsatz ${periodLabel}`, 'Rendite p.a.', 'Belegung']],
+    head: [['Liegenschaft', 'Fläche', 'Einheiten', 'Mieteinnahmen', 'Instandhaltung', 'Nettoertrag', 'Rendite p.a.', 'Belegung']],
     body: tableData,
-    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalRevenue), formatPercent(totalYield), '-']],
+    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalMieteinnahmen), formatCurrency(totalInstandhaltung), formatCurrency(totalNettoertrag), formatPercent(totalYield), '-']],
     theme: 'striped',
-    headStyles: { fillColor: [59, 130, 246] },
+    headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { fontSize: 8 },
   });
+
+  // Add explanation
+  const y1 = (doc as any).lastAutoTable?.finalY || 150;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(100);
+  doc.text('Hinweis: Rendite = (Mieteinnahmen - Instandhaltungskosten) / Immobilienwert × 100', 14, y1 + 10);
+  doc.text('Betriebskosten sind nicht enthalten, da diese auf die Mieter umgelegt werden.', 14, y1 + 16);
+  doc.setTextColor(0);
 
   doc.save(`Renditereport_${periodLabel.replace(' ', '_')}.pdf`);
 };
@@ -316,6 +388,8 @@ export const generateUmsatzReport = (
   tenants: TenantData[],
   invoices: InvoiceData[],
   payments: PaymentData[],
+  transactions: TransactionData[],
+  categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
@@ -335,108 +409,72 @@ export const generateUmsatzReport = (
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
-  // Filter units
-  const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
-  const unitIds = targetUnits.map(u => u.id);
-  
-  // Get relevant tenants
-  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id));
-  const tenantIds = relevantTenants.map(t => t.id);
-  
-  // Filter invoices for period
-  const periodInvoices = invoices.filter(inv => {
-    const matchesUnit = unitIds.includes(inv.unit_id);
-    if (reportPeriod === 'yearly') {
-      return matchesUnit && inv.year === selectedYear;
-    }
-    return matchesUnit && inv.year === selectedYear && inv.month === selectedMonth;
-  });
-
-  // Filter payments for period
-  const periodPayments = payments.filter(p => {
-    const paymentDate = new Date(p.eingangs_datum);
-    const matchesTenant = tenantIds.includes(p.tenant_id);
-    if (reportPeriod === 'yearly') {
-      return matchesTenant && paymentDate.getFullYear() === selectedYear;
-    }
-    return matchesTenant && 
-           paymentDate.getFullYear() === selectedYear && 
-           (paymentDate.getMonth() + 1) === selectedMonth;
-  });
-
-  // Calculate saldo per tenant for the period
-  const tenantSaldos: Record<string, { soll: number; haben: number; saldo: number }> = {};
-  
-  relevantTenants.forEach(tenant => {
-    const tenantInvoices = periodInvoices.filter(inv => inv.tenant_id === tenant.id);
-    const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+  // Filter transactions for period
+  const periodTransactions = transactions.filter(t => {
+    const date = new Date(t.transaction_date);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const matchesProp = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
     
-    const soll = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
-    const haben = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-    
-    tenantSaldos[tenant.id] = {
-      soll,
-      haben,
-      saldo: soll - haben
-    };
+    if (reportPeriod === 'yearly') {
+      return matchesProp && year === selectedYear;
+    }
+    return matchesProp && year === selectedYear && month === selectedMonth;
   });
 
-  // Table data with saldo
-  const tableData = periodInvoices.map(invoice => {
-    const unit = targetUnits.find(u => u.id === invoice.unit_id);
-    const tenant = tenants.find(t => t.id === invoice.tenant_id);
-    const property = properties.find(p => p.id === unit?.property_id);
-    const tenantSaldo = tenant ? tenantSaldos[tenant.id] : null;
+  // Calculate totals from transactions
+  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
+  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+  
+  const totalIncome = incomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalExpenses = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const netResult = totalIncome - totalExpenses;
+
+  // Summary text
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Zusammenfassung aus Buchhaltung', 14, 45);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Einnahmen: ${formatCurrency(totalIncome)} (${incomeTransactions.length} Buchungen)`, 14, 53);
+  doc.text(`Ausgaben: ${formatCurrency(totalExpenses)} (${expenseTransactions.length} Buchungen)`, 14, 60);
+  doc.text(`Ergebnis: ${formatCurrency(netResult)}`, 14, 67);
+
+  // Transaction table
+  const tableData = periodTransactions.slice(0, 50).map(t => {
+    const category = categories.find(c => c.id === t.category_id);
+    const property = properties.find(p => p.id === t.property_id);
+    const isIncome = t.amount > 0;
     
     return [
+      new Date(t.transaction_date).toLocaleDateString('de-AT'),
       property?.name || '-',
-      `Top ${unit?.top_nummer || '-'}`,
-      unitTypeLabels[unit?.type || ''] || '-',
-      tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Leerstand',
-      `${invoice.month}/${invoice.year}`,
-      formatCurrency(Number(invoice.grundmiete)),
-      formatCurrency(Number(invoice.betriebskosten)),
-      formatCurrency(Number(invoice.heizungskosten)),
-      formatCurrency(Number(invoice.gesamtbetrag)),
-      tenantSaldo ? formatCurrency(tenantSaldo.haben) : '-',
-      tenantSaldo ? formatCurrency(tenantSaldo.saldo) : '-',
+      t.description || '-',
+      category?.name || 'Nicht kategorisiert',
+      isIncome ? formatCurrency(t.amount) : '-',
+      !isIncome ? formatCurrency(Math.abs(t.amount)) : '-',
     ];
   });
 
-  // Totals
-  const totalMiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete), 0);
-  const totalBK = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten), 0);
-  const totalHK = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten), 0);
-  const totalGesamt = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
-  const totalZahlungen = periodPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-  const totalSaldo = totalGesamt - totalZahlungen;
-
   autoTable(doc, {
-    startY: 45,
-    head: [['Liegenschaft', 'Einheit', 'Typ', 'Mieter', 'Monat', 'Miete', 'BK', 'HK', 'Soll', 'Zahlung', 'Saldo']],
+    startY: 75,
+    head: [['Datum', 'Liegenschaft', 'Beschreibung', 'Kategorie', 'Einnahme', 'Ausgabe']],
     body: tableData,
-    foot: [['Summe', '', '', '', '', formatCurrency(totalMiete), formatCurrency(totalBK), formatCurrency(totalHK), formatCurrency(totalGesamt), formatCurrency(totalZahlungen), formatCurrency(totalSaldo)]],
+    foot: [['Summe', '', '', '', formatCurrency(totalIncome), formatCurrency(totalExpenses)]],
     theme: 'striped',
     headStyles: { fillColor: [16, 185, 129] },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
-    styles: { fontSize: 7 },
-    didParseCell: (data) => {
-      // Style Saldo column based on value
-      if (data.section === 'body' && data.column.index === 10) {
-        const saldoText = data.cell.text[0];
-        if (saldoText && saldoText !== '-') {
-          const value = parseFloat(saldoText.replace('€ ', '').replace(/\./g, '').replace(',', '.'));
-          if (value > 0) {
-            data.cell.styles.textColor = [239, 68, 68]; // Red for underpayment
-            data.cell.styles.fontStyle = 'bold';
-          } else if (value < 0) {
-            data.cell.styles.textColor = [34, 197, 94]; // Green for overpayment
-            data.cell.styles.fontStyle = 'bold';
-          }
-        }
-      }
-    },
+    styles: { fontSize: 8 },
   });
+
+  if (periodTransactions.length > 50) {
+    const y = (doc as any).lastAutoTable?.finalY || 200;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`... und ${periodTransactions.length - 50} weitere Buchungen`, 14, y + 10);
+    doc.setTextColor(0);
+  }
 
   doc.save(`Umsatzreport_${periodLabel.replace(' ', '_')}.pdf`);
 };
@@ -448,6 +486,8 @@ export const generateUstVoranmeldung = (
   tenants: TenantData[],
   invoices: InvoiceData[],
   expenses: ExpenseData[],
+  transactions: TransactionData[],
+  categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
@@ -467,75 +507,70 @@ export const generateUstVoranmeldung = (
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
-  // Filter data
-  const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
-  const unitIds = targetUnits.map(u => u.id);
-  
-  const periodInvoices = invoices.filter(inv => {
-    const matchesUnit = unitIds.includes(inv.unit_id);
+  // Filter transactions for period
+  const periodTransactions = transactions.filter(t => {
+    const date = new Date(t.transaction_date);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const matchesProp = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
+    
     if (reportPeriod === 'yearly') {
-      return matchesUnit && inv.year === selectedYear;
+      return matchesProp && year === selectedYear;
     }
-    return matchesUnit && inv.year === selectedYear && inv.month === selectedMonth;
+    return matchesProp && year === selectedYear && month === selectedMonth;
   });
 
-  const periodExpenses = selectedPropertyId === 'all'
-    ? expenses.filter(exp => {
-        if (reportPeriod === 'yearly') return exp.year === selectedYear;
-        return exp.year === selectedYear && exp.month === selectedMonth;
-      })
-    : expenses.filter(exp => {
-        const matchesProp = exp.property_id === selectedPropertyId;
-        if (reportPeriod === 'yearly') return matchesProp && exp.year === selectedYear;
-        return matchesProp && exp.year === selectedYear && exp.month === selectedMonth;
-      });
+  // Get category IDs
+  const mieteinnahmenCategoryId = categories.find(c => c.name === 'Mieteinnahmen')?.id;
+  const bkVorauszCategoryId = categories.find(c => c.name === 'Betriebskostenvorauszahlungen')?.id;
 
-  // Calculate totals
-  const totalGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-  const totalBetriebskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-  const totalHeizungskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
-  const totalGesamtbetrag = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
+  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
 
-  // Calculate Netto
-  const nettoMieteTotal = periodInvoices.reduce((sum, inv) => 
-    sum + calculateNetFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
-  const nettoBkTotal = periodInvoices.reduce((sum, inv) => 
-    sum + calculateNetFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
-  const nettoHkTotal = periodInvoices.reduce((sum, inv) => 
-    sum + calculateNetFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
-  const totalNetto = nettoMieteTotal + nettoBkTotal + nettoHkTotal;
+  // Mieteinnahmen (0% USt für Wohnungen)
+  const mieteinnahmen = incomeTransactions
+    .filter(t => t.category_id === mieteinnahmenCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const ustMieteinnahmen = 0; // Mieteinnahmen sind meist unecht umsatzsteuerbefreit
 
-  // Calculate USt
-  const ustMiete = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
-  const ustBk = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
-  const ustHeizung = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
-  const totalUst = ustMiete + ustBk + ustHeizung;
+  // BK-Vorauszahlungen (10% USt)
+  const bkVorauszahlungen = incomeTransactions
+    .filter(t => t.category_id === bkVorauszCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const ustBkVorausz = bkVorauszahlungen - (bkVorauszahlungen / 1.1);
 
-  // Vorsteuer from expenses (assuming 20% VAT)
-  const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
-    const betrag = Number(exp.betrag || 0);
+  // Sonstige Einnahmen
+  const sonstigeEinnahmen = incomeTransactions
+    .filter(t => t.category_id !== mieteinnahmenCategoryId && t.category_id !== bkVorauszCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const ustSonstige = sonstigeEinnahmen - (sonstigeEinnahmen / 1.2);
+
+  const totalEinnahmen = mieteinnahmen + bkVorauszahlungen + sonstigeEinnahmen;
+  const totalUst = ustMieteinnahmen + ustBkVorausz + ustSonstige;
+
+  // Vorsteuer aus Ausgaben (20%)
+  const totalAusgaben = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const vorsteuer = expenseTransactions.reduce((sum, t) => {
+    const betrag = Math.abs(Number(t.amount));
     return sum + (betrag - betrag / 1.2);
   }, 0);
 
-  const vatLiability = totalUst - vorsteuerFromExpenses;
+  const vatLiability = totalUst - vorsteuer;
 
-  // Section 1: Einnahmen
+  // Section 1: Einnahmen aus Transaktionen
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('1. Einnahmen aus Vorschreibungen', 14, 50);
+  doc.text('1. Einnahmen aus Buchhaltung', 14, 50);
 
   autoTable(doc, {
     startY: 55,
-    head: [['Position', 'Brutto', 'Netto', 'USt']],
+    head: [['Position', 'Brutto', 'USt-Satz', 'USt']],
     body: [
-      ['Grundmiete', formatCurrency(totalGrundmiete), formatCurrency(nettoMieteTotal), formatCurrency(ustMiete)],
-      ['Betriebskosten', formatCurrency(totalBetriebskosten), formatCurrency(nettoBkTotal), formatCurrency(ustBk)],
-      ['Heizungskosten', formatCurrency(totalHeizungskosten), formatCurrency(nettoHkTotal), formatCurrency(ustHeizung)],
+      ['Mieteinnahmen', formatCurrency(mieteinnahmen), '0%', formatCurrency(ustMieteinnahmen)],
+      ['BK-Vorauszahlungen', formatCurrency(bkVorauszahlungen), '10%', formatCurrency(ustBkVorausz)],
+      ['Sonstige Einnahmen', formatCurrency(sonstigeEinnahmen), '20%', formatCurrency(ustSonstige)],
     ],
-    foot: [['Gesamt', formatCurrency(totalGesamtbetrag), formatCurrency(totalNetto), formatCurrency(totalUst)]],
+    foot: [['Gesamt', formatCurrency(totalEinnahmen), '', formatCurrency(totalUst)]],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
     footStyles: { fillColor: [219, 234, 254], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -551,9 +586,9 @@ export const generateUstVoranmeldung = (
 
   autoTable(doc, {
     startY: y1 + 20,
-    head: [['Beschreibung', 'Anzahl', 'Betrag Brutto', 'Vorsteuer (20%)']],
+    head: [['Beschreibung', 'Anzahl Buchungen', 'Betrag Brutto', 'Vorsteuer (20%)']],
     body: [
-      ['Ausgaben gesamt', `${periodExpenses.length} Positionen`, formatCurrency(periodExpenses.reduce((sum, e) => sum + Number(e.betrag), 0)), formatCurrency(vorsteuerFromExpenses)],
+      ['Ausgaben gesamt', `${expenseTransactions.length} Positionen`, formatCurrency(totalAusgaben), formatCurrency(vorsteuer)],
     ],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -571,7 +606,7 @@ export const generateUstVoranmeldung = (
     startY: y2 + 20,
     body: [
       ['Umsatzsteuer (aus Einnahmen)', formatCurrency(totalUst)],
-      ['./. Vorsteuer (aus Ausgaben)', formatCurrency(vorsteuerFromExpenses)],
+      ['./. Vorsteuer (aus Ausgaben)', formatCurrency(vorsteuer)],
       [vatLiability >= 0 ? 'Zahllast an Finanzamt' : 'Gutschrift vom Finanzamt', formatCurrency(Math.abs(vatLiability))],
     ],
     theme: 'plain',
