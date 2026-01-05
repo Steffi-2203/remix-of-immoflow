@@ -55,33 +55,34 @@ export function DocumentUploadDialog({
     }
   };
 
-  const handleSubmit = async () => {
-    if (!selectedFile || !documentType || !documentName) return;
-    
-    await onUpload(selectedFile, documentType, documentName);
-    
-    // Reset form
+  const resetForm = () => {
     setSelectedFile(null);
     setDocumentType('');
     setDocumentName('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedFile || !documentType || !documentName) return;
+
+    await onUpload(selectedFile, documentType, documentName);
+
+    resetForm();
     onOpenChange(false);
   };
 
-  const handleClose = () => {
-    setSelectedFile(null);
-    setDocumentType('');
-    setDocumentName('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const handleOpenChange = (nextOpen: boolean) => {
+    // When closing via ESC/overlay, reset the form.
+    if (!nextOpen) {
+      resetForm();
     }
-    onOpenChange(false);
+    onOpenChange(nextOpen);
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Dokument hochladen</DialogTitle>
@@ -100,7 +101,7 @@ export function DocumentUploadDialog({
                 type="file"
                 onChange={handleFileChange}
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                className="hidden"
+                className="sr-only"
               />
               <Button
                 type="button"
@@ -151,7 +152,7 @@ export function DocumentUploadDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Abbrechen
           </Button>
           <Button
