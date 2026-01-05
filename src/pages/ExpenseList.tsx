@@ -872,7 +872,15 @@ export default function ExpenseList() {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-primary"
+                            onClick={() => openEditDialog(expense as any)}
+                          >
+                            <Upload className="h-3 w-3 mr-1" />
+                            Beleg einfügen
+                          </Button>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
