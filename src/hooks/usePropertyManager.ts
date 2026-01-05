@@ -60,29 +60,32 @@ export const usePropertyManager = () => {
   }) => {
     if (!user) throw new Error('Not authenticated');
 
-    // First create the property
-    const { data: property, error: propertyError } = await supabase
+    const propertyId = crypto.randomUUID();
+
+    const { error: propertyError } = await supabase
       .from('properties')
-      .insert(propertyData)
-      .select()
-      .single();
+      .insert({ id: propertyId, ...propertyData });
 
     if (propertyError) throw propertyError;
 
-    // Then assign the current user as manager
-    const { error: assignError } = await supabase
-      .from('property_managers')
-      .insert({
-        user_id: user.id,
-        property_id: property.id,
-      });
+    const { error: assignError } = await supabase.from('property_managers').insert({
+      user_id: user.id,
+      property_id: propertyId,
+    });
 
     if (assignError) {
-      // Cleanup: delete the property if we can't assign ownership
-      await supabase.from('properties').delete().eq('id', property.id);
+      // Best-effort cleanup (may fail depending on RLS)
+      await supabase.from('properties').delete().eq('id', propertyId);
       throw assignError;
     }
 
+    const { data: property, error: fetchError } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('id', propertyId)
+      .single();
+
+    if (fetchError) throw fetchError;
     return property;
   }, [user]);
 

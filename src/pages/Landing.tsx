@@ -53,7 +53,7 @@ export default function Landing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-14 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-14 w-auto" />
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
@@ -70,11 +70,11 @@ export default function Landing() {
       <section className="container mx-auto px-4 py-20 md:py-32">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-            ImmoFlow
+            ImmoFlowMe
             <span className="text-primary block mt-2">Hausverwaltung im Flow</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Die einfache Software für kleine Hausverwaltungen und Privatvermieter. 
+            Die einfache Software für kleine Hausverwaltungen und Privatvermieter.
             Verwalten Sie alles an einem Ort – übersichtlich, effizient und sicher.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -124,10 +124,10 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold mb-6">
-                Warum ImmoFlow?
+                Warum ImmoFlowMe?
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                Wir haben ImmoFlow entwickelt, um Hausverwaltern den Alltag zu erleichtern. 
+                Wir haben ImmoFlowMe entwickelt, um Hausverwaltern den Alltag zu erleichtern.
                 Konzentrieren Sie sich auf das Wesentliche – wir kümmern uns um den Rest.
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -160,7 +160,7 @@ export default function Landing() {
             Bereit für effizientere Hausverwaltung?
           </h2>
           <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoFlow bereits nutzen.
+            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoFlowMe bereits nutzen.
           </p>
           <Button size="lg" variant="secondary" asChild className="text-lg px-8">
             <Link to="/register">
@@ -176,7 +176,7 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-8 w-auto" />
+              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-8 w-auto" />
             </div>
             <div className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} ImmoFlowMe. Alle Rechte vorbehalten.

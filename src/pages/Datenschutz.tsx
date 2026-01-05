@@ -12,7 +12,7 @@ export default function Datenschutz() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Building2 className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl text-foreground">ImmoFlow</span>
+            <span className="font-bold text-xl text-foreground">ImmoFlowMe</span>
           </Link>
           <Link to="/">
             <Button variant="ghost" size="sm">
