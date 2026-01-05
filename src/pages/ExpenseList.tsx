@@ -90,6 +90,7 @@ export default function ExpenseList() {
     beleg_nummer: '',
     notizen: '',
   });
+  const [hasReceipt, setHasReceipt] = useState<boolean | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   
@@ -221,6 +222,7 @@ export default function ExpenseList() {
 
       setDialogOpen(false);
       setSelectedFile(null);
+      setHasReceipt(null);
       setNewExpense({
         property_id: '',
         category: 'betriebskosten_umlagefaehig',
@@ -553,41 +555,77 @@ export default function ExpenseList() {
                 />
               </div>
 
-              {/* PDF Upload */}
-              <div className="space-y-2">
-                <Label>Rechnungsbeleg (optional)</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/pdf,image/*"
-                    onChange={(e) => handleFileChange(e, false)}
-                    className="hidden"
-                  />
+              {/* Receipt Question */}
+              <div className="space-y-3">
+                <Label>Haben Sie einen Rechnungsbeleg?</Label>
+                <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full"
+                    variant={hasReceipt === true ? 'default' : 'outline'}
+                    onClick={() => setHasReceipt(true)}
+                    className="flex-1"
                   >
-                    <Upload className="h-4 w-4 mr-2" />
-                    {selectedFile ? selectedFile.name : 'Beleg hochladen (optional)'}
+                    Ja, Beleg vorhanden
                   </Button>
-                  {selectedFile && (
+                  <Button
+                    type="button"
+                    variant={hasReceipt === false ? 'default' : 'outline'}
+                    onClick={() => {
+                      setHasReceipt(false);
+                      setSelectedFile(null);
+                    }}
+                    className="flex-1"
+                  >
+                    Nein, ohne Beleg
+                  </Button>
+                </div>
+              </div>
+
+              {/* File Upload - only shown when hasReceipt is true */}
+              {hasReceipt === true && (
+                <div className="space-y-2">
+                  <Label>Rechnungsbeleg hochladen</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      onChange={(e) => handleFileChange(e, false)}
+                      className="hidden"
+                    />
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setSelectedFile(null)}
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Upload className="h-4 w-4 mr-2" />
+                      {selectedFile ? selectedFile.name : 'Beleg hochladen'}
                     </Button>
-                  )}
+                    {selectedFile && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedFile(null)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    PDF oder Bild, max. 10 MB
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  PDF oder Bild, max. 10 MB - nicht erforderlich
-                </p>
-              </div>
+              )}
+
+              {hasReceipt === false && (
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                  <p className="text-sm text-warning-foreground">
+                    Die Kosten werden ohne Beleg erfasst. Sie können später einen Beleg hinzufügen.
+                  </p>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
@@ -596,7 +634,7 @@ export default function ExpenseList() {
               </Button>
               <Button 
                 onClick={handleCreateExpense} 
-                disabled={uploading || createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag}
+                disabled={uploading || createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag || hasReceipt === null}
               >
                 {(uploading || createExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {uploading ? 'Hochladen...' : 'Erfassen'}
