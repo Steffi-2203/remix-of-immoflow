@@ -192,6 +192,16 @@ export default function ExpenseList() {
       return;
     }
 
+    // If user said they have a receipt, enforce upload.
+    if (hasReceipt === true && !selectedFile) {
+      toast({
+        title: 'Beleg fehlt',
+        description: 'Bitte Beleg hochladen oder „Nein, ohne Beleg“ auswählen.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setUploading(true);
     let beleg_url: string | undefined;
 
@@ -620,8 +630,8 @@ export default function ExpenseList() {
               )}
 
               {hasReceipt === false && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3">
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                  <p className="text-sm text-foreground">
                     Die Kosten werden ohne Beleg erfasst. Sie können später einen Beleg hinzufügen.
                   </p>
                 </div>
@@ -634,7 +644,14 @@ export default function ExpenseList() {
               </Button>
               <Button 
                 onClick={handleCreateExpense} 
-                disabled={uploading || createExpense.isPending || !newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag || hasReceipt === null}
+                disabled={
+                  uploading ||
+                  createExpense.isPending ||
+                  !newExpense.property_id ||
+                  !newExpense.bezeichnung ||
+                  !newExpense.betrag ||
+                  (hasReceipt === true && !selectedFile)
+                }
               >
                 {(uploading || createExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {uploading ? 'Hochladen...' : 'Erfassen'}
