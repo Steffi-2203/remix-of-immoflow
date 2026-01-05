@@ -39,6 +39,8 @@ import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useExpenses } from '@/hooks/useExpenses';
 import { usePayments } from '@/hooks/usePayments';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { toast } from 'sonner';
 import {
   generateRenditeReport,
@@ -47,6 +49,8 @@ import {
   generateUstVoranmeldung,
   generateOffenePostenReport,
   type PaymentData,
+  type TransactionData,
+  type CategoryData,
 } from '@/utils/reportPdfExport';
 
 // Berechnet Netto aus Brutto
@@ -68,6 +72,16 @@ const unitTypeLabels: Record<string, string> = {
   stellplatz: 'Stellplatz',
   lager: 'Lager',
 };
+
+// Kategorien für Instandhaltung (mindern Rendite)
+const INSTANDHALTUNG_CATEGORIES = ['Instandhaltung', 'Reparaturen'];
+
+// Kategorien für Betriebskosten (werden auf Mieter umgelegt, mindern NICHT die Rendite)
+const BETRIEBSKOSTEN_CATEGORIES = [
+  'Versicherungen', 'Lift/Aufzug', 'Heizung', 'Wasser/Abwasser', 
+  'Strom Allgemein', 'Müllabfuhr', 'Hausbetreuung/Reinigung', 
+  'Gartenpflege', 'Schneeräumung', 'Grundsteuer', 'Verwaltungskosten'
+];
 
 const reports = [
   {
@@ -125,8 +139,10 @@ export default function Reports() {
   const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
   const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
   const { data: allPayments, isLoading: isLoadingPayments } = usePayments();
+  const { data: allTransactions, isLoading: isLoadingTransactions } = useTransactions();
+  const { data: categories, isLoading: isLoadingCategories } = useAccountCategories();
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories;
 
   // Generate year options (last 5 years)
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
@@ -164,32 +180,106 @@ export default function Reports() {
     return exp.year === selectedYear && exp.month === selectedMonth;
   }) || [];
 
+  // ====== TRANSAKTIONEN FILTERN ======
+  const periodTransactions = allTransactions?.filter(t => {
+    const date = new Date(t.transaction_date);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    // Property-Filter
+    const propertyMatch = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
+    
+    if (reportPeriod === 'yearly') {
+      return year === selectedYear && propertyMatch;
+    }
+    return year === selectedYear && month === selectedMonth && propertyMatch;
+  }) || [];
+
+  // Kategorie-IDs ermitteln
+  const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
+  const bkVorauszCategoryId = categories?.find(c => c.name === 'Betriebskostenvorauszahlungen')?.id;
+  const instandhaltungCategoryIds = categories
+    ?.filter(c => INSTANDHALTUNG_CATEGORIES.includes(c.name))
+    .map(c => c.id) || [];
+  const betriebskostenCategoryIds = categories
+    ?.filter(c => BETRIEBSKOSTEN_CATEGORIES.includes(c.name))
+    .map(c => c.id) || [];
+
+  // ====== EINNAHMEN AUS TRANSAKTIONEN ======
+  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
+  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+
+  // Mieteinnahmen aus Transaktionen
+  const mieteinnahmenFromTransactions = incomeTransactions
+    .filter(t => t.category_id === mieteinnahmenCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  // BK-Vorauszahlungen aus Transaktionen  
+  const bkVorauszahlungenFromTransactions = incomeTransactions
+    .filter(t => t.category_id === bkVorauszCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  // Gesamteinnahmen aus Transaktionen
+  const totalIncomeFromTransactions = incomeTransactions
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  // ====== AUSGABEN AUS TRANSAKTIONEN ======
+  // Instandhaltungskosten (mindern die Rendite)
+  const instandhaltungskostenFromTransactions = expenseTransactions
+    .filter(t => instandhaltungCategoryIds.includes(t.category_id || ''))
+    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+  // Betriebskosten (werden umgelegt, mindern NICHT die Rendite)
+  const betriebskostenFromTransactions = expenseTransactions
+    .filter(t => betriebskostenCategoryIds.includes(t.category_id || ''))
+    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+  // Gesamtausgaben aus Transaktionen
+  const totalExpensesFromTransactions = expenseTransactions
+    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+  // ====== RENDITE-BERECHNUNG (NUR AUF TRANSAKTIONEN BASIERT) ======
+  // Nettoertrag = Mieteinnahmen - Instandhaltungskosten (NICHT Betriebskosten)
+  const nettoertrag = mieteinnahmenFromTransactions - instandhaltungskostenFromTransactions;
+  const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
+
   // Vacancy rate
   const totalUnits = units?.length || 0;
   const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  // Revenue from invoices for selected period
-  const periodRevenue = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
-  
-  // Annual revenue (always for selected year)
-  const yearInvoices = invoices?.filter(inv => inv.year === selectedYear) || [];
-  const annualRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
-
-  // Calculate input VAT from expenses (Vorsteuer)
-  const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
-    // Assume 20% VAT on expenses for simplicity
-    const betrag = Number(exp.betrag || 0);
-    return sum + (betrag - betrag / 1.2);
-  }, 0);
-
-  // Simple yield calculation based on property value or total qm
+  // Property value estimation
   const totalQm = selectedPropertyId === 'all'
     ? properties?.reduce((sum, p) => sum + Number(p.total_qm || 0), 0) || 0
     : Number(selectedProperty?.total_qm || 0);
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
-  const annualYield = estimatedPropertyValue > 0 ? (annualRevenue / estimatedPropertyValue) * 100 : 0;
+  
+  // Rendite basierend auf Transaktionen
+  const annualYieldFromTransactions = estimatedPropertyValue > 0 
+    ? (annualNettoertrag / estimatedPropertyValue) * 100 
+    : 0;
 
+  // ====== UST BERECHNUNG AUS TRANSAKTIONEN ======
+  // USt aus Mieteinnahmen (0% für Wohnungen, 20% für Geschäfte - vereinfacht: 0%)
+  const ustMieteinnahmenFromTransactions = 0; // Mieteinnahmen sind meist unecht umsatzsteuerbefreit
+
+  // USt aus BK-Vorauszahlungen (10%)
+  const ustBkVorauszFromTransactions = bkVorauszahlungenFromTransactions - (bkVorauszahlungenFromTransactions / 1.1);
+
+  // Vorsteuer aus Ausgaben (20%)
+  const vorsteuerFromTransactions = expenseTransactions.reduce((sum, t) => {
+    const betrag = Math.abs(Number(t.amount));
+    return sum + (betrag - betrag / 1.2);
+  }, 0);
+
+  // USt-Zahllast aus Transaktionen
+  const totalUstFromTransactions = ustMieteinnahmenFromTransactions + ustBkVorauszFromTransactions;
+  const vatLiabilityFromTransactions = totalUstFromTransactions - vorsteuerFromTransactions;
+
+  // ====== FALLBACK: AUCH ALTE DATEN AUS INVOICES ANZEIGEN ======
+  // Revenue from invoices for selected period (als Vergleich)
+  const periodRevenueFromInvoices = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+  
   // Calculate gross totals per category from invoices
   const totalGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
   const totalBetriebskosten = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
@@ -214,7 +304,13 @@ export default function Reports() {
     sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
   const totalUst = ustMiete + ustBk + ustHeizung;
 
-  // VAT liability: USt (was ans Finanzamt geht) - Vorsteuer (was abgezogen werden kann)
+  // Vorsteuer from expenses
+  const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
+    const betrag = Number(exp.betrag || 0);
+    return sum + (betrag - betrag / 1.2);
+  }, 0);
+
+  // VAT liability from invoices (alt)
   const vatLiability = totalUst - vorsteuerFromExpenses;
 
   // Period label for display
@@ -230,12 +326,31 @@ export default function Reports() {
     }
 
     try {
+      // Prepare transaction data for PDF export
+      const transactionData: TransactionData[] = (allTransactions || []).map(t => ({
+        id: t.id,
+        amount: t.amount,
+        transaction_date: t.transaction_date,
+        category_id: t.category_id,
+        property_id: t.property_id,
+        unit_id: t.unit_id,
+        description: t.description,
+      }));
+
+      const categoryData: CategoryData[] = (categories || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+      }));
+
       switch (reportId) {
         case 'rendite':
           generateRenditeReport(
             properties,
             allUnits,
             allInvoices,
+            transactionData,
+            categoryData,
             selectedPropertyId,
             selectedYear,
             reportPeriod,
@@ -260,6 +375,8 @@ export default function Reports() {
             allTenants,
             allInvoices,
             allPayments as PaymentData[],
+            transactionData,
+            categoryData,
             selectedPropertyId,
             selectedYear,
             reportPeriod,
@@ -274,6 +391,8 @@ export default function Reports() {
             allTenants,
             allInvoices,
             allExpenses,
+            transactionData,
+            categoryData,
             selectedPropertyId,
             selectedYear,
             reportPeriod,
@@ -382,15 +501,18 @@ export default function Reports() {
         )}
       </div>
 
-      {/* Quick Stats */}
+      {/* Quick Stats - JETZT AUS TRANSAKTIONEN */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Jahresrendite (geschätzt)</p>
+                <p className="text-sm text-muted-foreground">Jahresrendite (Netto)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  {annualYield.toFixed(1)}%
+                  {annualYieldFromTransactions.toFixed(1)}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Mieteinnahmen - Instandhaltung
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
@@ -422,12 +544,15 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Umsatz {periodLabel}</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{periodRevenue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  aus {incomeTransactions.length} Buchungen
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {periodInvoices.length} Vorschreibungen
+                Buchhaltung
               </div>
             </div>
           </CardContent>
@@ -436,9 +561,9 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">USt-Zahllast</p>
+                <p className="text-sm text-muted-foreground">USt-Zahllast (Buchhaltung)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{vatLiability.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{vatLiabilityFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="text-xs text-muted-foreground">{periodLabel}</div>
@@ -446,6 +571,109 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Einnahmen/Ausgaben aus Buchhaltung */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
+          <CardDescription>
+            Einnahmen und Ausgaben aus der Buchhaltung ({periodTransactions.length} Transaktionen)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Einnahmen */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-success flex items-center gap-2">
+                <ArrowUpRight className="h-4 w-4" />
+                Einnahmen
+              </h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
+                  <span className="text-sm">Mieteinnahmen</span>
+                  <span className="font-semibold text-success">
+                    €{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
+                  <span className="text-sm">BK-Vorauszahlungen</span>
+                  <span className="font-semibold text-success">
+                    €{bkVorauszahlungenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
+                  <span className="text-sm">Sonstige Einnahmen</span>
+                  <span className="font-semibold text-success">
+                    €{(totalIncomeFromTransactions - mieteinnahmenFromTransactions - bkVorauszahlungenFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border-2 border-success bg-success/10">
+                  <span className="font-semibold">Gesamt Einnahmen</span>
+                  <span className="font-bold text-success text-lg">
+                    €{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ausgaben */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-destructive flex items-center gap-2">
+                <ArrowDownRight className="h-4 w-4" />
+                Ausgaben
+              </h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
+                  <div>
+                    <span className="text-sm">Betriebskosten</span>
+                    <p className="text-xs text-muted-foreground">Umlagefähig auf Mieter</p>
+                  </div>
+                  <span className="font-semibold text-destructive">
+                    €{betriebskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-orange-500/20 bg-orange-500/5">
+                  <div>
+                    <span className="text-sm">Instandhaltung</span>
+                    <p className="text-xs text-muted-foreground">Mindert Rendite</p>
+                  </div>
+                  <span className="font-semibold text-orange-600">
+                    €{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
+                  <span className="text-sm">Sonstige Ausgaben</span>
+                  <span className="font-semibold text-destructive">
+                    €{(totalExpensesFromTransactions - betriebskostenFromTransactions - instandhaltungskostenFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border-2 border-destructive bg-destructive/10">
+                  <span className="font-semibold">Gesamt Ausgaben</span>
+                  <span className="font-bold text-destructive text-lg">
+                    €{totalExpensesFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Nettoertrag */}
+          <div className="mt-6 p-4 rounded-lg border-2 border-primary bg-primary/5">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
+                <p className="text-sm text-muted-foreground">
+                  Mieteinnahmen (€{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
+                  - Instandhaltung (€{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
+                </p>
+              </div>
+              <span className="font-bold text-primary text-2xl">
+                €{nettoertrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Report Cards */}
       <h2 className="text-lg font-semibold text-foreground mb-4">Verfügbare Reports</h2>
@@ -475,14 +703,14 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* USt Preview */}
+      {/* USt Preview - JETZT AUS TRANSAKTIONEN */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>USt-Voranmeldung {periodLabel}</CardTitle>
               <CardDescription>
-                Basierend auf {periodInvoices.length} Vorschreibungen
+                Basierend auf {periodTransactions.length} Buchhaltungs-Transaktionen
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
@@ -493,49 +721,44 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Einnahmen aus Vorschreibungen - Netto und Brutto */}
+          {/* Einnahmen aus Transaktionen */}
           <div className="mb-6">
-            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Vorschreibungen</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Buchhaltung</h4>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Grundmiete</p>
+                <p className="text-xs text-muted-foreground">Mieteinnahmen</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{totalGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                  <p>Netto: €{nettoMieteTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                  <p>USt: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <p>USt: €{ustMieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (0%)</p>
                 </div>
               </div>
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Betriebskosten</p>
+                <p className="text-xs text-muted-foreground">BK-Vorauszahlungen</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{totalBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{bkVorauszahlungenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                  <p>Netto: €{nettoBkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                  <p>USt: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <p>USt: €{ustBkVorauszFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (10%)</p>
                 </div>
               </div>
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Heizungskosten</p>
+                <p className="text-xs text-muted-foreground">Ausgaben (Vorsteuer)</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{totalHeizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{totalExpensesFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
-                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                  <p>Netto: €{nettoHkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                  <p>USt: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <p>Vorsteuer: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <p className="text-xs text-muted-foreground">Gesamt</p>
-                <p className="text-lg font-bold text-primary">
-                  €{totalGesamtbetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              <div className={`rounded-lg border p-3 ${vatLiabilityFromTransactions >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
+                <p className="text-xs text-muted-foreground">
+                  {vatLiabilityFromTransactions >= 0 ? 'Zahllast' : 'Gutschrift'}
                 </p>
-                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                  <p>Netto: €{totalNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                  <p>USt: €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                </div>
+                <p className={`text-lg font-bold ${vatLiabilityFromTransactions >= 0 ? 'text-success' : 'text-primary'}`}>
+                  €{Math.abs(vatLiabilityFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
               </div>
             </div>
           </div>
@@ -543,31 +766,30 @@ export default function Reports() {
           {/* USt Berechnung */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Vorschreibungen)</p>
+              <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Einnahmen)</p>
               <p className="text-2xl font-bold text-foreground mt-2">
-                €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{totalUstFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                <p>Miete: €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>Betriebskosten: €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>Heizung: €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Miete (0%): €{ustMieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>BK (10%): €{ustBkVorauszFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
             <div className="rounded-lg border border-border p-4">
               <p className="text-sm text-muted-foreground">Vorsteuer (aus Ausgaben)</p>
               <p className="text-2xl font-bold text-foreground mt-2">
-                €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
-                <p>{periodExpenses.length} Ausgaben in {periodLabel}</p>
+                <p>{expenseTransactions.length} Ausgaben-Buchungen</p>
               </div>
             </div>
-            <div className={`rounded-lg border p-4 ${vatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
+            <div className={`rounded-lg border p-4 ${vatLiabilityFromTransactions >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
               <p className="text-sm text-muted-foreground">
-                {vatLiability >= 0 ? 'Zahllast' : 'Gutschrift'}
+                {vatLiabilityFromTransactions >= 0 ? 'Zahllast' : 'Gutschrift'}
               </p>
-              <p className={`text-2xl font-bold mt-2 ${vatLiability >= 0 ? 'text-success' : 'text-primary'}`}>
-                €{Math.abs(vatLiability).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              <p className={`text-2xl font-bold mt-2 ${vatLiabilityFromTransactions >= 0 ? 'text-success' : 'text-primary'}`}>
+                €{Math.abs(vatLiabilityFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
                 {reportPeriod === 'monthly' && (
@@ -579,7 +801,7 @@ export default function Reports() {
         </CardContent>
       </Card>
 
-      {/* Detaillierte USt-Übersicht pro Rechnung */}
+      {/* Detaillierte Transaktionen */}
       <Card className="mt-8">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -587,144 +809,60 @@ export default function Reports() {
               <Receipt className="h-5 w-5 text-accent-foreground" />
             </div>
             <div>
-              <CardTitle>USt-Berechnung pro Rechnung</CardTitle>
+              <CardTitle>Transaktionen aus Buchhaltung</CardTitle>
               <CardDescription>
-                Detaillierte Aufschlüsselung mit Netto- und Bruttobeträgen für {periodLabel}
+                {periodTransactions.length} Buchungen für {periodLabel}
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {periodInvoices.length === 0 ? (
+          {periodTransactions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              Keine Vorschreibungen für {periodLabel} vorhanden.
+              Keine Buchungen für {periodLabel} vorhanden. 
+              <br />
+              <span className="text-sm">Erfassen Sie Einnahmen und Ausgaben in der Buchhaltung.</span>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[200px]">Mieter / Einheit</TableHead>
-                    <TableHead className="text-right">Typ</TableHead>
-                    <TableHead className="text-right">Miete Netto</TableHead>
-                    <TableHead className="text-right">USt Miete</TableHead>
-                    <TableHead className="text-right">BK Netto</TableHead>
-                    <TableHead className="text-right">USt BK</TableHead>
-                    <TableHead className="text-right">HK Netto</TableHead>
-                    <TableHead className="text-right">USt HK</TableHead>
-                    <TableHead className="text-right font-semibold">Gesamt Netto</TableHead>
-                    <TableHead className="text-right font-semibold">Gesamt USt</TableHead>
-                    <TableHead className="text-right font-semibold">Gesamt Brutto</TableHead>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Beschreibung</TableHead>
+                    <TableHead>Kategorie</TableHead>
+                    <TableHead className="text-right">Betrag</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {periodInvoices.map((invoice) => {
-                    const unit = allUnits?.find(u => u.id === invoice.unit_id);
-                    const tenant = allTenants?.find(t => t.id === invoice.tenant_id);
-                    const property = properties?.find(p => p.id === unit?.property_id);
-                    
-                    const grundmiete = Number(invoice.grundmiete || 0);
-                    const betriebskosten = Number(invoice.betriebskosten || 0);
-                    const heizungskosten = Number(invoice.heizungskosten || 0);
-                    const ustSatzMiete = Number(invoice.ust_satz_miete || 0);
-                    const ustSatzBk = Number(invoice.ust_satz_bk || 10);
-                    const ustSatzHeizung = Number(invoice.ust_satz_heizung || 20);
-                    
-                    const nettoMiete = calculateNetFromGross(grundmiete, ustSatzMiete);
-                    const nettoBk = calculateNetFromGross(betriebskosten, ustSatzBk);
-                    const nettoHk = calculateNetFromGross(heizungskosten, ustSatzHeizung);
-                    
-                    const ustMieteRow = calculateVatFromGross(grundmiete, ustSatzMiete);
-                    const ustBkRow = calculateVatFromGross(betriebskosten, ustSatzBk);
-                    const ustHkRow = calculateVatFromGross(heizungskosten, ustSatzHeizung);
-                    
-                    const gesamtNetto = nettoMiete + nettoBk + nettoHk;
-                    const gesamtUst = ustMieteRow + ustBkRow + ustHkRow;
-                    const gesamtBrutto = grundmiete + betriebskosten + heizungskosten;
+                  {periodTransactions.slice(0, 15).map((t) => {
+                    const category = categories?.find(c => c.id === t.category_id);
+                    const isIncome = t.amount > 0;
                     
                     return (
-                      <TableRow key={invoice.id}>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt'}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {property?.name} - Top {unit?.top_nummer}
-                            </span>
-                          </div>
+                      <TableRow key={t.id}>
+                        <TableCell className="whitespace-nowrap">
+                          {new Date(t.transaction_date).toLocaleDateString('de-AT')}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={unit?.type === 'wohnung' ? 'secondary' : 'default'}>
-                            {unitTypeLabels[unit?.type || 'wohnung'] || unit?.type}
+                        <TableCell>{t.description || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={isIncome ? 'secondary' : 'outline'}>
+                            {category?.name || 'Nicht kategorisiert'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          €{nettoMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          <span className="text-xs text-muted-foreground ml-1">({ustSatzMiete}%)</span>
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          €{ustMieteRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          €{nettoBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          <span className="text-xs text-muted-foreground ml-1">({ustSatzBk}%)</span>
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          €{ustBkRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          €{nettoHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          <span className="text-xs text-muted-foreground ml-1">({ustSatzHeizung}%)</span>
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          €{ustHkRow.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          €{gesamtNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-primary">
-                          €{gesamtUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          €{gesamtBrutto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        <TableCell className={`text-right font-semibold ${isIncome ? 'text-success' : 'text-destructive'}`}>
+                          {isIncome ? '+' : ''}{Number(t.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })} €
                         </TableCell>
                       </TableRow>
                     );
                   })}
-                  {/* Summenzeile */}
-                  <TableRow className="bg-muted/50 font-semibold">
-                    <TableCell colSpan={2}>Summe</TableCell>
-                    <TableCell className="text-right">
-                      €{nettoMieteTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      €{ustMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      €{nettoBkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      €{ustBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      €{nettoHkTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      €{ustHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      €{totalNetto.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right text-primary">
-                      €{totalUst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      €{totalGesamtbetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                  </TableRow>
                 </TableBody>
               </Table>
+              {periodTransactions.length > 15 && (
+                <p className="text-sm text-muted-foreground text-center mt-4">
+                  ... und {periodTransactions.length - 15} weitere Buchungen.
+                </p>
+              )}
             </div>
           )}
         </CardContent>
