@@ -23,7 +23,7 @@ const navItems: NavItem[] = [{
   icon: Layers,
   href: '/einheiten'
 }, {
-  label: 'Zahlungen',
+  label: 'Mieteinnahmen',
   icon: Wallet,
   href: '/zahlungen'
 }, {
