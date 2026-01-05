@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
 import { TrialExpiredModal } from "@/components/dashboard/TrialExpiredModal";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { BankingWidget } from "@/components/dashboard/BankingWidget";
 import { supabase } from "@/integrations/supabase/client";
 
 // Subscription limits
@@ -246,8 +247,13 @@ export default function SimpleDashboard() {
           </CardContent>
         </Card>
 
+        {/* Banking Widget */}
+        <div className="mt-6">
+          <BankingWidget />
+        </div>
+
         {/* Properties Section */}
-        <Card>
+        <Card className="mt-6">
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="flex items-center gap-2">

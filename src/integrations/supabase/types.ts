@@ -73,6 +73,61 @@ export type Database = {
           },
         ]
       }
+      learned_matches: {
+        Row: {
+          created_at: string
+          id: string
+          match_count: number | null
+          organization_id: string | null
+          pattern: string
+          tenant_id: string | null
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          match_count?: number | null
+          organization_id?: string | null
+          pattern: string
+          tenant_id?: string | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          match_count?: number | null
+          organization_id?: string | null
+          pattern?: string
+          tenant_id?: string | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learned_matches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learned_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learned_matches_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_invoices: {
         Row: {
           betriebskosten: number
@@ -623,6 +678,85 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenants_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions: {
+        Row: {
+          amount: number
+          booking_date: string | null
+          counterpart_iban: string | null
+          counterpart_name: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          match_confidence: number | null
+          organization_id: string | null
+          reference: string | null
+          status: string
+          tenant_id: string | null
+          transaction_date: string
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          booking_date?: string | null
+          counterpart_iban?: string | null
+          counterpart_name?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          match_confidence?: number | null
+          organization_id?: string | null
+          reference?: string | null
+          status?: string
+          tenant_id?: string | null
+          transaction_date: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          booking_date?: string | null
+          counterpart_iban?: string | null
+          counterpart_name?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          match_confidence?: number | null
+          organization_id?: string | null
+          reference?: string | null
+          status?: string
+          tenant_id?: string | null
+          transaction_date?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"

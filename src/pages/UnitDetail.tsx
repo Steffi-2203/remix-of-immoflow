@@ -44,6 +44,7 @@ import {
   CreditCard,
   Trash2,
   FileText,
+  Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
@@ -53,6 +54,7 @@ import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice
 import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DOCUMENT_TYPES } from '@/hooks/useUnitDocuments';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
+import { UnitTransactions } from '@/components/units/UnitTransactions';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -525,6 +527,10 @@ export default function UnitDetail() {
             <FileText className="h-4 w-4 mr-2" />
             Dokumente ({documents?.length || 0})
           </TabsTrigger>
+          <TabsTrigger value="transactions">
+            <Landmark className="h-4 w-4 mr-2" />
+            Zahlungen
+          </TabsTrigger>
           <TabsTrigger value="distribution">Verteilerschlüssel</TabsTrigger>
         </TabsList>
 
@@ -812,6 +818,17 @@ export default function UnitDetail() {
                 )}
               </CardContent>
             </Card>
+          )}
+        </TabsContent>
+
+        {/* Transactions Tab */}
+        <TabsContent value="transactions" className="space-y-4">
+          {unitId && (
+            <UnitTransactions 
+              unitId={unitId} 
+              tenantId={activeTenant?.id}
+              monthlyRent={totalRent}
+            />
           )}
         </TabsContent>
 
