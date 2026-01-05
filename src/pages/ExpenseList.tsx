@@ -620,8 +620,8 @@ export default function ExpenseList() {
               )}
 
               {hasReceipt === false && (
-                <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
-                  <p className="text-sm text-warning-foreground">
+                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3">
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
                     Die Kosten werden ohne Beleg erfasst. Sie können später einen Beleg hinzufügen.
                   </p>
                 </div>
