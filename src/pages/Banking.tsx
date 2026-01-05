@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { 
@@ -97,7 +98,7 @@ export default function Banking() {
   const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useBankAccounts();
   const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
   
-  const { createTransactionWithSync } = usePaymentSync();
+  const { createTransactionWithSync, deleteTransactionWithSync } = usePaymentSync();
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
   const createLearnedMatch = useCreateLearnedMatch();
@@ -1041,6 +1042,7 @@ export default function Banking() {
                         <TableHead>Zuordnung</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Betrag</TableHead>
+                        <TableHead className="text-center w-16">Aktion</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1104,6 +1106,48 @@ export default function Banking() {
                             </TableCell>
                             <TableCell className={`text-right font-medium ${Number(transaction.amount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {formatCurrency(Number(transaction.amount))}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Buchung löschen?</AlertDialogTitle>
+                                    <AlertDialogDescription asChild>
+                                      <div>
+                                        <p>Diese Buchung wird unwiderruflich gelöscht.</p>
+                                        {transaction.property_id && Number(transaction.amount) < 0 && (
+                                          <p className="mt-2 text-orange-600 dark:text-orange-400">
+                                            ⚠️ Die verknüpfte Ausgabe in der BK-Abrechnung wird ebenfalls gelöscht.
+                                          </p>
+                                        )}
+                                        {transaction.tenant_id && Number(transaction.amount) > 0 && (
+                                          <p className="mt-2 text-orange-600 dark:text-orange-400">
+                                            ⚠️ Die verknüpfte Mieteinnahme wird ebenfalls gelöscht.
+                                          </p>
+                                        )}
+                                      </div>
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteTransactionWithSync.mutate(transaction.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      {deleteTransactionWithSync.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        'Löschen'
+                                      )}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </TableCell>
                           </TableRow>
                         );

@@ -307,9 +307,86 @@ export function usePaymentSync() {
     },
   });
 
+  // Delete transaction with cascade sync (also deletes linked expenses/payments/splits)
+  const deleteTransactionWithSync = useMutation({
+    mutationFn: async (transactionId: string) => {
+      // 1. Get the transaction first
+      const { data: transaction, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!transaction) throw new Error('Transaction not found');
+
+      // 2. Delete transaction splits
+      const { error: splitsError } = await supabase
+        .from('transaction_splits')
+        .delete()
+        .eq('transaction_id', transactionId);
+
+      if (splitsError) {
+        console.error('Failed to delete transaction splits:', splitsError);
+      }
+
+      // 3. Delete related expense (if it's an expense transaction with property)
+      if (transaction.property_id && transaction.amount < 0) {
+        const { error: expenseError } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('property_id', transaction.property_id)
+          .eq('datum', transaction.transaction_date)
+          .gte('betrag', Math.abs(transaction.amount) - 0.01)
+          .lte('betrag', Math.abs(transaction.amount) + 0.01);
+
+        if (expenseError) {
+          console.error('Failed to delete related expense:', expenseError);
+        }
+      }
+
+      // 4. Delete related payment (if it's an income transaction with tenant)
+      if (transaction.tenant_id && transaction.amount > 0) {
+        const { error: paymentError } = await supabase
+          .from('payments')
+          .delete()
+          .eq('tenant_id', transaction.tenant_id)
+          .eq('eingangs_datum', transaction.transaction_date)
+          .gte('betrag', transaction.amount - 0.01)
+          .lte('betrag', transaction.amount + 0.01);
+
+        if (paymentError) {
+          console.error('Failed to delete related payment:', paymentError);
+        }
+      }
+
+      // 5. Delete the transaction itself
+      const { error: deleteError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transactionId);
+
+      if (deleteError) throw deleteError;
+
+      return { transactionId };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
+      toast.success('Buchung und verknüpfte Daten gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen der Buchung');
+      console.error('Delete transaction with sync error:', error);
+    },
+  });
+
   return {
     createPaymentWithSync,
     createTransactionWithSync,
+    deleteTransactionWithSync,
     syncExistingTransactionsToExpenses,
     getMieteinnahmenCategory,
     getCategoryNameById,
