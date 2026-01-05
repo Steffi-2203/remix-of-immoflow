@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Building, LayoutDashboard, FileStack, TrendingUp, Cog, Wallet, Layers, Calculator, ChevronLeft, ChevronRight, BookOpen, Landmark } from 'lucide-react';
+import { Building, LayoutDashboard, FileStack, TrendingUp, Cog, Wallet, Layers, Calculator, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import immoflowLogo from '@/assets/immoflow-logo.png';
@@ -13,7 +13,7 @@ interface NavItem {
 const navItems: NavItem[] = [{
   label: 'Dashboard',
   icon: LayoutDashboard,
-  href: '/'
+  href: '/dashboard'
 }, {
   label: 'Liegenschaften',
   icon: Building,
@@ -26,10 +26,6 @@ const navItems: NavItem[] = [{
   label: 'Zahlungen',
   icon: Wallet,
   href: '/zahlungen'
-}, {
-  label: 'Bank-Import',
-  icon: Landmark,
-  href: '/banking'
 }, {
   label: 'Buchhaltung',
   icon: BookOpen,
