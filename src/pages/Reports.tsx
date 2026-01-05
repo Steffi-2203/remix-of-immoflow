@@ -407,6 +407,8 @@ export default function Reports() {
       return;
     }
 
+    console.log('Generating report:', reportId);
+
     try {
       // Prepare transaction data for PDF export
       const transactionData: TransactionData[] = (allTransactions || []).map(t => ({
@@ -425,8 +427,11 @@ export default function Reports() {
         type: c.type,
       }));
 
+      console.log('Data prepared, calling generator...');
+
       switch (reportId) {
         case 'rendite':
+          console.log('Generating Rendite report...');
           generateRenditeReport(
             properties,
             allUnits,
@@ -441,6 +446,7 @@ export default function Reports() {
           toast.success('Renditereport wurde erstellt');
           break;
         case 'leerstand':
+          console.log('Generating Leerstand report...');
           generateLeerstandReport(
             properties,
             allUnits,
@@ -451,6 +457,7 @@ export default function Reports() {
           toast.success('Leerstandsreport wurde erstellt');
           break;
         case 'umsatz':
+          console.log('Generating Umsatz report...');
           generateUmsatzReport(
             properties,
             allUnits,
@@ -467,6 +474,7 @@ export default function Reports() {
           toast.success('Umsatzreport wurde erstellt');
           break;
         case 'ust':
+          console.log('Generating USt report...');
           generateUstVoranmeldung(
             properties,
             allUnits,
@@ -483,6 +491,7 @@ export default function Reports() {
           toast.success('USt-Voranmeldung wurde erstellt');
           break;
         case 'offeneposten':
+          console.log('Generating Offene Posten report...');
           generateOffenePostenReport(
             properties,
             allUnits,
@@ -497,9 +506,10 @@ export default function Reports() {
         default:
           toast.error('Report nicht gefunden');
       }
+      console.log('Report generation completed.');
     } catch (error) {
       console.error('Error generating report:', error);
-      toast.error('Fehler beim Erstellen des Reports');
+      toast.error(`Fehler beim Erstellen des Reports: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
     }
   };
 
