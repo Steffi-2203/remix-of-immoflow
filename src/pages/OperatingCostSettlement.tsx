@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, Lock, Crown } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, Lock, Crown, RefreshCw } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { usePaymentSync } from '@/hooks/usePaymentSync';
 
 // Distribution key mapping for expense types (without heating - handled separately)
 const expenseDistributionKeys: Record<string, 'mea' | 'qm' | 'personen'> = {
@@ -124,6 +125,7 @@ export default function OperatingCostSettlement() {
 
   const saveSettlement = useSaveSettlement();
   const finalizeSettlement = useFinalizeSettlement();
+  const { syncExistingTransactionsToExpenses } = usePaymentSync();
 
   // Fetch ALL units with current tenant and year tenants (including past tenants)
   const { data: units, isLoading: isLoadingUnits } = useQuery({
@@ -577,9 +579,26 @@ export default function OperatingCostSettlement() {
             </CardHeader>
             <CardContent>
               {Object.keys(expensesByType).length === 0 && totalHeizkosten === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  Keine umlagefähigen Kosten für diesen Zeitraum erfasst.
-                </p>
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground mb-4">
+                    Keine umlagefähigen Kosten für diesen Zeitraum erfasst.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => syncExistingTransactionsToExpenses.mutate()}
+                    disabled={syncExistingTransactionsToExpenses.isPending}
+                  >
+                    {syncExistingTransactionsToExpenses.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Buchungen aus Buchhaltung synchronisieren
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Synchronisiert bestehende kategorisierte Ausgaben zur BK-Abrechnung
+                  </p>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>

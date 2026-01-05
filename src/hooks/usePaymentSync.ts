@@ -219,9 +219,98 @@ export function usePaymentSync() {
     },
   });
 
+  // Sync existing transactions to expenses (for migration of historical data)
+  const syncExistingTransactionsToExpenses = useMutation({
+    mutationFn: async () => {
+      if (!categories) throw new Error('Categories not loaded');
+
+      // Get category IDs that are BK-relevant
+      const relevantCategoryIds = categories
+        .filter(c => CATEGORY_TO_EXPENSE_MAPPING[c.name])
+        .map(c => c.id);
+
+      if (relevantCategoryIds.length === 0) {
+        return { synced: 0, skipped: 0 };
+      }
+
+      // Get all expense transactions with BK-relevant categories and property_id
+      const { data: expenseTransactions, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .lt('amount', 0)
+        .not('property_id', 'is', null)
+        .in('category_id', relevantCategoryIds);
+
+      if (fetchError) throw fetchError;
+      if (!expenseTransactions || expenseTransactions.length === 0) {
+        return { synced: 0, skipped: 0 };
+      }
+
+      // Get existing expenses to check for duplicates
+      const { data: existingExpenses } = await supabase
+        .from('expenses')
+        .select('datum, betrag, property_id');
+
+      let syncedCount = 0;
+      let skippedCount = 0;
+
+      for (const transaction of expenseTransactions) {
+        const categoryName = categories.find(c => c.id === transaction.category_id)?.name;
+        if (!categoryName || !transaction.property_id) {
+          skippedCount++;
+          continue;
+        }
+
+        // Check for duplicate (same date, amount, property)
+        const isDuplicate = existingExpenses?.some(e =>
+          e.datum === transaction.transaction_date &&
+          Math.abs(Number(e.betrag) - Math.abs(transaction.amount)) < 0.01 &&
+          e.property_id === transaction.property_id
+        );
+
+        if (isDuplicate) {
+          skippedCount++;
+          continue;
+        }
+
+        const result = await createExpenseFromTransaction(
+          {
+            description: transaction.description,
+            amount: transaction.amount,
+            transaction_date: transaction.transaction_date,
+            reference: transaction.reference,
+            property_id: transaction.property_id,
+          },
+          categoryName
+        );
+
+        if (result) {
+          syncedCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+
+      return { synced: syncedCount, skipped: skippedCount };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      if (result.synced > 0) {
+        toast.success(`${result.synced} Buchung(en) erfolgreich zur BK-Abrechnung synchronisiert`);
+      } else {
+        toast.info('Keine neuen Buchungen zum Synchronisieren gefunden');
+      }
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Synchronisieren der Buchungen');
+      console.error('Sync transactions to expenses error:', error);
+    },
+  });
+
   return {
     createPaymentWithSync,
     createTransactionWithSync,
+    syncExistingTransactionsToExpenses,
     getMieteinnahmenCategory,
     getCategoryNameById,
     CATEGORY_TO_EXPENSE_MAPPING,
