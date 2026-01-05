@@ -995,7 +995,7 @@ export default function Reports() {
               <div>
                 <CardTitle>Offene Posten / Salden {selectedYear}</CardTitle>
                 <CardDescription>
-                  Mietrechnungen vs. Zahlungen (aus Mieterverwaltung + Buchhaltung)
+                  Mietrechnungen vs. Mieteinnahmen (aus Buchhaltung)
                   {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
                 </CardDescription>
               </div>
@@ -1048,7 +1048,6 @@ export default function Reports() {
 
             relevantTenants.forEach(tenant => {
               const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
-              const tenantPayments = yearPayments.filter(p => p.tenant_id === tenant.id);
               
               // Mieteinnahmen aus Buchhaltung die diesem Mieter/Unit zugeordnet sind
               const tenantMieteinnahmen = mieteinnahmenTransactions.filter(t => 
@@ -1057,12 +1056,8 @@ export default function Reports() {
               
               const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
               
-              // Haben = Zahlungen aus payments ODER Mieteinnahmen aus Buchhaltung (höherer Wert zählt)
-              const habenFromPayments = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-              const habenFromTransactions = tenantMieteinnahmen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-              
-              // Verwende den höheren Wert um Doppelzählungen zu vermeiden
-              const habenBetrag = Math.max(habenFromPayments, habenFromTransactions);
+              // Haben = nur aus Buchhaltung (Mieteinnahmen-Transaktionen)
+              const habenBetrag = tenantMieteinnahmen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
               const saldo = sollBetrag - habenBetrag;
 
               // Find oldest unpaid invoice
