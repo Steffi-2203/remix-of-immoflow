@@ -308,14 +308,21 @@ export default function Reports() {
     ? (annualNettoertrag / estimatedPropertyValue) * 100 
     : 0;
 
-  // ====== UST BERECHNUNG AUS TRANSAKTIONEN ======
-  // USt aus Mieteinnahmen (0% für Wohnungen, 20% für Geschäfte - vereinfacht: 0%)
-  const ustMieteinnahmenFromTransactions = 0; // Mieteinnahmen sind meist unecht umsatzsteuerbefreit
-
-  // USt aus BK-Vorauszahlungen (10%)
-  const ustBkVorauszFromTransactions = bkVorauszahlungenFromTransactions - (bkVorauszahlungenFromTransactions / 1.1);
-
-  // Vorsteuer aus Ausgaben (differenziert nach Kategorie)
+  // ====== UST BERECHNUNG - KOMBINIERT AUS TRANSAKTIONEN UND INVOICES ======
+  // Die Transaktionen haben keine separate Heizungskategorie, daher nutzen wir Invoice-Daten für die korrekte USt-Aufschlüsselung
+  
+  // Einnahmen aus Invoices für USt-Berechnung (diese haben die korrekte Aufschlüsselung nach Miete/BK/Heizung)
+  const ustGrundmieteFromInvoices = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
+  const ustBkFromInvoices = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
+  const ustHeizungFromInvoices = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
+  
+  // Gesamte USt aus Einnahmen (aus Invoices, da dort die Aufschlüsselung korrekt ist)
+  const totalUstEinnahmen = ustGrundmieteFromInvoices + ustBkFromInvoices + ustHeizungFromInvoices;
+  
+  // Vorsteuer aus Ausgaben (aus Transaktionen - diese haben die Kategorien)
   const vorsteuerFromTransactions = expenseTransactions.reduce((sum, t) => {
     const betrag = Math.abs(Number(t.amount));
     const categoryName = categories?.find(c => c.id === t.category_id)?.name || '';
@@ -323,9 +330,13 @@ export default function Reports() {
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
 
-  // USt-Zahllast aus Transaktionen
-  const totalUstFromTransactions = ustMieteinnahmenFromTransactions + ustBkVorauszFromTransactions;
-  const vatLiabilityFromTransactions = totalUstFromTransactions - vorsteuerFromTransactions;
+  // USt-Zahllast = USt aus Einnahmen (Invoices) - Vorsteuer aus Ausgaben (Transaktionen)
+  const vatLiabilityFromTransactions = totalUstEinnahmen - vorsteuerFromTransactions;
+  
+  // Brutto-Beträge aus Invoices für Anzeige
+  const bruttoGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+  const bruttoBk = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+  const bruttoHeizung = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
 
   // ====== FALLBACK: AUCH ALTE DATEN AUS INVOICES ANZEIGEN ======
   // Revenue from invoices for selected period (als Vergleich)
@@ -794,14 +805,14 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* USt Preview - JETZT AUS TRANSAKTIONEN */}
+      {/* USt Preview - KOMBINIERT AUS INVOICES UND TRANSAKTIONEN */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>USt-Voranmeldung {periodLabel}</CardTitle>
               <CardDescription>
-                Basierend auf {periodTransactions.length} Buchhaltungs-Transaktionen
+                Einnahmen aus {periodInvoices.length} Mietrechnungen, Vorsteuer aus {expenseTransactions.length} Ausgaben
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
@@ -812,26 +823,35 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Einnahmen aus Transaktionen */}
+          {/* Einnahmen aus Mietrechnungen (für korrekte USt-Aufschlüsselung) */}
           <div className="mb-6">
-            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen aus Buchhaltung</h4>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <h4 className="text-sm font-semibold text-foreground mb-3">Einnahmen (aus Mietrechnungen)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">Mieteinnahmen</p>
+                <p className="text-xs text-muted-foreground">Grundmiete</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{bruttoGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <div className="text-xs text-muted-foreground mt-1">
-                  <p>USt: €{ustMieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (0%)</p>
+                  <p>USt: €{ustGrundmieteFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (0-20%)</p>
                 </div>
               </div>
               <div className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">BK-Vorauszahlungen</p>
+                <p className="text-xs text-muted-foreground">Betriebskosten</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{bkVorauszahlungenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{bruttoBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <div className="text-xs text-muted-foreground mt-1">
-                  <p>USt: €{ustBkVorauszFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (10%)</p>
+                  <p>USt: €{ustBkFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (10%)</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">Heizung</p>
+                <p className="text-lg font-bold text-foreground">
+                  €{bruttoHeizung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <p>USt: €{ustHeizungFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })} (20%)</p>
                 </div>
               </div>
               <div className="rounded-lg border border-border p-3">
@@ -859,11 +879,12 @@ export default function Reports() {
             <div className="rounded-lg border border-border p-4">
               <p className="text-sm text-muted-foreground">Umsatzsteuer (aus Einnahmen)</p>
               <p className="text-2xl font-bold text-foreground mt-2">
-                €{totalUstFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{totalUstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                <p>Miete (0%): €{ustMieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                <p>BK (10%): €{ustBkVorauszFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Miete: €{ustGrundmieteFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>BK (10%): €{ustBkFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p>Heizung (20%): €{ustHeizungFromInvoices.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
             <div className="rounded-lg border border-border p-4">
