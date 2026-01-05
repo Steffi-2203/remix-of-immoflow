@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Building2, Shield, BarChart3, Users, FileText, Euro, ArrowRight, CheckCircle } from 'lucide-react';
+import { Shield, BarChart3, Users, FileText, Euro, ArrowRight, CheckCircle, Building2 } from 'lucide-react';
+import immoflowLogo from '@/assets/immoflow-logo.png';
 
 const features = [
   {
@@ -52,10 +53,7 @@ export default function Landing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <Building2 className="h-6 w-6 text-primary" />
-            </div>
-            <span className="font-semibold text-xl">ImmoFlow</span>
+            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-10 w-auto" />
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
@@ -178,10 +176,7 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="bg-primary/10 p-2 rounded-lg">
-                <Building2 className="h-5 w-5 text-primary" />
-              </div>
-              <span className="font-semibold">ImmoFlow</span>
+              <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-8 w-auto" />
             </div>
             <div className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} ImmoFlowMe. Alle Rechte vorbehalten.

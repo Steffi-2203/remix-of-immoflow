@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { Building2, Home, FileText, BarChart3, Settings, CreditCard, FolderOpen, Calculator, ChevronLeft, ChevronRight, Receipt } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import immoflowLogo from '@/assets/immoflow-logo.png';
 interface NavItem {
   label: string;
   icon: React.ElementType;
@@ -53,11 +54,9 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
         {!collapsed && <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-              <Building2 className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
-            <span className="font-semibold text-sidebar-foreground">ImmoFlow</span>
+            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-10 w-auto" />
           </div>}
+        {collapsed && <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-8 w-8 object-contain" />}
         <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
