@@ -1,48 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export interface Transaction {
-  id: string;
-  organization_id: string | null;
-  unit_id: string | null;
-  tenant_id: string | null;
-  amount: number;
-  currency: string;
-  transaction_date: string;
-  booking_date: string | null;
-  description: string | null;
-  reference: string | null;
-  counterpart_name: string | null;
-  counterpart_iban: string | null;
-  status: 'matched' | 'unmatched' | 'ignored';
-  match_confidence: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TransactionInsert {
-  organization_id?: string | null;
-  unit_id?: string | null;
-  tenant_id?: string | null;
-  amount: number;
-  currency?: string;
-  transaction_date: string;
-  booking_date?: string | null;
-  description?: string | null;
-  reference?: string | null;
-  counterpart_name?: string | null;
-  counterpart_iban?: string | null;
-  status?: 'matched' | 'unmatched' | 'ignored';
-  match_confidence?: number | null;
-}
-
-export interface TransactionUpdate {
-  unit_id?: string | null;
-  tenant_id?: string | null;
-  status?: 'matched' | 'unmatched' | 'ignored';
-  match_confidence?: number | null;
-}
+export type Transaction = Tables<'transactions'>;
+export type TransactionInsert = TablesInsert<'transactions'>;
+export type TransactionUpdate = TablesUpdate<'transactions'>;
 
 export function useTransactions() {
   return useQuery({
