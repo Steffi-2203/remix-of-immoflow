@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Building2, Home, FileText, BarChart3, Settings, CreditCard, FolderOpen, Calculator, ChevronLeft, ChevronRight, Receipt } from 'lucide-react';
+import { Building, LayoutDashboard, FileStack, TrendingUp, Cog, Wallet, Layers, Calculator, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import immoflowLogo from '@/assets/immoflow-logo.png';
@@ -12,23 +12,23 @@ interface NavItem {
 }
 const navItems: NavItem[] = [{
   label: 'Dashboard',
-  icon: Home,
+  icon: LayoutDashboard,
   href: '/'
 }, {
   label: 'Liegenschaften',
-  icon: Building2,
+  icon: Building,
   href: '/liegenschaften'
 }, {
   label: 'Einheiten',
-  icon: FolderOpen,
+  icon: Layers,
   href: '/einheiten'
 }, {
   label: 'Zahlungen',
-  icon: CreditCard,
+  icon: Wallet,
   href: '/zahlungen'
 }, {
   label: 'Buchhaltung',
-  icon: Receipt,
+  icon: BookOpen,
   href: '/buchhaltung'
 }, {
   label: 'BK-Abrechnung',
@@ -36,15 +36,15 @@ const navItems: NavItem[] = [{
   href: '/abrechnung'
 }, {
   label: 'Dokumente',
-  icon: FileText,
+  icon: FileStack,
   href: '/dokumente'
 }, {
   label: 'Reports',
-  icon: BarChart3,
+  icon: TrendingUp,
   href: '/reports'
 }, {
   label: 'Einstellungen',
-  icon: Settings,
+  icon: Cog,
   href: '/einstellungen'
 }];
 export function Sidebar() {
@@ -66,15 +66,24 @@ export function Sidebar() {
       <nav className="flex flex-col gap-1 p-2 mt-2">
         {navItems.map(item => {
         const isActive = location.pathname === item.href || item.href !== '/' && location.pathname.startsWith(item.href);
-        return <Link key={item.href} to={item.href} title={collapsed ? item.label : undefined} className="bg-secondary-foreground text-accent">
-              <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-sidebar-primary')} />
-              {!collapsed && <>
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge && <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                      {item.badge}
-                    </span>}
-                </>}
-            </Link>;
+        return <Link 
+            key={item.href} 
+            to={item.href} 
+            title={collapsed ? item.label : undefined} 
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+              'text-white/80 hover:text-white hover:bg-white/10',
+              isActive && 'bg-white/15 text-white'
+            )}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            {!collapsed && <>
+                <span className="flex-1">{item.label}</span>
+                {item.badge && <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
+                    {item.badge}
+                  </span>}
+              </>}
+          </Link>;
       })}
       </nav>
 
