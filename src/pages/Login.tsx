@@ -89,7 +89,7 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <Link to="/" className="flex justify-center mb-4 hover:opacity-80 transition-opacity">
-            <img src={immoflowLogo} alt="ImmoFlow Logo" className="h-20 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-20 w-auto" />
           </Link>
           <CardTitle className="text-2xl">Willkommen zurück</CardTitle>
           <CardDescription>

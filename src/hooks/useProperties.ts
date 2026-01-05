@@ -57,43 +57,49 @@ export function useProperty(id: string | undefined) {
 export function useCreateProperty() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  
+
   return useMutation({
     mutationFn: async (property: PropertyInsert) => {
       if (!user) throw new Error('Not authenticated');
-      
-      // First create the property
-      const { data, error } = await supabase
+
+      // Create deterministically so we can assign ownership even if INSERT can't RETURN the row
+      const propertyId = crypto.randomUUID();
+
+      const { error: createError } = await supabase
         .from('properties')
-        .insert(property)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Then assign the current user as manager
-      const { error: assignError } = await supabase
-        .from('property_managers')
-        .insert({
-          user_id: user.id,
-          property_id: data.id,
-        });
-      
+        .insert({ id: propertyId, ...property });
+
+      if (createError) throw createError;
+
+      const { error: assignError } = await supabase.from('property_managers').insert({
+        user_id: user.id,
+        property_id: propertyId,
+      });
+
       if (assignError) {
-        // Cleanup: delete the property if we can't assign ownership
-        await supabase.from('properties').delete().eq('id', data.id);
+        // Best-effort cleanup (may fail depending on RLS)
+        await supabase.from('properties').delete().eq('id', propertyId);
         throw assignError;
       }
-      
+
+      const { data, error: fetchError } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('id', propertyId)
+        .single();
+
+      if (fetchError) throw fetchError;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['managed_properties_count'] });
       queryClient.invalidateQueries({ queryKey: ['property_managers'] });
       toast.success('Liegenschaft erfolgreich erstellt');
     },
     onError: (error) => {
-      toast.error('Fehler beim Erstellen der Liegenschaft');
+      const message = (error as any)?.message ? `: ${(error as any).message}` : '';
+      toast.error(`Fehler beim Erstellen der Liegenschaft${message}`);
       console.error('Create property error:', error);
     },
   });
