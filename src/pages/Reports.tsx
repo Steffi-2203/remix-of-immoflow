@@ -41,6 +41,7 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { usePayments } from '@/hooks/usePayments';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
+import { usePaymentSync } from '@/hooks/usePaymentSync';
 import { toast } from 'sonner';
 import {
   generateRenditeReport,
@@ -164,6 +165,7 @@ export default function Reports() {
   const { data: allPayments, isLoading: isLoadingPayments } = usePayments();
   const { data: allTransactions, isLoading: isLoadingTransactions } = useTransactions();
   const { data: categories, isLoading: isLoadingCategories } = useAccountCategories();
+  const { syncExistingPaymentsToTransactions } = usePaymentSync();
 
   const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories;
 
@@ -591,6 +593,17 @@ export default function Reports() {
             {Number(selectedProperty.total_qm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
           </span>
         )}
+
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => syncExistingPaymentsToTransactions.mutate()}
+          disabled={syncExistingPaymentsToTransactions.isPending}
+          className="ml-auto"
+        >
+          {syncExistingPaymentsToTransactions.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Mieteinnahmen synchronisieren
+        </Button>
       </div>
 
       {/* Quick Stats - JETZT AUS TRANSAKTIONEN */}

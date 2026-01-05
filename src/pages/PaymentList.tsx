@@ -50,7 +50,8 @@ import {
   Trash2,
   RotateCcw
 } from 'lucide-react';
-import { usePayments, useCreatePayment, useDeletePayment } from '@/hooks/usePayments';
+import { usePayments, useDeletePayment } from '@/hooks/usePayments';
+import { usePaymentSync } from '@/hooks/usePaymentSync';
 import * as XLSX from 'xlsx';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -98,7 +99,7 @@ export default function PaymentList() {
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: invoices } = useInvoices();
-  const createPayment = useCreatePayment();
+  const { createPaymentWithSync } = usePaymentSync();
   const deletePayment = useDeletePayment();
   const updateInvoiceStatus = useUpdateInvoiceStatus();
 
@@ -268,14 +269,17 @@ export default function PaymentList() {
 
     for (const row of selectedRows) {
       try {
-        await createPayment.mutateAsync({
-          tenant_id: row.matchedTenant.id,
-          invoice_id: row.matchedInvoice?.id || null,
-          betrag: row.betrag,
-          zahlungsart: 'ueberweisung',
-          referenz: row.referenz,
-          eingangs_datum: row.datum,
-          buchungs_datum: row.datum,
+        await createPaymentWithSync.mutateAsync({
+          payment: {
+            tenant_id: row.matchedTenant.id,
+            invoice_id: row.matchedInvoice?.id || null,
+            betrag: row.betrag,
+            zahlungsart: 'ueberweisung',
+            referenz: row.referenz,
+            eingangs_datum: row.datum,
+            buchungs_datum: row.datum,
+          },
+          unitId: row.matchedTenant.unit_id,
         });
 
         // Update invoice status if matched
@@ -357,15 +361,18 @@ export default function PaymentList() {
     }
 
     try {
-      // Create the payment
-      await createPayment.mutateAsync({
-        tenant_id: matchedTenant.id,
-        invoice_id: matchedInvoice?.id || null,
-        betrag: parseFloat(newPayment.betrag),
-        zahlungsart: newPayment.zahlungsart,
-        referenz: newPayment.referenz,
-        eingangs_datum: newPayment.eingangs_datum,
-        buchungs_datum: newPayment.buchungs_datum,
+      // Create the payment with transaction sync
+      await createPaymentWithSync.mutateAsync({
+        payment: {
+          tenant_id: matchedTenant.id,
+          invoice_id: matchedInvoice?.id || null,
+          betrag: parseFloat(newPayment.betrag),
+          zahlungsart: newPayment.zahlungsart,
+          referenz: newPayment.referenz,
+          eingangs_datum: newPayment.eingangs_datum,
+          buchungs_datum: newPayment.buchungs_datum,
+        },
+        unitId: matchedTenant.unit_id,
       });
 
       // If matched to an invoice, check if we should mark it as paid
@@ -681,9 +688,9 @@ export default function PaymentList() {
               </Button>
               <Button 
                 onClick={handleCreatePayment} 
-                disabled={createPayment.isPending || !matchedTenant || !newPayment.betrag}
+                disabled={createPaymentWithSync.isPending || !matchedTenant || !newPayment.betrag}
               >
-                {createPayment.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {createPaymentWithSync.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Zahlung erfassen
               </Button>
             </DialogFooter>
