@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,16 +9,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, 
   Building, User, Euro, Brain, Sparkles, Trash2, Plus, Wallet, TrendingUp, TrendingDown,
-  PiggyBank, Calculator, FileText, Edit2, BarChart3
+  PiggyBank, Calculator, FileText, Edit2, BarChart3, Pencil
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subYears } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { parseCSV, autoMatchTransaction, ParsedTransaction } from '@/utils/bankImportUtils';
-import { useTransactions, useCreateTransactions, useUpdateTransaction, useTransactionSummary } from '@/hooks/useTransactions';
+import { useTransactions, useCreateTransaction, useCreateTransactions, useUpdateTransaction, useTransactionSummary } from '@/hooks/useTransactions';
 import { useLearnedMatches, useCreateLearnedMatch, useDeleteLearnedMatch } from '@/hooks/useLearnedMatches';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
@@ -69,6 +71,21 @@ export default function Banking() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   
+  // Manual entry form state
+  const [manualEntry, setManualEntry] = useState({
+    date: new Date().toISOString().split('T')[0],
+    amount: '',
+    type: 'expense' as 'income' | 'expense',
+    description: '',
+    categoryId: '',
+    unitId: '',
+    bankAccountId: '',
+    reference: '',
+    counterpartyName: '',
+    counterpartyIban: '',
+    notes: '',
+  });
+  
   const { data: transactions = [], isLoading: transactionsLoading } = useTransactions();
   const { data: units = [] } = useUnits();
   const { data: tenants = [] } = useTenants();
@@ -78,6 +95,7 @@ export default function Banking() {
   const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useBankAccounts();
   const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
   
+  const createTransaction = useCreateTransaction();
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
   const createLearnedMatch = useCreateLearnedMatch();
@@ -87,6 +105,97 @@ export default function Banking() {
   const deleteBankAccount = useDeleteBankAccount();
   const createCategory = useCreateAccountCategory();
   const deleteCategory = useDeleteAccountCategory();
+  
+  // Auto-categorization for manual entry
+  useEffect(() => {
+    if (manualEntry.description.length > 3 && categories.length > 0) {
+      const categoryInfos: CategoryInfo[] = categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type
+      }));
+      
+      const categorization = categorizeTransaction(
+        manualEntry.description,
+        manualEntry.reference,
+        manualEntry.counterpartyName,
+        manualEntry.type === 'expense' ? -1 : 1,
+        categoryInfos
+      );
+      
+      if (categorization.categoryId && !manualEntry.categoryId) {
+        setManualEntry(prev => ({ ...prev, categoryId: categorization.categoryId! }));
+      }
+    }
+  }, [manualEntry.description, manualEntry.reference, manualEntry.counterpartyName, manualEntry.type, categories]);
+
+  // Handle manual entry submission
+  const handleManualEntrySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!manualEntry.amount || !manualEntry.description || !manualEntry.bankAccountId) {
+      toast.error('Bitte alle Pflichtfelder ausfüllen (Bankkonto, Beschreibung, Betrag)');
+      return;
+    }
+    
+    const amount = manualEntry.type === 'expense' 
+      ? -Math.abs(parseFloat(manualEntry.amount.replace(',', '.')))
+      : Math.abs(parseFloat(manualEntry.amount.replace(',', '.')));
+    
+    try {
+      await createTransaction.mutateAsync({
+        organization_id: organization?.id || null,
+        bank_account_id: manualEntry.bankAccountId,
+        unit_id: manualEntry.unitId || null,
+        transaction_date: manualEntry.date,
+        amount: amount,
+        currency: 'EUR',
+        description: manualEntry.description,
+        reference: manualEntry.reference || null,
+        counterpart_name: manualEntry.counterpartyName || null,
+        counterpart_iban: manualEntry.counterpartyIban || null,
+        category_id: manualEntry.categoryId || null,
+        status: manualEntry.unitId ? 'matched' : 'unmatched',
+        notes: manualEntry.notes || null,
+      });
+      
+      toast.success('Buchung erfolgreich erfasst!');
+      
+      // Reset form but keep bank account
+      setManualEntry({
+        date: new Date().toISOString().split('T')[0],
+        amount: '',
+        type: 'expense',
+        description: '',
+        categoryId: '',
+        unitId: '',
+        bankAccountId: manualEntry.bankAccountId,
+        reference: '',
+        counterpartyName: '',
+        counterpartyIban: '',
+        notes: '',
+      });
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      toast.error('Fehler beim Speichern der Buchung');
+    }
+  };
+
+  const resetManualEntry = () => {
+    setManualEntry({
+      date: new Date().toISOString().split('T')[0],
+      amount: '',
+      type: 'expense',
+      description: '',
+      categoryId: '',
+      unitId: '',
+      bankAccountId: manualEntry.bankAccountId,
+      reference: '',
+      counterpartyName: '',
+      counterpartyIban: '',
+      notes: '',
+    });
+  };
 
   // Calculate date range for reports
   const dateRange = useMemo(() => {
@@ -478,9 +587,16 @@ export default function Banking() {
           </Card>
         </div>
 
-        <Tabs defaultValue="import">
+        <Tabs defaultValue="manual">
           <TabsList className="flex-wrap">
-            <TabsTrigger value="import">Import</TabsTrigger>
+            <TabsTrigger value="manual">
+              <Pencil className="h-4 w-4 mr-1" />
+              Manuelle Erfassung
+            </TabsTrigger>
+            <TabsTrigger value="import">
+              <Upload className="h-4 w-4 mr-1" />
+              CSV Import
+            </TabsTrigger>
             <TabsTrigger value="transactions">Transaktionen ({stats.total})</TabsTrigger>
             <TabsTrigger value="accounts">
               <Wallet className="h-4 w-4 mr-1" />
@@ -499,6 +615,252 @@ export default function Banking() {
               Gelernte Muster ({learnedMatches.length})
             </TabsTrigger>
           </TabsList>
+
+          {/* Manual Entry Tab */}
+          <TabsContent value="manual" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Pencil className="h-5 w-5" />
+                  Neue Buchung erfassen
+                </CardTitle>
+                <CardDescription>
+                  Erfassen Sie Einnahmen und Ausgaben manuell. Die Kategorie wird automatisch vorgeschlagen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleManualEntrySubmit} className="space-y-6">
+                  {/* Bank Account Selection - Required */}
+                  <div className="space-y-2">
+                    <Label htmlFor="bankAccount">
+                      Bankkonto <span className="text-destructive">*</span>
+                    </Label>
+                    <Select 
+                      value={manualEntry.bankAccountId || 'none'} 
+                      onValueChange={(val) => setManualEntry({...manualEntry, bankAccountId: val === 'none' ? '' : val})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Bankkonto auswählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">-- Konto wählen --</SelectItem>
+                        {bankAccounts.map(account => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.account_name} {account.iban && `(${account.iban})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {bankAccounts.length === 0 && (
+                      <p className="text-sm text-orange-600">
+                        Bitte zuerst ein Bankkonto anlegen (im "Konten" Tab)
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Type: Income or Expense */}
+                  <div className="space-y-2">
+                    <Label>Buchungsart <span className="text-destructive">*</span></Label>
+                    <RadioGroup 
+                      value={manualEntry.type} 
+                      onValueChange={(val) => setManualEntry({...manualEntry, type: val as 'income' | 'expense', categoryId: ''})}
+                      className="flex gap-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="income" id="income" />
+                        <Label htmlFor="income" className="text-green-600 font-medium cursor-pointer flex items-center gap-1">
+                          <TrendingUp className="h-4 w-4" />
+                          Einnahme (+)
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="expense" id="expense" />
+                        <Label htmlFor="expense" className="text-red-600 font-medium cursor-pointer flex items-center gap-1">
+                          <TrendingDown className="h-4 w-4" />
+                          Ausgabe (-)
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  {/* Date and Amount */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Datum <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="date"
+                        type="date"
+                        required
+                        value={manualEntry.date}
+                        onChange={(e) => setManualEntry({...manualEntry, date: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="amount">Betrag (€) <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="amount"
+                        type="text"
+                        inputMode="decimal"
+                        required
+                        placeholder="0,00"
+                        value={manualEntry.amount}
+                        onChange={(e) => setManualEntry({...manualEntry, amount: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label htmlFor="description">
+                      Beschreibung/Buchungstext <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="description"
+                      type="text"
+                      required
+                      placeholder="z.B. Versicherung Gebäude, Lift-Wartung, Miete Top 3..."
+                      value={manualEntry.description}
+                      onChange={(e) => setManualEntry({...manualEntry, description: e.target.value})}
+                    />
+                  </div>
+
+                  {/* Category */}
+                  <div className="space-y-2">
+                    <Label htmlFor="category">
+                      Kategorie <span className="text-xs text-muted-foreground">(wird automatisch vorgeschlagen)</span>
+                    </Label>
+                    <Select 
+                      value={manualEntry.categoryId || 'none'} 
+                      onValueChange={(val) => setManualEntry({...manualEntry, categoryId: val === 'none' ? '' : val})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Kategorie auswählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">-- Keine Kategorie --</SelectItem>
+                        {categories
+                          .filter(c => c.type === manualEntry.type)
+                          .map(category => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Unit Assignment (for income) */}
+                  {manualEntry.type === 'income' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="unit">Zuordnung zu Einheit (optional)</Label>
+                      <Select 
+                        value={manualEntry.unitId || 'none'} 
+                        onValueChange={(val) => setManualEntry({...manualEntry, unitId: val === 'none' ? '' : val})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Einheit zuordnen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Keine Zuordnung --</SelectItem>
+                          {units.map(unit => {
+                            const property = properties.find(p => p.id === unit.property_id);
+                            const tenant = tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv');
+                            return (
+                              <SelectItem key={unit.id} value={unit.id}>
+                                {unit.top_nummer} - {property?.name || 'Unbekannt'}
+                                {tenant && ` (${tenant.first_name} ${tenant.last_name})`}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Expandable: Advanced fields */}
+                  <details className="border rounded-lg p-4 bg-muted/30">
+                    <summary className="cursor-pointer font-medium text-sm">
+                      Erweiterte Angaben (optional)
+                    </summary>
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reference">Referenz/Rechnungsnummer</Label>
+                        <Input
+                          id="reference"
+                          type="text"
+                          placeholder="z.B. RE-2024-001"
+                          value={manualEntry.reference}
+                          onChange={(e) => setManualEntry({...manualEntry, reference: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="counterpartyName">Empfänger/Zahler Name</Label>
+                        <Input
+                          id="counterpartyName"
+                          type="text"
+                          placeholder="z.B. Wiener Städtische Versicherung"
+                          value={manualEntry.counterpartyName}
+                          onChange={(e) => setManualEntry({...manualEntry, counterpartyName: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="counterpartyIban">Empfänger/Zahler IBAN</Label>
+                        <Input
+                          id="counterpartyIban"
+                          type="text"
+                          placeholder="AT..."
+                          value={manualEntry.counterpartyIban}
+                          onChange={(e) => setManualEntry({...manualEntry, counterpartyIban: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="notes">Notizen</Label>
+                        <Textarea
+                          id="notes"
+                          placeholder="Zusätzliche Notizen..."
+                          value={manualEntry.notes}
+                          onChange={(e) => setManualEntry({...manualEntry, notes: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Submit Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="submit"
+                      disabled={createTransaction.isPending || !manualEntry.bankAccountId}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {createTransaction.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                      )}
+                      Buchung erfassen
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetManualEntry}
+                    >
+                      Zurücksetzen
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Tip Box */}
+            <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-900/10 dark:border-blue-800">
+              <CardContent className="pt-6">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  💡 <strong>Tipp:</strong> Bei der Eingabe der Beschreibung wird automatisch eine passende Kategorie vorgeschlagen. 
+                  Sie können diese aber jederzeit manuell ändern.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Import Tab */}
           <TabsContent value="import" className="space-y-4">
