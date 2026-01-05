@@ -40,6 +40,26 @@ export function useBankAccount(id?: string) {
   });
 }
 
+// Hook to calculate bank balance using the database function
+export function useBankBalance(accountId?: string, asOfDate?: string) {
+  return useQuery({
+    queryKey: ['bank_balance', accountId, asOfDate],
+    queryFn: async () => {
+      if (!accountId) return null;
+      
+      const { data, error } = await supabase
+        .rpc('calculate_bank_balance', { 
+          account_id: accountId,
+          as_of_date: asOfDate || new Date().toISOString().split('T')[0]
+        });
+      
+      if (error) throw error;
+      return data as number;
+    },
+    enabled: !!accountId,
+  });
+}
+
 export function useCreateBankAccount() {
   const queryClient = useQueryClient();
   
@@ -82,6 +102,7 @@ export function useUpdateBankAccount() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['bank_balance'] });
       toast.success('Bankkonto aktualisiert');
     },
     onError: (error) => {
@@ -105,6 +126,7 @@ export function useDeleteBankAccount() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['bank_balance'] });
       toast.success('Bankkonto gelöscht');
     },
     onError: (error) => {

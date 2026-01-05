@@ -40,6 +40,42 @@ export function useTransactionsByUnit(unitId?: string) {
   });
 }
 
+export function useTransactionsByBankAccount(bankAccountId?: string) {
+  return useQuery({
+    queryKey: ['transactions', 'bank_account', bankAccountId],
+    queryFn: async () => {
+      if (!bankAccountId) return [];
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('bank_account_id', bankAccountId)
+        .order('transaction_date', { ascending: false });
+      
+      if (error) throw error;
+      return data as Transaction[];
+    },
+    enabled: !!bankAccountId,
+  });
+}
+
+export function useTransactionsByCategory(categoryId?: string) {
+  return useQuery({
+    queryKey: ['transactions', 'category', categoryId],
+    queryFn: async () => {
+      if (!categoryId) return [];
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('category_id', categoryId)
+        .order('transaction_date', { ascending: false });
+      
+      if (error) throw error;
+      return data as Transaction[];
+    },
+    enabled: !!categoryId,
+  });
+}
+
 export function useRecentTransactions(limit: number = 10) {
   return useQuery({
     queryKey: ['transactions', 'recent', limit],
@@ -68,6 +104,78 @@ export function useUnmatchedTransactions() {
       
       if (error) throw error;
       return data as Transaction[];
+    },
+  });
+}
+
+export interface TransactionSummary {
+  totalIncome: number;
+  totalExpenses: number;
+  balance: number;
+  incomeByCategory: { categoryId: string | null; categoryName: string; total: number }[];
+  expensesByCategory: { categoryId: string | null; categoryName: string; total: number }[];
+}
+
+export function useTransactionSummary(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['transactions', 'summary', startDate, endDate],
+    queryFn: async () => {
+      let query = supabase
+        .from('transactions')
+        .select('*, account_categories(id, name, type)');
+      
+      if (startDate) {
+        query = query.gte('transaction_date', startDate);
+      }
+      if (endDate) {
+        query = query.lte('transaction_date', endDate);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      const transactions = data as Array<Transaction & { account_categories: { id: string; name: string; type: string } | null }>;
+      
+      // Calculate totals
+      const totalIncome = transactions
+        .filter(t => t.amount > 0)
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      
+      const totalExpenses = transactions
+        .filter(t => t.amount < 0)
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      
+      // Group by category
+      const incomeByCategory = new Map<string | null, { categoryName: string; total: number }>();
+      const expensesByCategory = new Map<string | null, { categoryName: string; total: number }>();
+      
+      for (const t of transactions) {
+        const categoryId = t.category_id;
+        const categoryName = t.account_categories?.name || 'Nicht kategorisiert';
+        const map = t.amount > 0 ? incomeByCategory : expensesByCategory;
+        
+        const existing = map.get(categoryId);
+        if (existing) {
+          existing.total += Number(t.amount);
+        } else {
+          map.set(categoryId, { categoryName, total: Number(t.amount) });
+        }
+      }
+      
+      return {
+        totalIncome,
+        totalExpenses,
+        balance: totalIncome + totalExpenses,
+        incomeByCategory: Array.from(incomeByCategory.entries()).map(([categoryId, data]) => ({
+          categoryId,
+          ...data
+        })).sort((a, b) => b.total - a.total),
+        expensesByCategory: Array.from(expensesByCategory.entries()).map(([categoryId, data]) => ({
+          categoryId,
+          ...data
+        })).sort((a, b) => a.total - b.total), // Most negative first
+      } as TransactionSummary;
     },
   });
 }
