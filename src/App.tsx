@@ -21,7 +21,7 @@ import PaymentList from "./pages/PaymentList";
 import ExpenseList from "./pages/ExpenseList";
 import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
-import ComingSoon from "./pages/ComingSoon";
+import Documents from "./pages/Documents";
 import Upgrade from "./pages/Upgrade";
 import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
@@ -65,7 +65,7 @@ const App = () => (
             <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
-            <Route path="/dokumente" element={<ProtectedRoute><ComingSoon title="Dokumente" subtitle="Dokumentenmanagement" /></ProtectedRoute>} />
+            <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
