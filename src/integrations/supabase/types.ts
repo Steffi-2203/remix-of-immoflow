@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      bank_accounts: {
+        Row: {
+          account_name: string
+          bank_name: string | null
+          created_at: string | null
+          iban: string | null
+          id: string
+          organization_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_name: string
+          bank_name?: string | null
+          created_at?: string | null
+          iban?: string | null
+          id?: string
+          organization_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_name?: string
+          bank_name?: string | null
+          created_at?: string | null
+          iban?: string | null
+          id?: string
+          organization_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           beleg_nummer: string | null
@@ -523,6 +561,57 @@ export type Database = {
           },
         ]
       }
+      rent_expectations: {
+        Row: {
+          created_at: string | null
+          due_day: number | null
+          end_date: string | null
+          id: string
+          monthly_rent: number
+          organization_id: string | null
+          start_date: string
+          unit_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          due_day?: number | null
+          end_date?: string | null
+          id?: string
+          monthly_rent: number
+          organization_id?: string | null
+          start_date: string
+          unit_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          due_day?: number | null
+          end_date?: string | null
+          id?: string
+          monthly_rent?: number
+          organization_id?: string | null
+          start_date?: string
+          unit_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_expectations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_expectations_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlement_items: {
         Row: {
           bk_anteil: number
@@ -688,6 +777,7 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          bank_account_id: string | null
           booking_date: string | null
           counterpart_iban: string | null
           counterpart_name: string | null
@@ -696,7 +786,11 @@ export type Database = {
           description: string | null
           id: string
           match_confidence: number | null
+          matched_at: string | null
+          matched_by: string | null
+          notes: string | null
           organization_id: string | null
+          property_id: string | null
           reference: string | null
           status: string
           tenant_id: string | null
@@ -706,6 +800,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          bank_account_id?: string | null
           booking_date?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null
@@ -714,7 +809,11 @@ export type Database = {
           description?: string | null
           id?: string
           match_confidence?: number | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
           organization_id?: string | null
+          property_id?: string | null
           reference?: string | null
           status?: string
           tenant_id?: string | null
@@ -724,6 +823,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          bank_account_id?: string | null
           booking_date?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null
@@ -732,7 +832,11 @@ export type Database = {
           description?: string | null
           id?: string
           match_confidence?: number | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
           organization_id?: string | null
+          property_id?: string | null
           reference?: string | null
           status?: string
           tenant_id?: string | null
@@ -742,10 +846,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "transactions_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
           {
