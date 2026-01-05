@@ -67,6 +67,15 @@ interface ExpenseData {
   month: number;
 }
 
+export interface PaymentData {
+  id: string;
+  tenant_id: string;
+  betrag: number;
+  eingangs_datum: string;
+  buchungs_datum: string;
+  invoice_id?: string | null;
+}
+
 const unitTypeLabels: Record<string, string> = {
   wohnung: 'Wohnung',
   geschaeft: 'Geschäft',
@@ -571,6 +580,7 @@ export const generateOffenePostenReport = (
   units: UnitData[],
   tenants: TenantData[],
   invoices: OpenItemInvoice[],
+  payments: PaymentData[],
   selectedPropertyId: string,
   selectedYear: number
 ) => {
@@ -588,68 +598,166 @@ export const generateOffenePostenReport = (
   const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
   const unitIds = targetUnits.map(u => u.id);
   
-  // Filter for open invoices
-  const openInvoices = invoices.filter(inv => {
+  // Get tenant IDs for these units
+  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id));
+  const tenantIds = relevantTenants.map(t => t.id);
+  
+  // Filter invoices for selected year
+  const yearInvoices = invoices.filter(inv => {
     const matchesUnit = unitIds.includes(inv.unit_id);
-    const isOpen = inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig';
-    return matchesUnit && isOpen && inv.year === selectedYear;
+    return matchesUnit && inv.year === selectedYear;
   });
 
-  // Sort by due date
-  openInvoices.sort((a, b) => new Date(a.faellig_am).getTime() - new Date(b.faellig_am).getTime());
+  // Filter payments for selected year
+  const yearPayments = payments.filter(p => {
+    const paymentDate = new Date(p.eingangs_datum);
+    return tenantIds.includes(p.tenant_id) && paymentDate.getFullYear() === selectedYear;
+  });
 
+  // Calculate balance per tenant
+  interface TenantBalance {
+    tenantId: string;
+    tenantName: string;
+    unitId: string;
+    unitNummer: string;
+    propertyName: string;
+    sollBetrag: number;
+    habenBetrag: number;
+    saldo: number; // Negative = Überzahlung (Guthaben), Positive = Unterzahlung (offen)
+    invoiceCount: number;
+    paymentCount: number;
+    oldestDueDate: Date | null;
+    daysOverdue: number;
+  }
+
+  const tenantBalances: TenantBalance[] = [];
   const today = new Date();
-  
-  // Table data
-  const tableData = openInvoices.map(invoice => {
-    const unit = targetUnits.find(u => u.id === invoice.unit_id);
-    const tenant = tenants.find(t => t.id === invoice.tenant_id);
-    const property = properties.find(p => p.id === unit?.property_id);
-    const dueDate = new Date(invoice.faellig_am);
-    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  relevantTenants.forEach(tenant => {
+    const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
+    const tenantPayments = yearPayments.filter(p => p.tenant_id === tenant.id);
     
-    const statusLabel = invoice.status === 'offen' ? 'Offen' 
-      : invoice.status === 'teilbezahlt' ? 'Teilbezahlt' 
-      : invoice.status === 'ueberfaellig' ? 'Überfällig' : invoice.status;
+    const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+    const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+    const saldo = sollBetrag - habenBetrag;
+
+    // Find oldest unpaid invoice
+    const openInvoices = tenantInvoices.filter(inv => 
+      inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig'
+    );
+    const oldestDueDate = openInvoices.length > 0 
+      ? new Date(Math.min(...openInvoices.map(inv => new Date(inv.faellig_am).getTime())))
+      : null;
+    const daysOverdue = oldestDueDate && oldestDueDate < today 
+      ? Math.floor((today.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    const unit = targetUnits.find(u => u.id === tenant.unit_id);
+    const property = properties.find(p => p.id === unit?.property_id);
+
+    // Only include if there's activity or a balance
+    if (sollBetrag > 0 || habenBetrag > 0) {
+      tenantBalances.push({
+        tenantId: tenant.id,
+        tenantName: `${tenant.first_name} ${tenant.last_name}`,
+        unitId: tenant.unit_id,
+        unitNummer: unit?.top_nummer || '-',
+        propertyName: property?.name || '-',
+        sollBetrag,
+        habenBetrag,
+        saldo,
+        invoiceCount: tenantInvoices.length,
+        paymentCount: tenantPayments.length,
+        oldestDueDate,
+        daysOverdue,
+      });
+    }
+  });
+
+  // Sort: Positive saldo (Unterzahlung) first, then by amount descending
+  tenantBalances.sort((a, b) => {
+    // First: underpayments (positive saldo)
+    if (a.saldo > 0 && b.saldo <= 0) return -1;
+    if (a.saldo <= 0 && b.saldo > 0) return 1;
+    // Then by absolute amount
+    return Math.abs(b.saldo) - Math.abs(a.saldo);
+  });
+
+  // Summary calculations
+  const totalSoll = tenantBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
+  const totalHaben = tenantBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
+  const totalSaldo = tenantBalances.reduce((sum, t) => sum + t.saldo, 0);
+  const underpaidTenants = tenantBalances.filter(t => t.saldo > 0);
+  const overpaidTenants = tenantBalances.filter(t => t.saldo < 0);
+  const totalUnterzahlung = underpaidTenants.reduce((sum, t) => sum + t.saldo, 0);
+  const totalUeberzahlung = Math.abs(overpaidTenants.reduce((sum, t) => sum + t.saldo, 0));
+
+  // Summary text
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Soll: ${formatCurrency(totalSoll)} | Haben: ${formatCurrency(totalHaben)} | Saldo: ${formatCurrency(totalSaldo)}`, 14, 40);
+  doc.text(`Unterzahlungen: ${formatCurrency(totalUnterzahlung)} (${underpaidTenants.length} Mieter) | Überzahlungen: ${formatCurrency(totalUeberzahlung)} (${overpaidTenants.length} Mieter)`, 14, 46);
+
+  // Table data
+  const tableData = tenantBalances.map(tb => {
+    let statusLabel = 'Ausgeglichen';
+    if (tb.saldo > 0) {
+      statusLabel = 'Unterzahlung';
+    } else if (tb.saldo < 0) {
+      statusLabel = 'Überzahlung';
+    }
     
     return [
-      property?.name || '-',
-      `Top ${unit?.top_nummer || '-'}`,
-      tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt',
-      `${invoice.month}/${invoice.year}`,
-      new Date(invoice.faellig_am).toLocaleDateString('de-AT'),
-      daysOverdue > 0 ? `${daysOverdue} Tage` : '-',
+      tb.propertyName,
+      `Top ${tb.unitNummer}`,
+      tb.tenantName,
+      formatCurrency(tb.sollBetrag),
+      formatCurrency(tb.habenBetrag),
+      tb.daysOverdue > 0 ? `${tb.daysOverdue} Tage` : '-',
       statusLabel,
-      formatCurrency(Number(invoice.gesamtbetrag)),
+      formatCurrency(tb.saldo),
     ];
   });
 
-  // Totals
-  const totalOpen = openInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
-  const overdueInvoices = openInvoices.filter(inv => new Date(inv.faellig_am) < today);
-  const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
-
-  // Summary
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Offene Posten gesamt: ${formatCurrency(totalOpen)} | Davon überfällig: ${formatCurrency(totalOverdue)} (${overdueInvoices.length} Rechnungen)`, 14, 40);
-
   autoTable(doc, {
-    startY: 48,
-    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Monat', 'Fällig am', 'Überfällig', 'Status', 'Betrag']],
+    startY: 52,
+    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Soll', 'Haben', 'Überfällig', 'Status', 'Saldo']],
     body: tableData,
-    foot: [[`Gesamt: ${openInvoices.length} offene Posten`, '', '', '', '', '', '', formatCurrency(totalOpen)]],
+    foot: [['Gesamt', '', '', formatCurrency(totalSoll), formatCurrency(totalHaben), '', '', formatCurrency(totalSaldo)]],
     theme: 'striped',
     headStyles: { fillColor: [239, 68, 68] },
     footStyles: { fillColor: [254, 226, 226], textColor: [0, 0, 0], fontStyle: 'bold' },
     styles: { fontSize: 9 },
     didParseCell: (data) => {
-      // Highlight overdue rows
+      // Style the Saldo column based on value
+      if (data.section === 'body' && data.column.index === 7) {
+        const saldoText = data.cell.text[0];
+        if (saldoText) {
+          // Parse the value - negative means overpayment (green), positive means underpayment (red)
+          const value = parseFloat(saldoText.replace('€ ', '').replace(/\./g, '').replace(',', '.'));
+          if (value > 0) {
+            data.cell.styles.textColor = [239, 68, 68]; // Red for underpayment
+            data.cell.styles.fontStyle = 'bold';
+          } else if (value < 0) {
+            data.cell.styles.textColor = [34, 197, 94]; // Green for overpayment
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+      // Style Status column
+      if (data.section === 'body' && data.column.index === 6) {
+        const status = data.cell.text[0];
+        if (status === 'Unterzahlung') {
+          data.cell.styles.textColor = [239, 68, 68];
+        } else if (status === 'Überzahlung') {
+          data.cell.styles.textColor = [34, 197, 94];
+        }
+      }
+      // Highlight overdue
       if (data.section === 'body' && data.column.index === 5) {
         const daysText = data.cell.text[0];
         if (daysText && daysText !== '-') {
           data.cell.styles.textColor = [239, 68, 68];
-          data.cell.styles.fontStyle = 'bold';
         }
       }
     },

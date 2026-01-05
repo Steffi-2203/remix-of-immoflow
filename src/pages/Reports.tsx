@@ -38,6 +38,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useExpenses } from '@/hooks/useExpenses';
+import { usePayments } from '@/hooks/usePayments';
 import { toast } from 'sonner';
 import {
   generateRenditeReport,
@@ -45,6 +46,7 @@ import {
   generateUmsatzReport,
   generateUstVoranmeldung,
   generateOffenePostenReport,
+  type PaymentData,
 } from '@/utils/reportPdfExport';
 
 // Berechnet Netto aus Brutto
@@ -122,8 +124,9 @@ export default function Reports() {
   const { data: allTenants, isLoading: isLoadingTenants } = useTenants();
   const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
   const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
+  const { data: allPayments, isLoading: isLoadingPayments } = usePayments();
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments;
 
   // Generate year options (last 5 years)
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
@@ -221,7 +224,7 @@ export default function Reports() {
 
   // Report generation handler
   const handleGenerateReport = (reportId: string) => {
-    if (!properties || !allUnits || !allTenants || !allInvoices || !allExpenses) {
+    if (!properties || !allUnits || !allTenants || !allInvoices || !allExpenses || !allPayments) {
       toast.error('Daten werden noch geladen...');
       return;
     }
@@ -283,6 +286,7 @@ export default function Reports() {
             allUnits,
             allTenants,
             allInvoices as any,
+            allPayments as PaymentData[],
             selectedPropertyId,
             selectedYear
           );
@@ -734,9 +738,9 @@ export default function Reports() {
                 <AlertCircle className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <CardTitle>Offene Posten {selectedYear}</CardTitle>
+                <CardTitle>Offene Posten / Salden {selectedYear}</CardTitle>
                 <CardDescription>
-                  Unbezahlte Rechnungen
+                  Soll/Haben-Vergleich pro Mieter mit Über- und Unterzahlungen
                   {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
                 </CardDescription>
               </div>
@@ -749,47 +753,125 @@ export default function Reports() {
         </CardHeader>
         <CardContent>
           {(() => {
-            const openInvoices = (invoices || []).filter(inv => {
-              const matchesUnit = unitIds.includes(inv.unit_id);
-              const isOpen = inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig';
-              return matchesUnit && isOpen && inv.year === selectedYear;
-            }).sort((a, b) => new Date(a.faellig_am).getTime() - new Date(b.faellig_am).getTime());
+            // Get relevant tenants based on selected units
+            const relevantTenants = allTenants?.filter(t => unitIds.includes(t.unit_id)) || [];
+            const tenantIds = relevantTenants.map(t => t.id);
             
-            const today = new Date();
-            const totalOpen = openInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
-            const overdueInvoices = openInvoices.filter(inv => new Date(inv.faellig_am) < today);
-            const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+            // Filter invoices for selected year
+            const yearInvoices = (invoices || []).filter(inv => 
+              unitIds.includes(inv.unit_id) && inv.year === selectedYear
+            );
 
-            if (openInvoices.length === 0) {
+            // Filter payments for selected year
+            const yearPayments = (allPayments || []).filter(p => {
+              const paymentDate = new Date(p.eingangs_datum);
+              return tenantIds.includes(p.tenant_id) && paymentDate.getFullYear() === selectedYear;
+            });
+
+            // Calculate balance per tenant
+            interface TenantBalance {
+              tenantId: string;
+              tenantName: string;
+              unitNummer: string;
+              propertyName: string;
+              sollBetrag: number;
+              habenBetrag: number;
+              saldo: number;
+              daysOverdue: number;
+            }
+
+            const tenantBalances: TenantBalance[] = [];
+            const today = new Date();
+
+            relevantTenants.forEach(tenant => {
+              const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
+              const tenantPayments = yearPayments.filter(p => p.tenant_id === tenant.id);
+              
+              const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+              const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+              const saldo = sollBetrag - habenBetrag;
+
+              // Find oldest unpaid invoice
+              const openInvoices = tenantInvoices.filter(inv => 
+                inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig'
+              );
+              const oldestDueDate = openInvoices.length > 0 
+                ? new Date(Math.min(...openInvoices.map(inv => new Date(inv.faellig_am).getTime())))
+                : null;
+              const daysOverdue = oldestDueDate && oldestDueDate < today 
+                ? Math.floor((today.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))
+                : 0;
+
+              const unit = allUnits?.find(u => u.id === tenant.unit_id);
+              const property = properties?.find(p => p.id === unit?.property_id);
+
+              // Only include if there's activity
+              if (sollBetrag > 0 || habenBetrag > 0) {
+                tenantBalances.push({
+                  tenantId: tenant.id,
+                  tenantName: `${tenant.first_name} ${tenant.last_name}`,
+                  unitNummer: unit?.top_nummer || '-',
+                  propertyName: property?.name || '-',
+                  sollBetrag,
+                  habenBetrag,
+                  saldo,
+                  daysOverdue,
+                });
+              }
+            });
+
+            // Sort: underpayments first, then by amount
+            tenantBalances.sort((a, b) => {
+              if (a.saldo > 0 && b.saldo <= 0) return -1;
+              if (a.saldo <= 0 && b.saldo > 0) return 1;
+              return Math.abs(b.saldo) - Math.abs(a.saldo);
+            });
+
+            // Calculations
+            const totalSoll = tenantBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
+            const totalHaben = tenantBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
+            const totalSaldo = tenantBalances.reduce((sum, t) => sum + t.saldo, 0);
+            const underpaidTenants = tenantBalances.filter(t => t.saldo > 0);
+            const overpaidTenants = tenantBalances.filter(t => t.saldo < 0);
+            const totalUnterzahlung = underpaidTenants.reduce((sum, t) => sum + t.saldo, 0);
+            const totalUeberzahlung = Math.abs(overpaidTenants.reduce((sum, t) => sum + t.saldo, 0));
+
+            if (tenantBalances.length === 0) {
               return (
                 <div className="text-center py-8 text-muted-foreground">
-                  Keine offenen Posten für {selectedYear} vorhanden.
+                  Keine Daten für {selectedYear} vorhanden.
                 </div>
               );
             }
 
             return (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Offene Posten gesamt</p>
+                    <p className="text-xs text-muted-foreground">Soll (Rechnungen)</p>
                     <p className="text-lg font-bold text-foreground">
-                      €{totalOpen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">{openInvoices.length} Rechnungen</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Haben (Zahlungen)</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{totalHaben.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                    <p className="text-xs text-muted-foreground">Davon überfällig</p>
+                    <p className="text-xs text-muted-foreground">Unterzahlungen</p>
                     <p className="text-lg font-bold text-destructive">
-                      €{totalOverdue.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      €{totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">{overdueInvoices.length} Rechnungen</p>
+                    <p className="text-xs text-muted-foreground">{underpaidTenants.length} Mieter</p>
                   </div>
-                  <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Durchschn. Betrag</p>
-                    <p className="text-lg font-bold text-foreground">
-                      €{(totalOpen / openInvoices.length).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  <div className="rounded-lg border border-success/30 bg-success/5 p-3">
+                    <p className="text-xs text-muted-foreground">Überzahlungen</p>
+                    <p className="text-lg font-bold text-success">
+                      €{totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
+                    <p className="text-xs text-muted-foreground">{overpaidTenants.length} Mieter</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -797,58 +879,62 @@ export default function Reports() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="min-w-[180px]">Mieter / Einheit</TableHead>
-                        <TableHead>Monat</TableHead>
-                        <TableHead>Fällig am</TableHead>
+                        <TableHead className="text-right">Soll</TableHead>
+                        <TableHead className="text-right">Haben</TableHead>
                         <TableHead>Überfällig</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Betrag</TableHead>
+                        <TableHead className="text-right">Saldo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {openInvoices.slice(0, 10).map((invoice) => {
-                        const unit = allUnits?.find(u => u.id === invoice.unit_id);
-                        const tenant = allTenants?.find(t => t.id === invoice.tenant_id);
-                        const property = properties?.find(p => p.id === unit?.property_id);
-                        const dueDate = new Date(invoice.faellig_am);
-                        const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+                      {tenantBalances.slice(0, 10).map((tb) => {
+                        let statusLabel = 'Ausgeglichen';
+                        let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
+                        if (tb.saldo > 0) {
+                          statusLabel = 'Unterzahlung';
+                          statusVariant = 'destructive';
+                        } else if (tb.saldo < 0) {
+                          statusLabel = 'Überzahlung';
+                          statusVariant = 'secondary';
+                        }
                         
                         return (
-                          <TableRow key={invoice.id}>
+                          <TableRow key={tb.tenantId}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt'}
-                                </span>
+                                <span className="font-medium">{tb.tenantName}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {property?.name} - Top {unit?.top_nummer}
+                                  {tb.propertyName} - Top {tb.unitNummer}
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell>{invoice.month}/{invoice.year}</TableCell>
-                            <TableCell>{dueDate.toLocaleDateString('de-AT')}</TableCell>
+                            <TableCell className="text-right">
+                              €{tb.sollBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              €{tb.habenBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
                             <TableCell>
-                              {daysOverdue > 0 ? (
-                                <span className="text-destructive font-medium">{daysOverdue} Tage</span>
+                              {tb.daysOverdue > 0 ? (
+                                <span className="text-destructive font-medium">{tb.daysOverdue} Tage</span>
                               ) : (
                                 <span className="text-muted-foreground">-</span>
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={invoice.status === 'ueberfaellig' ? 'destructive' : invoice.status === 'teilbezahlt' ? 'secondary' : 'outline'}>
-                                {invoice.status === 'offen' ? 'Offen' : invoice.status === 'teilbezahlt' ? 'Teilbezahlt' : 'Überfällig'}
-                              </Badge>
+                              <Badge variant={statusVariant}>{statusLabel}</Badge>
                             </TableCell>
-                            <TableCell className="text-right font-medium">
-                              €{Number(invoice.gesamtbetrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            <TableCell className={`text-right font-bold ${tb.saldo > 0 ? 'text-destructive' : tb.saldo < 0 ? 'text-success' : ''}`}>
+                              €{tb.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                  {openInvoices.length > 10 && (
+                  {tenantBalances.length > 10 && (
                     <p className="text-sm text-muted-foreground text-center mt-4">
-                      ... und {openInvoices.length - 10} weitere offene Posten. PDF für vollständige Liste exportieren.
+                      ... und {tenantBalances.length - 10} weitere Mieter. PDF für vollständige Liste exportieren.
                     </p>
                   )}
                 </div>
