@@ -13,11 +13,15 @@ export type UnitDocument = {
 
 export const UNIT_DOCUMENT_TYPES = [
   { value: 'mietvertrag', label: 'Mietvertrag' },
+  { value: 'wohnungsplan', label: 'Wohnungsplan' },
   { value: 'uebergabeprotokoll', label: 'Übergabeprotokoll' },
   { value: 'ruecknahmeprotokoll', label: 'Rücknahmeprotokoll' },
-  { value: 'emailverkehr', label: 'Emailverkehr' },
   { value: 'mietanbot', label: 'Mietanbot' },
-  { value: 'plan', label: 'Plan' },
+  { value: 'kaution', label: 'Kautionsbeleg' },
+  { value: 'bonitaet', label: 'Bonitätsauskunft' },
+  { value: 'ausweis', label: 'Ausweiskopie' },
+  { value: 'emailverkehr', label: 'Emailverkehr' },
+  { value: 'fotos', label: 'Fotos' },
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
