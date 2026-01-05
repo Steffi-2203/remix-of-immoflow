@@ -69,6 +69,7 @@ export default function PropertyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
@@ -159,7 +160,7 @@ export default function PropertyDetail() {
           Zurück zur Übersicht
         </Link>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setActiveTab('documents')}>
             <FileText className="h-4 w-4 mr-2" />
             Dokumente
           </Button>
@@ -252,7 +253,7 @@ export default function PropertyDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="units" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="units">Einheiten</TabsTrigger>
           <TabsTrigger value="distribution">Verteilerschlüssel</TabsTrigger>
