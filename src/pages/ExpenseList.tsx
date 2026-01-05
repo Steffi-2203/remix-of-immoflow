@@ -67,6 +67,18 @@ import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+// Parse euro amounts with German/Austrian format (comma as decimal separator)
+function parseEuroAmount(raw: string): number | null {
+  if (!raw || raw.trim() === '') return null;
+  // Remove thousand separators (dots) and replace comma with dot
+  const normalized = raw
+    .replace(/\s/g, '')        // remove whitespace
+    .replace(/\./g, '')        // remove thousand separators
+    .replace(',', '.');        // replace decimal comma with dot
+  const num = parseFloat(normalized);
+  return isFinite(num) && num >= 0 ? num : null;
+}
+
 export default function ExpenseList() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +92,7 @@ export default function ExpenseList() {
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | ExpenseCategory>('all');
   
-  const [newExpense, setNewExpense] = useState({
+  const initialExpenseState = {
     property_id: '',
     category: 'betriebskosten_umlagefaehig' as ExpenseCategory,
     expense_type: 'sonstiges' as ExpenseType,
@@ -89,8 +101,10 @@ export default function ExpenseList() {
     datum: format(new Date(), 'yyyy-MM-dd'),
     beleg_nummer: '',
     notizen: '',
-  });
-  const [hasReceipt, setHasReceipt] = useState<boolean | null>(null);
+  };
+  
+  const [newExpense, setNewExpense] = useState(initialExpenseState);
+  const [hasReceipt, setHasReceipt] = useState<boolean>(false); // Default to false (ohne Beleg)
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   
@@ -187,8 +201,57 @@ export default function ExpenseList() {
     return urlData.publicUrl;
   };
 
+  // Reset dialog state
+  const resetNewExpenseDialog = () => {
+    setNewExpense(initialExpenseState);
+    setHasReceipt(false);
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      resetNewExpenseDialog();
+    }
+  };
+
   const handleCreateExpense = async () => {
-    if (!newExpense.property_id || !newExpense.bezeichnung || !newExpense.betrag) {
+    // Validate required fields with clear error messages
+    if (!newExpense.property_id) {
+      toast({
+        title: 'Liegenschaft fehlt',
+        description: 'Bitte wählen Sie eine Liegenschaft aus.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!newExpense.bezeichnung.trim()) {
+      toast({
+        title: 'Bezeichnung fehlt',
+        description: 'Bitte geben Sie eine Bezeichnung ein.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const parsedAmount = parseEuroAmount(newExpense.betrag);
+    if (parsedAmount === null || parsedAmount <= 0) {
+      toast({
+        title: 'Ungültiger Betrag',
+        description: 'Bitte geben Sie einen gültigen Betrag ein (z.B. 12,50).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!newExpense.datum) {
+      toast({
+        title: 'Datum fehlt',
+        description: 'Bitte wählen Sie ein Datum aus.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -196,7 +259,7 @@ export default function ExpenseList() {
     if (hasReceipt === true && !selectedFile) {
       toast({
         title: 'Beleg fehlt',
-        description: 'Bitte Beleg hochladen oder „Nein, ohne Beleg“ auswählen.',
+        description: 'Bitte Beleg hochladen oder „Nein, ohne Beleg" auswählen.',
         variant: 'destructive',
       });
       return;
@@ -211,6 +274,10 @@ export default function ExpenseList() {
         const url = await uploadFile(selectedFile, newExpense.property_id);
         if (url) {
           beleg_url = url;
+        } else {
+          // Upload failed, don't proceed with insert
+          setUploading(false);
+          return;
         }
       }
 
@@ -220,8 +287,8 @@ export default function ExpenseList() {
         property_id: newExpense.property_id,
         category: newExpense.category,
         expense_type: newExpense.expense_type,
-        bezeichnung: newExpense.bezeichnung,
-        betrag: parseFloat(newExpense.betrag),
+        bezeichnung: newExpense.bezeichnung.trim(),
+        betrag: parsedAmount,
         datum: newExpense.datum,
         beleg_nummer: newExpense.beleg_nummer || undefined,
         notizen: newExpense.notizen || undefined,
@@ -231,22 +298,18 @@ export default function ExpenseList() {
       } as any);
 
       setDialogOpen(false);
-      setSelectedFile(null);
-      setHasReceipt(null);
-      setNewExpense({
-        property_id: '',
-        category: 'betriebskosten_umlagefaehig',
-        expense_type: 'sonstiges',
-        bezeichnung: '',
-        betrag: '',
-        datum: format(new Date(), 'yyyy-MM-dd'),
-        beleg_nummer: '',
-        notizen: '',
-      });
+      resetNewExpenseDialog();
 
       toast({
         title: 'Kosten erfasst',
         description: beleg_url ? 'Rechnung wurde hochgeladen.' : 'Eintrag wurde erstellt.',
+      });
+    } catch (error: any) {
+      console.error('Create expense error:', error);
+      toast({
+        title: 'Fehler beim Speichern',
+        description: error?.message || 'Die Kosten konnten nicht gespeichert werden.',
+        variant: 'destructive',
       });
     } finally {
       setUploading(false);
@@ -261,7 +324,7 @@ export default function ExpenseList() {
       category: expense.category,
       expense_type: expense.expense_type,
       bezeichnung: expense.bezeichnung,
-      betrag: expense.betrag.toString(),
+      betrag: expense.betrag.toString().replace('.', ','),
       datum: expense.datum,
       beleg_nummer: expense.beleg_nummer || '',
       notizen: expense.notizen || '',
@@ -273,7 +336,24 @@ export default function ExpenseList() {
 
   // Handle update expense
   const handleUpdateExpense = async () => {
-    if (!editingExpense || !editForm.bezeichnung || !editForm.betrag) {
+    if (!editingExpense) return;
+
+    if (!editForm.bezeichnung.trim()) {
+      toast({
+        title: 'Bezeichnung fehlt',
+        description: 'Bitte geben Sie eine Bezeichnung ein.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const parsedAmount = parseEuroAmount(editForm.betrag);
+    if (parsedAmount === null || parsedAmount <= 0) {
+      toast({
+        title: 'Ungültiger Betrag',
+        description: 'Bitte geben Sie einen gültigen Betrag ein (z.B. 12,50).',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -286,6 +366,9 @@ export default function ExpenseList() {
         const url = await uploadFile(editSelectedFile, editForm.property_id);
         if (url) {
           beleg_url = url;
+        } else {
+          setUploading(false);
+          return;
         }
       }
 
@@ -295,8 +378,8 @@ export default function ExpenseList() {
         id: editingExpense.id,
         category: editForm.category,
         expense_type: editForm.expense_type,
-        bezeichnung: editForm.bezeichnung,
-        betrag: parseFloat(editForm.betrag),
+        bezeichnung: editForm.bezeichnung.trim(),
+        betrag: parsedAmount,
         datum: editForm.datum,
         beleg_nummer: editForm.beleg_nummer || undefined,
         notizen: editForm.notizen || undefined,
@@ -312,6 +395,13 @@ export default function ExpenseList() {
       toast({
         title: 'Kosten aktualisiert',
         description: editSelectedFile ? 'Rechnung wurde hochgeladen.' : 'Änderungen wurden gespeichert.',
+      });
+    } catch (error: any) {
+      console.error('Update expense error:', error);
+      toast({
+        title: 'Fehler beim Speichern',
+        description: error?.message || 'Die Änderungen konnten nicht gespeichert werden.',
+        variant: 'destructive',
       });
     } finally {
       setUploading(false);
@@ -343,7 +433,7 @@ export default function ExpenseList() {
       setNewExpense(prev => ({
         ...prev,
         bezeichnung: result.beschreibung || result.lieferant || '',
-        betrag: result.betrag?.toString() || '',
+        betrag: result.betrag?.toString().replace('.', ',') || '',
         datum: result.datum || format(new Date(), 'yyyy-MM-dd'),
         beleg_nummer: result.rechnungsnummer || '',
         category: result.kategorie || 'betriebskosten_umlagefaehig',
@@ -443,7 +533,7 @@ export default function ExpenseList() {
           Rechnung scannen
         </Button>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -528,10 +618,9 @@ export default function ExpenseList() {
                 <div className="space-y-2">
                   <Label>Betrag (€)</Label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0,00"
                     value={newExpense.betrag}
                     onChange={(e) => setNewExpense(prev => ({ ...prev, betrag: e.target.value }))}
                   />
@@ -639,19 +728,12 @@ export default function ExpenseList() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
                 Abbrechen
               </Button>
               <Button 
                 onClick={handleCreateExpense} 
-                disabled={
-                  uploading ||
-                  createExpense.isPending ||
-                  !newExpense.property_id ||
-                  !newExpense.bezeichnung ||
-                  !newExpense.betrag ||
-                  (hasReceipt === true && !selectedFile)
-                }
+                disabled={uploading || createExpense.isPending}
               >
                 {(uploading || createExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {uploading ? 'Hochladen...' : 'Erfassen'}
@@ -897,10 +979,9 @@ export default function ExpenseList() {
               <div className="space-y-2">
                 <Label>Betrag (€)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
                   value={editForm.betrag}
                   onChange={(e) => setEditForm(prev => ({ ...prev, betrag: e.target.value }))}
                 />
@@ -999,7 +1080,7 @@ export default function ExpenseList() {
             </Button>
             <Button 
               onClick={handleUpdateExpense} 
-              disabled={uploading || updateExpense.isPending || !editForm.bezeichnung || !editForm.betrag}
+              disabled={uploading || updateExpense.isPending}
             >
               {(uploading || updateExpense.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {uploading ? 'Hochladen...' : 'Speichern'}
