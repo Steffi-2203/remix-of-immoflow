@@ -204,19 +204,45 @@ export default function Reports() {
   }) || [];
 
   // ====== TRANSAKTIONEN FILTERN ======
+  // Bei Property-Filter: auch Transaktionen einbeziehen die über unit_id zur Property gehören
   const periodTransactions = allTransactions?.filter(t => {
     const date = new Date(t.transaction_date);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
     
-    // Property-Filter
-    const propertyMatch = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
+    // Property-Filter: direkt ODER über unit_id ODER alle wenn 'all' ausgewählt
+    let propertyMatch = selectedPropertyId === 'all';
+    if (!propertyMatch) {
+      // Direkte Property-Zuordnung
+      if (t.property_id === selectedPropertyId) {
+        propertyMatch = true;
+      }
+      // Über Unit-Zuordnung
+      else if (t.unit_id) {
+        const unit = allUnits?.find(u => u.id === t.unit_id);
+        propertyMatch = unit?.property_id === selectedPropertyId;
+      }
+    }
     
     if (reportPeriod === 'yearly') {
       return year === selectedYear && propertyMatch;
     }
     return year === selectedYear && month === selectedMonth && propertyMatch;
   }) || [];
+
+  // ====== ZAHLUNGEN AUS PAYMENTS-TABELLE (für Vergleich) ======
+  const periodPayments = allPayments?.filter(p => {
+    const date = new Date(p.eingangs_datum);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    if (reportPeriod === 'yearly') {
+      return year === selectedYear;
+    }
+    return year === selectedYear && month === selectedMonth;
+  }) || [];
+  
+  const totalPaymentsAmount = periodPayments.reduce((sum, p) => sum + Number(p.betrag), 0);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
@@ -617,12 +643,32 @@ export default function Reports() {
         </Card>
       </div>
 
+      {/* Datenabgleich-Hinweis wenn Buchhaltung und Zahlungen nicht übereinstimmen */}
+      {Math.abs(totalIncomeFromTransactions - totalPaymentsAmount) > 1 && totalPaymentsAmount > 0 && (
+        <Card className="mb-4 border-warning/50 bg-warning/5">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
+              <div>
+                <p className="font-medium text-warning">Hinweis: Daten nicht synchronisiert</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Buchhaltung zeigt <strong>€{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</strong> Einnahmen, 
+                  aber es wurden <strong>€{totalPaymentsAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</strong> an Mietzahlungen erfasst.
+                  Für konsistente Reports sollten Zahlungen auch in der Buchhaltung erfasst werden.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Einnahmen/Ausgaben aus Buchhaltung */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
             Einnahmen und Ausgaben aus der Buchhaltung ({periodTransactions.length} Transaktionen)
+            {periodPayments.length > 0 && ` • ${periodPayments.length} Mietzahlungen erfasst`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -924,7 +970,7 @@ export default function Reports() {
               <div>
                 <CardTitle>Offene Posten / Salden {selectedYear}</CardTitle>
                 <CardDescription>
-                  Soll/Haben-Vergleich pro Mieter mit Über- und Unterzahlungen
+                  Basierend auf Mietrechnungen und Zahlungseingängen (Mieterverwaltung)
                   {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
                 </CardDescription>
               </div>
