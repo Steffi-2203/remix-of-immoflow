@@ -19,6 +19,12 @@ interface OCRResult {
 export function useOCRInvoice() {
   return useMutation({
     mutationFn: async (file: File): Promise<OCRResult> => {
+      // Check if user is authenticated
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Nicht angemeldet – bitte neu einloggen');
+      }
+      
       // Convert file to base64
       const base64 = await fileToBase64(file);
       
@@ -29,7 +35,10 @@ export function useOCRInvoice() {
         },
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('OCR function error:', error);
+        throw new Error(error.message || 'OCR-Analyse fehlgeschlagen');
+      }
       if (data?.error) throw new Error(data.error);
       
       return data.data as OCRResult;
