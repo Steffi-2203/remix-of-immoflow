@@ -124,12 +124,10 @@ export function DocumentList({
                   <div className="flex items-center justify-end gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => window.open(doc.file_url, '_blank')}
-                        >
-                          <Eye className="h-4 w-4" />
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={doc.file_url} target="_blank" rel="noreferrer">
+                            <Eye className="h-4 w-4" />
+                          </a>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>Ansehen</TooltipContent>
