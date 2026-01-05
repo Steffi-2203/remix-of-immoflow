@@ -95,6 +95,29 @@ export interface CategoryData {
 // Kategorien für Instandhaltung (mindern Rendite)
 const INSTANDHALTUNG_CATEGORIES = ['Instandhaltung', 'Reparaturen'];
 
+// USt-Sätze pro Ausgabenkategorie (österreichische Regelung)
+const CATEGORY_VAT_RATES: Record<string, number> = {
+  // 20% Normalsteuersatz
+  'Lift/Aufzug': 20,
+  'Heizung': 20,
+  'Strom Allgemein': 20,
+  'Hausbetreuung/Reinigung': 20,
+  'Gartenpflege': 20,
+  'Schneeräumung': 20,
+  'Verwaltungskosten': 20,
+  'Instandhaltung': 20,
+  'Reparaturen': 20,
+  'Müllabfuhr': 20,
+  'Sonstige Ausgaben': 20,
+  
+  // 10% ermäßigter Steuersatz
+  'Wasser/Abwasser': 10,
+  
+  // 0% - Keine Vorsteuer
+  'Versicherungen': 0,  // Versicherungssteuer ist keine Vorsteuer
+  'Grundsteuer': 0,     // Keine USt auf Grundsteuer
+};
+
 const unitTypeLabels: Record<string, string> = {
   wohnung: 'Wohnung',
   geschaeft: 'Geschäft',
@@ -548,12 +571,30 @@ export const generateUstVoranmeldung = (
   const totalEinnahmen = mieteinnahmen + bkVorauszahlungen + sonstigeEinnahmen;
   const totalUst = ustMieteinnahmen + ustBkVorausz + ustSonstige;
 
-  // Vorsteuer aus Ausgaben (20%)
+  // Vorsteuer aus Ausgaben (differenziert nach Kategorie)
   const totalAusgaben = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-  const vorsteuer = expenseTransactions.reduce((sum, t) => {
-    const betrag = Math.abs(Number(t.amount));
-    return sum + (betrag - betrag / 1.2);
-  }, 0);
+  
+  // Ausgaben nach USt-Satz gruppieren
+  const ausgaben20 = expenseTransactions.filter(t => {
+    const catName = categories.find(c => c.id === t.category_id)?.name || '';
+    return (CATEGORY_VAT_RATES[catName] ?? 20) === 20;
+  });
+  const ausgaben10 = expenseTransactions.filter(t => {
+    const catName = categories.find(c => c.id === t.category_id)?.name || '';
+    return CATEGORY_VAT_RATES[catName] === 10;
+  });
+  const ausgaben0 = expenseTransactions.filter(t => {
+    const catName = categories.find(c => c.id === t.category_id)?.name || '';
+    return CATEGORY_VAT_RATES[catName] === 0;
+  });
+  
+  const brutto20 = ausgaben20.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const brutto10 = ausgaben10.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const brutto0 = ausgaben0.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  
+  const vorsteuer20 = calculateVatFromGross(brutto20, 20);
+  const vorsteuer10 = calculateVatFromGross(brutto10, 10);
+  const vorsteuer = vorsteuer20 + vorsteuer10;
 
   const vatLiability = totalUst - vorsteuer;
 
@@ -579,19 +620,23 @@ export const generateUstVoranmeldung = (
 
   const y1 = (doc as any).lastAutoTable?.finalY || 100;
 
-  // Section 2: Ausgaben / Vorsteuer
+  // Section 2: Ausgaben / Vorsteuer (nach USt-Sätzen aufgeschlüsselt)
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('2. Vorsteuer aus Ausgaben', 14, y1 + 15);
 
   autoTable(doc, {
     startY: y1 + 20,
-    head: [['Beschreibung', 'Anzahl Buchungen', 'Betrag Brutto', 'Vorsteuer (20%)']],
+    head: [['Position', 'Anzahl', 'Brutto', 'USt-Satz', 'Vorsteuer']],
     body: [
-      ['Ausgaben gesamt', `${expenseTransactions.length} Positionen`, formatCurrency(totalAusgaben), formatCurrency(vorsteuer)],
+      ['Ausgaben (20% USt)', `${ausgaben20.length}`, formatCurrency(brutto20), '20%', formatCurrency(vorsteuer20)],
+      ['Ausgaben (10% USt)', `${ausgaben10.length}`, formatCurrency(brutto10), '10%', formatCurrency(vorsteuer10)],
+      ['Ausgaben (0% USt)', `${ausgaben0.length}`, formatCurrency(brutto0), '0%', formatCurrency(0)],
     ],
+    foot: [['Gesamt', `${expenseTransactions.length}`, formatCurrency(totalAusgaben), '', formatCurrency(vorsteuer)]],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+    footStyles: { fillColor: [219, 234, 254], textColor: [0, 0, 0], fontStyle: 'bold' },
     styles: { fontSize: 10 },
   });
 
