@@ -20,7 +20,8 @@ import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, su
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { parseCSV, autoMatchTransaction, ParsedTransaction } from '@/utils/bankImportUtils';
-import { useTransactions, useCreateTransaction, useCreateTransactions, useUpdateTransaction, useTransactionSummary } from '@/hooks/useTransactions';
+import { useTransactions, useCreateTransactions, useUpdateTransaction, useTransactionSummary } from '@/hooks/useTransactions';
+import { usePaymentSync } from '@/hooks/usePaymentSync';
 import { useLearnedMatches, useCreateLearnedMatch, useDeleteLearnedMatch } from '@/hooks/useLearnedMatches';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
@@ -96,7 +97,7 @@ export default function Banking() {
   const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useBankAccounts();
   const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
   
-  const createTransaction = useCreateTransaction();
+  const { createTransactionWithSync } = usePaymentSync();
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
   const createLearnedMatch = useCreateLearnedMatch();
@@ -144,21 +145,23 @@ export default function Banking() {
       : Math.abs(parseFloat(manualEntry.amount.replace(',', '.')));
     
     try {
-      await createTransaction.mutateAsync({
-        organization_id: organization?.id || null,
-        bank_account_id: manualEntry.bankAccountId,
-        unit_id: manualEntry.unitId || null,
-        property_id: manualEntry.propertyId || null, // For BK-Abrechnung sync
-        transaction_date: manualEntry.date,
-        amount: amount,
-        currency: 'EUR',
-        description: manualEntry.description,
-        reference: manualEntry.reference || null,
-        counterpart_name: manualEntry.counterpartyName || null,
-        counterpart_iban: manualEntry.counterpartyIban || null,
-        category_id: manualEntry.categoryId || null,
-        status: manualEntry.unitId ? 'matched' : 'unmatched',
-        notes: manualEntry.notes || null,
+      await createTransactionWithSync.mutateAsync({
+        transaction: {
+          organization_id: organization?.id || null,
+          bank_account_id: manualEntry.bankAccountId,
+          unit_id: manualEntry.unitId || null,
+          property_id: manualEntry.propertyId || null,
+          transaction_date: manualEntry.date,
+          amount: amount,
+          currency: 'EUR',
+          description: manualEntry.description,
+          reference: manualEntry.reference || null,
+          counterpart_name: manualEntry.counterpartyName || null,
+          counterpart_iban: manualEntry.counterpartyIban || null,
+          category_id: manualEntry.categoryId || null,
+          status: manualEntry.unitId ? 'matched' : 'unmatched',
+          notes: manualEntry.notes || null,
+        },
       });
       
       toast.success('Buchung erfolgreich erfasst!');
@@ -862,10 +865,10 @@ export default function Banking() {
                   <div className="flex gap-3 pt-4">
                     <Button
                       type="submit"
-                      disabled={createTransaction.isPending || !manualEntry.bankAccountId}
+                      disabled={createTransactionWithSync.isPending || !manualEntry.bankAccountId}
                       className="bg-green-600 hover:bg-green-700"
                     >
-                      {createTransaction.isPending ? (
+                      {createTransactionWithSync.isPending ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                         <CheckCircle2 className="h-4 w-4 mr-2" />
