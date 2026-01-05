@@ -27,6 +27,7 @@ import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import SystemTest from "./pages/SystemTest";
+import Banking from "./pages/Banking";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
             <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
+            <Route path="/banking" element={<ProtectedRoute><Banking /></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
