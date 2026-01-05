@@ -299,7 +299,7 @@ export default function PropertyDetail() {
                     <TableHead>Mieter</TableHead>
                     <TableHead>Gesamtmiete</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -349,11 +349,18 @@ export default function PropertyDetail() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Link to={`/liegenschaften/${id}/einheiten/${unit.id}/bearbeiten`}>
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <div className="flex items-center justify-end gap-1">
+                            <Link to={`/einheiten/${unit.id}?tab=documents`}>
+                              <Button variant="ghost" size="sm" title="Dokumente">
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Link to={`/liegenschaften/${id}/einheiten/${unit.id}/bearbeiten`}>
+                              <Button variant="ghost" size="sm" title="Bearbeiten">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
