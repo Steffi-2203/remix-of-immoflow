@@ -83,6 +83,29 @@ const BETRIEBSKOSTEN_CATEGORIES = [
   'Gartenpflege', 'Schneeräumung', 'Grundsteuer', 'Verwaltungskosten'
 ];
 
+// USt-Sätze pro Ausgabenkategorie (österreichische Regelung)
+const CATEGORY_VAT_RATES: Record<string, number> = {
+  // 20% Normalsteuersatz
+  'Lift/Aufzug': 20,
+  'Heizung': 20,
+  'Strom Allgemein': 20,
+  'Hausbetreuung/Reinigung': 20,
+  'Gartenpflege': 20,
+  'Schneeräumung': 20,
+  'Verwaltungskosten': 20,
+  'Instandhaltung': 20,
+  'Reparaturen': 20,
+  'Müllabfuhr': 20,
+  'Sonstige Ausgaben': 20,
+  
+  // 10% ermäßigter Steuersatz
+  'Wasser/Abwasser': 10,
+  
+  // 0% - Keine Vorsteuer
+  'Versicherungen': 0,  // Versicherungssteuer ist keine Vorsteuer
+  'Grundsteuer': 0,     // Keine USt auf Grundsteuer
+};
+
 const reports = [
   {
     id: 'rendite',
@@ -266,10 +289,12 @@ export default function Reports() {
   // USt aus BK-Vorauszahlungen (10%)
   const ustBkVorauszFromTransactions = bkVorauszahlungenFromTransactions - (bkVorauszahlungenFromTransactions / 1.1);
 
-  // Vorsteuer aus Ausgaben (20%)
+  // Vorsteuer aus Ausgaben (differenziert nach Kategorie)
   const vorsteuerFromTransactions = expenseTransactions.reduce((sum, t) => {
     const betrag = Math.abs(Number(t.amount));
-    return sum + (betrag - betrag / 1.2);
+    const categoryName = categories?.find(c => c.id === t.category_id)?.name || '';
+    const vatRate = CATEGORY_VAT_RATES[categoryName] ?? 20; // Default 20% wenn Kategorie unbekannt
+    return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
 
   // USt-Zahllast aus Transaktionen
@@ -304,10 +329,30 @@ export default function Reports() {
     sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
   const totalUst = ustMiete + ustBk + ustHeizung;
 
-  // Vorsteuer from expenses
+  // Vorsteuer from expenses (differenziert nach Kategorie)
+  const expenseTypeToCategory: Record<string, string> = {
+    'versicherung': 'Versicherungen',
+    'grundsteuer': 'Grundsteuer',
+    'muellabfuhr': 'Müllabfuhr',
+    'wasser_abwasser': 'Wasser/Abwasser',
+    'heizung': 'Heizung',
+    'strom_allgemein': 'Strom Allgemein',
+    'hausbetreuung': 'Hausbetreuung/Reinigung',
+    'lift': 'Lift/Aufzug',
+    'gartenpflege': 'Gartenpflege',
+    'schneeraeumung': 'Schneeräumung',
+    'verwaltung': 'Verwaltungskosten',
+    'ruecklage': 'Sonstige Ausgaben',
+    'reparatur': 'Reparaturen',
+    'sanierung': 'Instandhaltung',
+    'sonstiges': 'Sonstige Ausgaben',
+  };
+  
   const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
     const betrag = Number(exp.betrag || 0);
-    return sum + (betrag - betrag / 1.2);
+    const categoryName = expenseTypeToCategory[exp.expense_type] || 'Sonstige Ausgaben';
+    const vatRate = CATEGORY_VAT_RATES[categoryName] ?? 20;
+    return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
 
   // VAT liability from invoices (alt)
