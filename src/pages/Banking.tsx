@@ -514,12 +514,12 @@ export default function Banking() {
                 {bankAccounts.length > 0 && (
                   <div className="flex items-center gap-4">
                     <Label>Ziel-Bankkonto:</Label>
-                    <Select value={selectedBankAccountId || ''} onValueChange={setSelectedBankAccountId}>
+                    <Select value={selectedBankAccountId || 'none'} onValueChange={(val) => setSelectedBankAccountId(val === 'none' ? null : val)}>
                       <SelectTrigger className="w-[300px]">
                         <SelectValue placeholder="Bankkonto auswählen (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Kein Konto</SelectItem>
+                        <SelectItem value="none">Kein Konto</SelectItem>
                         {bankAccounts.map(account => (
                           <SelectItem key={account.id} value={account.id}>
                             {account.account_name} {account.iban && `(${account.iban.slice(-4)})`}
@@ -850,11 +850,12 @@ export default function Banking() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-4">
                     <Label>Konto auswählen:</Label>
-                    <Select value={selectedBankAccountId || ''} onValueChange={setSelectedBankAccountId}>
+                    <Select value={selectedBankAccountId || 'none'} onValueChange={(val) => setSelectedBankAccountId(val === 'none' ? null : val)}>
                       <SelectTrigger className="w-[300px]">
                         <SelectValue placeholder="Bankkonto auswählen" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="none">Kein Konto</SelectItem>
                         {bankAccounts.map(account => (
                           <SelectItem key={account.id} value={account.id}>
                             {account.account_name}
