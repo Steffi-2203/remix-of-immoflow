@@ -55,7 +55,7 @@ export default function Landing() {
             <div className="bg-primary/10 p-2 rounded-lg">
               <Building2 className="h-6 w-6 text-primary" />
             </div>
-            <span className="font-semibold text-xl">PropertyPro</span>
+            <span className="font-semibold text-xl">ImmoFlow</span>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
@@ -72,12 +72,12 @@ export default function Landing() {
       <section className="container mx-auto px-4 py-20 md:py-32">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-            Immobilienverwaltung
-            <span className="text-primary block mt-2">einfach & professionell</span>
+            ImmoFlow
+            <span className="text-primary block mt-2">Hausverwaltung im Flow</span>
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Die moderne Software für Hausverwalter. Verwalten Sie Liegenschaften, Mieter und Abrechnungen 
-            an einem Ort – übersichtlich, effizient und sicher.
+            Die einfache Software für kleine Hausverwaltungen und Privatvermieter. 
+            Verwalten Sie alles an einem Ort – übersichtlich, effizient und sicher.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild className="text-lg px-8">
@@ -126,10 +126,10 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold mb-6">
-                Warum PropertyPro?
+                Warum ImmoFlow?
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                Wir haben PropertyPro entwickelt, um Hausverwaltern den Alltag zu erleichtern. 
+                Wir haben ImmoFlow entwickelt, um Hausverwaltern den Alltag zu erleichtern. 
                 Konzentrieren Sie sich auf das Wesentliche – wir kümmern uns um den Rest.
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -162,7 +162,7 @@ export default function Landing() {
             Bereit für effizientere Hausverwaltung?
           </h2>
           <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Schließen Sie sich Hunderten von Hausverwaltern an, die PropertyPro bereits nutzen.
+            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoFlow bereits nutzen.
           </p>
           <Button size="lg" variant="secondary" asChild className="text-lg px-8">
             <Link to="/register">
@@ -181,10 +181,10 @@ export default function Landing() {
               <div className="bg-primary/10 p-2 rounded-lg">
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
-              <span className="font-semibold">PropertyPro</span>
+              <span className="font-semibold">ImmoFlow</span>
             </div>
             <div className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} PropertyPro. Alle Rechte vorbehalten.
+              © {new Date().getFullYear()} ImmoFlow. Alle Rechte vorbehalten.
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link to="#" className="hover:text-foreground transition-colors">Datenschutz</Link>
