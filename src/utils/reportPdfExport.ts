@@ -530,50 +530,81 @@ export const generateUstVoranmeldung = (
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
-  // Filter transactions for period
+  // ====== EINNAHMEN AUS MIETRECHNUNGEN (SOLL-BESTEUERUNG) ======
+  // Filter invoices for period and property (via unit_id -> property_id)
+  const periodInvoices = invoices.filter(inv => {
+    // Period filter
+    let periodMatch = false;
+    if (reportPeriod === 'yearly') {
+      periodMatch = inv.year === selectedYear;
+    } else {
+      periodMatch = inv.year === selectedYear && inv.month === selectedMonth;
+    }
+    if (!periodMatch) return false;
+    
+    // Property filter (über unit_id)
+    if (selectedPropertyId === 'all') return true;
+    
+    const unit = units.find(u => u.id === inv.unit_id);
+    return unit?.property_id === selectedPropertyId;
+  });
+
+  // Berechne Einnahmen aus Invoices (mit korrekter USt-Aufschlüsselung)
+  const bruttoGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+  const bruttoBk = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+  const bruttoHeizung = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  
+  // USt aus Invoices berechnen (mit den gespeicherten Steuersätzen)
+  const ustGrundmiete = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
+  const ustBk = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
+  const ustHeizung = periodInvoices.reduce((sum, inv) => 
+    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
+
+  const totalEinnahmen = bruttoGrundmiete + bruttoBk + bruttoHeizung;
+  const totalUstEinnahmen = ustGrundmiete + ustBk + ustHeizung;
+
+  // Ermittle USt-Satz-Spannen für Anzeige
+  const mieteSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_miete || 0)));
+  const bkSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_bk || 10)));
+  const heizungSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_heizung || 20)));
+  
+  const formatSatzSpanne = (saetze: Set<number>): string => {
+    const arr = Array.from(saetze).sort((a, b) => a - b);
+    if (arr.length === 0) return '-';
+    if (arr.length === 1) return `${arr[0]}%`;
+    return `${arr[0]}-${arr[arr.length - 1]}%`;
+  };
+
+  // ====== VORSTEUER AUS TRANSAKTIONEN ======
+  // Filter transactions for period (mit Property-Match über unit_id)
   const periodTransactions = transactions.filter(t => {
     const date = new Date(t.transaction_date);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
-    const matchesProp = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
     
+    // Period filter
+    let periodMatch = false;
     if (reportPeriod === 'yearly') {
-      return matchesProp && year === selectedYear;
+      periodMatch = year === selectedYear;
+    } else {
+      periodMatch = year === selectedYear && month === selectedMonth;
     }
-    return matchesProp && year === selectedYear && month === selectedMonth;
+    if (!periodMatch) return false;
+    
+    // Property filter (direkt ODER über unit_id)
+    if (selectedPropertyId === 'all') return true;
+    if (t.property_id === selectedPropertyId) return true;
+    if (t.unit_id) {
+      const unit = units.find(u => u.id === t.unit_id);
+      return unit?.property_id === selectedPropertyId;
+    }
+    return false;
   });
 
-  // Get category IDs
-  const mieteinnahmenCategoryId = categories.find(c => c.name === 'Mieteinnahmen')?.id;
-  const bkVorauszCategoryId = categories.find(c => c.name === 'Betriebskostenvorauszahlungen')?.id;
-
-  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
 
-  // Mieteinnahmen (0% USt für Wohnungen)
-  const mieteinnahmen = incomeTransactions
-    .filter(t => t.category_id === mieteinnahmenCategoryId)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-  const ustMieteinnahmen = 0; // Mieteinnahmen sind meist unecht umsatzsteuerbefreit
-
-  // BK-Vorauszahlungen (10% USt)
-  const bkVorauszahlungen = incomeTransactions
-    .filter(t => t.category_id === bkVorauszCategoryId)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-  const ustBkVorausz = bkVorauszahlungen - (bkVorauszahlungen / 1.1);
-
-  // Sonstige Einnahmen
-  const sonstigeEinnahmen = incomeTransactions
-    .filter(t => t.category_id !== mieteinnahmenCategoryId && t.category_id !== bkVorauszCategoryId)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-  const ustSonstige = sonstigeEinnahmen - (sonstigeEinnahmen / 1.2);
-
-  const totalEinnahmen = mieteinnahmen + bkVorauszahlungen + sonstigeEinnahmen;
-  const totalUst = ustMieteinnahmen + ustBkVorausz + ustSonstige;
-
-  // Vorsteuer aus Ausgaben (differenziert nach Kategorie)
-  const totalAusgaben = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-  
   // Ausgaben nach USt-Satz gruppieren
   const ausgaben20 = expenseTransactions.filter(t => {
     const catName = categories.find(c => c.id === t.category_id)?.name || '';
@@ -591,27 +622,34 @@ export const generateUstVoranmeldung = (
   const brutto20 = ausgaben20.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
   const brutto10 = ausgaben10.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
   const brutto0 = ausgaben0.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const totalAusgaben = brutto20 + brutto10 + brutto0;
   
   const vorsteuer20 = calculateVatFromGross(brutto20, 20);
   const vorsteuer10 = calculateVatFromGross(brutto10, 10);
   const vorsteuer = vorsteuer20 + vorsteuer10;
 
-  const vatLiability = totalUst - vorsteuer;
+  // USt-Zahllast
+  const vatLiability = totalUstEinnahmen - vorsteuer;
 
-  // Section 1: Einnahmen aus Transaktionen
+  // Section 1: Einnahmen aus Mietrechnungen (Soll)
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('1. Einnahmen aus Buchhaltung', 14, 50);
+  doc.text('1. Einnahmen aus Mietrechnungen (Soll-Besteuerung)', 14, 50);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`${periodInvoices.length} Rechnungen im Zeitraum`, 14, 56);
+  doc.setTextColor(0);
 
   autoTable(doc, {
-    startY: 55,
+    startY: 60,
     head: [['Position', 'Brutto', 'USt-Satz', 'USt']],
     body: [
-      ['Mieteinnahmen', formatCurrency(mieteinnahmen), '0%', formatCurrency(ustMieteinnahmen)],
-      ['BK-Vorauszahlungen', formatCurrency(bkVorauszahlungen), '10%', formatCurrency(ustBkVorausz)],
-      ['Sonstige Einnahmen', formatCurrency(sonstigeEinnahmen), '20%', formatCurrency(ustSonstige)],
+      ['Grundmiete', formatCurrency(bruttoGrundmiete), formatSatzSpanne(mieteSaetze), formatCurrency(ustGrundmiete)],
+      ['Betriebskosten', formatCurrency(bruttoBk), formatSatzSpanne(bkSaetze), formatCurrency(ustBk)],
+      ['Heizung', formatCurrency(bruttoHeizung), formatSatzSpanne(heizungSaetze), formatCurrency(ustHeizung)],
     ],
-    foot: [['Gesamt', formatCurrency(totalEinnahmen), '', formatCurrency(totalUst)]],
+    foot: [['Gesamt Einnahmen', formatCurrency(totalEinnahmen), '', formatCurrency(totalUstEinnahmen)]],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
     footStyles: { fillColor: [219, 234, 254], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -624,16 +662,21 @@ export const generateUstVoranmeldung = (
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('2. Vorsteuer aus Ausgaben', 14, y1 + 15);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`${expenseTransactions.length} Ausgaben-Buchungen im Zeitraum`, 14, y1 + 21);
+  doc.setTextColor(0);
 
   autoTable(doc, {
-    startY: y1 + 20,
+    startY: y1 + 25,
     head: [['Position', 'Anzahl', 'Brutto', 'USt-Satz', 'Vorsteuer']],
     body: [
       ['Ausgaben (20% USt)', `${ausgaben20.length}`, formatCurrency(brutto20), '20%', formatCurrency(vorsteuer20)],
       ['Ausgaben (10% USt)', `${ausgaben10.length}`, formatCurrency(brutto10), '10%', formatCurrency(vorsteuer10)],
       ['Ausgaben (0% USt)', `${ausgaben0.length}`, formatCurrency(brutto0), '0%', formatCurrency(0)],
     ],
-    foot: [['Gesamt', `${expenseTransactions.length}`, formatCurrency(totalAusgaben), '', formatCurrency(vorsteuer)]],
+    foot: [['Gesamt Ausgaben', `${expenseTransactions.length}`, formatCurrency(totalAusgaben), '', formatCurrency(vorsteuer)]],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
     footStyles: { fillColor: [219, 234, 254], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -650,7 +693,7 @@ export const generateUstVoranmeldung = (
   autoTable(doc, {
     startY: y2 + 20,
     body: [
-      ['Umsatzsteuer (aus Einnahmen)', formatCurrency(totalUst)],
+      ['Umsatzsteuer (aus Einnahmen)', formatCurrency(totalUstEinnahmen)],
       ['./. Vorsteuer (aus Ausgaben)', formatCurrency(vorsteuer)],
       [vatLiability >= 0 ? 'Zahllast an Finanzamt' : 'Gutschrift vom Finanzamt', formatCurrency(Math.abs(vatLiability))],
     ],
