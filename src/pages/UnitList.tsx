@@ -19,12 +19,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Filter, Home, Building2, Car, Loader2, Users, Receipt } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Search, Filter, Home, Building2, Car, Loader2, Users, AlertTriangle, Clock } from 'lucide-react';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useState } from 'react';
+import { differenceInDays, format, addMonths } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 const unitTypeLabels: Record<string, string> = {
   wohnung: 'Wohnung',
@@ -70,6 +78,28 @@ export default function UnitList() {
   const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unit_id === unitId && t.status === 'aktiv');
   const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unit_id === unitId) || [];
 
+  // Check if contract expires within 3 months
+  const getContractExpirationInfo = (tenant: any) => {
+    if (!tenant?.mietende) return null;
+    const endDate = new Date(tenant.mietende);
+    const today = new Date();
+    const daysUntilExpiry = differenceInDays(endDate, today);
+    
+    if (daysUntilExpiry < 0) {
+      return { status: 'expired', message: 'Mietvertrag abgelaufen', daysUntilExpiry, endDate };
+    }
+    if (daysUntilExpiry <= 90) {
+      return { status: 'warning', message: `Mietvertrag läuft in ${daysUntilExpiry} Tagen ab`, daysUntilExpiry, endDate };
+    }
+    return null;
+  };
+
+  // Count expiring contracts
+  const expiringContracts = tenants?.filter(t => {
+    if (t.status !== 'aktiv' || !t.mietende) return false;
+    const daysUntilExpiry = differenceInDays(new Date(t.mietende), new Date());
+    return daysUntilExpiry >= 0 && daysUntilExpiry <= 90;
+  }).length || 0;
   // Filter units
   const filteredUnits = units?.filter(unit => {
     if (typeFilter !== 'all' && unit.type !== typeFilter) return false;
@@ -145,6 +175,23 @@ export default function UnitList() {
         </div>
       </div>
 
+      {/* Contract Expiration Warning */}
+      {expiringContracts > 0 && (
+        <Card className="mb-6 border-warning bg-warning/10">
+          <CardContent className="p-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-warning" />
+            <div>
+              <p className="font-medium text-warning">
+                {expiringContracts} {expiringContracts === 1 ? 'Mietvertrag läuft' : 'Mietverträge laufen'} in den nächsten 3 Monaten ab
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Bitte prüfen Sie die betroffenen Einheiten und kontaktieren Sie die Mieter rechtzeitig.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
@@ -196,10 +243,8 @@ export default function UnitList() {
                   <TableHead>Typ</TableHead>
                   <TableHead>Fläche</TableHead>
                   <TableHead>Mieter</TableHead>
-                  <TableHead className="text-right">Grundmiete</TableHead>
-                  <TableHead className="text-right">BK</TableHead>
-                  <TableHead className="text-right">HK</TableHead>
-                  <TableHead className="text-right">Vorschreibung</TableHead>
+                  <TableHead>Mietvertrag</TableHead>
+                  <TableHead className="text-right">Gesamt</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -207,8 +252,7 @@ export default function UnitList() {
                 {filteredUnits.map((unit) => {
                   const property = getProperty(unit.property_id);
                   const tenant = getTenantForUnit(unit.id);
-                  const unitInvoices = getInvoicesForUnit(unit.id);
-                  const openInvoices = unitInvoices.filter(i => i.status === 'offen').length;
+                  const expirationInfo = tenant ? getContractExpirationInfo(tenant) : null;
                   const Icon = unitTypeIcons[unit.type] || Building2;
                   
                   const grundmiete = tenant ? Number(tenant.grundmiete) : 0;
@@ -247,32 +291,43 @@ export default function UnitList() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {tenant ? (
-                          <span className="text-muted-foreground">
-                            € {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {tenant ? (
-                          <span className="text-muted-foreground">
-                            € {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {tenant ? (
-                          <span className="text-muted-foreground">
-                            € {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                      <TableCell>
+                        <TooltipProvider>
+                          {tenant ? (
+                            <div className="flex items-center gap-2">
+                              {expirationInfo ? (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <div className={`flex items-center gap-1 ${expirationInfo.status === 'expired' ? 'text-destructive' : 'text-warning'}`}>
+                                      {expirationInfo.status === 'expired' ? (
+                                        <AlertTriangle className="h-4 w-4" />
+                                      ) : (
+                                        <Clock className="h-4 w-4" />
+                                      )}
+                                      <span className="text-sm font-medium">
+                                        {format(expirationInfo.endDate, 'dd.MM.yyyy', { locale: de })}
+                                      </span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{expirationInfo.message}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Beginn: {format(new Date(tenant.mietbeginn), 'dd.MM.yyyy', { locale: de })}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : tenant.mietende ? (
+                                <span className="text-sm text-muted-foreground">
+                                  bis {format(new Date(tenant.mietende), 'dd.MM.yyyy', { locale: de })}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">unbefristet</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TooltipProvider>
                       </TableCell>
                       <TableCell className="text-right">
                         {tenant ? (
