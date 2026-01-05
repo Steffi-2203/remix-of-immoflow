@@ -309,20 +309,22 @@ export default function Banking() {
                       <p className="text-sm text-muted-foreground mb-4">
                         oder klicken Sie auf den Button
                       </p>
-                      <label>
+                      <div>
                         <input
                           type="file"
                           accept=".csv"
                           onChange={handleFileSelect}
                           className="hidden"
+                          id="csv-file-input"
                         />
-                        <Button asChild variant="outline">
-                          <span>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Datei auswählen
-                          </span>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => document.getElementById('csv-file-input')?.click()}
+                        >
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Datei auswählen
                         </Button>
-                      </label>
+                      </div>
                     </>
                   )}
                 </div>
