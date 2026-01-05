@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   Property Partner Pro - Starten
+echo   ImmoFlow - Starten
 echo ========================================
 echo.
 

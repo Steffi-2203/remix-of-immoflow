@@ -56,7 +56,7 @@ export function Sidebar() {
             <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
               <Building2 className="h-5 w-5 text-sidebar-primary-foreground" />
             </div>
-            <span className="font-semibold text-sidebar-foreground">HausVerwalter</span>
+            <span className="font-semibold text-sidebar-foreground">ImmoFlow</span>
           </div>}
         <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -83,7 +83,7 @@ export function Sidebar() {
       {!collapsed && <div className="absolute bottom-4 left-4 right-4">
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-sidebar-foreground/70">Version 1.0.0</p>
-            <p className="text-xs text-sidebar-foreground/50 mt-1">© 2025 HausVerwalter</p>
+            <p className="text-xs text-sidebar-foreground/50 mt-1">© 2026 ImmoFlow</p>
           </div>
         </div>}
     </aside>;
