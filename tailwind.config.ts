@@ -13,16 +13,34 @@ export default {
   		}
   	},
   	extend: {
-  		colors: {
-  			border: 'hsl(var(--border))',
-  			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
-  			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
-  			},
+		colors: {
+			border: 'hsl(var(--border))',
+			input: 'hsl(var(--input))',
+			ring: 'hsl(var(--ring))',
+			background: 'hsl(var(--background))',
+			foreground: 'hsl(var(--foreground))',
+			brand: {
+				primary: {
+					50: 'hsl(var(--brand-primary-50))',
+					100: 'hsl(var(--brand-primary-100))',
+					DEFAULT: 'hsl(var(--brand-primary-500))',
+					500: 'hsl(var(--brand-primary-500))',
+					600: 'hsl(var(--brand-primary-600))',
+					700: 'hsl(var(--brand-primary-700))',
+				},
+				secondary: {
+					50: 'hsl(var(--brand-secondary-50))',
+					100: 'hsl(var(--brand-secondary-100))',
+					DEFAULT: 'hsl(var(--brand-secondary-500))',
+					500: 'hsl(var(--brand-secondary-500))',
+					600: 'hsl(var(--brand-secondary-600))',
+					700: 'hsl(var(--brand-secondary-700))',
+				},
+			},
+			primary: {
+				DEFAULT: 'hsl(var(--primary))',
+				foreground: 'hsl(var(--primary-foreground))'
+			},
   			secondary: {
   				DEFAULT: 'hsl(var(--secondary))',
   				foreground: 'hsl(var(--secondary-foreground))'
