@@ -4,9 +4,31 @@ import { useOrganization } from './useOrganization';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { PaymentInsert } from './usePayments';
-import type { TablesInsert } from '@/integrations/supabase/types';
+import type { TablesInsert, Enums } from '@/integrations/supabase/types';
 
 type TransactionInsert = TablesInsert<'transactions'>;
+type ExpenseCategory = Enums<'expense_category'>;
+type ExpenseType = Enums<'expense_type'>;
+
+// Mapping von Buchhaltungs-Kategorien zu Expense-Kategorien für BK-Abrechnung
+const CATEGORY_TO_EXPENSE_MAPPING: Record<string, {
+  category: ExpenseCategory;
+  expenseType: ExpenseType;
+}> = {
+  'Versicherungen': { category: 'betriebskosten_umlagefaehig', expenseType: 'versicherung' },
+  'Grundsteuer': { category: 'betriebskosten_umlagefaehig', expenseType: 'grundsteuer' },
+  'Müllabfuhr': { category: 'betriebskosten_umlagefaehig', expenseType: 'muellabfuhr' },
+  'Wasser/Abwasser': { category: 'betriebskosten_umlagefaehig', expenseType: 'wasser_abwasser' },
+  'Heizung': { category: 'betriebskosten_umlagefaehig', expenseType: 'heizung' },
+  'Strom Allgemein': { category: 'betriebskosten_umlagefaehig', expenseType: 'strom_allgemein' },
+  'Hausbetreuung/Reinigung': { category: 'betriebskosten_umlagefaehig', expenseType: 'hausbetreuung' },
+  'Lift/Aufzug': { category: 'betriebskosten_umlagefaehig', expenseType: 'lift' },
+  'Gartenpflege': { category: 'betriebskosten_umlagefaehig', expenseType: 'gartenpflege' },
+  'Schneeräumung': { category: 'betriebskosten_umlagefaehig', expenseType: 'schneeraeumung' },
+  'Verwaltungskosten': { category: 'betriebskosten_umlagefaehig', expenseType: 'verwaltung' },
+  'Instandhaltung': { category: 'instandhaltung', expenseType: 'sonstiges' },
+  'Reparaturen': { category: 'instandhaltung', expenseType: 'reparatur' },
+};
 
 export function usePaymentSync() {
   const queryClient = useQueryClient();
@@ -78,13 +100,59 @@ export function usePaymentSync() {
     },
   });
 
-  // Create transaction and sync to payments (if it's a Mieteinnahme with tenant)
+  // Helper: Get category name by ID
+  const getCategoryNameById = (categoryId: string | null | undefined) => {
+    if (!categoryId) return null;
+    return categories?.find(c => c.id === categoryId)?.name || null;
+  };
+
+  // Create expense from transaction (for BK-Abrechnung sync)
+  const createExpenseFromTransaction = async (
+    transaction: {
+      description?: string | null;
+      amount: number;
+      transaction_date: string;
+      reference?: string | null;
+      property_id?: string | null;
+    },
+    categoryName: string
+  ) => {
+    const mapping = CATEGORY_TO_EXPENSE_MAPPING[categoryName];
+    if (!mapping || !transaction.property_id) {
+      console.log('Skipping expense sync: no mapping or property_id', { categoryName, property_id: transaction.property_id });
+      return null;
+    }
+    
+    const date = new Date(transaction.transaction_date);
+    
+    const { data, error } = await supabase.from('expenses').insert({
+      property_id: transaction.property_id,
+      category: mapping.category,
+      expense_type: mapping.expenseType,
+      bezeichnung: transaction.description || categoryName,
+      betrag: Math.abs(transaction.amount), // Positiver Wert in expenses
+      datum: transaction.transaction_date,
+      beleg_nummer: transaction.reference || null,
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+    }).select().single();
+    
+    if (error) {
+      console.error('Failed to sync transaction to expenses:', error);
+      return null;
+    }
+    
+    return data;
+  };
+
+  // Create transaction and sync to payments/expenses
   const createTransactionWithSync = useMutation({
     mutationFn: async (params: {
       transaction: TransactionInsert;
       skipPaymentSync?: boolean;
+      skipExpenseSync?: boolean;
     }) => {
-      const { transaction, skipPaymentSync } = params;
+      const { transaction, skipPaymentSync, skipExpenseSync } = params;
 
       // 1. Create the transaction
       const { data: createdTransaction, error: transactionError } = await supabase
@@ -94,6 +162,9 @@ export function usePaymentSync() {
         .single();
 
       if (transactionError) throw transactionError;
+
+      // Get category name for sync logic
+      const categoryName = getCategoryNameById(transaction.category_id);
 
       // 2. Sync to payments (if it's a Mieteinnahme with tenant)
       if (!skipPaymentSync && transaction.tenant_id && transaction.amount && transaction.amount > 0) {
@@ -114,8 +185,23 @@ export function usePaymentSync() {
 
           if (paymentError) {
             console.error('Failed to sync transaction to payments:', paymentError);
-            // Don't throw - transaction was created successfully
           }
+        }
+      }
+
+      // 3. Sync to expenses (if it's a BK-relevant expense with property)
+      if (!skipExpenseSync && transaction.amount && transaction.amount < 0 && categoryName) {
+        if (CATEGORY_TO_EXPENSE_MAPPING[categoryName] && transaction.property_id) {
+          await createExpenseFromTransaction(
+            {
+              description: transaction.description,
+              amount: transaction.amount,
+              transaction_date: transaction.transaction_date,
+              reference: transaction.reference,
+              property_id: transaction.property_id,
+            },
+            categoryName
+          );
         }
       }
 
@@ -124,6 +210,7 @@ export function usePaymentSync() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Buchung erfolgreich erfasst');
     },
     onError: (error) => {
@@ -136,5 +223,9 @@ export function usePaymentSync() {
     createPaymentWithSync,
     createTransactionWithSync,
     getMieteinnahmenCategory,
+    getCategoryNameById,
+    CATEGORY_TO_EXPENSE_MAPPING,
   };
 }
+
+export { CATEGORY_TO_EXPENSE_MAPPING };

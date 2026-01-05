@@ -79,6 +79,7 @@ export default function Banking() {
     description: '',
     categoryId: '',
     unitId: '',
+    propertyId: '', // For expense sync to BK-Abrechnung
     bankAccountId: '',
     reference: '',
     counterpartyName: '',
@@ -147,6 +148,7 @@ export default function Banking() {
         organization_id: organization?.id || null,
         bank_account_id: manualEntry.bankAccountId,
         unit_id: manualEntry.unitId || null,
+        property_id: manualEntry.propertyId || null, // For BK-Abrechnung sync
         transaction_date: manualEntry.date,
         amount: amount,
         currency: 'EUR',
@@ -169,6 +171,7 @@ export default function Banking() {
         description: '',
         categoryId: '',
         unitId: '',
+        propertyId: '',
         bankAccountId: manualEntry.bankAccountId,
         reference: '',
         counterpartyName: '',
@@ -189,6 +192,7 @@ export default function Banking() {
       description: '',
       categoryId: '',
       unitId: '',
+      propertyId: '',
       bankAccountId: manualEntry.bankAccountId,
       reference: '',
       counterpartyName: '',
@@ -774,6 +778,35 @@ export default function Banking() {
                           })}
                         </SelectContent>
                       </Select>
+                    </div>
+                  )}
+
+                  {/* Property Assignment (for expenses - needed for BK-Abrechnung sync) */}
+                  {manualEntry.type === 'expense' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="property">
+                        Zuordnung zu Immobilie 
+                        <span className="text-xs text-muted-foreground ml-2">(für BK-Abrechnung)</span>
+                      </Label>
+                      <Select 
+                        value={manualEntry.propertyId || 'none'} 
+                        onValueChange={(val) => setManualEntry({...manualEntry, propertyId: val === 'none' ? '' : val})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Immobilie zuordnen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Keine Zuordnung --</SelectItem>
+                          {properties.map(property => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name} - {property.address}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Bei Zuweisung einer Immobilie werden Betriebskosten automatisch in die BK-Abrechnung übernommen.
+                      </p>
                     </div>
                   )}
 
