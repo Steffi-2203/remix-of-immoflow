@@ -184,12 +184,12 @@ export default function Landing() {
               <span className="font-semibold">ImmoFlow</span>
             </div>
             <div className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ImmoFlow. Alle Rechte vorbehalten.
+              © {new Date().getFullYear()} ImmoFlowMe. Alle Rechte vorbehalten.
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
-              <Link to="#" className="hover:text-foreground transition-colors">Datenschutz</Link>
-              <Link to="#" className="hover:text-foreground transition-colors">Impressum</Link>
-              <Link to="#" className="hover:text-foreground transition-colors">AGB</Link>
+              <Link to="/datenschutz" className="hover:text-foreground transition-colors">Datenschutz</Link>
+              <Link to="/impressum" className="hover:text-foreground transition-colors">Impressum</Link>
+              <Link to="/agb" className="hover:text-foreground transition-colors">AGB</Link>
             </div>
           </div>
         </div>
