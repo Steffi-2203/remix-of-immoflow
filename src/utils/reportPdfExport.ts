@@ -315,6 +315,7 @@ export const generateUmsatzReport = (
   units: UnitData[],
   tenants: TenantData[],
   invoices: InvoiceData[],
+  payments: PaymentData[],
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
@@ -338,7 +339,11 @@ export const generateUmsatzReport = (
   const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
   const unitIds = targetUnits.map(u => u.id);
   
-  // Filter invoices
+  // Get relevant tenants
+  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id));
+  const tenantIds = relevantTenants.map(t => t.id);
+  
+  // Filter invoices for period
   const periodInvoices = invoices.filter(inv => {
     const matchesUnit = unitIds.includes(inv.unit_id);
     if (reportPeriod === 'yearly') {
@@ -347,11 +352,41 @@ export const generateUmsatzReport = (
     return matchesUnit && inv.year === selectedYear && inv.month === selectedMonth;
   });
 
-  // Table data
+  // Filter payments for period
+  const periodPayments = payments.filter(p => {
+    const paymentDate = new Date(p.eingangs_datum);
+    const matchesTenant = tenantIds.includes(p.tenant_id);
+    if (reportPeriod === 'yearly') {
+      return matchesTenant && paymentDate.getFullYear() === selectedYear;
+    }
+    return matchesTenant && 
+           paymentDate.getFullYear() === selectedYear && 
+           (paymentDate.getMonth() + 1) === selectedMonth;
+  });
+
+  // Calculate saldo per tenant for the period
+  const tenantSaldos: Record<string, { soll: number; haben: number; saldo: number }> = {};
+  
+  relevantTenants.forEach(tenant => {
+    const tenantInvoices = periodInvoices.filter(inv => inv.tenant_id === tenant.id);
+    const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+    
+    const soll = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+    const haben = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+    
+    tenantSaldos[tenant.id] = {
+      soll,
+      haben,
+      saldo: soll - haben
+    };
+  });
+
+  // Table data with saldo
   const tableData = periodInvoices.map(invoice => {
     const unit = targetUnits.find(u => u.id === invoice.unit_id);
     const tenant = tenants.find(t => t.id === invoice.tenant_id);
     const property = properties.find(p => p.id === unit?.property_id);
+    const tenantSaldo = tenant ? tenantSaldos[tenant.id] : null;
     
     return [
       property?.name || '-',
@@ -363,6 +398,8 @@ export const generateUmsatzReport = (
       formatCurrency(Number(invoice.betriebskosten)),
       formatCurrency(Number(invoice.heizungskosten)),
       formatCurrency(Number(invoice.gesamtbetrag)),
+      tenantSaldo ? formatCurrency(tenantSaldo.haben) : '-',
+      tenantSaldo ? formatCurrency(tenantSaldo.saldo) : '-',
     ];
   });
 
@@ -371,16 +408,34 @@ export const generateUmsatzReport = (
   const totalBK = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten), 0);
   const totalHK = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten), 0);
   const totalGesamt = periodInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag), 0);
+  const totalZahlungen = periodPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+  const totalSaldo = totalGesamt - totalZahlungen;
 
   autoTable(doc, {
     startY: 45,
-    head: [['Liegenschaft', 'Einheit', 'Typ', 'Mieter', 'Monat', 'Miete', 'BK', 'HK', 'Gesamt']],
+    head: [['Liegenschaft', 'Einheit', 'Typ', 'Mieter', 'Monat', 'Miete', 'BK', 'HK', 'Soll', 'Zahlung', 'Saldo']],
     body: tableData,
-    foot: [['Summe', '', '', '', '', formatCurrency(totalMiete), formatCurrency(totalBK), formatCurrency(totalHK), formatCurrency(totalGesamt)]],
+    foot: [['Summe', '', '', '', '', formatCurrency(totalMiete), formatCurrency(totalBK), formatCurrency(totalHK), formatCurrency(totalGesamt), formatCurrency(totalZahlungen), formatCurrency(totalSaldo)]],
     theme: 'striped',
     headStyles: { fillColor: [16, 185, 129] },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
-    styles: { fontSize: 8 },
+    styles: { fontSize: 7 },
+    didParseCell: (data) => {
+      // Style Saldo column based on value
+      if (data.section === 'body' && data.column.index === 10) {
+        const saldoText = data.cell.text[0];
+        if (saldoText && saldoText !== '-') {
+          const value = parseFloat(saldoText.replace('€ ', '').replace(/\./g, '').replace(',', '.'));
+          if (value > 0) {
+            data.cell.styles.textColor = [239, 68, 68]; // Red for underpayment
+            data.cell.styles.fontStyle = 'bold';
+          } else if (value < 0) {
+            data.cell.styles.textColor = [34, 197, 94]; // Green for overpayment
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    },
   });
 
   doc.save(`Umsatzreport_${periodLabel.replace(' ', '_')}.pdf`);

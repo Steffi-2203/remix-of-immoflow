@@ -259,6 +259,7 @@ export default function Reports() {
             allUnits,
             allTenants,
             allInvoices,
+            allPayments as PaymentData[],
             selectedPropertyId,
             selectedYear,
             reportPeriod,
