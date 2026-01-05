@@ -525,8 +525,8 @@ export default function PaymentList() {
 
   return (
     <MainLayout
-      title="Zahlungseingänge"
-      subtitle="Zahlungen erfassen und zuordnen"
+      title="Mieteinnahmen"
+      subtitle="Mieteinnahmen erfassen und verwalten"
     >
       {/* Actions Bar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
