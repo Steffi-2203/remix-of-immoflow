@@ -1,4 +1,13 @@
 import Papa from 'papaparse';
+import { 
+  createSearchCandidates, 
+  fuzzyMatch, 
+  extractLearnablePatterns,
+  type UnitData, 
+  type TenantData, 
+  type LearnedPattern,
+  type FuzzyMatchResult 
+} from './fuzzyMatching';
 
 export interface ParsedTransaction {
   date: string;
@@ -135,12 +144,14 @@ export function parseCSV(content: string): CSVParseResult {
   return { transactions, errors };
 }
 
-// Auto-matching logic
+// Auto-matching logic with fuzzy matching support
 export interface MatchResult {
   unitId: string | null;
   tenantId: string | null;
   confidence: number;
   matchReason: string;
+  matchType?: 'exact' | 'fuzzy' | 'learned' | 'none';
+  learnablePatterns?: string[];
 }
 
 export interface Unit {
@@ -154,76 +165,51 @@ export interface Tenant {
   first_name: string;
   last_name: string;
   unit_id: string;
+  iban?: string | null;
 }
 
+// Enhanced auto-match with fuzzy matching and learned patterns
 export function autoMatchTransaction(
   transaction: ParsedTransaction,
   units: Unit[],
-  tenants: Tenant[]
+  tenants: Tenant[],
+  learnedPatterns: LearnedPattern[] = []
 ): MatchResult {
-  const description = (transaction.description || '').toLowerCase();
-  const counterpartName = (transaction.counterpartName || '').toLowerCase();
-  const reference = (transaction.reference || '').toLowerCase();
-  const searchText = `${description} ${counterpartName} ${reference}`;
+  const description = transaction.description || '';
+  const counterpartName = transaction.counterpartName || '';
+  const reference = transaction.reference || '';
+  const counterpartIban = transaction.counterpartIban || '';
   
-  let bestMatch: MatchResult = {
-    unitId: null,
-    tenantId: null,
-    confidence: 0,
-    matchReason: '',
+  // Combine all text for searching
+  const searchText = `${description} ${counterpartName} ${reference} ${counterpartIban}`;
+  
+  // Create search candidates including learned patterns
+  const candidates = createSearchCandidates(
+    units as UnitData[],
+    tenants as TenantData[],
+    learnedPatterns
+  );
+  
+  // Perform fuzzy matching
+  const fuzzyResult = fuzzyMatch(searchText, candidates);
+  
+  // Extract patterns that could be learned from this transaction
+  const learnablePatterns = extractLearnablePatterns(
+    counterpartName,
+    counterpartIban,
+    description
+  );
+  
+  return {
+    unitId: fuzzyResult.unitId,
+    tenantId: fuzzyResult.tenantId,
+    confidence: fuzzyResult.confidence,
+    matchReason: fuzzyResult.matchReason,
+    matchType: fuzzyResult.matchType,
+    learnablePatterns,
   };
-  
-  // Try to match by unit number (Top X)
-  for (const unit of units) {
-    const topNummer = unit.top_nummer.toLowerCase();
-    const variations = [
-      topNummer,
-      topNummer.replace(/\s/g, ''),
-      `top ${topNummer}`,
-      `top${topNummer}`,
-      `wohnung ${topNummer}`,
-      `einheit ${topNummer}`,
-    ];
-    
-    for (const variation of variations) {
-      if (searchText.includes(variation)) {
-        const tenant = tenants.find(t => t.unit_id === unit.id);
-        bestMatch = {
-          unitId: unit.id,
-          tenantId: tenant?.id || null,
-          confidence: 0.8,
-          matchReason: `Einheit "${unit.top_nummer}" im Verwendungszweck gefunden`,
-        };
-        break;
-      }
-    }
-    if (bestMatch.confidence > 0) break;
-  }
-  
-  // Try to match by tenant name
-  if (bestMatch.confidence === 0) {
-    for (const tenant of tenants) {
-      const fullName = `${tenant.first_name} ${tenant.last_name}`.toLowerCase();
-      const lastName = tenant.last_name.toLowerCase();
-      
-      if (searchText.includes(fullName)) {
-        bestMatch = {
-          unitId: tenant.unit_id,
-          tenantId: tenant.id,
-          confidence: 0.9,
-          matchReason: `Mieter "${tenant.first_name} ${tenant.last_name}" im Namen/Verwendungszweck gefunden`,
-        };
-        break;
-      } else if (searchText.includes(lastName) && lastName.length > 3) {
-        bestMatch = {
-          unitId: tenant.unit_id,
-          tenantId: tenant.id,
-          confidence: 0.6,
-          matchReason: `Nachname "${tenant.last_name}" im Namen/Verwendungszweck gefunden`,
-        };
-      }
-    }
-  }
-  
-  return bestMatch;
 }
+
+// Re-export for convenience
+export { extractLearnablePatterns } from './fuzzyMatching';
+export type { LearnedPattern, UnitData, TenantData } from './fuzzyMatching';
