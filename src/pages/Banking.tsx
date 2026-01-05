@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, Building, User, Euro, ArrowUpDown } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, Building, User, Euro, Brain, Sparkles, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { parseCSV, autoMatchTransaction, ParsedTransaction } from '@/utils/bankImportUtils';
 import { useTransactions, useCreateTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
+import { useLearnedMatches, useCreateLearnedMatch, useDeleteLearnedMatch } from '@/hooks/useLearnedMatches';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useProperties } from '@/hooks/useProperties';
@@ -25,7 +26,10 @@ interface ImportTransaction extends ParsedTransaction {
   matchedTenantId: string | null;
   confidence: number;
   matchReason: string;
+  matchType?: 'exact' | 'fuzzy' | 'learned' | 'none';
+  learnablePatterns?: string[];
   selected: boolean;
+  wasManuallyAssigned?: boolean;
 }
 
 export default function Banking() {
@@ -42,8 +46,11 @@ export default function Banking() {
   const { data: tenants = [] } = useTenants();
   const { data: properties = [] } = useProperties();
   const { data: organization } = useOrganization();
+  const { data: learnedMatches = [] } = useLearnedMatches();
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
+  const createLearnedMatch = useCreateLearnedMatch();
+  const deleteLearnedMatch = useDeleteLearnedMatch();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -72,9 +79,18 @@ export default function Banking() {
         return;
       }
       
-      // Auto-match transactions
+      // Convert learned matches to the format expected by autoMatchTransaction
+      const learnedPatterns = learnedMatches.map(m => ({
+        id: m.id,
+        pattern: m.pattern,
+        unit_id: m.unit_id,
+        tenant_id: m.tenant_id,
+        match_count: m.match_count,
+      }));
+      
+      // Auto-match transactions with fuzzy matching and learned patterns
       const matchedTransactions: ImportTransaction[] = parsed.map((t, index) => {
-        const match = autoMatchTransaction(t, units, tenants);
+        const match = autoMatchTransaction(t, units, tenants, learnedPatterns);
         return {
           ...t,
           id: `import-${index}`,
@@ -82,7 +98,10 @@ export default function Banking() {
           matchedTenantId: match.tenantId,
           confidence: match.confidence,
           matchReason: match.matchReason,
+          matchType: match.matchType,
+          learnablePatterns: match.learnablePatterns,
           selected: true,
+          wasManuallyAssigned: false,
         };
       });
       
@@ -94,7 +113,7 @@ export default function Banking() {
     }
     
     setIsProcessing(false);
-  }, [units, tenants]);
+  }, [units, tenants, learnedMatches]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -127,6 +146,8 @@ export default function Banking() {
           matchedTenantId: tenant?.id || null,
           confidence: unitId ? 1 : 0,
           matchReason: unitId ? 'Manuell zugeordnet' : '',
+          matchType: unitId ? 'exact' as const : 'none' as const,
+          wasManuallyAssigned: !!unitId,
         };
       }
       return t;
@@ -151,6 +172,32 @@ export default function Banking() {
       return;
     }
     
+    // Learn patterns from manually assigned transactions
+    const manuallyAssigned = selectedTransactions.filter(
+      t => t.wasManuallyAssigned && t.matchedUnitId && t.learnablePatterns && t.learnablePatterns.length > 0
+    );
+    
+    for (const transaction of manuallyAssigned) {
+      for (const pattern of transaction.learnablePatterns || []) {
+        try {
+          await createLearnedMatch.mutateAsync({
+            organization_id: organization?.id || null,
+            pattern,
+            unit_id: transaction.matchedUnitId,
+            tenant_id: transaction.matchedTenantId,
+          });
+        } catch (error) {
+          console.error('Error saving learned pattern:', error);
+        }
+      }
+    }
+    
+    if (manuallyAssigned.length > 0) {
+      toast.success(`${manuallyAssigned.length} neue Zuordnungen gelernt`, {
+        description: 'Diese werden bei zukünftigen Imports automatisch erkannt',
+      });
+    }
+    
     const toInsert = selectedTransactions.map(t => {
       const status: 'matched' | 'unmatched' | 'ignored' = t.matchedUnitId ? 'matched' : 'unmatched';
       return {
@@ -173,7 +220,7 @@ export default function Banking() {
     await createTransactions.mutateAsync(toInsert);
     setShowImportDialog(false);
     setImportTransactions([]);
-  }, [importTransactions, organization, createTransactions]);
+  }, [importTransactions, organization, createTransactions, createLearnedMatch]);
 
   const getUnitInfo = useCallback((unitId: string | null) => {
     if (!unitId) return null;
@@ -274,6 +321,10 @@ export default function Banking() {
           <TabsList>
             <TabsTrigger value="import">Import</TabsTrigger>
             <TabsTrigger value="transactions">Transaktionen ({stats.total})</TabsTrigger>
+            <TabsTrigger value="learned">
+              <Brain className="h-4 w-4 mr-1" />
+              Gelernte Muster ({learnedMatches.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="import" className="space-y-4">
@@ -463,6 +514,104 @@ export default function Banking() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Learned Patterns Tab */}
+          <TabsContent value="learned" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Gelernte Zuordnungsmuster
+                </CardTitle>
+                <CardDescription>
+                  Diese Muster wurden aus manuellen Zuordnungen gelernt und werden bei zukünftigen Imports automatisch angewendet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {learnedMatches.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Noch keine Muster gelernt</p>
+                    <p className="text-sm mt-2">
+                      Wenn Sie beim Import Transaktionen manuell zuordnen, werden die Muster automatisch gespeichert.
+                    </p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Muster</TableHead>
+                        <TableHead>Zugeordnete Einheit</TableHead>
+                        <TableHead>Mieter</TableHead>
+                        <TableHead className="text-center">Anwendungen</TableHead>
+                        <TableHead className="w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {learnedMatches.map((match) => {
+                        const unit = units.find(u => u.id === match.unit_id);
+                        const property = unit ? properties.find(p => p.id === unit.property_id) : null;
+                        const tenant = match.tenant_id ? tenants.find(t => t.id === match.tenant_id) : null;
+                        
+                        return (
+                          <TableRow key={match.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="h-4 w-4 text-yellow-500" />
+                                <code className="text-sm bg-muted px-2 py-1 rounded">
+                                  {match.pattern}
+                                </code>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {unit ? (
+                                <div className="flex items-center gap-2">
+                                  <Building className="h-4 w-4 text-muted-foreground" />
+                                  <span>{unit.top_nummer}</span>
+                                  {property && (
+                                    <span className="text-muted-foreground text-sm">
+                                      ({property.name})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {tenant ? (
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4 text-muted-foreground" />
+                                  <span>{tenant.first_name} {tenant.last_name}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary">
+                                {match.match_count || 0}x
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteLearnedMatch.mutate(match.id)}
+                                disabled={deleteLearnedMatch.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -532,8 +681,18 @@ export default function Banking() {
                       <p className="truncate font-medium">{transaction.counterpartName || 'Unbekannt'}</p>
                       <p className="text-sm text-muted-foreground truncate">{transaction.description}</p>
                       {transaction.matchReason && (
-                        <p className="text-xs text-green-600 mt-1">
-                          <CheckCircle2 className="h-3 w-3 inline mr-1" />
+                        <p className={`text-xs mt-1 flex items-center gap-1 ${
+                          transaction.matchType === 'learned' ? 'text-yellow-600' :
+                          transaction.matchType === 'fuzzy' ? 'text-blue-600' :
+                          'text-green-600'
+                        }`}>
+                          {transaction.matchType === 'learned' ? (
+                            <Brain className="h-3 w-3" />
+                          ) : transaction.matchType === 'fuzzy' ? (
+                            <Sparkles className="h-3 w-3" />
+                          ) : (
+                            <CheckCircle2 className="h-3 w-3" />
+                          )}
                           {transaction.matchReason}
                         </p>
                       )}
