@@ -72,6 +72,8 @@ export default function Banking() {
   const [reportPeriod, setReportPeriod] = useState('current-month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [editingTransaction, setEditingTransaction] = useState<typeof transactions[0] | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   
   // Manual entry form state
   const [manualEntry, setManualEntry] = useState({
@@ -1108,46 +1110,59 @@ export default function Banking() {
                               {formatCurrency(Number(transaction.amount))}
                             </TableCell>
                             <TableCell className="text-center">
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Buchung löschen?</AlertDialogTitle>
-                                    <AlertDialogDescription asChild>
-                                      <div>
-                                        <p>Diese Buchung wird unwiderruflich gelöscht.</p>
-                                        {transaction.property_id && Number(transaction.amount) < 0 && (
-                                          <p className="mt-2 text-orange-600 dark:text-orange-400">
-                                            ⚠️ Die verknüpfte Ausgabe in der BK-Abrechnung wird ebenfalls gelöscht.
-                                          </p>
+                              <div className="flex items-center justify-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    setEditingTransaction(transaction);
+                                    setShowEditDialog(true);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Buchung löschen?</AlertDialogTitle>
+                                      <AlertDialogDescription asChild>
+                                        <div>
+                                          <p>Diese Buchung wird unwiderruflich gelöscht.</p>
+                                          {transaction.property_id && Number(transaction.amount) < 0 && (
+                                            <p className="mt-2 text-orange-600 dark:text-orange-400">
+                                              ⚠️ Die verknüpfte Ausgabe in der BK-Abrechnung wird ebenfalls gelöscht.
+                                            </p>
+                                          )}
+                                          {transaction.tenant_id && Number(transaction.amount) > 0 && (
+                                            <p className="mt-2 text-orange-600 dark:text-orange-400">
+                                              ⚠️ Die verknüpfte Mieteinnahme wird ebenfalls gelöscht.
+                                            </p>
+                                          )}
+                                        </div>
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deleteTransactionWithSync.mutate(transaction.id)}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        {deleteTransactionWithSync.isPending ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          'Löschen'
                                         )}
-                                        {transaction.tenant_id && Number(transaction.amount) > 0 && (
-                                          <p className="mt-2 text-orange-600 dark:text-orange-400">
-                                            ⚠️ Die verknüpfte Mieteinnahme wird ebenfalls gelöscht.
-                                          </p>
-                                        )}
-                                      </div>
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteTransactionWithSync.mutate(transaction.id)}
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    >
-                                      {deleteTransactionWithSync.isPending ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        'Löschen'
-                                      )}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -1868,6 +1883,187 @@ export default function Banking() {
               {importTransactions.filter(t => t.selected).length} Transaktionen importieren
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Transaction Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => { setShowEditDialog(open); if (!open) setEditingTransaction(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Buchung bearbeiten
+            </DialogTitle>
+            <DialogDescription>
+              Ändern Sie die Details dieser Buchung
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingTransaction && (
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              
+              try {
+                await updateTransaction.mutateAsync({
+                  id: editingTransaction.id,
+                  description: formData.get('description') as string,
+                  amount: parseFloat((formData.get('amount') as string).replace(',', '.')),
+                  transaction_date: formData.get('date') as string,
+                  category_id: formData.get('categoryId') as string || null,
+                  unit_id: formData.get('unitId') as string || null,
+                  property_id: formData.get('propertyId') as string || null,
+                  counterpart_name: formData.get('counterpartName') as string || null,
+                  reference: formData.get('reference') as string || null,
+                  notes: formData.get('notes') as string || null,
+                  status: formData.get('unitId') ? 'matched' : 'unmatched',
+                });
+                toast.success('Buchung erfolgreich aktualisiert');
+                setShowEditDialog(false);
+                setEditingTransaction(null);
+              } catch (error) {
+                console.error('Error updating transaction:', error);
+                toast.error('Fehler beim Aktualisieren');
+              }
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-date">Datum</Label>
+                  <Input
+                    id="edit-date"
+                    name="date"
+                    type="date"
+                    defaultValue={editingTransaction.transaction_date}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-amount">Betrag (€)</Label>
+                  <Input
+                    id="edit-amount"
+                    name="amount"
+                    type="text"
+                    defaultValue={editingTransaction.amount.toString().replace('.', ',')}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Negativ = Ausgabe, Positiv = Einnahme
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Beschreibung</Label>
+                <Input
+                  id="edit-description"
+                  name="description"
+                  type="text"
+                  defaultValue={editingTransaction.description || ''}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-counterpartName">Empfänger/Zahler</Label>
+                <Input
+                  id="edit-counterpartName"
+                  name="counterpartName"
+                  type="text"
+                  defaultValue={editingTransaction.counterpart_name || ''}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-category">Kategorie</Label>
+                  <Select name="categoryId" defaultValue={editingTransaction.category_id || 'none'}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Kategorie wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">-- Keine --</SelectItem>
+                      {categories.map(cat => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name} ({cat.type === 'income' ? 'Einnahme' : 'Ausgabe'})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-unit">Einheit zuordnen</Label>
+                  <Select name="unitId" defaultValue={editingTransaction.unit_id || 'none'}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Einheit wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">-- Keine --</SelectItem>
+                      {units.map(unit => {
+                        const property = properties.find(p => p.id === unit.property_id);
+                        const tenant = tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv');
+                        return (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.top_nummer} - {property?.name || 'Unbekannt'}
+                            {tenant && ` (${tenant.first_name} ${tenant.last_name})`}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-property">Immobilie (für BK-Abrechnung)</Label>
+                <Select name="propertyId" defaultValue={editingTransaction.property_id || 'none'}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Immobilie wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- Keine --</SelectItem>
+                    {properties.map(property => (
+                      <SelectItem key={property.id} value={property.id}>
+                        {property.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-reference">Referenz</Label>
+                  <Input
+                    id="edit-reference"
+                    name="reference"
+                    type="text"
+                    defaultValue={editingTransaction.reference || ''}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-notes">Notizen</Label>
+                  <Input
+                    id="edit-notes"
+                    name="notes"
+                    type="text"
+                    defaultValue={editingTransaction.notes || ''}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                  Abbrechen
+                </Button>
+                <Button type="submit" disabled={updateTransaction.isPending}>
+                  {updateTransaction.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  Speichern
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </MainLayout>
