@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw, RefreshCcw } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,6 +30,7 @@ import {
   generateGesamtabrechnungPdf 
 } from '@/utils/bkAbrechnungPdfExport';
 import { useSaveSettlement, useExistingSettlement, useFinalizeSettlement } from '@/hooks/useSettlements';
+import { useUpdateNewAdvances } from '@/hooks/useNewAdvances';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
@@ -118,6 +119,7 @@ export default function OperatingCostSettlement() {
 
   const saveSettlement = useSaveSettlement();
   const finalizeSettlement = useFinalizeSettlement();
+  const updateNewAdvances = useUpdateNewAdvances();
   const { syncExistingTransactionsToExpenses } = usePaymentSync();
 
   // Fetch ALL units with current tenant and year tenants (including past tenants)
@@ -941,6 +943,43 @@ export default function OperatingCostSettlement() {
                             <CheckCircle className="h-4 w-4 mr-2" />
                           )}
                           Finalisieren
+                        </Button>
+                      )}
+
+                      {/* New Advances Button - only show when settlement is finalized */}
+                      {existingSettlement && existingSettlement.status === 'abgeschlossen' && (
+                        <Button
+                          variant="outline"
+                          className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                          onClick={() => {
+                            if (!units) return;
+                            
+                            const unitsForUpdate = units.map(u => ({
+                              id: u.id,
+                              qm: u.qm,
+                              mea: u.mea,
+                              currentTenantId: u.current_tenant?.id || null,
+                            }));
+
+                            updateNewAdvances.mutate({
+                              propertyId: selectedPropertyId,
+                              totalBkKosten: totalBkKosten,
+                              totalHkKosten: totalHeizkosten,
+                              units: unitsForUpdate,
+                              totals: {
+                                qm: totals.qm,
+                                mea: totals.mea,
+                              },
+                            });
+                          }}
+                          disabled={updateNewAdvances.isPending}
+                        >
+                          {updateNewAdvances.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4 mr-2" />
+                          )}
+                          Neue Vorschreibung ab {selectedYear + 1}
                         </Button>
                       )}
                     </div>
