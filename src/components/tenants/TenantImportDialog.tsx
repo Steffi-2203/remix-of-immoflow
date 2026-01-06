@@ -72,6 +72,7 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
       header: true,
       skipEmptyLines: true,
       encoding: 'UTF-8',
+      delimiter: '', // Auto-detect delimiter (comma, semicolon, tab)
       complete: (results) => {
         const data = results.data as ParsedRow[];
         if (data.length === 0) {
@@ -306,61 +307,123 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
               </div>
               <div>
                 <Label>Grundmiete</Label>
-                <Select value={mapping.grundmiete} onValueChange={(v) => setMapping({ ...mapping, grundmiete: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.grundmiete || 'none'}
+                  onValueChange={(v) =>
+                    setMapping({ ...mapping, grundmiete: v === 'none' ? '' : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Betriebskosten</Label>
-                <Select value={mapping.betriebskosten} onValueChange={(v) => setMapping({ ...mapping, betriebskosten: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.betriebskosten || 'none'}
+                  onValueChange={(v) =>
+                    setMapping({ ...mapping, betriebskosten: v === 'none' ? '' : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Heizungskosten</Label>
-                <Select value={mapping.heizungskosten} onValueChange={(v) => setMapping({ ...mapping, heizungskosten: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.heizungskosten || 'none'}
+                  onValueChange={(v) =>
+                    setMapping({ ...mapping, heizungskosten: v === 'none' ? '' : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Mietbeginn</Label>
-                <Select value={mapping.mietbeginn} onValueChange={(v) => setMapping({ ...mapping, mietbeginn: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.mietbeginn || 'none'}
+                  onValueChange={(v) =>
+                    setMapping({ ...mapping, mietbeginn: v === 'none' ? '' : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Email</Label>
-                <Select value={mapping.email} onValueChange={(v) => setMapping({ ...mapping, email: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.email || 'none'}
+                  onValueChange={(v) => setMapping({ ...mapping, email: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Telefon</Label>
-                <Select value={mapping.phone} onValueChange={(v) => setMapping({ ...mapping, phone: v })}>
-                  <SelectTrigger><SelectValue placeholder="Spalte wählen" /></SelectTrigger>
+                <Select
+                  value={mapping.phone || 'none'}
+                  onValueChange={(v) => setMapping({ ...mapping, phone: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Spalte wählen" />
+                  </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Keine —</SelectItem>
-                    {headers.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                    <SelectItem value="none">— Keine —</SelectItem>
+                    {headers.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
