@@ -1172,36 +1172,9 @@ export default function Reports() {
         </CardHeader>
         <CardContent>
           {(() => {
-            // Get relevant tenants based on selected units
-            const relevantTenants = allTenants?.filter(t => unitIds.includes(t.unit_id)) || [];
-            const tenantIds = relevantTenants.map(t => t.id);
-            
-            // Filter invoices for selected year
-            const yearInvoices = (invoices || []).filter(inv => 
-              unitIds.includes(inv.unit_id) && inv.year === selectedYear
-            );
-
-            // Filter payments for selected year
-            const yearPayments = (allPayments || []).filter(p => {
-              const paymentDate = new Date(p.eingangs_datum);
-              return tenantIds.includes(p.tenant_id) && paymentDate.getFullYear() === selectedYear;
-            });
-
-            // Calculate balance per tenant
-            interface TenantBalance {
-              tenantId: string;
-              tenantName: string;
-              unitNummer: string;
-              propertyName: string;
-              sollBetrag: number;
-              habenBetrag: number;
-              saldo: number;
-              daysOverdue: number;
-            }
-
-            const tenantBalances: TenantBalance[] = [];
+            // Zeige ALLE Einheiten mit IST-Zahlungen aus Transaktionen
             const today = new Date();
-
+            
             // Alle Einnahmen-Kategorien die für Mieteinnahmen relevant sind (Miete, BK, Heizung)
             const allIncomeCategories = [
               mieteinnahmenCategoryId,
@@ -1216,28 +1189,55 @@ export default function Reports() {
                      t.amount > 0 &&
                      (allIncomeCategories.includes(t.category_id || '') || 
                       t.tenant_id || 
-                      t.unit_id); // Auch nicht-kategorisierte aber zugeordnete Transaktionen
+                      t.unit_id);
             }) || [];
 
-            relevantTenants.forEach(tenant => {
-              const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
+            // Filter invoices for selected year
+            const yearInvoices = (invoices || []).filter(inv => 
+              unitIds.includes(inv.unit_id) && inv.year === selectedYear
+            );
+
+            // Calculate balance per UNIT (not tenant)
+            interface UnitBalance {
+              unitId: string;
+              unitNummer: string;
+              unitType: string;
+              propertyName: string;
+              tenantName: string;
+              sollBetrag: number; // aus Vorschreibungen
+              habenBetrag: number; // IST aus Transaktionen
+              saldo: number;
+              daysOverdue: number;
+              isLeerstand: boolean;
+            }
+
+            const unitBalances: UnitBalance[] = [];
+
+            // Alle relevanten Units durchgehen
+            units?.forEach(unit => {
+              const property = properties?.find(p => p.id === unit.property_id);
               
-              // Alle Zahlungen aus Buchhaltung die diesem Mieter oder dessen Unit zugeordnet sind
-              const tenantZahlungen = allIncomeTransactions.filter(t => 
-                t.tenant_id === tenant.id || t.unit_id === tenant.unit_id
+              // Aktiver Mieter für diese Unit
+              const activeTenant = allTenants?.find(t => 
+                t.unit_id === unit.id && t.status === 'aktiv'
               );
               
-              // SOLL = Erwartete Einnahmen (Vorschreibungen)
-              const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+              // SOLL = Vorschreibungen für diese Unit im Jahr
+              const unitInvoices = yearInvoices.filter(inv => inv.unit_id === unit.id);
+              const sollBetrag = unitInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
               
-              // HABEN = Tatsächlich erhaltene Zahlungen aus Buchhaltung
-              const habenBetrag = tenantZahlungen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+              // HABEN = IST-Zahlungen aus Transaktionen für diese Unit
+              const unitZahlungen = allIncomeTransactions.filter(t => 
+                t.unit_id === unit.id || 
+                (activeTenant && t.tenant_id === activeTenant.id)
+              );
+              const habenBetrag = unitZahlungen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
               
-              // SALDO = Soll - Haben (positiv = Unterzahlung, negativ = Überzahlung, 0 = ausgeglichen)
+              // SALDO = Soll - Haben
               const saldo = sollBetrag - habenBetrag;
 
-              // Find oldest unpaid invoice
-              const openInvoices = tenantInvoices.filter(inv => 
+              // Überfällige Tage berechnen
+              const openInvoices = unitInvoices.filter(inv => 
                 inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig'
               );
               const oldestDueDate = openInvoices.length > 0 
@@ -1247,41 +1247,40 @@ export default function Reports() {
                 ? Math.floor((today.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))
                 : 0;
 
-              const unit = allUnits?.find(u => u.id === tenant.unit_id);
-              const property = properties?.find(p => p.id === unit?.property_id);
-
-              // Only include if there's activity
-              if (sollBetrag > 0 || habenBetrag > 0) {
-                tenantBalances.push({
-                  tenantId: tenant.id,
-                  tenantName: `${tenant.first_name} ${tenant.last_name}`,
-                  unitNummer: unit?.top_nummer || '-',
-                  propertyName: property?.name || '-',
-                  sollBetrag,
-                  habenBetrag,
-                  saldo,
-                  daysOverdue,
-                });
-              }
+              // Zeige alle Units (auch Leerstand mit 0-Werten wenn gewünscht)
+              unitBalances.push({
+                unitId: unit.id,
+                unitNummer: unit.top_nummer || '-',
+                unitType: unitTypeLabels[unit.type] || unit.type,
+                propertyName: property?.name || '-',
+                tenantName: activeTenant 
+                  ? `${activeTenant.first_name} ${activeTenant.last_name}`
+                  : 'Leerstand',
+                sollBetrag,
+                habenBetrag,
+                saldo,
+                daysOverdue,
+                isLeerstand: unit.status === 'leerstand',
+              });
             });
 
             // Sort: underpayments first, then by amount
-            tenantBalances.sort((a, b) => {
+            unitBalances.sort((a, b) => {
               if (a.saldo > 0 && b.saldo <= 0) return -1;
               if (a.saldo <= 0 && b.saldo > 0) return 1;
               return Math.abs(b.saldo) - Math.abs(a.saldo);
             });
 
             // Calculations
-            const totalSoll = tenantBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
-            const totalHaben = tenantBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
-            const totalSaldo = tenantBalances.reduce((sum, t) => sum + t.saldo, 0);
-            const underpaidTenants = tenantBalances.filter(t => t.saldo > 0);
-            const overpaidTenants = tenantBalances.filter(t => t.saldo < 0);
-            const totalUnterzahlung = underpaidTenants.reduce((sum, t) => sum + t.saldo, 0);
-            const totalUeberzahlung = Math.abs(overpaidTenants.reduce((sum, t) => sum + t.saldo, 0));
+            const totalSoll = unitBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
+            const totalHaben = unitBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
+            const totalSaldo = unitBalances.reduce((sum, t) => sum + t.saldo, 0);
+            const underpaidUnits = unitBalances.filter(t => t.saldo > 0);
+            const overpaidUnits = unitBalances.filter(t => t.saldo < 0);
+            const totalUnterzahlung = underpaidUnits.reduce((sum, t) => sum + t.saldo, 0);
+            const totalUeberzahlung = Math.abs(overpaidUnits.reduce((sum, t) => sum + t.saldo, 0));
 
-            if (tenantBalances.length === 0) {
+            if (unitBalances.length === 0) {
               return (
                 <div className="text-center py-8 text-muted-foreground">
                   Keine Daten für {selectedYear} vorhanden.
@@ -1299,7 +1298,7 @@ export default function Reports() {
                     </p>
                   </div>
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Haben (Zahlungen)</p>
+                    <p className="text-xs text-muted-foreground">Haben (IST-Zahlungen)</p>
                     <p className="text-lg font-bold text-foreground">
                       €{totalHaben.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
@@ -1309,59 +1308,66 @@ export default function Reports() {
                     <p className="text-lg font-bold text-destructive">
                       €{totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">{underpaidTenants.length} Mieter</p>
+                    <p className="text-xs text-muted-foreground">{underpaidUnits.length} Einheiten</p>
                   </div>
                   <div className="rounded-lg border border-success/30 bg-success/5 p-3">
                     <p className="text-xs text-muted-foreground">Überzahlungen</p>
                     <p className="text-lg font-bold text-success">
                       €{totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
-                    <p className="text-xs text-muted-foreground">{overpaidTenants.length} Mieter</p>
+                    <p className="text-xs text-muted-foreground">{overpaidUnits.length} Einheiten</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[180px]">Mieter / Einheit</TableHead>
+                        <TableHead className="min-w-[180px]">Einheit / Mieter</TableHead>
+                        <TableHead>Typ</TableHead>
                         <TableHead className="text-right">Soll</TableHead>
-                        <TableHead className="text-right">Haben</TableHead>
+                        <TableHead className="text-right">Haben (IST)</TableHead>
                         <TableHead>Überfällig</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Saldo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {tenantBalances.slice(0, 10).map((tb) => {
+                      {unitBalances.slice(0, 15).map((ub) => {
                         let statusLabel = 'Ausgeglichen';
                         let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
-                        if (tb.saldo > 0) {
+                        if (ub.isLeerstand) {
+                          statusLabel = 'Leerstand';
+                          statusVariant = 'secondary';
+                        } else if (ub.saldo > 0) {
                           statusLabel = 'Unterzahlung';
                           statusVariant = 'destructive';
-                        } else if (tb.saldo < 0) {
+                        } else if (ub.saldo < 0) {
                           statusLabel = 'Überzahlung';
-                          statusVariant = 'secondary';
+                          statusVariant = 'default';
                         }
                         
                         return (
-                          <TableRow key={tb.tenantId}>
+                          <TableRow key={ub.unitId}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">{tb.tenantName}</span>
+                                <span className="font-medium">Top {ub.unitNummer}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {tb.propertyName} - Top {tb.unitNummer}
+                                  {ub.tenantName} • {ub.propertyName}
                                 </span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right">
-                              €{tb.sollBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            <TableCell className="text-xs text-muted-foreground">
+                              {ub.unitType}
                             </TableCell>
                             <TableCell className="text-right">
-                              €{tb.habenBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                              €{ub.sollBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              €{ub.habenBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                             </TableCell>
                             <TableCell>
-                              {tb.daysOverdue > 0 ? (
-                                <span className="text-destructive font-medium">{tb.daysOverdue} Tage</span>
+                              {ub.daysOverdue > 0 ? (
+                                <span className="text-destructive font-medium">{ub.daysOverdue} Tage</span>
                               ) : (
                                 <span className="text-muted-foreground">-</span>
                               )}
@@ -1369,17 +1375,17 @@ export default function Reports() {
                             <TableCell>
                               <Badge variant={statusVariant}>{statusLabel}</Badge>
                             </TableCell>
-                            <TableCell className={`text-right font-bold ${tb.saldo > 0 ? 'text-destructive' : tb.saldo < 0 ? 'text-success' : ''}`}>
-                              €{tb.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            <TableCell className={`text-right font-bold ${ub.saldo > 0 ? 'text-destructive' : ub.saldo < 0 ? 'text-success' : ''}`}>
+                              €{ub.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                  {tenantBalances.length > 10 && (
+                  {unitBalances.length > 15 && (
                     <p className="text-sm text-muted-foreground text-center mt-4">
-                      ... und {tenantBalances.length - 10} weitere Mieter. PDF für vollständige Liste exportieren.
+                      ... und {unitBalances.length - 15} weitere Einheiten. PDF für vollständige Liste exportieren.
                     </p>
                   )}
                 </div>
@@ -1556,138 +1562,201 @@ export default function Reports() {
             );
           })()}
 
-          {/* Mietvorschreibungen - Monatliche Miete/BK/HK pro Mieter */}
+          {/* Mietvorschreibungen - Monatliche SOLL-Werte pro Mieter/Einheit */}
           {selectedReportId === 'mietvorschreibung' && (() => {
-            // Gruppiere Invoices nach Monat und Mieter
-            const monthlyData = new Map<string, Array<{
-              month: number;
-              year: number;
-              tenant: typeof allTenants extends (infer T)[] ? T : never;
-              unit: typeof allUnits extends (infer U)[] ? U : never;
+            // SOLL-Werte direkt aus tenants-Tabelle (aktive Mieter)
+            // Gruppiere nach Liegenschaft
+            const propertiesData = new Map<string, {
               property: typeof properties extends (infer P)[] ? P : never;
-              grundmiete: number;
-              betriebskosten: number;
-              heizungskosten: number;
-              gesamt: number;
-              status: string;
-            }>>();
+              tenantsSoll: Array<{
+                tenant: typeof allTenants extends (infer T)[] ? T : never;
+                unit: typeof allUnits extends (infer U)[] ? U : never;
+                grundmiete: number;
+                betriebskosten: number;
+                heizungskosten: number;
+                gesamt: number;
+              }>;
+              totalGrundmiete: number;
+              totalBK: number;
+              totalHK: number;
+              totalGesamt: number;
+            }>();
 
-            // Fülle die Daten
-            periodInvoices.forEach(inv => {
-              const tenant = allTenants?.find(t => t.id === inv.tenant_id);
-              const unit = allUnits?.find(u => u.id === inv.unit_id);
-              const property = unit ? properties?.find(p => p.id === unit.property_id) : null;
-              
-              const key = `${inv.year}-${inv.month}`;
-              if (!monthlyData.has(key)) {
-                monthlyData.set(key, []);
-              }
-              
-              monthlyData.get(key)!.push({
-                month: inv.month,
-                year: inv.year,
-                tenant: tenant as any,
-                unit: unit as any,
-                property: property as any,
-                grundmiete: Number(inv.grundmiete) || 0,
-                betriebskosten: Number(inv.betriebskosten) || 0,
-                heizungskosten: Number(inv.heizungskosten) || 0,
-                gesamt: Number(inv.gesamtbetrag) || 0,
-                status: inv.status,
+            // Initialisiere Properties
+            properties?.forEach(prop => {
+              propertiesData.set(prop.id, {
+                property: prop as any,
+                tenantsSoll: [],
+                totalGrundmiete: 0,
+                totalBK: 0,
+                totalHK: 0,
+                totalGesamt: 0,
               });
             });
 
-            // Sortiere nach Datum
-            const sortedMonths = Array.from(monthlyData.entries())
-              .sort((a, b) => {
-                const [aYear, aMonth] = a[0].split('-').map(Number);
-                const [bYear, bMonth] = b[0].split('-').map(Number);
-                return bYear - aYear || bMonth - aMonth;
+            // Filtere nur relevante Units
+            const relevantUnits = selectedPropertyId === 'all' 
+              ? allUnits 
+              : allUnits?.filter(u => u.property_id === selectedPropertyId);
+
+            // Fülle SOLL-Daten aus Mietern
+            relevantUnits?.forEach(unit => {
+              const property = properties?.find(p => p.id === unit.property_id);
+              if (!property) return;
+
+              // Finde aktive Mieter für diese Unit
+              const activeTenants = allTenants?.filter(t => 
+                t.unit_id === unit.id && t.status === 'aktiv'
+              ) || [];
+
+              activeTenants.forEach(tenant => {
+                const grundmiete = Number(tenant.grundmiete) || 0;
+                const bk = Number(tenant.betriebskosten_vorschuss) || 0;
+                const hk = Number(tenant.heizungskosten_vorschuss) || 0;
+                const gesamt = grundmiete + bk + hk;
+
+                if (gesamt > 0) {
+                  const propData = propertiesData.get(property.id)!;
+                  propData.tenantsSoll.push({
+                    tenant: tenant as any,
+                    unit: unit as any,
+                    grundmiete,
+                    betriebskosten: bk,
+                    heizungskosten: hk,
+                    gesamt,
+                  });
+                  propData.totalGrundmiete += grundmiete;
+                  propData.totalBK += bk;
+                  propData.totalHK += hk;
+                  propData.totalGesamt += gesamt;
+                }
               });
+
+              // Für Leerstand zeigen wir die Einheit ohne Mieter-Soll
+              if (activeTenants.length === 0 && unit.status === 'leerstand') {
+                const propData = propertiesData.get(property.id)!;
+                propData.tenantsSoll.push({
+                  tenant: null as any,
+                  unit: unit as any,
+                  grundmiete: 0,
+                  betriebskosten: 0,
+                  heizungskosten: 0,
+                  gesamt: 0,
+                });
+              }
+            });
+
+            // Gesamtsummen
+            const totals = Array.from(propertiesData.values()).reduce((acc, p) => ({
+              grundmiete: acc.grundmiete + p.totalGrundmiete,
+              bk: acc.bk + p.totalBK,
+              hk: acc.hk + p.totalHK,
+              gesamt: acc.gesamt + p.totalGesamt,
+            }), { grundmiete: 0, bk: 0, hk: 0, gesamt: 0 });
 
             return (
               <>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-purple-600" />
-                    <h3 className="font-semibold">Mietvorschreibungen - Monatliche Übersicht</h3>
+                    <h3 className="font-semibold">Mietvorschreibungen - Monatliche SOLL-Werte</h3>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setSelectedReportId(null)}>
                     Schließen
                   </Button>
                 </div>
 
-                {sortedMonths.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Keine Mietvorschreibungen für den gewählten Zeitraum gefunden.
+                {/* Gesamtübersicht */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Grundmiete (SOLL)</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{totals.grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    {sortedMonths.map(([monthKey, invoices]) => {
-                      const [year, month] = monthKey.split('-').map(Number);
-                      const totals = invoices.reduce((acc, inv) => ({
-                        grundmiete: acc.grundmiete + inv.grundmiete,
-                        betriebskosten: acc.betriebskosten + inv.betriebskosten,
-                        heizungskosten: acc.heizungskosten + inv.heizungskosten,
-                        gesamt: acc.gesamt + inv.gesamt,
-                      }), { grundmiete: 0, betriebskosten: 0, heizungskosten: 0, gesamt: 0 });
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Betriebskosten (SOLL)</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{totals.bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Heizung (SOLL)</p>
+                    <p className="text-lg font-bold text-foreground">
+                      €{totals.hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                    <p className="text-xs text-muted-foreground">Gesamt (SOLL/Monat)</p>
+                    <p className="text-lg font-bold text-primary">
+                      €{totals.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
 
-                      return (
-                        <div key={monthKey} className="border rounded-lg overflow-hidden">
-                          <div className="bg-muted p-4 flex justify-between items-center">
-                            <h4 className="font-semibold text-lg">{monthNames[month - 1]} {year}</h4>
-                            <div className="text-right">
-                              <p className="font-bold">Gesamt: €{totals.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Miete: €{totals.grundmiete.toLocaleString('de-AT')} | BK: €{totals.betriebskosten.toLocaleString('de-AT')} | HK: €{totals.heizungskosten.toLocaleString('de-AT')}
-                              </p>
-                            </div>
-                          </div>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Mieter</TableHead>
-                                <TableHead>Einheit</TableHead>
-                                <TableHead>Liegenschaft</TableHead>
-                                <TableHead className="text-right">Grundmiete</TableHead>
-                                <TableHead className="text-right">BK</TableHead>
-                                <TableHead className="text-right">Heizung</TableHead>
-                                <TableHead className="text-right">Gesamt</TableHead>
-                                <TableHead>Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {invoices.map((inv, idx) => (
-                                <TableRow key={idx}>
-                                  <TableCell className="font-medium">
-                                    {inv.tenant ? `${inv.tenant.first_name} ${inv.tenant.last_name}` : 'Unbekannt'}
-                                  </TableCell>
-                                  <TableCell>Top {inv.unit?.top_nummer || '-'}</TableCell>
-                                  <TableCell className="text-muted-foreground">{inv.property?.name || '-'}</TableCell>
-                                  <TableCell className="text-right">€{inv.grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
-                                  <TableCell className="text-right">€{inv.betriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
-                                  <TableCell className="text-right">€{inv.heizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
-                                  <TableCell className="text-right font-bold">€{inv.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
-                                  <TableCell>
-                                    <Badge variant={
-                                      inv.status === 'bezahlt' ? 'default' :
-                                      inv.status === 'ueberfaellig' ? 'destructive' :
-                                      inv.status === 'teilbezahlt' ? 'secondary' : 'outline'
-                                    }>
-                                      {inv.status === 'bezahlt' ? 'Bezahlt' :
-                                       inv.status === 'ueberfaellig' ? 'Überfällig' :
-                                       inv.status === 'teilbezahlt' ? 'Teilbezahlt' : 'Offen'}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      );
-                    })}
+                {Array.from(propertiesData.values())
+                  .filter(p => p.tenantsSoll.length > 0)
+                  .map((propData) => (
+                  <div key={propData.property?.id} className="border rounded-lg overflow-hidden mb-4">
+                    <div className="bg-muted p-4 flex justify-between items-center">
+                      <div>
+                        <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
+                        <p className="text-sm text-muted-foreground">{propData.property?.address}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">SOLL: €{propData.totalGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}/Monat</p>
+                        <p className="text-xs text-muted-foreground">
+                          Miete: €{propData.totalGrundmiete.toLocaleString('de-AT')} | BK: €{propData.totalBK.toLocaleString('de-AT')} | HK: €{propData.totalHK.toLocaleString('de-AT')}
+                        </p>
+                      </div>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Einheit</TableHead>
+                          <TableHead>Mieter</TableHead>
+                          <TableHead className="text-right">Grundmiete</TableHead>
+                          <TableHead className="text-right">BK</TableHead>
+                          <TableHead className="text-right">Heizung</TableHead>
+                          <TableHead className="text-right">Gesamt (SOLL)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {propData.tenantsSoll.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">Top {item.unit?.top_nummer || '-'}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {unitTypeLabels[item.unit?.type || ''] || item.unit?.type}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {item.tenant ? (
+                                `${item.tenant.first_name} ${item.tenant.last_name}`
+                              ) : (
+                                <Badge variant="outline">Leerstand</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              €{item.grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              €{item.betriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              €{item.heizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right font-bold">
+                              €{item.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                )}
+                ))}
               </>
             );
           })()}
