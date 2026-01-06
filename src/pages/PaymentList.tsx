@@ -226,15 +226,17 @@ export default function PaymentList() {
         unit_id: tenant.unit_id,
         status: 'matched',
         matched_at: new Date().toISOString(),
-        matched_by: 'manual',
+        // matched_by is a UUID in the database; leave it empty here to avoid invalid values
       });
-      
+
       toast.success(`Transaktion wurde ${tenant.first_name} ${tenant.last_name} zugeordnet`);
       setReassignDialogOpen(false);
       setSelectedTransaction(null);
       setSelectedTenantId('');
     } catch (error) {
-      toast.error('Fehler beim Zuordnen der Transaktion');
+      console.error('Reassign transaction error:', error);
+      const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
+      toast.error(`Fehler beim Zuordnen: ${message}`);
     }
   };
 
