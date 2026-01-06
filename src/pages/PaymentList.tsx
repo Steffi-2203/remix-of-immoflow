@@ -181,9 +181,26 @@ export default function PaymentList() {
   };
 
   // Helper to get tenant and unit info for a transaction
+  // If tenant_id is set, use that. Otherwise, try to find active tenant for the unit_id
   const getTransactionDetails = (transaction: any) => {
-    const tenant = tenants?.find(t => t.id === transaction.tenant_id);
-    const unit = units?.find(u => u.id === transaction.unit_id);
+    let tenant = null;
+    let unit = null;
+
+    // First try direct tenant_id
+    if (transaction.tenant_id) {
+      tenant = tenants?.find(t => t.id === transaction.tenant_id);
+    }
+    
+    // Get unit info
+    if (transaction.unit_id) {
+      unit = units?.find(u => u.id === transaction.unit_id);
+      
+      // If no tenant found via tenant_id, try to find active tenant for this unit
+      if (!tenant && unit) {
+        tenant = tenants?.find(t => t.unit_id === transaction.unit_id && t.status === 'aktiv');
+      }
+    }
+    
     return { tenant, unit };
   };
 
@@ -378,10 +395,9 @@ export default function PaymentList() {
                   <TableBody>
                     {filteredTransactions.map((transaction) => {
                       const { tenant, unit } = getTransactionDetails(transaction);
-                      const isUnmatched = transaction.status !== 'matched' || !transaction.tenant_id;
 
                       return (
-                        <TableRow key={transaction.id} className={isUnmatched ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
+                        <TableRow key={transaction.id} className={!tenant ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
                           <TableCell>
                             {format(new Date(transaction.transaction_date), 'dd.MM.yyyy', { locale: de })}
                           </TableCell>
@@ -400,7 +416,7 @@ export default function PaymentList() {
                             € {Number(transaction.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell>
-                            {transaction.status === 'matched' && transaction.tenant_id ? (
+                            {tenant ? (
                               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Zugeordnet
@@ -412,7 +428,7 @@ export default function PaymentList() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {isUnmatched && (
+                            {!tenant && (
                               <Button 
                                 size="sm" 
                                 variant="outline"
