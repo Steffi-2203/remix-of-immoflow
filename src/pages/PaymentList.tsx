@@ -44,7 +44,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -594,16 +596,16 @@ export default function PaymentList() {
                   </SelectTrigger>
                   <SelectContent>
                     {tenantsByProperty.map(({ property, tenants: propertyTenants }) => (
-                      <div key={property.id}>
-                        <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground bg-muted">
+                      <SelectGroup key={property.id}>
+                        <SelectLabel className="text-muted-foreground">
                           🏠 {property.name}
-                        </div>
+                        </SelectLabel>
                         {propertyTenants.map(tenant => (
                           <SelectItem key={tenant.id} value={tenant.id}>
                             {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
                           </SelectItem>
                         ))}
-                      </div>
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>
