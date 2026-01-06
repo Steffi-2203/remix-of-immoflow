@@ -188,6 +188,7 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
     setStep('importing');
     let successCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
     const importErrors: string[] = [];
 
     for (const row of csvData) {
@@ -201,6 +202,36 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
       }
 
       const { firstName, lastName } = parseName(row[mapping.name]);
+      const mietbeginn = parseDate(row[mapping.mietbeginn]);
+
+      // Check if a tenant with same name and unit already exists
+      const { data: existingTenants } = await supabase
+        .from('tenants')
+        .select('id, first_name, last_name, status')
+        .eq('unit_id', unitId)
+        .ilike('first_name', firstName.trim())
+        .ilike('last_name', lastName.trim());
+
+      if (existingTenants && existingTenants.length > 0) {
+        // Tenant already exists - skip
+        importErrors.push(`${row[mapping.name]} (${topNummer}): Mieter existiert bereits - übersprungen`);
+        skippedCount++;
+        continue;
+      }
+
+      // If this tenant will be active, deactivate other active tenants for this unit
+      const { error: deactivateError } = await supabase
+        .from('tenants')
+        .update({ 
+          status: 'beendet',
+          mietende: new Date(new Date(mietbeginn).getTime() - 86400000).toISOString().split('T')[0]
+        })
+        .eq('unit_id', unitId)
+        .eq('status', 'aktiv');
+
+      if (deactivateError) {
+        console.warn('Could not deactivate existing tenants:', deactivateError);
+      }
 
       const tenantData = {
         unit_id: unitId,
@@ -209,7 +240,7 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
         grundmiete: parseNumber(row[mapping.grundmiete]),
         betriebskosten_vorschuss: parseNumber(row[mapping.betriebskosten]),
         heizungskosten_vorschuss: parseNumber(row[mapping.heizungskosten]),
-        mietbeginn: parseDate(row[mapping.mietbeginn]),
+        mietbeginn: mietbeginn,
         email: mapping.email ? row[mapping.email] || null : null,
         phone: mapping.phone ? row[mapping.phone] || null : null,
         status: 'aktiv' as const,
@@ -225,7 +256,7 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
       }
     }
 
-    setImportResults({ success: successCount, failed: failedCount });
+    setImportResults({ success: successCount, failed: failedCount + skippedCount });
     setErrors(importErrors);
     setStep('done');
 
