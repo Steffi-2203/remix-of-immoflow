@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, Star, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { useProperty, useCreateProperty, useUpdateProperty } from '@/hooks/useProperties';
-import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -27,7 +26,6 @@ export default function PropertyForm() {
   const { data: existingProperty, isLoading: isLoadingProperty } = useProperty(id);
   const createProperty = useCreateProperty();
   const updateProperty = useUpdateProperty();
-  const { canAddProperty, maxLimits, currentUsage, isLoading: isLoadingLimits } = useSubscriptionLimits();
   
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -76,12 +74,6 @@ export default function PropertyForm() {
     const result = propertySchema.safeParse(formData);
     if (!result.success) {
       setValidationError(result.error.errors[0].message);
-      return;
-    }
-    
-    // Check subscription limits for new properties
-    if (!isEditing && !canAddProperty) {
-      toast.error('Limit erreicht! Bitte upgraden Sie Ihren Plan.');
       return;
     }
     
@@ -137,24 +129,6 @@ export default function PropertyForm() {
           Zurück zur Übersicht
         </Link>
       </div>
-
-      {/* Limit Warning for new properties */}
-      {!isEditing && !canAddProperty && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>
-              Limit erreicht! Sie haben bereits {currentUsage.properties} von {maxLimits.properties} Liegenschaften.
-            </span>
-            <Link to="/upgrade">
-              <Button size="sm" variant="outline" className="ml-4">
-                <Star className="h-4 w-4 mr-2" />
-                Plan upgraden
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Validation Error */}
@@ -312,10 +286,7 @@ export default function PropertyForm() {
           <Button type="button" variant="outline" onClick={() => navigate('/liegenschaften')}>
             Abbrechen
           </Button>
-          <Button 
-            type="submit" 
-            disabled={isSubmitting || (!isEditing && !canAddProperty)}
-          >
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

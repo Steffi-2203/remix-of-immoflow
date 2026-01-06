@@ -16,24 +16,24 @@ export interface Organization {
   updated_at: string;
 }
 
-// Limits per subscription tier
+// Unlimited usage - no subscription limits
 export const TIER_LIMITS = {
-  starter: { properties: 1, unitsPerProperty: 5 },
-  professional: { properties: 2, unitsPerProperty: 10 },
-  enterprise: { properties: 1, unitsPerProperty: 15 }, // "premium" in UI
+  starter: { properties: 999, unitsPerProperty: 999 },
+  professional: { properties: 999, unitsPerProperty: 999 },
+  enterprise: { properties: 999, unitsPerProperty: 999 },
 } as const;
 
 export const TIER_LABELS: Record<SubscriptionTier, string> = {
-  starter: 'Starter',
-  professional: 'Professional',
-  enterprise: 'Premium',
+  starter: 'Vollversion',
+  professional: 'Vollversion',
+  enterprise: 'Vollversion',
 };
 
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
-  trial: 'Testphase',
+  trial: 'Aktiv',
   active: 'Aktiv',
-  cancelled: 'Gekündigt',
-  expired: 'Abgelaufen',
+  cancelled: 'Aktiv',
+  expired: 'Aktiv',
 };
 
 export function useOrganization() {
@@ -121,8 +121,8 @@ export function useSubscriptionLimits() {
     enabled: !!propertiesData && propertiesData.length > 0,
   });
 
-  const tier = organization?.subscription_tier || 'starter';
-  const maxLimits = TIER_LIMITS[tier];
+  // Always use unlimited limits
+  const maxLimits = { properties: 999, unitsPerProperty: 999 };
 
   // Current usage
   const currentUsage = useMemo(() => {
@@ -147,26 +147,10 @@ export function useSubscriptionLimits() {
     };
   }, [propertiesData, unitsData]);
 
-  // Can add property
-  const canAddProperty = useMemo(() => {
-    return currentUsage.properties < maxLimits.properties;
-  }, [currentUsage.properties, maxLimits.properties]);
-
-  // Can add unit for a specific property
-  const canAddUnit = useCallback((propertyId: string): boolean => {
-    const currentUnits = currentUsage.units[propertyId] || 0;
-    return currentUnits < maxLimits.unitsPerProperty;
-  }, [currentUsage.units, maxLimits.unitsPerProperty]);
-
-  // Get remaining units for a property
-  const getRemainingUnits = useCallback((propertyId: string): number => {
-    const currentUnits = currentUsage.units[propertyId] || 0;
-    return Math.max(0, maxLimits.unitsPerProperty - currentUnits);
-  }, [currentUsage.units, maxLimits.unitsPerProperty]);
-
-  // Trial days remaining
-  const trialEndsAt = organization?.trial_ends_at ? new Date(organization.trial_ends_at) : null;
-  const trialDaysRemaining = calculateTrialDaysRemaining(trialEndsAt);
+  // Always allow adding properties and units (no limits)
+  const canAddProperty = true;
+  const canAddUnit = useCallback((_propertyId: string): boolean => true, []);
+  const getRemainingUnits = useCallback((_propertyId: string): number => 999, []);
 
   return {
     // Loading state
@@ -174,41 +158,35 @@ export function useSubscriptionLimits() {
     
     // Organization info
     organization,
-    subscriptionTier: tier,
-    tierLabel: TIER_LABELS[tier],
-    status: organization?.subscription_status || 'trial',
-    statusLabel: STATUS_LABELS[organization?.subscription_status || 'trial'],
+    subscriptionTier: 'enterprise' as SubscriptionTier,
+    tierLabel: 'Vollversion',
+    status: 'active' as SubscriptionStatus,
+    statusLabel: 'Aktiv',
     
-    // Trial info
-    trialEndsAt,
-    trialDaysRemaining,
-    isTrialExpired: organization?.subscription_status === 'trial' && trialDaysRemaining === 0,
-    isTrialExpiringSoon: organization?.subscription_status === 'trial' && trialDaysRemaining <= 3 && trialDaysRemaining > 0,
+    // No trial - always active
+    trialEndsAt: null,
+    trialDaysRemaining: 0,
+    isTrialExpired: false,
+    isTrialExpiringSoon: false,
     
-    // Limits
-    maxLimits: {
-      properties: maxLimits.properties,
-      unitsPerProperty: maxLimits.unitsPerProperty,
-    },
-    limits: maxLimits, // backwards compatibility
+    // Unlimited limits
+    maxLimits,
+    limits: maxLimits,
     
     // Current usage
     currentUsage,
     
-    // Permission checks
+    // Permission checks - always allowed
     canAddProperty,
     canAddUnit,
     getRemainingUnits,
     
-    // Helper for reaching limits
-    hasReachedPropertyLimit: !canAddProperty,
-    getUnitLimitReached: (propertyId: string) => !canAddUnit(propertyId),
+    // No limits reached
+    hasReachedPropertyLimit: false,
+    getUnitLimitReached: (_propertyId: string) => false,
   };
 }
 
-export function calculateTrialDaysRemaining(trialEndsAt: Date | null): number {
-  if (!trialEndsAt) return 0;
-  const now = new Date();
-  const diff = trialEndsAt.getTime() - now.getTime();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+export function calculateTrialDaysRemaining(_trialEndsAt: Date | null): number {
+  return 0;
 }

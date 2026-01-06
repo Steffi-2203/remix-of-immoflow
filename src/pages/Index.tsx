@@ -3,44 +3,27 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { PropertyCard } from '@/components/dashboard/PropertyCard';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { UpcomingPayments } from '@/components/dashboard/UpcomingPayments';
-import { SubscriptionInfoBox } from '@/components/dashboard/SubscriptionInfoBox';
 import { PaymentStatusWidget } from '@/components/dashboard/PaymentStatusWidget';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useAuth } from '@/hooks/useAuth';
-import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus, Star } from 'lucide-react';
+import { Building2, Home, Users, Euro, AlertTriangle, Receipt, Loader2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { useMemo, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useSubscription } from '@/hooks/useSubscription';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Index = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { maxLimits, canAddProperty } = useSubscriptionLimits();
-  const { refetch: refetchSubscription } = useSubscription();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Handle payment success
-  useEffect(() => {
-    const payment = searchParams.get('payment');
-    if (payment === 'success') {
-      toast.success('Zahlung erfolgreich! Ihr Abonnement ist jetzt aktiv.');
-      refetchSubscription();
-      // Clean up URL
-      searchParams.delete('payment');
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, [searchParams, setSearchParams, refetchSubscription]);
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
@@ -161,16 +144,8 @@ const Index = () => {
     );
   }
 
-  // canAddProperty is now provided by the hook
-
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht Ihrer Immobilienverwaltung">
-      {/* Subscription Info Box */}
-      <SubscriptionInfoBox 
-        propertiesCount={managedProperties.length} 
-        unitsCount={stats.totalUnits} 
-      />
-
       {/* Unassigned Properties Alert */}
       {unassignedProperties.length > 0 && (
         <Alert className="mb-6 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
@@ -266,24 +241,15 @@ const Index = () => {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Meine Liegenschaften</h2>
             <p className="text-sm text-muted-foreground">
-              {managedProperties.length} von {maxLimits.properties} Liegenschaften
+              {managedProperties.length} Liegenschaften
             </p>
           </div>
-          {canAddProperty ? (
-            <Link to="/liegenschaften/neu">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Neue Liegenschaft
-              </Button>
-            </Link>
-          ) : (
-            <Link to="/upgrade">
-              <Button variant="secondary">
-                <Star className="h-4 w-4 mr-2" />
-                Plan upgraden
-              </Button>
-            </Link>
-          )}
+          <Link to="/liegenschaften/neu">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Neue Liegenschaft
+            </Button>
+          </Link>
         </div>
         {managedProperties.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -292,7 +258,6 @@ const Index = () => {
                 key={property.id}
                 property={property}
                 units={propertyUnits[property.id] || { total: 0, occupied: 0, vacant: 0 }}
-                maxUnitsPerProperty={maxLimits.unitsPerProperty}
               />
             ))}
           </div>
@@ -300,21 +265,12 @@ const Index = () => {
           <div className="rounded-xl border border-dashed border-border p-8 text-center">
             <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">Noch keine Liegenschaften angelegt</p>
-            {canAddProperty ? (
-              <Link to="/liegenschaften/neu">
-                <Button className="mt-4">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Erste Liegenschaft anlegen
-                </Button>
-              </Link>
-            ) : (
-              <Link to="/upgrade">
-                <Button className="mt-4" variant="secondary">
-                  <Star className="h-4 w-4 mr-2" />
-                  Plan upgraden für mehr Liegenschaften
-                </Button>
-              </Link>
-            )}
+            <Link to="/liegenschaften/neu">
+              <Button className="mt-4">
+                <Plus className="h-4 w-4 mr-2" />
+                Erste Liegenschaft anlegen
+              </Button>
+            </Link>
           </div>
         )}
       </div>

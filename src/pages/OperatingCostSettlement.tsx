@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, Lock, Crown, RefreshCw } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,9 +32,6 @@ import {
 import { useSaveSettlement, useExistingSettlement, useFinalizeSettlement } from '@/hooks/useSettlements';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { useSubscription } from '@/hooks/useSubscription';
-import { useNavigate } from 'react-router-dom';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
 
 // Distribution key mapping for expense types (without heating - handled separately)
@@ -105,10 +102,6 @@ export default function OperatingCostSettlement() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear - 1); // Default: Vorjahr für Abrechnung
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = ganzes Jahr (Standard für Jahresabrechnung)
   const [sendEmails, setSendEmails] = useState<boolean>(true);
-  
-  const navigate = useNavigate();
-  const { isSubscribed, subscriptionStatus } = useSubscription();
-  const isTrial = subscriptionStatus === 'trial';
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: expenses, isLoading: isLoadingExpenses } = useExpenses(
@@ -476,24 +469,6 @@ export default function OperatingCostSettlement() {
         </div>
       ) : (
         <>
-          {/* Trial Banner */}
-          {isTrial && (
-            <Alert className="mb-6 border-amber-500 bg-amber-50">
-              <Crown className="h-4 w-4 text-amber-600" />
-              <AlertTitle className="text-amber-800">Testversion</AlertTitle>
-              <AlertDescription className="text-amber-700">
-                In der 14-tägigen Testversion können Sie die Betriebskostenabrechnung ansehen und berechnen. 
-                PDF-Export, E-Mail-Versand und Ausdruck sind nur mit einem Upgrade verfügbar.
-                <Button 
-                  variant="link" 
-                  className="text-amber-700 underline p-0 h-auto ml-1"
-                  onClick={() => navigate('/upgrade')}
-                >
-                  Jetzt upgraden
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
           
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
@@ -834,12 +809,7 @@ export default function OperatingCostSettlement() {
                 {/* PDF Export Buttons */}
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Button 
-                    disabled={isTrial}
                     onClick={() => {
-                      if (isTrial) {
-                        toast.error('PDF-Export ist nur mit Upgrade verfügbar');
-                        return;
-                      }
                       if (!selectedProperty || !verificationSums) return;
                       generateGesamtabrechnungPdf(
                         {
@@ -860,18 +830,12 @@ export default function OperatingCostSettlement() {
                       toast.success('Gesamtabrechnung PDF erstellt');
                     }}
                   >
-                    {isTrial ? <Lock className="h-4 w-4 mr-2" /> : <FileDown className="h-4 w-4 mr-2" />}
+                    <FileDown className="h-4 w-4 mr-2" />
                     Gesamtabrechnung PDF
-                    {isTrial && <Crown className="h-3 w-3 ml-1 text-amber-500" />}
                   </Button>
                   <Button 
                     variant="outline"
-                    disabled={isTrial}
                     onClick={() => {
-                      if (isTrial) {
-                        toast.error('PDF-Export ist nur mit Upgrade verfügbar');
-                        return;
-                      }
                       if (!selectedProperty) return;
                       const unitsWithTenants = unitDistribution.filter(u => !u.isLeerstandBK || !u.isLeerstandHK);
                       if (unitsWithTenants.length === 0) {
@@ -896,9 +860,8 @@ export default function OperatingCostSettlement() {
                       toast.success(`${unitsWithTenants.length} Einzelabrechnungen werden erstellt...`);
                     }}
                   >
-                    {isTrial ? <Lock className="h-4 w-4 mr-2" /> : <Files className="h-4 w-4 mr-2" />}
+                    <Files className="h-4 w-4 mr-2" />
                     Alle Einzelabrechnungen ({unitDistribution.filter(u => !u.isLeerstandBK || !u.isLeerstandHK).length})
-                    {isTrial && <Crown className="h-3 w-3 ml-1 text-amber-500" />}
                   </Button>
                 </div>
 
@@ -908,14 +871,12 @@ export default function OperatingCostSettlement() {
                     <div className="flex items-center space-x-2">
                       <Checkbox 
                         id="sendEmails" 
-                        checked={sendEmails && !isTrial}
-                        disabled={isTrial}
+                        checked={sendEmails}
                         onCheckedChange={(checked) => setSendEmails(checked === true)}
                       />
-                      <Label htmlFor="sendEmails" className={`flex items-center gap-2 ${isTrial ? 'text-muted-foreground' : ''}`}>
-                        {isTrial ? <Lock className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                      <Label htmlFor="sendEmails" className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
                         E-Mails an Mieter senden (bei hinterlegter E-Mail)
-                        {isTrial && <Crown className="h-3 w-3 text-amber-500" />}
                       </Label>
                     </div>
                     
@@ -977,7 +938,7 @@ export default function OperatingCostSettlement() {
                           {finalizeSettlement.isPending ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           ) : (
-                            <Lock className="h-4 w-4 mr-2" />
+                            <CheckCircle className="h-4 w-4 mr-2" />
                           )}
                           Finalisieren
                         </Button>
@@ -1137,12 +1098,7 @@ export default function OperatingCostSettlement() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                disabled={isTrial}
                                 onClick={() => {
-                                  if (isTrial) {
-                                    toast.error('PDF-Export ist nur mit Upgrade verfügbar');
-                                    return;
-                                  }
                                   generateTenantSettlementPdf(
                                     {
                                       name: selectedProperty.name,
@@ -1160,9 +1116,9 @@ export default function OperatingCostSettlement() {
                                   );
                                   toast.success(`PDF für Top ${unit.top_nummer} erstellt`);
                                 }}
-                                title={isTrial ? 'Upgrade erforderlich' : `PDF für Top ${unit.top_nummer}`}
+                                title={`PDF für Top ${unit.top_nummer}`}
                               >
-                                {isTrial ? <Lock className="h-4 w-4 text-muted-foreground" /> : <FileDown className="h-4 w-4" />}
+                                <FileDown className="h-4 w-4" />
                               </Button>
                             )}
                           </TableCell>
