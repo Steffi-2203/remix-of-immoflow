@@ -645,25 +645,35 @@ export default function Banking() {
                     <Label htmlFor="bankAccount">
                       Bankkonto <span className="text-destructive">*</span>
                     </Label>
-                    <Select 
-                      value={manualEntry.bankAccountId || 'none'} 
-                      onValueChange={(val) => setManualEntry({...manualEntry, bankAccountId: val === 'none' ? '' : val})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Bankkonto auswählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">-- Konto wählen --</SelectItem>
-                        {bankAccounts.map(account => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {account.account_name} {account.iban && `(${account.iban})`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select 
+                        value={manualEntry.bankAccountId || 'none'} 
+                        onValueChange={(val) => setManualEntry({...manualEntry, bankAccountId: val === 'none' ? '' : val})}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Bankkonto auswählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Konto wählen --</SelectItem>
+                          {bankAccounts.map(account => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.account_name} {account.iban && `(${account.iban})`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowAddAccount(true)}
+                        title="Neues Bankkonto anlegen"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                     {bankAccounts.length === 0 && (
                       <p className="text-sm text-orange-600">
-                        Bitte zuerst ein Bankkonto anlegen (im "Konten" Tab)
+                        Bitte zuerst ein Bankkonto anlegen (+ Button)
                       </p>
                     )}
                   </div>
@@ -759,7 +769,7 @@ export default function Banking() {
                     </Select>
                   </div>
 
-                  {/* Unit Assignment (for income) */}
+                  {/* Unit Assignment (for income) - grouped by property */}
                   {manualEntry.type === 'income' && (
                     <div className="space-y-2">
                       <Label htmlFor="unit">Zuordnung zu Einheit (optional)</Label>
@@ -772,47 +782,71 @@ export default function Banking() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">-- Keine Zuordnung --</SelectItem>
-                          {units.map(unit => {
-                            const property = properties.find(p => p.id === unit.property_id);
-                            const tenant = tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv');
+                          {properties.map(property => {
+                            const propertyUnits = units.filter(u => u.property_id === property.id);
+                            if (propertyUnits.length === 0) return null;
                             return (
-                              <SelectItem key={unit.id} value={unit.id}>
-                                {unit.top_nummer} - {property?.name || 'Unbekannt'}
-                                {tenant && ` (${tenant.first_name} ${tenant.last_name})`}
-                              </SelectItem>
+                              <div key={property.id}>
+                                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                                  🏠 {property.name} – {property.address}
+                                </div>
+                                {propertyUnits.map(unit => {
+                                  const tenant = tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv');
+                                  return (
+                                    <SelectItem key={unit.id} value={unit.id}>
+                                      {unit.top_nummer} {tenant && `(${tenant.first_name} ${tenant.last_name})`}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </div>
                             );
                           })}
                         </SelectContent>
                       </Select>
+                      {manualEntry.unitId && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Building className="h-4 w-4" />
+                          Liegenschaft: {properties.find(p => units.find(u => u.id === manualEntry.unitId)?.property_id === p.id)?.name || 'Unbekannt'}
+                        </p>
+                      )}
                     </div>
                   )}
 
                   {/* Property Assignment (for expenses - needed for BK-Abrechnung sync) */}
                   {manualEntry.type === 'expense' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="property">
-                        Zuordnung zu Immobilie 
-                        <span className="text-xs text-muted-foreground ml-2">(für BK-Abrechnung)</span>
+                    <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                      <Label htmlFor="property" className="flex items-center gap-2 text-base font-medium">
+                        <Building className="h-4 w-4" />
+                        Zuordnung zu Immobilie
+                        <span className="text-xs font-normal text-muted-foreground">(für BK-Abrechnung)</span>
                       </Label>
                       <Select 
                         value={manualEntry.propertyId || 'none'} 
                         onValueChange={(val) => setManualEntry({...manualEntry, propertyId: val === 'none' ? '' : val})}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Immobilie zuordnen" />
+                        <SelectTrigger className={manualEntry.propertyId ? 'border-primary' : ''}>
+                          <SelectValue placeholder="Immobilie auswählen" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">-- Keine Zuordnung --</SelectItem>
+                          <SelectItem value="none">-- Keine Zuordnung (privat) --</SelectItem>
                           {properties.map(property => (
                             <SelectItem key={property.id} value={property.id}>
-                              {property.name} - {property.address}
+                              🏠 {property.name} – {property.address}, {property.postal_code} {property.city}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Bei Zuweisung einer Immobilie werden Betriebskosten automatisch in die BK-Abrechnung übernommen.
-                      </p>
+                      {manualEntry.propertyId && (
+                        <div className="text-sm text-green-700 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Ausgabe wird in BK-Abrechnung von "{properties.find(p => p.id === manualEntry.propertyId)?.name}" übernommen
+                        </div>
+                      )}
+                      {!manualEntry.propertyId && (
+                        <p className="text-xs text-muted-foreground">
+                          ⚠️ Ohne Zuordnung wird die Ausgabe NICHT in der BK-Abrechnung berücksichtigt.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -2064,6 +2098,81 @@ export default function Banking() {
               </div>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Bank Account Dialog (accessible from manual entry) */}
+      <Dialog open={showAddAccount} onOpenChange={setShowAddAccount}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              Neues Bankkonto anlegen
+            </DialogTitle>
+            <DialogDescription>
+              Erstellen Sie ein neues Bankkonto für Ihre Buchungen
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-account-name">Kontoname <span className="text-destructive">*</span></Label>
+              <Input
+                id="new-account-name"
+                placeholder="z.B. Haupt-Girokonto"
+                value={newAccount.name}
+                onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-account-iban">IBAN (optional)</Label>
+              <Input
+                id="new-account-iban"
+                placeholder="AT..."
+                value={newAccount.iban}
+                onChange={(e) => setNewAccount({...newAccount, iban: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-account-bank">Bank (optional)</Label>
+              <Input
+                id="new-account-bank"
+                placeholder="z.B. Erste Bank"
+                value={newAccount.bankName}
+                onChange={(e) => setNewAccount({...newAccount, bankName: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="new-account-balance">Anfangsbestand</Label>
+                <Input
+                  id="new-account-balance"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={newAccount.openingBalance}
+                  onChange={(e) => setNewAccount({...newAccount, openingBalance: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-account-date">Datum Anfangsbestand</Label>
+                <Input
+                  id="new-account-date"
+                  type="date"
+                  value={newAccount.openingDate}
+                  onChange={(e) => setNewAccount({...newAccount, openingDate: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowAddAccount(false)}>
+                Abbrechen
+              </Button>
+              <Button onClick={handleCreateAccount} disabled={createBankAccount.isPending || !newAccount.name.trim()}>
+                {createBankAccount.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Konto erstellen
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </MainLayout>
