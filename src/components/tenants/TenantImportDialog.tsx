@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -54,6 +54,19 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
   const [importResults, setImportResults] = useState<{ success: number; failed: number }>({ success: 0, failed: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const downloadTemplate = () => {
+    const templateContent = 'Name;Top Nr.;Miete;BK;Heizung;Mietbeginn;Email;Telefon\nMax Mustermann;1;500;100;50;01.01.2024;max@email.de;0123456789';
+    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mieter-import-vorlage.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const reset = () => {
     setStep('upload');
@@ -248,6 +261,12 @@ export function TenantImportDialog({ open, onOpenChange, propertyId, units, onSu
 
         {step === 'upload' && (
           <div className="py-8">
+            <div className="flex justify-end mb-4">
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="h-4 w-4 mr-2" />
+                CSV-Vorlage herunterladen
+              </Button>
+            </div>
             <div 
               className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onClick={() => fileInputRef.current?.click()}
