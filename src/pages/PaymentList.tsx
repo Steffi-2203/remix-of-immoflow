@@ -240,24 +240,27 @@ export default function PaymentList() {
     }
   };
 
-  // Group tenants by property for better overview
+  // Group tenants by property for better overview (include all tenants for payment assignment)
   const tenantsByProperty = useMemo(() => {
     if (!tenants || !units || !properties) return [];
     
-    const activeTenants = tenants.filter(t => t.status === 'aktiv');
-    const grouped: { property: any; tenants: any[] }[] = [];
+    // Include all tenants (aktiv and beendet) for payment assignment
+    const grouped: { property: any; activeTenants: any[]; formerTenants: any[] }[] = [];
     
     properties.forEach(property => {
       const propertyUnits = units.filter(u => u.property_id === property.id);
-      const propertyTenants = activeTenants.filter(t => 
+      const allPropertyTenants = tenants.filter(t => 
         propertyUnits.some(u => u.id === t.unit_id)
       ).map(t => ({
         ...t,
         unit: propertyUnits.find(u => u.id === t.unit_id)
       }));
       
-      if (propertyTenants.length > 0) {
-        grouped.push({ property, tenants: propertyTenants });
+      const activeTenants = allPropertyTenants.filter(t => t.status === 'aktiv');
+      const formerTenants = allPropertyTenants.filter(t => t.status === 'beendet');
+      
+      if (allPropertyTenants.length > 0) {
+        grouped.push({ property, activeTenants, formerTenants });
       }
     });
     
@@ -597,16 +600,28 @@ export default function PaymentList() {
                     <SelectValue placeholder="Mieter wählen..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {tenantsByProperty.map(({ property, tenants: propertyTenants }) => (
+                    {tenantsByProperty.map(({ property, activeTenants, formerTenants }) => (
                       <SelectGroup key={property.id}>
                         <SelectLabel className="text-muted-foreground">
-                          🏠 {property.name}
+                          🏠 {property.name} - Aktive Mieter
                         </SelectLabel>
-                        {propertyTenants.map(tenant => (
+                        {activeTenants.map(tenant => (
                           <SelectItem key={tenant.id} value={tenant.id}>
                             {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
                           </SelectItem>
                         ))}
+                        {formerTenants.length > 0 && (
+                          <>
+                            <SelectLabel className="text-muted-foreground mt-2">
+                              📋 {property.name} - Altmieter
+                            </SelectLabel>
+                            {formerTenants.map(tenant => (
+                              <SelectItem key={tenant.id} value={tenant.id}>
+                                {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
                       </SelectGroup>
                     ))}
                   </SelectContent>
