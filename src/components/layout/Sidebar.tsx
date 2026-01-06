@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Building, LayoutDashboard, FileStack, TrendingUp, Cog, Wallet, Layers, Calculator, ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import immoflowLogo from '@/assets/immoflow-logo.png';
+import immoflowLogo from '@/assets/immoflowme-logo.png';
 interface NavItem {
   label: string;
   icon: React.ElementType;
@@ -52,11 +52,15 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   return <aside className={cn('fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300', collapsed ? 'w-16' : 'w-64')}>
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-        {!collapsed && <div className="flex items-center gap-2">
-            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" />
+      <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border">
+        {!collapsed && <div className="flex items-center gap-3">
+            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+            <div className="flex flex-col">
+              <span className="font-bold text-white text-lg leading-tight">ImmoflowMe</span>
+              <span className="text-xs text-white/60">by ImmoPepper</span>
+            </div>
           </div>}
-        {collapsed && <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-10 w-10 object-contain" />}
+        {collapsed && <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-10 w-10 object-contain" />}
         <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
@@ -91,7 +95,7 @@ export function Sidebar() {
       {!collapsed && <div className="absolute bottom-4 left-4 right-4">
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-sidebar-foreground/70">Version 1.0.0</p>
-            <p className="text-xs text-sidebar-foreground/50 mt-1">© 2026 ImmoFlowMe</p>
+            <p className="text-xs text-sidebar-foreground/50 mt-1">© 2026 ImmoflowMe by ImmoPepper</p>
           </div>
         </div>}
     </aside>;
