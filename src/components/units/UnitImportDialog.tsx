@@ -272,6 +272,9 @@ export function UnitImportDialog({ open, onOpenChange, propertyId, existingUnits
               <p className="text-xs text-muted-foreground">
                 Unterstützte Spalten: Top Nr., Typ, Fläche (m²), MEA, Etage, Personen, Heizungsverbrauch, Wasserverbrauch
               </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Beispiel Top-Nummern: W1 = Wohnung, L1 = Lokal/Geschäft, G1 = Garage
+              </p>
             </div>
             <input
               ref={fileInputRef}
