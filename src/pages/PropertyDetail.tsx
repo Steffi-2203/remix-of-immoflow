@@ -24,7 +24,12 @@ import {
   Loader2,
   Trash2,
   Crown,
+  Upload,
+  Users,
 } from 'lucide-react';
+import { UnitImportDialog } from '@/components/units/UnitImportDialog';
+import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -68,7 +73,10 @@ const statusStyles: Record<string, string> = {
 export default function PropertyDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [unitImportDialogOpen, setUnitImportDialogOpen] = useState(false);
+  const [tenantImportDialogOpen, setTenantImportDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
@@ -262,28 +270,38 @@ export default function PropertyDetail() {
         </TabsList>
 
         <TabsContent value="units" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <h3 className="font-semibold text-foreground">Alle Einheiten</h3>
               <p className="text-sm text-muted-foreground">
                 {units?.length || 0} von {maxLimits.unitsPerProperty} Einheiten
               </p>
             </div>
-            {canAddUnit ? (
-              <Link to={`/liegenschaften/${id}/einheiten/neu`}>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Einheit hinzufügen
-                </Button>
-              </Link>
-            ) : (
-              <Link to="/upgrade">
-                <Button variant="secondary">
-                  <Crown className="h-4 w-4 mr-2" />
-                  Plan upgraden
-                </Button>
-              </Link>
-            )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setUnitImportDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Einheiten importieren
+              </Button>
+              <Button variant="outline" onClick={() => setTenantImportDialogOpen(true)}>
+                <Users className="h-4 w-4 mr-2" />
+                Mieter importieren
+              </Button>
+              {canAddUnit ? (
+                <Link to={`/liegenschaften/${id}/einheiten/neu`}>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Einheit hinzufügen
+                  </Button>
+                </Link>
+              ) : (
+                <Link to="/upgrade">
+                  <Button variant="secondary">
+                    <Crown className="h-4 w-4 mr-2" />
+                    Plan upgraden
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
 
           {units && units.length > 0 ? (
@@ -536,6 +554,31 @@ export default function PropertyDetail() {
         onUpload={handleUploadDocument}
         isUploading={uploadDocument.isPending}
       />
+
+      {id && units && (
+        <>
+          <UnitImportDialog
+            open={unitImportDialogOpen}
+            onOpenChange={setUnitImportDialogOpen}
+            propertyId={id}
+            existingUnits={units.map(u => ({ top_nummer: u.top_nummer }))}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['units', id] });
+            }}
+          />
+
+          <TenantImportDialog
+            open={tenantImportDialogOpen}
+            onOpenChange={setTenantImportDialogOpen}
+            propertyId={id}
+            units={units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['units', id] });
+              queryClient.invalidateQueries({ queryKey: ['tenants'] });
+            }}
+          />
+        </>
+      )}
     </MainLayout>
   );
 }
