@@ -104,9 +104,13 @@ export function UnitImportDialog({ open, onOpenChange, propertyId, existingUnits
         
         // Auto-detect column mapping
         const autoMapping: ColumnMapping = { ...defaultMapping };
-        csvHeaders.forEach(header => {
-          const lowerHeader = header.toLowerCase();
-          if (lowerHeader.includes('top') || lowerHeader.includes('nummer') || lowerHeader.includes('einheit')) {
+        csvHeaders.forEach((header, index) => {
+          const lowerHeader = header.toLowerCase().trim();
+          
+          // First column with empty or no name is often the type
+          if (index === 0 && (lowerHeader === '' || !lowerHeader)) {
+            autoMapping.type = header;
+          } else if (lowerHeader.includes('top') || lowerHeader.includes('nummer') || lowerHeader.includes('einheit')) {
             autoMapping.topNummer = header;
           } else if (lowerHeader.includes('typ') || lowerHeader.includes('art')) {
             autoMapping.type = header;
