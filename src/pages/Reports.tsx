@@ -387,15 +387,12 @@ export default function Reports() {
       return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
     }, 0);
   
-  // Gesamte USt aus Einnahmen - PRIORISIERT Transaktionen, Fallback auf Invoices
-  const hasTransactionData = mieteinnahmenFromTransactions > 0 || bkVorauszahlungenFromTransactions > 0;
-  const hasInvoiceData = periodInvoices.length > 0;
+  // ====== SOLL-VERSTEUERUNG: USt BASIERT AUF VORSCHREIBUNGEN (INVOICES) ======
+  // Bei Soll-Versteuerung entsteht die USt-Schuld mit Rechnungsstellung,
+  // unabhängig davon ob der Mieter bereits bezahlt hat
   
-  // Wenn wir Transaktionsdaten haben, verwenden wir diese primär
-  // Wenn nicht, fallen wir auf Invoice-Daten zurück
-  const totalUstEinnahmen = hasTransactionData 
-    ? (ustFromMieteinnahmenTransactions + ustFromBkTransactions + ustFromHeizungTransactions)
-    : (ustGrundmieteFromInvoices + ustBkFromInvoices + ustHeizungFromInvoices);
+  // Gesamte USt aus Einnahmen - NUR aus Vorschreibungen (Invoices)
+  const totalUstEinnahmen = ustGrundmieteFromInvoices + ustBkFromInvoices + ustHeizungFromInvoices;
   
   // Vorsteuer aus Ausgaben (aus Transaktionen - diese haben die Kategorien)
   const vorsteuerFromTransactions = expenseTransactions.reduce((sum, t) => {
@@ -405,24 +402,18 @@ export default function Reports() {
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
 
-  // USt-Zahllast = USt aus Einnahmen - Vorsteuer aus Ausgaben
+  // USt-Zahllast = USt aus Vorschreibungen - Vorsteuer aus Ausgaben
   const vatLiabilityFromTransactions = totalUstEinnahmen - vorsteuerFromTransactions;
   
-  // Brutto-Beträge für Anzeige - priorisiere Transaktionen
-  const bruttoGrundmiete = hasTransactionData 
-    ? mieteinnahmenFromTransactions 
-    : periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-  const bruttoBk = hasTransactionData 
-    ? bkVorauszahlungenFromTransactions 
-    : periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-  const bruttoHeizung = hasTransactionData 
-    ? incomeTransactions.filter(t => t.category_id === heizungCategoryId).reduce((s, t) => s + Number(t.amount), 0)
-    : periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  // Brutto-Beträge für Anzeige - IMMER aus Vorschreibungen (Soll-Versteuerung)
+  const bruttoGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+  const bruttoBk = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+  const bruttoHeizung = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
   
-  // USt-Beträge für Anzeige
-  const ustGrundmieteDisplay = hasTransactionData ? ustFromMieteinnahmenTransactions : ustGrundmieteFromInvoices;
-  const ustBkDisplay = hasTransactionData ? ustFromBkTransactions : ustBkFromInvoices;
-  const ustHeizungDisplay = hasTransactionData ? ustFromHeizungTransactions : ustHeizungFromInvoices;
+  // USt-Beträge für Anzeige - aus Vorschreibungen
+  const ustGrundmieteDisplay = ustGrundmieteFromInvoices;
+  const ustBkDisplay = ustBkFromInvoices;
+  const ustHeizungDisplay = ustHeizungFromInvoices;
 
   // ====== FALLBACK: AUCH ALTE DATEN AUS INVOICES ANZEIGEN ======
   // Revenue from invoices for selected period (als Vergleich)
@@ -921,10 +912,9 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Einnahmen aus Buchhaltung */}
           <div className="mb-6">
             <h4 className="text-sm font-semibold text-foreground mb-3">
-              Einnahmen ({hasTransactionData ? 'aus Transaktionen' : 'aus Mietrechnungen'})
+              Einnahmen (Soll-Versteuerung - aus Vorschreibungen)
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="rounded-lg border border-border p-3">
@@ -972,9 +962,9 @@ export default function Reports() {
                 </p>
               </div>
             </div>
-            {!hasTransactionData && !hasInvoiceData && (
+            {periodInvoices.length === 0 && (
               <p className="text-sm text-orange-600 mt-3">
-                ⚠️ Keine Einnahmen für den ausgewählten Zeitraum gefunden. Erfassen Sie Mieteinnahmen in der Buchhaltung.
+                ⚠️ Keine Vorschreibungen für den ausgewählten Zeitraum gefunden. Bitte erstellen Sie zuerst monatliche Mietvorschreibungen.
               </p>
             )}
           </div>
