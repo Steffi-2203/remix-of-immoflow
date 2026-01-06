@@ -1,1 +1,16 @@
 project_id = "wvkhszullkdkokblrmud"
+
+[functions.generate-monthly-invoices]
+verify_jwt = false
+
+[functions.cron-generate-invoices]
+verify_jwt = false
+
+[functions.ocr-invoice]
+verify_jwt = false
+
+[functions.send-dunning]
+verify_jwt = false
+
+[functions.send-settlement-email]
+verify_jwt = false
