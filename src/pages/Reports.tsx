@@ -1139,26 +1139,38 @@ export default function Reports() {
             const tenantBalances: TenantBalance[] = [];
             const today = new Date();
 
-            // Mieteinnahmen aus Buchhaltung (transactions) für das Jahr
-            const mieteinnahmenTransactions = allTransactions?.filter(t => {
+            // Alle Einnahmen-Kategorien die für Mieteinnahmen relevant sind (Miete, BK, Heizung)
+            const allIncomeCategories = [
+              mieteinnahmenCategoryId,
+              bkVorauszCategoryId,
+              heizungCategoryId
+            ].filter(Boolean);
+            
+            // Alle Einnahmen aus Buchhaltung (transactions) für das Jahr
+            const allIncomeTransactions = allTransactions?.filter(t => {
               const date = new Date(t.transaction_date);
               return date.getFullYear() === selectedYear && 
-                     t.category_id === mieteinnahmenCategoryId &&
-                     t.amount > 0;
+                     t.amount > 0 &&
+                     (allIncomeCategories.includes(t.category_id || '') || 
+                      t.tenant_id || 
+                      t.unit_id); // Auch nicht-kategorisierte aber zugeordnete Transaktionen
             }) || [];
 
             relevantTenants.forEach(tenant => {
               const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
               
-              // Mieteinnahmen aus Buchhaltung die diesem Mieter/Unit zugeordnet sind
-              const tenantMieteinnahmen = mieteinnahmenTransactions.filter(t => 
+              // Alle Zahlungen aus Buchhaltung die diesem Mieter oder dessen Unit zugeordnet sind
+              const tenantZahlungen = allIncomeTransactions.filter(t => 
                 t.tenant_id === tenant.id || t.unit_id === tenant.unit_id
               );
               
+              // SOLL = Erwartete Einnahmen (Vorschreibungen)
               const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
               
-              // Haben = nur aus Buchhaltung (Mieteinnahmen-Transaktionen)
-              const habenBetrag = tenantMieteinnahmen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+              // HABEN = Tatsächlich erhaltene Zahlungen aus Buchhaltung
+              const habenBetrag = tenantZahlungen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+              
+              // SALDO = Soll - Haben (positiv = Unterzahlung, negativ = Überzahlung, 0 = ausgeglichen)
               const saldo = sollBetrag - habenBetrag;
 
               // Find oldest unpaid invoice
