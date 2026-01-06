@@ -316,25 +316,21 @@ export default function Reports() {
     ?.filter(c => BETRIEBSKOSTEN_CATEGORIES.includes(c.name))
     .map(c => c.id) || [];
 
-  // ====== EINNAHMEN AUS TRANSAKTIONEN ======
+  // ====== IST-EINNAHMEN AUS PAYMENTS-TABELLE ======
+  // Payments sind die tatsächlichen Mietzahlungen
+  const totalIstEinnahmen = totalPaymentsAmount;
+  
+  // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
+  const paymentsByTenant = new Map<string, number>();
+  periodPayments.forEach(p => {
+    const current = paymentsByTenant.get(p.tenant_id) || 0;
+    paymentsByTenant.set(p.tenant_id, current + Number(p.betrag));
+  });
+
+  // ====== AUSGABEN AUS TRANSAKTIONEN (negative Beträge) ======
   const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
 
-  // Mieteinnahmen aus Transaktionen
-  const mieteinnahmenFromTransactions = incomeTransactions
-    .filter(t => t.category_id === mieteinnahmenCategoryId)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-
-  // BK-Vorauszahlungen aus Transaktionen  
-  const bkVorauszahlungenFromTransactions = incomeTransactions
-    .filter(t => t.category_id === bkVorauszCategoryId)
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-
-  // Gesamteinnahmen aus Transaktionen
-  const totalIncomeFromTransactions = incomeTransactions
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-
-  // ====== AUSGABEN AUS TRANSAKTIONEN ======
   // Instandhaltungskosten (mindern die Rendite)
   const instandhaltungskostenFromTransactions = expenseTransactions
     .filter(t => instandhaltungCategoryIds.includes(t.category_id || ''))
@@ -349,9 +345,9 @@ export default function Reports() {
   const totalExpensesFromTransactions = expenseTransactions
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
-  // ====== RENDITE-BERECHNUNG (NUR AUF TRANSAKTIONEN BASIERT) ======
-  // Nettoertrag = Mieteinnahmen - Instandhaltungskosten (NICHT Betriebskosten)
-  const nettoertrag = mieteinnahmenFromTransactions - instandhaltungskostenFromTransactions;
+  // ====== RENDITE-BERECHNUNG (IST-Basis) ======
+  // Nettoertrag = IST-Mieteinnahmen - Instandhaltungskosten
+  const nettoertrag = totalIstEinnahmen - instandhaltungskostenFromTransactions;
   const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
 
   // Vacancy rate
@@ -774,17 +770,17 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Umsatz {periodLabel}</p>
+                <p className="text-sm text-muted-foreground">Umsatz {periodLabel} (IST)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  aus {incomeTransactions.length} Buchungen
+                  aus {periodPayments.length} Mietzahlungen
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                Buchhaltung
+                Zahlungseingänge
               </div>
             </div>
           </CardContent>
@@ -804,47 +800,54 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Einnahmen/Ausgaben aus Buchhaltung */}
+      {/* Einnahmen/Ausgaben Übersicht */}
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
-            Einnahmen und Ausgaben aus der Buchhaltung ({periodTransactions.length} Transaktionen)
-            {periodPayments.length > 0 && ` • ${periodPayments.length} Mietzahlungen erfasst`}
+            IST-Einnahmen aus {periodPayments.length} Mietzahlungen • Ausgaben aus {expenseTransactions.length} Buchungen
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Einnahmen */}
+            {/* Einnahmen (IST aus payments) */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-success flex items-center gap-2">
                 <ArrowUpRight className="h-4 w-4" />
-                Einnahmen
+                Einnahmen (IST)
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
-                  <span className="text-sm">Mieteinnahmen</span>
+                  <div>
+                    <span className="text-sm">Mietzahlungen eingegangen</span>
+                    <p className="text-xs text-muted-foreground">{periodPayments.length} Zahlungen</p>
+                  </div>
                   <span className="font-semibold text-success">
-                    €{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
-                  <span className="text-sm">BK-Vorauszahlungen</span>
-                  <span className="font-semibold text-success">
-                    €{bkVorauszahlungenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
-                  <span className="text-sm">Sonstige Einnahmen</span>
-                  <span className="font-semibold text-success">
-                    €{(totalIncomeFromTransactions - mieteinnahmenFromTransactions - bkVorauszahlungenFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-success bg-success/10">
-                  <span className="font-semibold">Gesamt Einnahmen</span>
+                  <span className="font-semibold">Gesamt IST-Einnahmen</span>
                   <span className="font-bold text-success text-lg">
-                    €{totalIncomeFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
+                </div>
+              </div>
+              
+              {/* SOLL vs IST Vergleich */}
+              <div className="mt-4 p-3 rounded-lg border border-border bg-muted/50">
+                <p className="text-xs font-medium text-muted-foreground mb-2">SOLL vs IST Vergleich</p>
+                <div className="flex justify-between text-sm">
+                  <span>SOLL (Vorschreibung):</span>
+                  <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>IST (Eingegangen):</span>
+                  <span>€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGesamt - totalIstEinnahmen > 0 ? 'text-destructive' : 'text-success'}`}>
+                  <span>Differenz:</span>
+                  <span>€{(periodSollGesamt - totalIstEinnahmen).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
@@ -896,7 +899,7 @@ export default function Reports() {
               <div>
                 <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
                 <p className="text-sm text-muted-foreground">
-                  Mieteinnahmen (€{mieteinnahmenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
+                  IST-Einnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
                   - Instandhaltung (€{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
                 </p>
               </div>
@@ -1185,25 +1188,14 @@ export default function Reports() {
         </CardHeader>
         <CardContent>
           {(() => {
-            // Zeige ALLE Einheiten mit IST-Zahlungen aus Transaktionen
+            // Zeige ALLE Einheiten mit IST-Zahlungen aus PAYMENTS-Tabelle
             const today = new Date();
             
-            // Alle Einnahmen-Kategorien die für Mieteinnahmen relevant sind (Miete, BK, Heizung)
-            const allIncomeCategories = [
-              mieteinnahmenCategoryId,
-              bkVorauszCategoryId,
-              heizungCategoryId
-            ].filter(Boolean);
-            
-            // Alle Einnahmen aus Buchhaltung (transactions) für das Jahr
-            const allIncomeTransactions = allTransactions?.filter(t => {
-              const date = new Date(t.transaction_date);
-              return date.getFullYear() === selectedYear && 
-                     t.amount > 0 &&
-                     (allIncomeCategories.includes(t.category_id || '') || 
-                      t.tenant_id || 
-                      t.unit_id);
-            }) || [];
+            // Alle Zahlungen für das Jahr aus payments-Tabelle
+            const yearPayments = (allPayments || []).filter(p => {
+              const paymentDate = new Date(p.eingangs_datum);
+              return paymentDate.getFullYear() === selectedYear;
+            });
 
             // Filter invoices for selected year
             const yearInvoices = (invoices || []).filter(inv => 
@@ -1217,14 +1209,17 @@ export default function Reports() {
               unitType: string;
               propertyName: string;
               tenantName: string;
-              sollBetrag: number; // aus Vorschreibungen
-              habenBetrag: number; // IST aus Transaktionen
+              sollBetrag: number; // aus SOLL (tenants) x Monate
+              habenBetrag: number; // IST aus payments
               saldo: number;
               daysOverdue: number;
               isLeerstand: boolean;
             }
 
             const unitBalances: UnitBalance[] = [];
+            
+            // Wie viele Monate im Jahr?
+            const monthsInYear = 12;
 
             // Alle relevanten Units durchgehen
             units?.forEach(unit => {
@@ -1235,30 +1230,28 @@ export default function Reports() {
                 t.unit_id === unit.id && t.status === 'aktiv'
               );
               
-              // SOLL = Vorschreibungen für diese Unit im Jahr
-              const unitInvoices = yearInvoices.filter(inv => inv.unit_id === unit.id);
-              const sollBetrag = unitInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+              // SOLL = Monatliche SOLL-Werte aus tenant x 12 Monate
+              const sollMonatlich = activeTenant 
+                ? Number(activeTenant.grundmiete || 0) + 
+                  Number(activeTenant.betriebskosten_vorschuss || 0) + 
+                  Number(activeTenant.heizungskosten_vorschuss || 0)
+                : 0;
+              const sollBetrag = sollMonatlich * monthsInYear;
               
-              // HABEN = IST-Zahlungen aus Transaktionen für diese Unit
-              const unitZahlungen = allIncomeTransactions.filter(t => 
-                t.unit_id === unit.id || 
-                (activeTenant && t.tenant_id === activeTenant.id)
-              );
-              const habenBetrag = unitZahlungen.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+              // HABEN = IST-Zahlungen aus payments für diesen Mieter
+              const tenantPayments = activeTenant 
+                ? yearPayments.filter(p => p.tenant_id === activeTenant.id)
+                : [];
+              const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
               
               // SALDO = Soll - Haben
               const saldo = sollBetrag - habenBetrag;
 
-              // Überfällige Tage berechnen
-              const openInvoices = unitInvoices.filter(inv => 
-                inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig'
-              );
-              const oldestDueDate = openInvoices.length > 0 
-                ? new Date(Math.min(...openInvoices.map(inv => new Date(inv.faellig_am).getTime())))
-                : null;
-              const daysOverdue = oldestDueDate && oldestDueDate < today 
-                ? Math.floor((today.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))
-                : 0;
+              // Überfällige Tage berechnen basierend auf SOLL vs IST
+              // Wenn Unterzahlung und mehr als 30 Tage seit Jahresbeginn
+              const today = new Date();
+              const daysSinceYearStart = Math.floor((today.getTime() - new Date(selectedYear, 0, 1).getTime()) / (1000 * 60 * 60 * 24));
+              const daysOverdue = saldo > 0 && daysSinceYearStart > 30 ? Math.min(daysSinceYearStart - 30, 365) : 0;
 
               // Zeige alle Units (auch Leerstand mit 0-Werten wenn gewünscht)
               unitBalances.push({
