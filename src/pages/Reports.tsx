@@ -396,48 +396,51 @@ export default function Reports() {
     return 10; // Miete und BK für Wohnungen = 10%
   };
   
-  // USt aus Invoices (wenn vorhanden)
-  const ustGrundmieteFromInvoices = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || getVatRateForUnit(inv.unit_id, 'miete'))), 0);
-  const ustBkFromInvoices = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || getVatRateForUnit(inv.unit_id, 'bk'))), 0);
-  const ustHeizungFromInvoices = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || getVatRateForUnit(inv.unit_id, 'heizung'))), 0);
-  
-  // USt aus TRANSAKTIONEN berechnen (für den Fall, dass keine Invoices existieren)
-  // Mieteinnahmen-Transaktionen nach Einheitstyp aufschlüsseln
-  const ustFromMieteinnahmenTransactions = incomeTransactions
-    .filter(t => t.category_id === mieteinnahmenCategoryId)
-    .reduce((sum, t) => {
-      const betrag = Number(t.amount);
-      const vatRate = getVatRateForUnit(t.unit_id, 'miete');
-      return sum + calculateVatFromGross(betrag, vatRate);
-    }, 0);
-  
-  // BK-Vorauszahlungen aus Transaktionen
-  const ustFromBkTransactions = incomeTransactions
-    .filter(t => t.category_id === bkVorauszCategoryId)
-    .reduce((sum, t) => {
-      const betrag = Number(t.amount);
-      const vatRate = getVatRateForUnit(t.unit_id, 'bk');
-      return sum + calculateVatFromGross(betrag, vatRate);
-    }, 0);
-  
-  // Heizungskategorien suchen (falls vorhanden)
-  const heizungCategoryId = categories?.find(c => c.name === 'Heizung' && c.type === 'income')?.id;
-  const ustFromHeizungTransactions = incomeTransactions
-    .filter(t => t.category_id === heizungCategoryId)
-    .reduce((sum, t) => {
-      const betrag = Number(t.amount);
-      return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
-    }, 0);
-  
-  // ====== SOLL-VERSTEUERUNG: USt BASIERT AUF VORSCHREIBUNGEN (INVOICES) ======
+  // ====== SOLL-VERSTEUERUNG: USt BASIERT AUF SOLL-WERTEN AUS MIETERN ======
   // Bei Soll-Versteuerung entsteht die USt-Schuld mit Rechnungsstellung,
-  // unabhängig davon ob der Mieter bereits bezahlt hat
+  // basierend auf den monatlichen SOLL-Werten der aktiven Mieter
   
-  // Gesamte USt aus Einnahmen - NUR aus Vorschreibungen (Invoices)
-  const totalUstEinnahmen = ustGrundmieteFromInvoices + ustBkFromInvoices + ustHeizungFromInvoices;
+  // Berechne SOLL-Werte aus aktiven Mietern für den Zeitraum
+  const activeTenants = allTenants?.filter(t => t.status === 'aktiv') || [];
+  const relevantTenants = selectedPropertyId === 'all' 
+    ? activeTenants 
+    : activeTenants.filter(t => {
+        const unit = allUnits?.find(u => u.id === t.unit_id);
+        return unit?.property_id === selectedPropertyId;
+      });
+  
+  // Monatliche SOLL-Summen aus Mieterdaten
+  const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
+  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
+  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
+  
+  // Bei jährlicher Ansicht: x12 Monate
+  const monthMultiplier = reportPeriod === 'yearly' ? 12 : 1;
+  const periodSollGrundmiete = sollGrundmiete * monthMultiplier;
+  const periodSollBk = sollBk * monthMultiplier;
+  const periodSollHk = sollHk * monthMultiplier;
+  const periodSollGesamt = periodSollGrundmiete + periodSollBk + periodSollHk;
+  
+  // USt aus SOLL-Werten berechnen (nach Einheitstyp)
+  const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
+    const betrag = Number(t.grundmiete || 0) * monthMultiplier;
+    const vatRate = getVatRateForUnit(t.unit_id, 'miete');
+    return sum + calculateVatFromGross(betrag, vatRate);
+  }, 0);
+  
+  const ustFromSollBk = relevantTenants.reduce((sum, t) => {
+    const betrag = Number(t.betriebskosten_vorschuss || 0) * monthMultiplier;
+    const vatRate = getVatRateForUnit(t.unit_id, 'bk');
+    return sum + calculateVatFromGross(betrag, vatRate);
+  }, 0);
+  
+  const ustFromSollHk = relevantTenants.reduce((sum, t) => {
+    const betrag = Number(t.heizungskosten_vorschuss || 0) * monthMultiplier;
+    return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
+  }, 0);
+  
+  // Gesamte USt aus SOLL-Einnahmen
+  const totalUstEinnahmen = ustFromSollMiete + ustFromSollBk + ustFromSollHk;
   
   // Vorsteuer aus Ausgaben (aus Transaktionen - diese haben die Kategorien)
   const vorsteuerFromTransactions = expenseTransactions.reduce((sum, t) => {
@@ -450,15 +453,19 @@ export default function Reports() {
   // USt-Zahllast = USt aus Vorschreibungen - Vorsteuer aus Ausgaben
   const vatLiabilityFromTransactions = totalUstEinnahmen - vorsteuerFromTransactions;
   
-  // Brutto-Beträge für Anzeige - IMMER aus Vorschreibungen (Soll-Versteuerung)
-  const bruttoGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-  const bruttoBk = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-  const bruttoHeizung = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  // Brutto-Beträge für Anzeige - aus SOLL-Werten der Mieter
+  const bruttoGrundmiete = periodSollGrundmiete;
+  const bruttoBk = periodSollBk;
+  const bruttoHeizung = periodSollHk;
   
-  // USt-Beträge für Anzeige - aus Vorschreibungen
-  const ustGrundmieteDisplay = ustGrundmieteFromInvoices;
-  const ustBkDisplay = ustBkFromInvoices;
-  const ustHeizungDisplay = ustHeizungFromInvoices;
+  // USt-Beträge für Anzeige - aus SOLL-Werten
+  const ustGrundmieteDisplay = ustFromSollMiete;
+  const ustBkDisplay = ustFromSollBk;
+  const ustHeizungDisplay = ustFromSollHk;
+  
+  // Heizung-Kategorie für Offene Posten (falls vorhanden)
+  const heizungCategoryId = categories?.find(c => c.name === 'Heizung' && c.type === 'income')?.id || 
+                            categories?.find(c => c.name === 'Heizungskostenvorauszahlungen')?.id;
 
   // ====== FALLBACK: AUCH ALTE DATEN AUS INVOICES ANZEIGEN ======
   // Revenue from invoices for selected period (als Vergleich)
@@ -946,7 +953,7 @@ export default function Reports() {
             <div>
               <CardTitle>USt-Voranmeldung {periodLabel}</CardTitle>
               <CardDescription>
-                Einnahmen aus {periodInvoices.length} Mietrechnungen, Vorsteuer aus {expenseTransactions.length} Ausgaben
+                Einnahmen aus {relevantTenants.length} aktiven Mietern (SOLL), Vorsteuer aus {expenseTransactions.length} Ausgaben
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
@@ -959,7 +966,7 @@ export default function Reports() {
         <CardContent>
           <div className="mb-6">
             <h4 className="text-sm font-semibold text-foreground mb-3">
-              Einnahmen (Soll-Versteuerung - aus Vorschreibungen)
+              Einnahmen (Soll-Versteuerung - SOLL aus Mieterdaten)
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="rounded-lg border border-border p-3">
@@ -1005,6 +1012,12 @@ export default function Reports() {
                 <p className={`text-lg font-bold ${vatLiabilityFromTransactions >= 0 ? 'text-success' : 'text-primary'}`}>
                   €{Math.abs(vatLiabilityFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-muted rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Gesamt SOLL-Einnahmen ({reportPeriod === 'yearly' ? '12 Monate' : 'Monat'}):</span>
+                <span className="text-lg font-bold">€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
             {periodInvoices.length === 0 && (
