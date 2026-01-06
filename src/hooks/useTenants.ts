@@ -63,6 +63,25 @@ export function useCreateTenant() {
   
   return useMutation({
     mutationFn: async (tenant: TenantInsert) => {
+      // If the new tenant is "aktiv", first set all other active tenants of the same unit to "beendet"
+      if (tenant.status === 'aktiv' && tenant.unit_id) {
+        const { error: updateError } = await supabase
+          .from('tenants')
+          .update({ 
+            status: 'beendet',
+            // Set mietende to day before new tenant's mietbeginn if not already set
+            mietende: tenant.mietbeginn ? 
+              new Date(new Date(tenant.mietbeginn).getTime() - 86400000).toISOString().split('T')[0] 
+              : new Date().toISOString().split('T')[0]
+          })
+          .eq('unit_id', tenant.unit_id)
+          .eq('status', 'aktiv');
+        
+        if (updateError) {
+          console.warn('Could not update existing tenants:', updateError);
+        }
+      }
+
       const { data, error } = await supabase
         .from('tenants')
         .insert(tenant)
@@ -89,6 +108,20 @@ export function useUpdateTenant() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TenantUpdate & { id: string }) => {
+      // If updating status to "aktiv", first deactivate all other active tenants of the same unit
+      if (updates.status === 'aktiv' && updates.unit_id) {
+        const { error: updateError } = await supabase
+          .from('tenants')
+          .update({ status: 'beendet' })
+          .eq('unit_id', updates.unit_id)
+          .eq('status', 'aktiv')
+          .neq('id', id);
+        
+        if (updateError) {
+          console.warn('Could not deactivate other tenants:', updateError);
+        }
+      }
+
       const { data, error } = await supabase
         .from('tenants')
         .update(updates)
