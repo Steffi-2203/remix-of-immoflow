@@ -60,11 +60,8 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" asChild>
-              <Link to="/login">Anmelden</Link>
-            </Button>
             <Button asChild>
-              <Link to="/register">Kostenlos starten</Link>
+              <Link to="/login">Anmelden</Link>
             </Button>
           </div>
         </div>
@@ -84,13 +81,10 @@ export default function Landing() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild className="text-lg px-8">
-              <Link to="/register">
-                Jetzt kostenlos starten
+              <Link to="/login">
+                Anmelden
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild className="text-lg px-8">
-              <Link to="/login">Demo ansehen</Link>
             </Button>
           </div>
         </div>
@@ -145,13 +139,13 @@ export default function Landing() {
               </div>
             </div>
             <div className="bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl p-8 text-center">
-              <div className="text-6xl font-bold text-primary mb-2">14</div>
-              <div className="text-lg text-muted-foreground mb-4">Tage kostenlos testen</div>
+              <div className="text-4xl font-bold text-primary mb-4">Professionell</div>
+              <div className="text-lg text-muted-foreground mb-4">Hausverwaltung leicht gemacht</div>
               <p className="text-sm text-muted-foreground mb-6">
-                Keine Kreditkarte erforderlich. Jederzeit kündbar.
+                Alle Funktionen inklusive. Sofort einsatzbereit.
               </p>
               <Button asChild className="w-full">
-                <Link to="/register">Jetzt registrieren</Link>
+                <Link to="/login">Jetzt anmelden</Link>
               </Button>
             </div>
           </div>
@@ -168,8 +162,8 @@ export default function Landing() {
             Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoflowMe bereits nutzen.
           </p>
           <Button size="lg" variant="secondary" asChild className="text-lg px-8">
-            <Link to="/register">
-              Kostenlos registrieren
+            <Link to="/login">
+              Jetzt anmelden
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
