@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -21,25 +22,48 @@ import {
   AlertTriangle,
   Clock,
   Users,
-  Info
+  Info,
+  ArrowRightLeft
 } from 'lucide-react';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
+import { useProperties } from '@/hooks/useProperties';
 import { useInvoices } from '@/hooks/useInvoices';
-import { useTransactions } from '@/hooks/useTransactions';
+import { useTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 export default function PaymentList() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
 
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
+  const { data: properties } = useProperties();
   const { data: invoices } = useInvoices();
   const { data: transactions, isLoading: transactionsLoading } = useTransactions();
   const { data: categories } = useAccountCategories();
+  const updateTransaction = useUpdateTransaction();
 
   // Get Mieteinnahmen category
   const mieteinnahmenCategory = useMemo(() => {
@@ -162,6 +186,62 @@ export default function PaymentList() {
     const unit = units?.find(u => u.id === transaction.unit_id);
     return { tenant, unit };
   };
+
+  // Handle reassignment of unmatched transactions
+  const handleReassign = (transaction: any) => {
+    setSelectedTransaction(transaction);
+    setSelectedTenantId('');
+    setReassignDialogOpen(true);
+  };
+
+  const confirmReassign = async () => {
+    if (!selectedTransaction || !selectedTenantId) return;
+    
+    const tenant = tenants?.find(t => t.id === selectedTenantId);
+    if (!tenant) return;
+
+    try {
+      await updateTransaction.mutateAsync({
+        id: selectedTransaction.id,
+        tenant_id: selectedTenantId,
+        unit_id: tenant.unit_id,
+        status: 'matched',
+        matched_at: new Date().toISOString(),
+        matched_by: 'manual',
+      });
+      
+      toast.success(`Transaktion wurde ${tenant.first_name} ${tenant.last_name} zugeordnet`);
+      setReassignDialogOpen(false);
+      setSelectedTransaction(null);
+      setSelectedTenantId('');
+    } catch (error) {
+      toast.error('Fehler beim Zuordnen der Transaktion');
+    }
+  };
+
+  // Group tenants by property for better overview
+  const tenantsByProperty = useMemo(() => {
+    if (!tenants || !units || !properties) return [];
+    
+    const activeTenants = tenants.filter(t => t.status === 'aktiv');
+    const grouped: { property: any; tenants: any[] }[] = [];
+    
+    properties.forEach(property => {
+      const propertyUnits = units.filter(u => u.property_id === property.id);
+      const propertyTenants = activeTenants.filter(t => 
+        propertyUnits.some(u => u.id === t.unit_id)
+      ).map(t => ({
+        ...t,
+        unit: propertyUnits.find(u => u.id === t.unit_id)
+      }));
+      
+      if (propertyTenants.length > 0) {
+        grouped.push({ property, tenants: propertyTenants });
+      }
+    });
+    
+    return grouped;
+  }, [tenants, units, properties]);
 
   return (
     <MainLayout
@@ -292,19 +372,23 @@ export default function PaymentList() {
                       <TableHead>Beschreibung</TableHead>
                       <TableHead className="text-right">Betrag</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="w-[100px]">Aktion</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredTransactions.map((transaction) => {
                       const { tenant, unit } = getTransactionDetails(transaction);
+                      const isUnmatched = transaction.status !== 'matched' || !transaction.tenant_id;
 
                       return (
-                        <TableRow key={transaction.id}>
+                        <TableRow key={transaction.id} className={isUnmatched ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
                           <TableCell>
                             {format(new Date(transaction.transaction_date), 'dd.MM.yyyy', { locale: de })}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
+                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : (
+                              <span className="text-orange-600 italic">Nicht zugeordnet</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {unit ? unit.top_nummer : '-'}
@@ -316,13 +400,28 @@ export default function PaymentList() {
                             € {Number(transaction.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell>
-                            {transaction.status === 'matched' ? (
+                            {transaction.status === 'matched' && transaction.tenant_id ? (
                               <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Zugeordnet
                               </Badge>
                             ) : (
-                              <Badge variant="secondary">Nicht zugeordnet</Badge>
+                              <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                                Nicht zugeordnet
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isUnmatched && (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleReassign(transaction)}
+                                className="h-7 text-xs"
+                              >
+                                <ArrowRightLeft className="h-3 w-3 mr-1" />
+                                Umbuchen
+                              </Button>
                             )}
                           </TableCell>
                         </TableRow>
@@ -445,6 +544,71 @@ export default function PaymentList() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Reassignment Dialog */}
+      <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Zahlung zuordnen</DialogTitle>
+            <DialogDescription>
+              Ordnen Sie diese Zahlung einem Mieter zu.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Zahlung vom {format(new Date(selectedTransaction.transaction_date), 'dd.MM.yyyy', { locale: de })}</p>
+                <p className="font-semibold text-lg text-green-600">
+                  € {Number(selectedTransaction.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                {selectedTransaction.description && (
+                  <p className="text-sm mt-1">{selectedTransaction.description}</p>
+                )}
+                {selectedTransaction.counterpart_name && (
+                  <p className="text-sm text-muted-foreground">Von: {selectedTransaction.counterpart_name}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Mieter auswählen</Label>
+                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Mieter wählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tenantsByProperty.map(({ property, tenants: propertyTenants }) => (
+                      <div key={property.id}>
+                        <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground bg-muted">
+                          🏠 {property.name}
+                        </div>
+                        {propertyTenants.map(tenant => (
+                          <SelectItem key={tenant.id} value={tenant.id}>
+                            {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
+                          </SelectItem>
+                        ))}
+                      </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>
+                  Abbrechen
+                </Button>
+                <Button 
+                  onClick={confirmReassign}
+                  disabled={!selectedTenantId || updateTransaction.isPending}
+                >
+                  {updateTransaction.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Zuordnen
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
