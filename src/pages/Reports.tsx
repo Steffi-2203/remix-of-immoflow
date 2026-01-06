@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +34,7 @@ import {
   Building2,
   Receipt,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -171,11 +174,14 @@ export default function Reports() {
   const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [isGeneratingInvoices, setIsGeneratingInvoices] = useState(false);
+  
+  const queryClient = useQueryClient();
   
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: allUnits, isLoading: isLoadingUnits } = useUnits();
   const { data: allTenants, isLoading: isLoadingTenants } = useTenants();
-  const { data: allInvoices, isLoading: isLoadingInvoices } = useInvoices();
+  const { data: allInvoices, isLoading: isLoadingInvoices, refetch: refetchInvoices } = useInvoices();
   const { data: allExpenses, isLoading: isLoadingExpenses } = useExpenses();
   const { data: allPayments, isLoading: isLoadingPayments } = usePayments();
   const { data: allTransactions, isLoading: isLoadingTransactions } = useTransactions();
@@ -183,6 +189,45 @@ export default function Reports() {
   const { syncExistingPaymentsToTransactions } = usePaymentSync();
 
   const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories;
+
+  // Generate monthly invoices for the selected period
+  const handleGenerateInvoices = useCallback(async () => {
+    setIsGeneratingInvoices(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Bitte melden Sie sich an');
+        return;
+      }
+
+      const response = await supabase.functions.invoke('generate-monthly-invoices', {
+        body: { year: selectedYear, month: selectedMonth }
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      const result = response.data;
+      
+      if (result.created > 0) {
+        toast.success(`${result.created} Vorschreibung(en) für ${monthNames[selectedMonth - 1]} ${selectedYear} erstellt`);
+      } else if (result.skipped > 0) {
+        toast.info(`Alle ${result.skipped} Mieter haben bereits Vorschreibungen für ${monthNames[selectedMonth - 1]} ${selectedYear}`);
+      } else {
+        toast.warning('Keine aktiven Mieter gefunden');
+      }
+      
+      // Refresh invoices data
+      await refetchInvoices();
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (error) {
+      console.error('Error generating invoices:', error);
+      toast.error(`Fehler beim Erstellen der Vorschreibungen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
+    } finally {
+      setIsGeneratingInvoices(false);
+    }
+  }, [selectedYear, selectedMonth, refetchInvoices, queryClient]);
 
   // Generate year options (last 5 years)
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
@@ -963,9 +1008,37 @@ export default function Reports() {
               </div>
             </div>
             {periodInvoices.length === 0 && (
-              <p className="text-sm text-orange-600 mt-3">
-                ⚠️ Keine Vorschreibungen für den ausgewählten Zeitraum gefunden. Bitte erstellen Sie zuerst monatliche Mietvorschreibungen.
-              </p>
+              <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                      Keine Vorschreibungen für {monthNames[selectedMonth - 1]} {selectedYear} gefunden
+                    </p>
+                    <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
+                      Erstellen Sie monatliche Mietvorschreibungen basierend auf den aktiven Mietern.
+                    </p>
+                    <Button 
+                      onClick={handleGenerateInvoices}
+                      disabled={isGeneratingInvoices}
+                      className="mt-3"
+                      size="sm"
+                    >
+                      {isGeneratingInvoices ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Generiere...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Vorschreibungen für {monthNames[selectedMonth - 1]} generieren
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
