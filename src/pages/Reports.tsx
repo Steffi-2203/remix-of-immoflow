@@ -143,6 +143,20 @@ const reports = [
     icon: AlertCircle,
     color: 'bg-destructive/10 text-destructive',
   },
+  {
+    id: 'detailbericht',
+    title: 'Detailbericht',
+    description: 'Einnahmen & Ausgaben pro Einheit/Liegenschaft',
+    icon: Building2,
+    color: 'bg-blue-500/10 text-blue-600',
+  },
+  {
+    id: 'mietvorschreibung',
+    title: 'Mietvorschreibungen',
+    description: 'Monatliche Miete, BK & HK pro Mieter',
+    icon: Receipt,
+    color: 'bg-purple-500/10 text-purple-600',
+  },
 ];
 
 const monthNames = [
@@ -156,6 +170,7 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: allUnits, isLoading: isLoadingUnits } = useUnits();
@@ -799,10 +814,20 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2 mt-2">
-                <Button size="sm" onClick={() => handleGenerateReport(report.id)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Generieren
-                </Button>
+                {/* PDF-fähige Berichte */}
+                {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten'].includes(report.id) && (
+                  <Button size="sm" onClick={() => handleGenerateReport(report.id)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    PDF Export
+                  </Button>
+                )}
+                {/* Inline-Berichte (Detailbericht, Mietvorschreibungen) */}
+                {['detailbericht', 'mietvorschreibung'].includes(report.id) && (
+                  <Button size="sm" onClick={() => setSelectedReportId(report.id)}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Anzeigen
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1207,6 +1232,311 @@ export default function Reports() {
                     </p>
                   )}
                 </div>
+              </>
+            );
+          })()}
+
+          {/* Detailbericht - Einnahmen/Ausgaben pro Einheit */}
+          {selectedReportId === 'detailbericht' && (() => {
+            // Gruppiere Transaktionen nach Einheiten
+            const unitTransactions = new Map<string, { 
+              unit: typeof units extends (infer U)[] ? U : never;
+              property: typeof properties extends (infer P)[] ? P : never;
+              income: number; 
+              expenses: number; 
+              transactions: typeof periodTransactions;
+              tenants: typeof allTenants;
+            }>();
+
+            // Initialisiere alle Einheiten
+            units?.forEach(unit => {
+              const property = properties?.find(p => p.id === unit.property_id);
+              const unitTenants = allTenants?.filter(t => t.unit_id === unit.id) || [];
+              unitTransactions.set(unit.id, {
+                unit: unit as any,
+                property: property as any,
+                income: 0,
+                expenses: 0,
+                transactions: [],
+                tenants: unitTenants as any,
+              });
+            });
+
+            // Verteile Transaktionen
+            periodTransactions.forEach(t => {
+              if (t.unit_id && unitTransactions.has(t.unit_id)) {
+                const data = unitTransactions.get(t.unit_id)!;
+                if (t.amount > 0) {
+                  data.income += Number(t.amount);
+                } else {
+                  data.expenses += Math.abs(Number(t.amount));
+                }
+                (data.transactions as any[]).push(t);
+              }
+            });
+
+            // Nicht zugeordnete Transaktionen
+            const unassignedTransactions = periodTransactions.filter(t => !t.unit_id);
+            const unassignedIncome = unassignedTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + Number(t.amount), 0);
+            const unassignedExpenses = unassignedTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+            // Gruppiere nach Liegenschaft
+            const propertiesData = new Map<string, {
+              property: typeof properties extends (infer P)[] ? P : never;
+              units: Array<{
+                unit: typeof units extends (infer U)[] ? U : never;
+                income: number;
+                expenses: number;
+                tenants: typeof allTenants;
+              }>;
+              totalIncome: number;
+              totalExpenses: number;
+            }>();
+
+            properties?.forEach(prop => {
+              propertiesData.set(prop.id, {
+                property: prop as any,
+                units: [],
+                totalIncome: 0,
+                totalExpenses: 0,
+              });
+            });
+
+            unitTransactions.forEach((data, unitId) => {
+              if (data.property && propertiesData.has(data.property.id)) {
+                const propData = propertiesData.get(data.property.id)!;
+                propData.units.push({
+                  unit: data.unit,
+                  income: data.income,
+                  expenses: data.expenses,
+                  tenants: data.tenants,
+                });
+                propData.totalIncome += data.income;
+                propData.totalExpenses += data.expenses;
+              }
+            });
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold">Detailbericht - Einnahmen & Ausgaben pro Einheit</h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedReportId(null)}>
+                    Schließen
+                  </Button>
+                </div>
+
+                <div className="space-y-6">
+                  {Array.from(propertiesData.values())
+                    .filter(p => selectedPropertyId === 'all' || p.property?.id === selectedPropertyId)
+                    .map((propData) => (
+                    <div key={propData.property?.id} className="border rounded-lg overflow-hidden">
+                      <div className="bg-muted p-4 flex justify-between items-center">
+                        <div>
+                          <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
+                          <p className="text-sm text-muted-foreground">{propData.property?.address}, {propData.property?.postal_code} {propData.property?.city}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-success font-semibold">+€{propData.totalIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-destructive font-semibold">-€{propData.totalExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Einheit</TableHead>
+                            <TableHead>Mieter</TableHead>
+                            <TableHead className="text-right">Einnahmen</TableHead>
+                            <TableHead className="text-right">Ausgaben</TableHead>
+                            <TableHead className="text-right">Saldo</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {propData.units.map((unitData) => {
+                            const activeTenant = (unitData.tenants as any[])?.find((t: any) => t.status === 'aktiv');
+                            const saldo = unitData.income - unitData.expenses;
+                            return (
+                              <TableRow key={unitData.unit?.id}>
+                                <TableCell className="font-medium">Top {unitData.unit?.top_nummer}</TableCell>
+                                <TableCell>
+                                  {activeTenant ? `${activeTenant.first_name} ${activeTenant.last_name}` : <span className="text-muted-foreground">Leerstand</span>}
+                                </TableCell>
+                                <TableCell className="text-right text-success">
+                                  €{unitData.income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell className="text-right text-destructive">
+                                  €{unitData.expenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                                <TableCell className={`text-right font-bold ${saldo >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                  €{saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ))}
+
+                  {unassignedTransactions.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-muted p-4">
+                        <h4 className="font-semibold">Nicht zugeordnete Buchungen</h4>
+                        <p className="text-sm text-muted-foreground">{unassignedTransactions.length} Transaktionen ohne Einheitszuordnung</p>
+                      </div>
+                      <div className="p-4">
+                        <div className="flex gap-8">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Einnahmen</p>
+                            <p className="text-success font-semibold">€{unassignedIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Ausgaben</p>
+                            <p className="text-destructive font-semibold">€{unassignedExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+
+          {/* Mietvorschreibungen - Monatliche Miete/BK/HK pro Mieter */}
+          {selectedReportId === 'mietvorschreibung' && (() => {
+            // Gruppiere Invoices nach Monat und Mieter
+            const monthlyData = new Map<string, Array<{
+              month: number;
+              year: number;
+              tenant: typeof allTenants extends (infer T)[] ? T : never;
+              unit: typeof allUnits extends (infer U)[] ? U : never;
+              property: typeof properties extends (infer P)[] ? P : never;
+              grundmiete: number;
+              betriebskosten: number;
+              heizungskosten: number;
+              gesamt: number;
+              status: string;
+            }>>();
+
+            // Fülle die Daten
+            periodInvoices.forEach(inv => {
+              const tenant = allTenants?.find(t => t.id === inv.tenant_id);
+              const unit = allUnits?.find(u => u.id === inv.unit_id);
+              const property = unit ? properties?.find(p => p.id === unit.property_id) : null;
+              
+              const key = `${inv.year}-${inv.month}`;
+              if (!monthlyData.has(key)) {
+                monthlyData.set(key, []);
+              }
+              
+              monthlyData.get(key)!.push({
+                month: inv.month,
+                year: inv.year,
+                tenant: tenant as any,
+                unit: unit as any,
+                property: property as any,
+                grundmiete: Number(inv.grundmiete) || 0,
+                betriebskosten: Number(inv.betriebskosten) || 0,
+                heizungskosten: Number(inv.heizungskosten) || 0,
+                gesamt: Number(inv.gesamtbetrag) || 0,
+                status: inv.status,
+              });
+            });
+
+            // Sortiere nach Datum
+            const sortedMonths = Array.from(monthlyData.entries())
+              .sort((a, b) => {
+                const [aYear, aMonth] = a[0].split('-').map(Number);
+                const [bYear, bMonth] = b[0].split('-').map(Number);
+                return bYear - aYear || bMonth - aMonth;
+              });
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-5 w-5 text-purple-600" />
+                    <h3 className="font-semibold">Mietvorschreibungen - Monatliche Übersicht</h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedReportId(null)}>
+                    Schließen
+                  </Button>
+                </div>
+
+                {sortedMonths.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Keine Mietvorschreibungen für den gewählten Zeitraum gefunden.
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {sortedMonths.map(([monthKey, invoices]) => {
+                      const [year, month] = monthKey.split('-').map(Number);
+                      const totals = invoices.reduce((acc, inv) => ({
+                        grundmiete: acc.grundmiete + inv.grundmiete,
+                        betriebskosten: acc.betriebskosten + inv.betriebskosten,
+                        heizungskosten: acc.heizungskosten + inv.heizungskosten,
+                        gesamt: acc.gesamt + inv.gesamt,
+                      }), { grundmiete: 0, betriebskosten: 0, heizungskosten: 0, gesamt: 0 });
+
+                      return (
+                        <div key={monthKey} className="border rounded-lg overflow-hidden">
+                          <div className="bg-muted p-4 flex justify-between items-center">
+                            <h4 className="font-semibold text-lg">{monthNames[month - 1]} {year}</h4>
+                            <div className="text-right">
+                              <p className="font-bold">Gesamt: €{totals.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Miete: €{totals.grundmiete.toLocaleString('de-AT')} | BK: €{totals.betriebskosten.toLocaleString('de-AT')} | HK: €{totals.heizungskosten.toLocaleString('de-AT')}
+                              </p>
+                            </div>
+                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Mieter</TableHead>
+                                <TableHead>Einheit</TableHead>
+                                <TableHead>Liegenschaft</TableHead>
+                                <TableHead className="text-right">Grundmiete</TableHead>
+                                <TableHead className="text-right">BK</TableHead>
+                                <TableHead className="text-right">Heizung</TableHead>
+                                <TableHead className="text-right">Gesamt</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {invoices.map((inv, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-medium">
+                                    {inv.tenant ? `${inv.tenant.first_name} ${inv.tenant.last_name}` : 'Unbekannt'}
+                                  </TableCell>
+                                  <TableCell>Top {inv.unit?.top_nummer || '-'}</TableCell>
+                                  <TableCell className="text-muted-foreground">{inv.property?.name || '-'}</TableCell>
+                                  <TableCell className="text-right">€{inv.grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell className="text-right">€{inv.betriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell className="text-right">€{inv.heizungskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell className="text-right font-bold">€{inv.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={
+                                      inv.status === 'bezahlt' ? 'default' :
+                                      inv.status === 'ueberfaellig' ? 'destructive' :
+                                      inv.status === 'teilbezahlt' ? 'secondary' : 'outline'
+                                    }>
+                                      {inv.status === 'bezahlt' ? 'Bezahlt' :
+                                       inv.status === 'ueberfaellig' ? 'Überfällig' :
+                                       inv.status === 'teilbezahlt' ? 'Teilbezahlt' : 'Offen'}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             );
           })()}
