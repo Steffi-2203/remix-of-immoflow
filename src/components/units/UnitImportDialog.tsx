@@ -90,6 +90,7 @@ export function UnitImportDialog({ open, onOpenChange, propertyId, existingUnits
       header: true,
       skipEmptyLines: true,
       encoding: 'UTF-8',
+      delimiter: '', // Auto-detect delimiter (comma, semicolon, tab)
       complete: (results) => {
         const data = results.data as ParsedRow[];
         if (data.length === 0) {
