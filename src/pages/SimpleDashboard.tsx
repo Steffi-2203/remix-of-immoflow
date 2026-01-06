@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/hooks/useAuth";
-import { useSubscription } from "@/hooks/useSubscription";
-import { useSubscriptionLimits, calculateTrialDaysRemaining } from "@/hooks/useOrganization";
+import { useOrganization } from "@/hooks/useOrganization";
 import { useProperties, useCreateProperty, useDeleteProperty } from "@/hooks/useProperties";
 import { useUnits, useCreateUnit } from "@/hooks/useUnits";
 import { Link } from "react-router-dom";
@@ -12,26 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
-import { TrialExpiredModal } from "@/components/dashboard/TrialExpiredModal";
-import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { BankingWidget } from "@/components/dashboard/BankingWidget";
-import { supabase } from "@/integrations/supabase/client";
 
-// Subscription limits
-const LIMITS = {
-  starter: { properties: 1, unitsPerProperty: 5 },
-  professional: { properties: 3, unitsPerProperty: 15 },
-  enterprise: { properties: 999, unitsPerProperty: 999 },
-};
-
-function UnitsSection({ propertyId, maxUnits, isExpired }: { propertyId: string; maxUnits: number; isExpired: boolean }) {
+function UnitsSection({ propertyId }: { propertyId: string }) {
   const { data: units, isLoading } = useUnits(propertyId);
   const createUnit = useCreateUnit();
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [newUnit, setNewUnit] = useState({ top_nummer: '' });
 
   const unitsList = units || [];
-  const canAddUnit = unitsList.length < maxUnits && !isExpired;
 
   if (isLoading) {
     return <div className="mt-4 pt-4 border-t"><Skeleton className="h-20 w-full" /></div>;
@@ -41,22 +29,16 @@ function UnitsSection({ propertyId, maxUnits, isExpired }: { propertyId: string;
     <div className="mt-4 pt-4 border-t" onClick={(e) => e.stopPropagation()}>
       <div className="flex justify-between items-center mb-3">
         <h4 className="font-semibold text-sm">
-          Einheiten ({unitsList.length} von {maxUnits})
+          Einheiten ({unitsList.length})
         </h4>
-        {isExpired ? (
-          <span className="text-sm text-destructive">Abo abgelaufen</span>
-        ) : canAddUnit ? (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAddUnit(true)}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Einheit
-          </Button>
-        ) : (
-          <span className="text-sm text-orange-600">Limit erreicht</span>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowAddUnit(true)}
+        >
+          <Plus className="h-3 w-3 mr-1" />
+          Einheit
+        </Button>
       </div>
 
       {showAddUnit && (
@@ -118,9 +100,7 @@ function UnitsSection({ propertyId, maxUnits, isExpired }: { propertyId: string;
 }
 
 export default function SimpleDashboard() {
-  const { user } = useAuth();
-  const { organization, isLoading, subscriptionStatus, subscriptionTier, refetch } = useSubscription();
-  const { trialDaysRemaining, isTrialExpiringSoon, status } = useSubscriptionLimits();
+  const { data: organization, isLoading } = useOrganization();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const createProperty = useCreateProperty();
   const deleteProperty = useDeleteProperty();
@@ -129,27 +109,7 @@ export default function SimpleDashboard() {
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
-  // Check for expired trials on mount
-  useEffect(() => {
-    const checkTrialExpiration = async () => {
-      try {
-        await supabase.functions.invoke('check-trial-expiration');
-        refetch();
-      } catch (error) {
-        console.error('Error checking trial expiration:', error);
-      }
-    };
-    
-    checkTrialExpiration();
-  }, [refetch]);
-
   const propertiesList = properties || [];
-  const currentLimits = LIMITS[subscriptionTier as keyof typeof LIMITS] || LIMITS.starter;
-  const currentPropertyCount = propertiesList.length;
-  const maxProperties = currentLimits.properties;
-  
-  const isExpired = subscriptionStatus === 'expired';
-  const canAddProperty = currentPropertyCount < maxProperties && !isExpired;
 
   if (isLoading) {
     return (
@@ -177,71 +137,31 @@ export default function SimpleDashboard() {
     );
   }
 
-  const statusColors: Record<string, string> = {
-    trial: "bg-yellow-100 text-yellow-800",
-    active: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-    expired: "bg-gray-100 text-gray-800",
-  };
-
-  const tierLabels: Record<string, string> = {
-    starter: "Starter",
-    professional: "Professional",
-    enterprise: "Enterprise",
-  };
-
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
-      {/* Trial Expired Modal */}
-      <TrialExpiredModal open={isExpired} />
-      
       <div className="max-w-4xl">
-        {/* Trial Banner */}
-        {subscriptionStatus === 'trial' && trialDaysRemaining > 0 && (
-          <div className="mb-6">
-            <TrialBanner 
-              daysRemaining={trialDaysRemaining} 
-              isExpiringSoon={isTrialExpiringSoon} 
-            />
-          </div>
-        )}
-
         {/* Header mit Aktionen */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">ImmoflowMe</h1>
-          <div className="flex gap-2">
-            <Button variant="outline" asChild>
-              <Link to="/einstellungen">Einstellungen</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/upgrade">Plan upgraden</Link>
-            </Button>
-          </div>
+          <Button variant="outline" asChild>
+            <Link to="/einstellungen">Einstellungen</Link>
+          </Button>
         </div>
 
-        {/* Subscription Info */}
+        {/* Organization Info */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Ihr Abo</CardTitle>
+            <CardTitle>Organisation</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Plan</p>
-                <p className="text-lg font-medium">{tierLabels[subscriptionTier] || subscriptionTier}</p>
+                <p className="text-sm text-muted-foreground">Name</p>
+                <p className="text-lg font-medium">{organization.name}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className={statusColors[subscriptionStatus] || "bg-gray-100"}>
-                  {subscriptionStatus === "trial" ? "Testphase" : 
-                   subscriptionStatus === "active" ? "Aktiv" :
-                   subscriptionStatus === "cancelled" ? "Gekündigt" :
-                   subscriptionStatus === "expired" ? "Abgelaufen" : subscriptionStatus}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Organisation</p>
-                <p className="text-lg font-medium">{organization.name}</p>
+                <Badge className="bg-green-100 text-green-800">Aktiv</Badge>
               </div>
             </div>
           </CardContent>
@@ -258,22 +178,12 @@ export default function SimpleDashboard() {
             <div className="flex justify-between items-center">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                Meine Liegenschaften ({currentPropertyCount} von {maxProperties})
+                Meine Liegenschaften ({propertiesList.length})
               </CardTitle>
-              {isExpired ? (
-                <Button variant="destructive" asChild>
-                  <Link to="/pricing">Abo abgelaufen - Jetzt upgraden</Link>
-                </Button>
-              ) : canAddProperty ? (
-                <Button onClick={() => setShowAddForm(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Neue Liegenschaft
-                </Button>
-              ) : (
-                <Button variant="secondary" asChild>
-                  <Link to="/pricing">Limit erreicht - Upgraden</Link>
-                </Button>
-              )}
+              <Button onClick={() => setShowAddForm(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Neue Liegenschaft
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -385,11 +295,7 @@ export default function SimpleDashboard() {
 
                     {/* Units Section - nur wenn Property ausgewählt */}
                     {selectedProperty === property.id && (
-                      <UnitsSection
-                        propertyId={property.id}
-                        maxUnits={currentLimits.unitsPerProperty}
-                        isExpired={isExpired}
-                      />
+                      <UnitsSection propertyId={property.id} />
                     )}
                   </div>
                 ))}

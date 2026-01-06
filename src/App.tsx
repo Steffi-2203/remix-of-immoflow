@@ -22,8 +22,6 @@ import ExpenseList from "./pages/ExpenseList";
 import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import Documents from "./pages/Documents";
-import Upgrade from "./pages/Upgrade";
-import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import SystemTest from "./pages/SystemTest";
@@ -69,8 +67,6 @@ const App = () => (
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
-            <Route path="/upgrade" element={<ProtectedRoute><Upgrade /></ProtectedRoute>} />
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
