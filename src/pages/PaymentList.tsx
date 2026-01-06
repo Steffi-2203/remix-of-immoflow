@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +31,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
+import { useAssignPaymentWithSplit, calculatePaymentSplit } from '@/hooks/usePaymentSplit';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -58,6 +59,7 @@ export default function PaymentList() {
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [splitPreview, setSplitPreview] = useState<{ bk: number; hk: number; miete: number } | null>(null);
 
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
@@ -66,19 +68,32 @@ export default function PaymentList() {
   const { data: transactions, isLoading: transactionsLoading } = useTransactions();
   const { data: categories } = useAccountCategories();
   const updateTransaction = useUpdateTransaction();
+  const assignPaymentWithSplit = useAssignPaymentWithSplit();
 
-  // Get Mieteinnahmen category
+  // Get income categories
   const mieteinnahmenCategory = useMemo(() => {
     return categories?.find(c => c.name === 'Mieteinnahmen' && c.type === 'income');
   }, [categories]);
 
-  // Filter transactions to only show Mieteinnahmen (rental income)
+  const bkCategory = useMemo(() => {
+    return categories?.find(c => c.name === 'Betriebskostenvorauszahlungen' && c.type === 'income');
+  }, [categories]);
+
+  const hkCategory = useMemo(() => {
+    return categories?.find(c => c.name === 'Heizungskostenvorauszahlungen' && c.type === 'income');
+  }, [categories]);
+
+  // Filter transactions to only show rental income (Mieteinnahmen, BK, HK)
+  const incomeCategories = useMemo(() => {
+    return [mieteinnahmenCategory?.id, bkCategory?.id, hkCategory?.id].filter(Boolean);
+  }, [mieteinnahmenCategory, bkCategory, hkCategory]);
+
   const rentalIncomeTransactions = useMemo(() => {
-    if (!transactions || !mieteinnahmenCategory) return [];
+    if (!transactions || incomeCategories.length === 0) return [];
     return transactions
-      .filter(t => t.category_id === mieteinnahmenCategory.id && t.amount > 0)
+      .filter(t => incomeCategories.includes(t.category_id) && t.amount > 0)
       .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
-  }, [transactions, mieteinnahmenCategory]);
+  }, [transactions, incomeCategories]);
 
   // Filter by search query
   const filteredTransactions = useMemo(() => {
@@ -210,8 +225,40 @@ export default function PaymentList() {
   const handleReassign = (transaction: any) => {
     setSelectedTransaction(transaction);
     setSelectedTenantId('');
+    setSplitPreview(null);
     setReassignDialogOpen(true);
   };
+
+  // Update split preview when tenant is selected
+  const handleTenantSelect = useCallback((tenantId: string) => {
+    setSelectedTenantId(tenantId);
+    
+    if (!selectedTransaction || !tenantId) {
+      setSplitPreview(null);
+      return;
+    }
+    
+    const tenant = tenants?.find(t => t.id === tenantId);
+    if (!tenant) {
+      setSplitPreview(null);
+      return;
+    }
+    
+    const paymentAmount = Number(selectedTransaction.amount);
+    const bkSoll = Number(tenant.betriebskosten_vorschuss || 0);
+    const hkSoll = Number(tenant.heizungskosten_vorschuss || 0);
+    const mieteSoll = Number(tenant.grundmiete || 0);
+    
+    // Calculate preview
+    let remaining = paymentAmount;
+    const bk = Math.min(remaining, bkSoll);
+    remaining -= bk;
+    const hk = Math.min(remaining, hkSoll);
+    remaining -= hk;
+    const miete = remaining;
+    
+    setSplitPreview({ bk, hk, miete });
+  }, [selectedTransaction, tenants]);
 
   const confirmReassign = async () => {
     if (!selectedTransaction || !selectedTenantId) return;
@@ -219,24 +266,56 @@ export default function PaymentList() {
     const tenant = tenants?.find(t => t.id === selectedTenantId);
     if (!tenant) return;
 
-    try {
-      await updateTransaction.mutateAsync({
-        id: selectedTransaction.id,
-        tenant_id: selectedTenantId,
-        unit_id: tenant.unit_id,
-        status: 'matched',
-        matched_at: new Date().toISOString(),
-        // matched_by is a UUID in the database; leave it empty here to avoid invalid values
-      });
+    // Check if we have the required categories for splitting
+    if (mieteinnahmenCategory && bkCategory) {
+      try {
+        await assignPaymentWithSplit.mutateAsync({
+          transactionId: selectedTransaction.id,
+          tenantId: selectedTenantId,
+          unitId: tenant.unit_id,
+          paymentAmount: Number(selectedTransaction.amount),
+          tenant: {
+            betriebskosten_vorschuss: Number(tenant.betriebskosten_vorschuss || 0),
+            heizungskosten_vorschuss: Number(tenant.heizungskosten_vorschuss || 0),
+            grundmiete: Number(tenant.grundmiete || 0),
+          },
+          categories: {
+            bkCategoryId: bkCategory.id,
+            hkCategoryId: hkCategory?.id || mieteinnahmenCategory.id,
+            mieteCategoryId: mieteinnahmenCategory.id,
+          },
+        });
 
-      toast.success(`Transaktion wurde ${tenant.first_name} ${tenant.last_name} zugeordnet`);
-      setReassignDialogOpen(false);
-      setSelectedTransaction(null);
-      setSelectedTenantId('');
-    } catch (error) {
-      console.error('Reassign transaction error:', error);
-      const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
-      toast.error(`Fehler beim Zuordnen: ${message}`);
+        setReassignDialogOpen(false);
+        setSelectedTransaction(null);
+        setSelectedTenantId('');
+        setSplitPreview(null);
+      } catch (error) {
+        console.error('Reassign transaction error:', error);
+        const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
+        toast.error(`Fehler beim Zuordnen: ${message}`);
+      }
+    } else {
+      // Fallback: simple assignment without splitting
+      try {
+        await updateTransaction.mutateAsync({
+          id: selectedTransaction.id,
+          tenant_id: selectedTenantId,
+          unit_id: tenant.unit_id,
+          status: 'matched',
+          matched_at: new Date().toISOString(),
+        });
+
+        toast.success(`Transaktion wurde ${tenant.first_name} ${tenant.last_name} zugeordnet`);
+        setReassignDialogOpen(false);
+        setSelectedTransaction(null);
+        setSelectedTenantId('');
+        setSplitPreview(null);
+      } catch (error) {
+        console.error('Reassign transaction error:', error);
+        const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
+        toast.error(`Fehler beim Zuordnen: ${message}`);
+      }
     }
   };
 
@@ -569,12 +648,18 @@ export default function PaymentList() {
       </Tabs>
 
       {/* Reassignment Dialog */}
-      <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
-        <DialogContent>
+      <Dialog open={reassignDialogOpen} onOpenChange={(open) => {
+        setReassignDialogOpen(open);
+        if (!open) {
+          setSplitPreview(null);
+          setSelectedTenantId('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Zahlung zuordnen</DialogTitle>
             <DialogDescription>
-              Ordnen Sie diese Zahlung einem Mieter zu.
+              Ordnen Sie diese Zahlung einem Mieter zu. Die Zahlung wird automatisch auf BK, Heizung und Miete aufgeteilt (MRG-konform).
             </DialogDescription>
           </DialogHeader>
           
@@ -595,7 +680,7 @@ export default function PaymentList() {
 
               <div className="space-y-2">
                 <Label>Mieter auswählen</Label>
-                <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                <Select value={selectedTenantId} onValueChange={handleTenantSelect}>
                   <SelectTrigger>
                     <SelectValue placeholder="Mieter wählen..." />
                   </SelectTrigger>
@@ -628,16 +713,57 @@ export default function PaymentList() {
                 </Select>
               </div>
 
+              {/* Split Preview */}
+              {splitPreview && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                    Automatische Aufteilung (MRG-konform):
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="text-center p-2 bg-white dark:bg-background rounded">
+                      <p className="text-muted-foreground text-xs">Betriebskosten</p>
+                      <p className="font-semibold">€ {splitPreview.bk.toFixed(2)}</p>
+                    </div>
+                    <div className="text-center p-2 bg-white dark:bg-background rounded">
+                      <p className="text-muted-foreground text-xs">Heizung</p>
+                      <p className="font-semibold">€ {splitPreview.hk.toFixed(2)}</p>
+                    </div>
+                    <div className="text-center p-2 bg-white dark:bg-background rounded">
+                      <p className="text-muted-foreground text-xs">Miete</p>
+                      <p className="font-semibold">€ {splitPreview.miete.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  {(() => {
+                    const tenant = tenants?.find(t => t.id === selectedTenantId);
+                    if (!tenant) return null;
+                    const totalSoll = Number(tenant.betriebskosten_vorschuss || 0) + 
+                                     Number(tenant.heizungskosten_vorschuss || 0) + 
+                                     Number(tenant.grundmiete || 0);
+                    const unterzahlung = totalSoll - Number(selectedTransaction.amount);
+                    if (unterzahlung > 0.01) {
+                      return (
+                        <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                          ⚠️ Unterzahlung: € {unterzahlung.toFixed(2)} (Soll: € {totalSoll.toFixed(2)})
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>
                   Abbrechen
                 </Button>
                 <Button 
                   onClick={confirmReassign}
-                  disabled={!selectedTenantId || updateTransaction.isPending}
+                  disabled={!selectedTenantId || assignPaymentWithSplit.isPending || updateTransaction.isPending}
                 >
-                  {updateTransaction.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Zuordnen
+                  {(assignPaymentWithSplit.isPending || updateTransaction.isPending) && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Zuordnen & Aufteilen
                 </Button>
               </div>
             </div>
