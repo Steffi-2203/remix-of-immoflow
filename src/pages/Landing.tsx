@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Shield, BarChart3, Users, FileText, Euro, ArrowRight, CheckCircle, Building2 } from 'lucide-react';
-import immoflowLogo from '@/assets/immoflow-logo.png';
+import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 const features = [
   {
@@ -52,8 +52,12 @@ export default function Landing() {
       {/* Navigation */}
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-14 w-auto" />
+          <div className="flex items-center gap-3">
+            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+            <div className="flex flex-col">
+              <span className="font-bold text-lg leading-tight">ImmoflowMe</span>
+              <span className="text-xs text-muted-foreground">by ImmoPepper</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" asChild>
@@ -69,10 +73,11 @@ export default function Landing() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 md:py-32">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-            ImmoFlowMe
-            <span className="text-primary block mt-2">Hausverwaltung im Flow</span>
+          <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-2">
+            ImmoflowMe
           </h1>
+          <p className="text-lg text-muted-foreground mb-4">by ImmoPepper</p>
+          <p className="text-primary text-2xl md:text-3xl font-semibold mb-6">Hausverwaltung im Flow</p>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Die einfache Software für kleine Hausverwaltungen und Privatvermieter.
             Verwalten Sie alles an einem Ort – übersichtlich, effizient und sicher.
@@ -124,10 +129,10 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold mb-6">
-                Warum ImmoFlowMe?
+                Warum ImmoflowMe?
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                Wir haben ImmoFlowMe entwickelt, um Hausverwaltern den Alltag zu erleichtern.
+                Wir haben ImmoflowMe entwickelt, um Hausverwaltern den Alltag zu erleichtern.
                 Konzentrieren Sie sich auf das Wesentliche – wir kümmern uns um den Rest.
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -160,7 +165,7 @@ export default function Landing() {
             Bereit für effizientere Hausverwaltung?
           </h2>
           <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoFlowMe bereits nutzen.
+            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoflowMe bereits nutzen.
           </p>
           <Button size="lg" variant="secondary" asChild className="text-lg px-8">
             <Link to="/register">
@@ -176,10 +181,14 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-8 w-auto" />
+              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-8 w-auto" />
+              <div className="flex flex-col">
+                <span className="font-semibold text-sm">ImmoflowMe</span>
+                <span className="text-xs text-muted-foreground">by ImmoPepper</span>
+              </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ImmoFlowMe. Alle Rechte vorbehalten.
+              © {new Date().getFullYear()} ImmoflowMe by ImmoPepper. Alle Rechte vorbehalten.
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link to="/datenschutz" className="hover:text-foreground transition-colors">Datenschutz</Link>

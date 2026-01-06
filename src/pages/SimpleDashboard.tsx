@@ -208,7 +208,7 @@ export default function SimpleDashboard() {
 
         {/* Header mit Aktionen */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">ImmoFlowMe</h1>
+          <h1 className="text-2xl font-bold">ImmoflowMe</h1>
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link to="/einstellungen">Einstellungen</Link>

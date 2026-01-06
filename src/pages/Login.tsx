@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { z } from 'zod';
-import immoflowLogo from '@/assets/immoflow-logo.png';
+import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 const emailSchema = z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein');
 const passwordSchema = z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein');
@@ -88,8 +88,10 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <Link to="/" className="flex justify-center mb-4 hover:opacity-80 transition-opacity">
-            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-20 w-auto" />
+          <Link to="/" className="flex flex-col items-center mb-4 hover:opacity-80 transition-opacity">
+            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-16 w-auto mb-2" />
+            <span className="font-bold text-xl">ImmoflowMe</span>
+            <span className="text-xs text-muted-foreground">by ImmoPepper</span>
           </Link>
           <CardTitle className="text-2xl">Willkommen zurück</CardTitle>
           <CardDescription>
