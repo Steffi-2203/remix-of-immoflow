@@ -117,20 +117,40 @@ export default function PaymentList() {
     return filtered.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
   }, [transactions, incomeCategories, propertyUnitIds, tenants]);
 
-  // Filter by search query
-  const filteredTransactions = useMemo(() => {
-    if (!searchQuery) return rentalIncomeTransactions;
-    const searchLower = searchQuery.toLowerCase();
-    return rentalIncomeTransactions.filter(t => {
-      const tenant = tenants?.find(tenant => tenant.id === t.tenant_id);
-      const tenantName = tenant ? `${tenant.first_name} ${tenant.last_name}`.toLowerCase() : '';
-      return (
-        t.reference?.toLowerCase().includes(searchLower) ||
-        t.description?.toLowerCase().includes(searchLower) ||
-        tenantName.includes(searchLower)
-      );
+  // Filter payments by property and current month (same as Reports logic)
+  const filteredPayments = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    let filtered = (payments || []).filter(p => {
+      const date = new Date(p.eingangs_datum);
+      return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
     });
-  }, [rentalIncomeTransactions, searchQuery, tenants]);
+    
+    // Filter by property if selected
+    if (propertyUnitIds) {
+      filtered = filtered.filter(p => {
+        const tenant = tenants?.find(t => t.id === p.tenant_id);
+        return tenant && propertyUnitIds.includes(tenant.unit_id);
+      });
+    }
+    
+    // Filter by search query
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => {
+        const tenant = tenants?.find(t => t.id === p.tenant_id);
+        const tenantName = tenant ? `${tenant.first_name} ${tenant.last_name}`.toLowerCase() : '';
+        return (
+          p.referenz?.toLowerCase().includes(searchLower) ||
+          tenantName.includes(searchLower)
+        );
+      });
+    }
+    
+    return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
+  }, [payments, propertyUnitIds, tenants, searchQuery]);
 
   // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from payments)
   // Also calculate Unterzahlung and Überzahlung separately per tenant
@@ -538,81 +558,61 @@ export default function PaymentList() {
         </TabsList>
 
         <TabsContent value="payments">
-          {/* Payments Table */}
+          {/* Payments Table - using payments table like Reports page */}
           <Card>
             <CardContent className="p-0">
-              {transactionsLoading ? (
+              {!payments ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              ) : !filteredTransactions || filteredTransactions.length === 0 ? (
+              ) : filteredPayments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Keine Mieteinnahmen gefunden</p>
+                  <p className="text-muted-foreground">Keine Zahlungen in diesem Monat gefunden</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Erfassen Sie Zahlungen über Banking → Transaktionen mit der Kategorie "Mieteinnahmen".
+                    Zahlungen werden automatisch aus Transaktionen synchronisiert.
                   </p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Datum</TableHead>
+                      <TableHead>Eingangsdatum</TableHead>
                       <TableHead>Mieter</TableHead>
                       <TableHead>Top</TableHead>
-                      <TableHead>Beschreibung</TableHead>
+                      <TableHead>Referenz</TableHead>
                       <TableHead className="text-right">Betrag</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[100px]">Aktion</TableHead>
+                      <TableHead>Zahlungsart</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTransactions.map((transaction) => {
-                      const { tenant, unit } = getTransactionDetails(transaction);
+                    {filteredPayments.map((payment) => {
+                      const tenant = tenants?.find(t => t.id === payment.tenant_id);
+                      const unit = tenant ? units?.find(u => u.id === tenant.unit_id) : null;
 
                       return (
-                        <TableRow key={transaction.id} className={!tenant ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
+                        <TableRow key={payment.id}>
                           <TableCell>
-                            {format(new Date(transaction.transaction_date), 'dd.MM.yyyy', { locale: de })}
+                            {format(new Date(payment.eingangs_datum), 'dd.MM.yyyy', { locale: de })}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : (
-                              <span className="text-orange-600 italic">Nicht zugeordnet</span>
-                            )}
+                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
                           </TableCell>
                           <TableCell>
                             {unit ? unit.top_nummer : '-'}
                           </TableCell>
                           <TableCell className="max-w-xs truncate">
-                            {transaction.description || transaction.reference || '-'}
+                            {payment.referenz || '-'}
                           </TableCell>
                           <TableCell className="text-right font-bold text-green-600">
-                            € {Number(transaction.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            € {Number(payment.betrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell>
-                            {tenant ? (
-                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Zugeordnet
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-orange-100 text-orange-800">
-                                Nicht zugeordnet
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {!tenant && (
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => handleReassign(transaction)}
-                                className="h-7 text-xs"
-                              >
-                                <ArrowRightLeft className="h-3 w-3 mr-1" />
-                                Umbuchen
-                              </Button>
-                            )}
+                            <Badge variant="outline">
+                              {payment.zahlungsart === 'sepa' ? 'SEPA' : 
+                               payment.zahlungsart === 'ueberweisung' ? 'Überweisung' : 
+                               payment.zahlungsart === 'bar' ? 'Bar' : 'Sonstige'}
+                            </Badge>
                           </TableCell>
                         </TableRow>
                       );
