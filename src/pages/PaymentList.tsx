@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react';
-import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,8 +31,9 @@ import { useProperties } from '@/hooks/useProperties';
 import { usePayments } from '@/hooks/usePayments';
 import { useTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
-import { useAssignPaymentWithSplit, calculatePaymentSplit } from '@/hooks/usePaymentSplit';
+import { useAssignPaymentWithSplit } from '@/hooks/usePaymentSplit';
 import { useCombinedPayments } from '@/hooks/useCombinedPayments';
+import { useMrgAllocation } from '@/hooks/useMrgAllocation';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -155,190 +155,34 @@ export default function PaymentList() {
     return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
   }, [payments, propertyUnitIds, tenants, searchQuery]);
 
-  // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from combined payments)
-  // Also calculate Unterzahlung and Überzahlung separately per tenant
-  const stats = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    
-    // Get relevant units based on property filter
-    const relevantUnits = propertyUnitIds 
-      ? units?.filter(u => propertyUnitIds.includes(u.id)) 
-      : units;
-    
-    // Verwendet zentrale Utility-Funktion für konsistente Logik
-    // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Monat
-    const activeTenants = getActiveTenantsForPeriod(
-      relevantUnits || [],
-      tenants || [],
-      selectedPropertyId,
-      currentYear,
-      currentMonth
-    );
-    
-    // SOLL from tenant data (same as Reports page)
-    const totalSoll = activeTenants.reduce((sum, t) => 
-      sum + Number(t.grundmiete || 0) + 
-            Number(t.betriebskosten_vorschuss || 0) + 
-            Number(t.heizungskosten_vorschuss || 0), 0);
-    
-    // IST from COMBINED payments (payments table + transactions with tenant_id)
-    const thisMonthPayments = (combinedPayments || []).filter(p => {
-      const date = new Date(p.date);
-      if (date.getMonth() + 1 !== currentMonth || date.getFullYear() !== currentYear) return false;
-      
-      // Filter by property if selected
-      if (propertyUnitIds) {
-        const tenant = tenants?.find(t => t.id === p.tenant_id);
-        return tenant && propertyUnitIds.includes(tenant.unit_id);
-      }
-      return true;
-    });
-    
-    const totalIst = thisMonthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    
-    // Calculate per-tenant saldos to separate Unterzahlung and Überzahlung
-    let totalUnterzahlung = 0;
-    let totalUeberzahlung = 0;
-    
-    activeTenants.forEach(tenant => {
-      const sollTenant = Number(tenant.grundmiete || 0) + 
-                         Number(tenant.betriebskosten_vorschuss || 0) + 
-                         Number(tenant.heizungskosten_vorschuss || 0);
-      
-      const istTenant = thisMonthPayments
-        .filter(p => p.tenant_id === tenant.id)
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      
-      const saldoTenant = istTenant - sollTenant;
-      
-      if (saldoTenant < 0) {
-        totalUnterzahlung += Math.abs(saldoTenant);
-      } else if (saldoTenant > 0) {
-        totalUeberzahlung += saldoTenant;
-      }
-    });
+  // Use central MRG allocation hook for consistent logic with Reports
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  
+  const { allocations: mrgAllocations, totals: mrgTotals, isLoading: mrgLoading } = useMrgAllocation(
+    selectedPropertyId,
+    currentYear,
+    currentMonth
+  );
 
-    return {
-      totalSoll,
-      totalIst,
-      totalUnterzahlung,
-      totalUeberzahlung,
-      paymentCount: thisMonthPayments.length,
-    };
-  }, [tenants, combinedPayments, propertyUnitIds, units, selectedPropertyId]);
+  // Stats from central MRG allocation
+  const stats = {
+    totalSoll: mrgTotals.totalSoll,
+    totalIst: mrgTotals.totalIst,
+    totalUnterzahlung: mrgTotals.totalUnterzahlung,
+    totalUeberzahlung: mrgTotals.totalUeberzahlung,
+    paymentCount: mrgTotals.paymentCount,
+  };
 
-  // Calculate open items (offene Posten) per tenant - using same logic as Reports page
-  // SOLL from tenant data, IST from COMBINED payments (payments + transactions)
-  // Mit MRG-konformer Zahlungsaufteilung: BK → HK → Miete
-  const openItemsPerTenant = useMemo(() => {
-    if (!tenants || !combinedPayments || !units) return [];
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    // Get relevant units based on property filter
-    const relevantUnits = propertyUnitIds 
-      ? units.filter(u => propertyUnitIds.includes(u.id)) 
-      : units;
-    
-    // Verwendet zentrale Utility-Funktion für konsistente Logik
-    // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Monat
-    const activeTenants = getActiveTenantsForPeriod(
-      relevantUnits,
-      tenants,
-      selectedPropertyId,
-      currentYear,
-      currentMonth
-    );
-    
-    return activeTenants.map(tenant => {
-      // SOLL from tenant data (same as Reports page)
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0);
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
-      const sollMiete = Number(tenant.grundmiete || 0);
-      const totalSoll = sollBk + sollHk + sollMiete;
-      
-      // IST from COMBINED payments for current month
-      const tenantPayments = combinedPayments.filter(p => {
-        if (p.tenant_id !== tenant.id) return false;
-        const paymentDate = new Date(p.date);
-        return paymentDate.getMonth() + 1 === currentMonth && 
-               paymentDate.getFullYear() === currentYear;
-      });
-      const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      
-      // MRG-konforme Aufteilung: BK → HK → Miete
-      let remaining = totalIst;
-      const istBk = Math.min(remaining, sollBk);
-      remaining -= istBk;
-      const istHk = Math.min(remaining, sollHk);
-      remaining -= istHk;
-      const istMiete = Math.min(remaining, sollMiete);
-      remaining -= istMiete;
-      
-      // Überzahlung (wenn mehr gezahlt als SOLL)
-      const ueberzahlung = remaining > 0 ? remaining : 0;
-      
-      // Unterzahlung pro Komponente
-      const diffBk = sollBk - istBk;
-      const diffHk = sollHk - istHk;
-      const diffMiete = sollMiete - istMiete;
-      const unterzahlung = diffBk + diffHk + diffMiete;
-      
-      // Saldo: positiv = Überzahlung, negativ = Unterzahlung
-      const saldo = totalIst - totalSoll;
-      
-      // Days overdue: if we're past the 5th of the month and saldo is negative
-      const dayOfMonth = now.getDate();
-      const daysOverdue = saldo < 0 && dayOfMonth > 5 ? dayOfMonth - 5 : 0;
-
-      // Determine Mahnstatus based on days overdue
-      let mahnstatus = 'aktuell';
-      if (daysOverdue > 30) {
-        mahnstatus = '2. Mahnung';
-      } else if (daysOverdue > 14) {
-        mahnstatus = '1. Mahnung';
-      } else if (daysOverdue > 0) {
-        mahnstatus = 'Zahlungserinnerung';
-      }
-
-      // Get unit info
-      const unit = units?.find(u => u.id === tenant.unit_id);
-
-      return {
-        tenant,
-        unit,
-        // SOLL-Werte
-        sollBk,
-        sollHk,
-        sollMiete,
-        totalSoll,
-        // IST-Werte (MRG-konform aufgeteilt)
-        istBk,
-        istHk,
-        istMiete,
-        totalIst,
-        // Differenzen
-        diffBk,
-        diffHk,
-        diffMiete,
-        ueberzahlung,
-        unterzahlung,
-        saldo,
-        oldestOverdueDays: daysOverdue,
-        mahnstatus,
-      };
-    }).sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
-  }, [tenants, combinedPayments, units, propertyUnitIds, selectedPropertyId]);
+  // Open items per tenant from central MRG allocation
+  const openItemsPerTenant = mrgAllocations;
 
   const openItemsStats = {
     totalTenants: openItemsPerTenant.filter(item => item.saldo !== 0).length,
-    totalOpenAmount: openItemsPerTenant.reduce((sum, item) => sum + Math.max(0, item.unterzahlung), 0),
+    totalOpenAmount: mrgTotals.totalUnterzahlung,
     overdueCount: openItemsPerTenant.filter(item => item.oldestOverdueDays > 0 && item.saldo < 0).length,
-    totalUeberzahlung: openItemsPerTenant.reduce((sum, item) => sum + item.ueberzahlung, 0),
+    totalUeberzahlung: mrgTotals.totalUeberzahlung,
   };
 
   // Helper to get tenant and unit info for a transaction
