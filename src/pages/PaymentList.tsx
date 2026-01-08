@@ -133,6 +133,7 @@ export default function PaymentList() {
   }, [rentalIncomeTransactions, searchQuery, tenants]);
 
   // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from payments)
+  // Also calculate Unterzahlung and Überzahlung separately per tenant
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -164,20 +165,37 @@ export default function PaymentList() {
     });
     
     const totalIst = thisMonthPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-    const saldo = totalIst - totalSoll;
+    
+    // Calculate per-tenant saldos to separate Unterzahlung and Überzahlung
+    let totalUnterzahlung = 0;
+    let totalUeberzahlung = 0;
+    
+    activeTenants.forEach(tenant => {
+      const sollTenant = Number(tenant.grundmiete || 0) + 
+                         Number(tenant.betriebskosten_vorschuss || 0) + 
+                         Number(tenant.heizungskosten_vorschuss || 0);
+      
+      const istTenant = thisMonthPayments
+        .filter(p => p.tenant_id === tenant.id)
+        .reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+      
+      const saldoTenant = istTenant - sollTenant;
+      
+      if (saldoTenant < 0) {
+        totalUnterzahlung += Math.abs(saldoTenant);
+      } else if (saldoTenant > 0) {
+        totalUeberzahlung += saldoTenant;
+      }
+    });
 
     return {
       totalSoll,
       totalIst,
-      saldo,
+      totalUnterzahlung,
+      totalUeberzahlung,
       paymentCount: thisMonthPayments.length,
-      // For transaction display (keeping for backward compatibility)
-      total: rentalIncomeTransactions.length,
-      totalAmount: rentalIncomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0),
-      thisMonth: thisMonthPayments.length,
-      thisMonthAmount: totalIst,
     };
-  }, [tenants, payments, propertyUnitIds, rentalIncomeTransactions]);
+  }, [tenants, payments, propertyUnitIds]);
 
   // Calculate open items (offene Posten) per tenant - using same logic as Reports page
   // SOLL from tenant data, IST from payments table
@@ -473,13 +491,13 @@ export default function PaymentList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${stats.saldo >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                <Euro className={`h-5 w-5 ${stats.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                <Euro className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Saldo</p>
-                <p className={`text-2xl font-bold ${stats.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  € {stats.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                <p className="text-sm text-muted-foreground">Saldo Unterzahlung</p>
+                <p className="text-2xl font-bold text-red-600">
+                  € {stats.totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -489,13 +507,13 @@ export default function PaymentList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <Euro className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Offene Posten</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  € {openItemsStats.totalOpenAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                <p className="text-sm text-muted-foreground">Überzahlung</p>
+                <p className="text-2xl font-bold text-green-600">
+                  € {stats.totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
