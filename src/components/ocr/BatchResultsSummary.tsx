@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Check, X, Pencil, ChevronDown, ChevronUp, Save, Trash2 } from 'lucide-react';
+import { Check, X, Pencil, ChevronDown, ChevronUp, Save, Trash2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -60,7 +61,7 @@ interface BatchResultsSummaryProps {
   onOpenChange: (open: boolean) => void;
   results: BatchResultItem[];
   properties: { id: string; name: string }[];
-  onSaveAll: (items: BatchResultItem[], propertyId: string) => Promise<void>;
+  onSaveAll: (items: BatchResultItem[], propertyId: string, abrechnungsjahrConfig?: { useCustom: boolean; year: number; verbrauchsTypes: string[] }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -91,6 +92,14 @@ export function BatchResultsSummary({
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  
+  // Abrechnungsjahr für verbrauchsabhängige Kosten
+  const currentYear = new Date().getFullYear();
+  const [useCustomAbrechnungsjahr, setUseCustomAbrechnungsjahr] = useState(false);
+  const [customAbrechnungsjahr, setCustomAbrechnungsjahr] = useState(currentYear - 1);
+  
+  // Verbrauchsabhängige Kostenarten
+  const verbrauchsabhaengigeKosten = ['heizung', 'wasser_abwasser'];
 
   const selectedCount = items.filter(i => i.selected && !i.saved).length;
   const savedCount = items.filter(i => i.saved).length;
@@ -139,7 +148,11 @@ export function BatchResultsSummary({
     
     setSaving(true);
     try {
-      await onSaveAll(itemsToSave, selectedProperty);
+      await onSaveAll(itemsToSave, selectedProperty, {
+        useCustom: useCustomAbrechnungsjahr,
+        year: customAbrechnungsjahr,
+        verbrauchsTypes: verbrauchsabhaengigeKosten,
+      });
       
       // Mark items as saved
       setItems(prev => prev.map(item => 
@@ -169,19 +182,58 @@ export function BatchResultsSummary({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Property selection */}
-        <div className="flex items-center gap-3 py-2 border-b">
-          <Label className="text-sm font-medium whitespace-nowrap">Liegenschaft:</Label>
-          <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Liegenschaft auswählen..." />
-            </SelectTrigger>
-            <SelectContent>
-              {properties.map(p => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Property selection and Abrechnungsjahr */}
+        <div className="space-y-3 py-2 border-b">
+          <div className="flex items-center gap-3">
+            <Label className="text-sm font-medium whitespace-nowrap">Liegenschaft:</Label>
+            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Liegenschaft auswählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                {properties.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Abrechnungsjahr für Verbrauchskosten */}
+          <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+            <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Verbrauchskosten im Vorjahr buchen</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Heizung und Wasser/Abwasser werden im ausgewählten Jahr gebucht
+                  </p>
+                </div>
+                <Switch
+                  checked={useCustomAbrechnungsjahr}
+                  onCheckedChange={setUseCustomAbrechnungsjahr}
+                />
+              </div>
+              {useCustomAbrechnungsjahr && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Label className="text-xs text-muted-foreground">Abrechnungsjahr:</Label>
+                  <Select 
+                    value={customAbrechnungsjahr.toString()} 
+                    onValueChange={(v) => setCustomAbrechnungsjahr(parseInt(v))}
+                  >
+                    <SelectTrigger className="w-24 h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[currentYear - 2, currentYear - 1, currentYear].map(year => (
+                        <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Results list */}

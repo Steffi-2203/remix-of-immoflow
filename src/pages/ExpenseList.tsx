@@ -704,7 +704,11 @@ export default function ExpenseList() {
   };
 
   // Handle saving all batch results
-  const handleSaveBatchResults = async (items: BatchResultItem[], propertyId: string) => {
+  const handleSaveBatchResults = async (
+    items: BatchResultItem[], 
+    propertyId: string,
+    abrechnungsjahrConfig?: { useCustom: boolean; year: number; verbrauchsTypes: string[] }
+  ) => {
     for (const item of items) {
       if (!item.edited) continue;
       
@@ -722,6 +726,13 @@ export default function ExpenseList() {
         }
       }
       
+      // Determine year and month based on Abrechnungsjahr config
+      const isVerbrauchskosten = abrechnungsjahrConfig?.verbrauchsTypes.includes(item.edited.expense_type);
+      const useAbrechnungsjahr = abrechnungsjahrConfig?.useCustom && isVerbrauchskosten;
+      
+      const year = useAbrechnungsjahr ? abrechnungsjahrConfig.year : date.getFullYear();
+      const month = useAbrechnungsjahr ? 12 : date.getMonth() + 1;
+      
       await createExpense.mutateAsync({
         property_id: propertyId,
         category: item.edited.category,
@@ -731,8 +742,8 @@ export default function ExpenseList() {
         datum: item.edited.datum,
         beleg_nummer: item.edited.beleg_nummer || undefined,
         notizen: item.edited.notizen || undefined,
-        year: date.getFullYear(),
-        month: date.getMonth() + 1,
+        year,
+        month,
         beleg_url,
       } as any);
     }
