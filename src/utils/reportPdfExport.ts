@@ -803,16 +803,26 @@ export const generateOffenePostenReport = (
     return matchesYear && (paymentDate.getMonth() + 1) === selectedMonth;
   });
 
-  // Calculate balance per tenant
+  // Calculate balance per tenant with MRG-konform allocation
   interface TenantBalance {
     tenantId: string;
     tenantName: string;
     unitId: string;
     unitNummer: string;
     propertyName: string;
+    // SOLL-Werte
+    sollBk: number;
+    sollHk: number;
+    sollMiete: number;
     sollBetrag: number;
+    // IST-Werte (MRG-konform aufgeteilt)
+    istBk: number;
+    istHk: number;
+    istMiete: number;
     habenBetrag: number;
-    saldo: number; // Negative = Überzahlung (Guthaben), Positive = Unterzahlung (offen)
+    // Saldo
+    saldo: number;
+    ueberzahlung: number;
     paymentCount: number;
     daysOverdue: number;
   }
@@ -829,14 +839,27 @@ export const generateOffenePostenReport = (
   relevantTenants.forEach(tenant => {
     const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
     
-    // SOLL from tenant data (like SOLL/IST comparison)
-    const monthlyTotal = Number(tenant.grundmiete || 0) + 
-                         Number(tenant.betriebskosten_vorschuss || 0) + 
-                         Number(tenant.heizungskosten_vorschuss || 0);
-    const sollBetrag = monthlyTotal * monthMultiplier;
+    // SOLL from tenant data (MRG-konform: BK → HK → Miete)
+    const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+    const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+    const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+    const sollBetrag = sollBk + sollHk + sollMiete;
     
     // IST from combined payments (uses 'amount' field)
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    
+    // MRG-konforme Aufteilung: BK → HK → Miete
+    let remaining = habenBetrag;
+    const istBk = Math.min(remaining, sollBk);
+    remaining -= istBk;
+    const istHk = Math.min(remaining, sollHk);
+    remaining -= istHk;
+    const istMiete = Math.min(remaining, sollMiete);
+    remaining -= istMiete;
+    
+    // Überzahlung (wenn mehr gezahlt als SOLL)
+    const ueberzahlung = remaining > 0 ? remaining : 0;
+    
     const saldo = sollBetrag - habenBetrag;
 
     // Days overdue: only if there's unpaid amount and we're past the period start
@@ -845,21 +868,26 @@ export const generateOffenePostenReport = (
     const unit = targetUnits.find(u => u.id === tenant.unit_id);
     const property = properties.find(p => p.id === unit?.property_id);
 
-    // Only include if there's SOLL (active tenant with rent)
-    if (sollBetrag > 0) {
-      tenantBalances.push({
-        tenantId: tenant.id,
-        tenantName: `${tenant.first_name} ${tenant.last_name}`,
-        unitId: tenant.unit_id,
-        unitNummer: unit?.top_nummer || '-',
-        propertyName: property?.name || '-',
-        sollBetrag,
-        habenBetrag,
-        saldo,
-        paymentCount: tenantPayments.length,
-        daysOverdue,
-      });
-    }
+    // Include all tenants (not just those with SOLL > 0)
+    tenantBalances.push({
+      tenantId: tenant.id,
+      tenantName: `${tenant.first_name} ${tenant.last_name}`,
+      unitId: tenant.unit_id,
+      unitNummer: unit?.top_nummer || '-',
+      propertyName: property?.name || '-',
+      sollBk,
+      sollHk,
+      sollMiete,
+      sollBetrag,
+      istBk,
+      istHk,
+      istMiete,
+      habenBetrag,
+      saldo,
+      ueberzahlung,
+      paymentCount: tenantPayments.length,
+      daysOverdue,
+    });
   });
 
   // Sort: Positive saldo (Unterzahlung) first, then by amount descending
@@ -872,26 +900,32 @@ export const generateOffenePostenReport = (
   });
 
   // Summary calculations
+  const totalSollBk = tenantBalances.reduce((sum, t) => sum + t.sollBk, 0);
+  const totalSollHk = tenantBalances.reduce((sum, t) => sum + t.sollHk, 0);
+  const totalSollMiete = tenantBalances.reduce((sum, t) => sum + t.sollMiete, 0);
   const totalSoll = tenantBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
+  const totalIstBk = tenantBalances.reduce((sum, t) => sum + t.istBk, 0);
+  const totalIstHk = tenantBalances.reduce((sum, t) => sum + t.istHk, 0);
+  const totalIstMiete = tenantBalances.reduce((sum, t) => sum + t.istMiete, 0);
   const totalHaben = tenantBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
   const totalSaldo = tenantBalances.reduce((sum, t) => sum + t.saldo, 0);
+  const totalUeberzahlung = tenantBalances.reduce((sum, t) => sum + t.ueberzahlung, 0);
   const underpaidTenants = tenantBalances.filter(t => t.saldo > 0);
   const overpaidTenants = tenantBalances.filter(t => t.saldo < 0);
-  const totalUnterzahlung = underpaidTenants.reduce((sum, t) => sum + t.saldo, 0);
-  const totalUeberzahlung = Math.abs(overpaidTenants.reduce((sum, t) => sum + t.saldo, 0));
+  const totalUnterzahlungAmount = underpaidTenants.reduce((sum, t) => sum + t.saldo, 0);
 
   // Summary text
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`Soll: ${formatCurrency(totalSoll)} | Haben: ${formatCurrency(totalHaben)} | Saldo: ${formatCurrency(totalSaldo)}`, 14, 40);
-  doc.text(`Unterzahlungen: ${formatCurrency(totalUnterzahlung)} (${underpaidTenants.length} Mieter) | Überzahlungen: ${formatCurrency(totalUeberzahlung)} (${overpaidTenants.length} Mieter)`, 14, 46);
+  doc.text(`Unterzahlungen: ${formatCurrency(totalUnterzahlungAmount)} (${underpaidTenants.length} Mieter) | Überzahlungen: ${formatCurrency(totalUeberzahlung)} (${overpaidTenants.length} Mieter)`, 14, 46);
 
-  // Table data
+  // Table data with MRG-konform allocation
   const tableData = tenantBalances.map(tb => {
-    let statusLabel = 'Ausgeglichen';
-    if (tb.saldo > 0) {
+    let statusLabel = 'Bezahlt';
+    if (tb.saldo > 0.01) {
       statusLabel = 'Unterzahlung';
-    } else if (tb.saldo < 0) {
+    } else if (tb.saldo < -0.01 || tb.ueberzahlung > 0.01) {
       statusLabel = 'Überzahlung';
     }
     
@@ -899,9 +933,16 @@ export const generateOffenePostenReport = (
       tb.propertyName,
       `Top ${tb.unitNummer}`,
       tb.tenantName,
-      formatCurrency(tb.sollBetrag),
-      formatCurrency(tb.habenBetrag),
-      tb.daysOverdue > 0 ? `${tb.daysOverdue} Tage` : '-',
+      // BK Soll/Ist
+      formatCurrency(tb.sollBk),
+      formatCurrency(tb.istBk),
+      // HK Soll/Ist
+      formatCurrency(tb.sollHk),
+      formatCurrency(tb.istHk),
+      // Miete Soll/Ist
+      formatCurrency(tb.sollMiete),
+      formatCurrency(tb.istMiete),
+      // Status & Saldo
       statusLabel,
       formatCurrency(tb.saldo),
     ];
@@ -909,19 +950,31 @@ export const generateOffenePostenReport = (
 
   autoTable(doc, {
     startY: 52,
-    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Soll', 'Haben', 'Überfällig', 'Status', 'Saldo']],
+    head: [['Liegenschaft', 'Einheit', 'Mieter', 'BK Soll', 'BK Ist', 'HK Soll', 'HK Ist', 'Miete Soll', 'Miete Ist', 'Status', 'Saldo']],
     body: tableData,
-    foot: [['Gesamt', '', '', formatCurrency(totalSoll), formatCurrency(totalHaben), '', '', formatCurrency(totalSaldo)]],
+    foot: [['Gesamt', '', '', formatCurrency(totalSollBk), formatCurrency(totalIstBk), formatCurrency(totalSollHk), formatCurrency(totalIstHk), formatCurrency(totalSollMiete), formatCurrency(totalIstMiete), '', formatCurrency(totalSaldo)]],
     theme: 'striped',
-    headStyles: { fillColor: [239, 68, 68] },
+    headStyles: { fillColor: [239, 68, 68], fontSize: 7 },
     footStyles: { fillColor: [254, 226, 226], textColor: [0, 0, 0], fontStyle: 'bold' },
-    styles: { fontSize: 9 },
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    columnStyles: {
+      0: { cellWidth: 30 },  // Liegenschaft
+      1: { cellWidth: 18 },  // Einheit
+      2: { cellWidth: 30 },  // Mieter
+      3: { cellWidth: 20, halign: 'right' },  // BK Soll
+      4: { cellWidth: 20, halign: 'right' },  // BK Ist
+      5: { cellWidth: 20, halign: 'right' },  // HK Soll
+      6: { cellWidth: 20, halign: 'right' },  // HK Ist
+      7: { cellWidth: 22, halign: 'right' },  // Miete Soll
+      8: { cellWidth: 22, halign: 'right' },  // Miete Ist
+      9: { cellWidth: 22 },  // Status
+      10: { cellWidth: 22, halign: 'right' },  // Saldo
+    },
     didParseCell: (data) => {
       // Style the Saldo column based on value
-      if (data.section === 'body' && data.column.index === 7) {
+      if (data.section === 'body' && data.column.index === 10) {
         const saldoText = data.cell.text[0];
         if (saldoText) {
-          // Parse the value - negative means overpayment (green), positive means underpayment (red)
           const value = parseFloat(saldoText.replace('€ ', '').replace(/\./g, '').replace(',', '.'));
           if (value > 0) {
             data.cell.styles.textColor = [239, 68, 68]; // Red for underpayment
@@ -933,19 +986,33 @@ export const generateOffenePostenReport = (
         }
       }
       // Style Status column
-      if (data.section === 'body' && data.column.index === 6) {
+      if (data.section === 'body' && data.column.index === 9) {
         const status = data.cell.text[0];
         if (status === 'Unterzahlung') {
           data.cell.styles.textColor = [239, 68, 68];
         } else if (status === 'Überzahlung') {
           data.cell.styles.textColor = [34, 197, 94];
+        } else if (status === 'Bezahlt') {
+          data.cell.styles.textColor = [22, 163, 74];
         }
       }
-      // Highlight overdue
-      if (data.section === 'body' && data.column.index === 5) {
-        const daysText = data.cell.text[0];
-        if (daysText && daysText !== '-') {
-          data.cell.styles.textColor = [239, 68, 68];
+      // Color IST columns based on diff (red if less than SOLL)
+      if (data.section === 'body') {
+        const row = data.row.index;
+        const tb = tenantBalances[row];
+        if (tb) {
+          // BK Ist
+          if (data.column.index === 4 && tb.sollBk - tb.istBk > 0.01) {
+            data.cell.styles.textColor = [239, 68, 68];
+          }
+          // HK Ist
+          if (data.column.index === 6 && tb.sollHk - tb.istHk > 0.01) {
+            data.cell.styles.textColor = [239, 68, 68];
+          }
+          // Miete Ist
+          if (data.column.index === 8 && tb.sollMiete - tb.istMiete > 0.01) {
+            data.cell.styles.textColor = [239, 68, 68];
+          }
         }
       }
     },
