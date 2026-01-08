@@ -925,20 +925,82 @@ export default function Reports() {
                 </div>
               </div>
               
-              {/* SOLL vs IST Vergleich - nur Miete */}
-              <div className="mt-4 p-3 rounded-lg border border-border bg-muted/50">
-                <p className="text-xs font-medium text-muted-foreground mb-2">SOLL vs IST Vergleich (nur Miete)</p>
-                <div className="flex justify-between text-sm">
-                  <span>SOLL Miete:</span>
-                  <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+              {/* SOLL vs IST Vergleich - Miete, BK, Heizung */}
+              <div className="mt-4 p-4 rounded-lg border border-border bg-muted/50 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground mb-3">SOLL vs IST Vergleich</p>
+                
+                {/* Miete */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground">Miete</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">SOLL:</span>
+                    <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">IST:</span>
+                    <span>€{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollGrundmiete - mieteFromTransactions > 0.01 ? 'text-destructive' : periodSollGrundmiete - mieteFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                    <span>Differenz:</span>
+                    <span>{periodSollGrundmiete - mieteFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollGrundmiete - mieteFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>IST Miete:</span>
-                  <span>€{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                
+                <div className="border-t border-border pt-2"></div>
+                
+                {/* Betriebskosten */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground">Betriebskosten</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">SOLL:</span>
+                    <span>€{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">IST:</span>
+                    <span>€{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollBk - bkFromTransactions > 0.01 ? 'text-destructive' : periodSollBk - bkFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                    <span>Differenz:</span>
+                    <span>{periodSollBk - bkFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollBk - bkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
-                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGrundmiete - mieteFromTransactions > 0 ? 'text-destructive' : 'text-success'}`}>
-                  <span>Differenz:</span>
-                  <span>€{(periodSollGrundmiete - mieteFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                
+                <div className="border-t border-border pt-2"></div>
+                
+                {/* Heizung */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground">Heizung</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">SOLL:</span>
+                    <span>€{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">IST:</span>
+                    <span>€{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollHk - hkFromTransactions > 0.01 ? 'text-destructive' : periodSollHk - hkFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                    <span>Differenz:</span>
+                    <span>{periodSollHk - hkFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollHk - hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+                
+                <div className="border-t-2 border-border pt-2"></div>
+                
+                {/* Gesamt */}
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-foreground">Gesamt</p>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="text-muted-foreground">SOLL:</span>
+                    <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span className="text-muted-foreground">IST:</span>
+                    <span>€{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className={`flex justify-between text-sm font-bold ${periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) > 0.01 ? 'text-destructive' : periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                    <span>Differenz:</span>
+                    <span>{periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions)).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
               </div>
             </div>
