@@ -64,6 +64,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
 import { InvoiceDropZone, QueuedFile } from '@/components/ocr/InvoiceDropZone';
+import { BatchResultsSummary, BatchResultItem } from '@/components/ocr/BatchResultsSummary';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -135,8 +136,9 @@ export default function ExpenseList() {
   // Batch processing state
   const [batchQueue, setBatchQueue] = useState<QueuedFile[]>([]);
   const [batchIndex, setBatchIndex] = useState(0);
-  const [batchResults, setBatchResults] = useState<any[]>([]);
+  const [batchResults, setBatchResults] = useState<BatchResultItem[]>([]);
   const [batchCancelled, setBatchCancelled] = useState(false);
+  const [batchSummaryOpen, setBatchSummaryOpen] = useState(false);
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
   const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
@@ -582,14 +584,13 @@ export default function ExpenseList() {
   };
 
   // Process single batch item
-  const processBatchItem = async (queue: QueuedFile[], index: number) => {
+  const processBatchItem = async (queue: QueuedFile[], index: number, accumulatedResults: BatchResultItem[] = []) => {
     if (index >= queue.length || batchCancelled) {
-      // Batch complete
-      if (!batchCancelled && batchResults.length > 0) {
-        toast({
-          title: 'Stapelverarbeitung abgeschlossen',
-          description: `${batchResults.length} Rechnungen wurden analysiert.`,
-        });
+      // Batch complete - show summary dialog
+      const finalResults = [...accumulatedResults];
+      if (finalResults.length > 0) {
+        setBatchResults(finalResults);
+        setBatchSummaryOpen(true);
       }
       setBatchQueue([]);
       setBatchIndex(0);
@@ -647,25 +648,11 @@ export default function ExpenseList() {
       ));
       
       // Store result
-      setBatchResults(prev => [...prev, { ...result, fileName: item.file.name }]);
-      
-      // Pre-fill form with first result
-      if (index === 0) {
-        setNewExpense(prev => ({
-          ...prev,
-          bezeichnung: result.beschreibung || result.lieferant || '',
-          betrag: result.betrag?.toString().replace('.', ',') || '',
-          datum: result.datum || format(new Date(), 'yyyy-MM-dd'),
-          beleg_nummer: result.rechnungsnummer || '',
-          category: result.kategorie || 'betriebskosten_umlagefaehig',
-          expense_type: result.expense_type as ExpenseType || 'sonstiges',
-          notizen: result.iban ? `IBAN: ${result.iban}` : '',
-        }));
-        setDialogOpen(true);
-      }
+      const newResult: BatchResultItem = { ...result, fileName: item.file.name };
+      const newAccumulatedResults = [...accumulatedResults, newResult];
       
       // Process next item
-      setTimeout(() => processBatchItem(queue, index + 1), 500);
+      setTimeout(() => processBatchItem(queue, index + 1, newAccumulatedResults), 500);
       
     } catch (error) {
       console.error('Batch item OCR failed:', error);
@@ -676,8 +663,38 @@ export default function ExpenseList() {
       ));
       
       // Continue with next item
-      setTimeout(() => processBatchItem(queue, index + 1), 500);
+      setTimeout(() => processBatchItem(queue, index + 1, accumulatedResults), 500);
     }
+  };
+
+  // Handle saving all batch results
+  const handleSaveBatchResults = async (items: BatchResultItem[], propertyId: string) => {
+    for (const item of items) {
+      if (!item.edited) continue;
+      
+      const parsedAmount = parseFloat(item.edited.betrag.replace(',', '.'));
+      if (isNaN(parsedAmount) || parsedAmount <= 0) continue;
+      
+      const date = new Date(item.edited.datum);
+      
+      await createExpense.mutateAsync({
+        property_id: propertyId,
+        category: item.edited.category,
+        expense_type: item.edited.expense_type,
+        bezeichnung: item.edited.bezeichnung.trim(),
+        betrag: parsedAmount,
+        datum: item.edited.datum,
+        beleg_nummer: item.edited.beleg_nummer || undefined,
+        notizen: item.edited.notizen || undefined,
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+      } as any);
+    }
+    
+    toast({
+      title: 'Kosten gespeichert',
+      description: `${items.length} Einträge wurden erfolgreich gespeichert.`,
+    });
   };
 
   // Cancel batch processing
@@ -698,6 +715,18 @@ export default function ExpenseList() {
       title="Buchhaltung"
       subtitle="Kosten erfassen und kategorisieren"
     >
+      {/* Batch Results Summary Dialog */}
+      <BatchResultsSummary
+        open={batchSummaryOpen}
+        onOpenChange={setBatchSummaryOpen}
+        results={batchResults}
+        properties={properties || []}
+        onSaveAll={handleSaveBatchResults}
+        onClose={() => {
+          setBatchSummaryOpen(false);
+          setBatchResults([]);
+        }}
+      />
       {/* PDF Page Selector Dialog */}
       <Dialog open={pdfSelectorOpen} onOpenChange={setPdfSelectorOpen}>
         <DialogContent className="sm:max-w-2xl">
