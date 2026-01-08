@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -465,34 +466,14 @@ export default function Reports() {
   // basierend auf den monatlichen SOLL-Werten der aktiven Mieter
   
   // Berechne SOLL-Werte aus aktiven Mietern für den Zeitraum
-  // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
-  // WICHTIG: Nur Mieter deren Mietbeginn im ausgewählten Zeitraum liegt
-  const relevantUnits = selectedPropertyId === 'all' 
-    ? allUnits 
-    : allUnits?.filter(u => u.property_id === selectedPropertyId);
-  
-  // Hilfsfunktion: Prüft ob ein Mieter im ausgewählten Zeitraum aktiv war
-  const isTenantActiveInPeriod = (tenant: NonNullable<typeof allTenants>[number]) => {
-    if (!tenant.mietbeginn) return false;
-    const mietbeginn = new Date(tenant.mietbeginn);
-    const mietbeginnYear = mietbeginn.getFullYear();
-    const mietbeginnMonth = mietbeginn.getMonth() + 1;
-    
-    if (reportPeriod === 'yearly') {
-      // Für jährliche Ansicht: Mietbeginn muss im Jahr oder davor sein
-      return mietbeginnYear <= selectedYear;
-    } else {
-      // Für monatliche Ansicht: Mietbeginn muss im Monat oder davor sein
-      if (mietbeginnYear < selectedYear) return true;
-      if (mietbeginnYear === selectedYear && mietbeginnMonth <= selectedMonth) return true;
-      return false;
-    }
-  };
-  
-  const relevantTenants = (relevantUnits || [])
-    .map(unit => allTenants?.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
-    .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-    .filter(isTenantActiveInPeriod);
+  // Verwendet zentrale Utility-Funktion für konsistente Logik
+  const relevantTenants = getActiveTenantsForPeriod(
+    allUnits || [],
+    allTenants || [],
+    selectedPropertyId,
+    selectedYear,
+    reportPeriod === 'monthly' ? selectedMonth : undefined
+  );
   
   // Monatliche SOLL-Summen aus Mieterdaten
   const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
