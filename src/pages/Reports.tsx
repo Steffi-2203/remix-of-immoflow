@@ -465,13 +465,15 @@ export default function Reports() {
   // basierend auf den monatlichen SOLL-Werten der aktiven Mieter
   
   // Berechne SOLL-Werte aus aktiven Mietern für den Zeitraum
-  const activeTenants = allTenants?.filter(t => t.status === 'aktiv') || [];
-  const relevantTenants = selectedPropertyId === 'all' 
-    ? activeTenants 
-    : activeTenants.filter(t => {
-        const unit = allUnits?.find(u => u.id === t.unit_id);
-        return unit?.property_id === selectedPropertyId;
-      });
+  // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
+  // Gleiche Logik wie in der Offene Posten Liste: iteriere über Units und finde den aktiven Mieter
+  const relevantUnits = selectedPropertyId === 'all' 
+    ? allUnits 
+    : allUnits?.filter(u => u.property_id === selectedPropertyId);
+  
+  const relevantTenants = (relevantUnits || [])
+    .map(unit => allTenants?.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
+    .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined);
   
   // Monatliche SOLL-Summen aus Mieterdaten
   const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);

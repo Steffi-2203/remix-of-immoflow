@@ -159,11 +159,16 @@ export default function PaymentList() {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
     
-    // Filter active tenants by property if selected
-    let activeTenants = tenants?.filter(t => t.status === 'aktiv') || [];
-    if (propertyUnitIds) {
-      activeTenants = activeTenants.filter(t => propertyUnitIds.includes(t.unit_id));
-    }
+    // Get relevant units based on property filter
+    const relevantUnits = propertyUnitIds 
+      ? units?.filter(u => propertyUnitIds.includes(u.id)) 
+      : units;
+    
+    // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
+    // Gleiche Logik wie in Reports Offene Posten Liste
+    const activeTenants = (relevantUnits || [])
+      .map(unit => tenants?.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
+      .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined);
     
     // SOLL from tenant data (same as Reports page)
     const totalSoll = activeTenants.reduce((sum, t) => 
@@ -215,7 +220,7 @@ export default function PaymentList() {
       totalUeberzahlung,
       paymentCount: thisMonthPayments.length,
     };
-  }, [tenants, payments, propertyUnitIds]);
+  }, [tenants, payments, propertyUnitIds, units]);
 
   // Calculate open items (offene Posten) per tenant - using same logic as Reports page
   // SOLL from tenant data, IST from payments table
@@ -226,12 +231,16 @@ export default function PaymentList() {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    let activeTenants = tenants.filter(t => t.status === 'aktiv');
+    // Get relevant units based on property filter
+    const relevantUnits = propertyUnitIds 
+      ? units.filter(u => propertyUnitIds.includes(u.id)) 
+      : units;
     
-    // Filter by property if selected
-    if (propertyUnitIds) {
-      activeTenants = activeTenants.filter(t => propertyUnitIds.includes(t.unit_id));
-    }
+    // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
+    // Gleiche Logik wie in Reports Offene Posten Liste
+    const activeTenants = relevantUnits
+      .map(unit => tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
+      .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined);
     
     return activeTenants.map(tenant => {
       // SOLL from tenant data (same as Reports page)
