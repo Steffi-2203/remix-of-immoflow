@@ -46,6 +46,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
+import { useCombinedPayments } from '@/hooks/useCombinedPayments';
 import { allocatePayment, type InvoiceAmounts } from '@/lib/paymentAllocation';
 import { toast } from 'sonner';
 import {
@@ -189,8 +190,9 @@ export default function Reports() {
   const { data: allTransactions, isLoading: isLoadingTransactions } = useTransactions();
   const { data: categories, isLoading: isLoadingCategories } = useAccountCategories();
   const { syncExistingPaymentsToTransactions } = usePaymentSync();
+  const { data: combinedPayments, isLoading: isLoadingCombined } = useCombinedPayments();
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingCombined;
 
   // Generate monthly invoices for the selected period
   const handleGenerateInvoices = useCallback(async () => {
@@ -294,17 +296,19 @@ export default function Reports() {
     return year === selectedYear && month === selectedMonth && propertyMatch;
   }) || [];
 
-  // ====== ZAHLUNGEN AUS PAYMENTS-TABELLE (für Vergleich) ======
-  const periodPayments = allPayments?.filter(p => {
-    const date = new Date(p.eingangs_datum);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    
-    if (reportPeriod === 'yearly') {
-      return year === selectedYear;
-    }
-    return year === selectedYear && month === selectedMonth;
-  }) || [];
+  // ====== KOMBINIERTE ZAHLUNGEN (payments + transactions mit tenant_id) ======
+  const periodCombinedPayments = useMemo(() => {
+    return (combinedPayments || []).filter(p => {
+      const date = new Date(p.date);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      
+      if (reportPeriod === 'yearly') {
+        return year === selectedYear;
+      }
+      return year === selectedYear && month === selectedMonth;
+    });
+  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth]);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
@@ -317,7 +321,7 @@ export default function Reports() {
     ?.filter(c => BETRIEBSKOSTEN_CATEGORIES.includes(c.name))
     .map(c => c.id) || [];
 
-  // ====== IST-EINNAHMEN AUS PAYMENTS-TABELLE (NUR MIETE-ANTEIL) ======
+  // ====== IST-EINNAHMEN AUS KOMBINIERTEN ZAHLUNGEN (NUR MIETE-ANTEIL) ======
   // Zahlungsaufteilung: BK → Heizung → Miete
   // Für die Buchhaltungsübersicht zeigen wir nur den Miete-Anteil
   
@@ -327,13 +331,13 @@ export default function Reports() {
     let totalHkAnteil = 0;
     let totalGesamt = 0;
     
-    periodPayments.forEach(p => {
+    periodCombinedPayments.forEach(p => {
       // Finde den Mieter für diese Zahlung
       const tenant = allTenants?.find(t => t.id === p.tenant_id);
       if (!tenant) {
         // Wenn kein Mieter gefunden, zähle alles als Miete
-        totalMieteAnteil += Number(p.betrag);
-        totalGesamt += Number(p.betrag);
+        totalMieteAnteil += Number(p.amount);
+        totalGesamt += Number(p.amount);
         return;
       }
       
@@ -348,12 +352,12 @@ export default function Reports() {
       };
       
       // Berechne die Zuordnung (BK → Heizung → Miete)
-      const allocation = allocatePayment(Number(p.betrag), invoiceAmounts, false);
+      const allocation = allocatePayment(Number(p.amount), invoiceAmounts, false);
       
       totalBkAnteil += allocation.allocation.betriebskosten_anteil;
       totalHkAnteil += allocation.allocation.heizung_anteil;
       totalMieteAnteil += allocation.allocation.miete_anteil;
-      totalGesamt += Number(p.betrag);
+      totalGesamt += Number(p.amount);
     });
     
     return {
@@ -362,7 +366,7 @@ export default function Reports() {
       hkAnteil: totalHkAnteil,
       gesamt: totalGesamt
     };
-  }, [periodPayments, allTenants]);
+  }, [periodCombinedPayments, allTenants]);
   
   // IST-Einnahmen = NUR Miete-Anteil (ohne BK und Heizung)
   const totalIstEinnahmenMiete = paymentAllocationDetails.mieteAnteil;
@@ -374,9 +378,9 @@ export default function Reports() {
   
   // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
   const paymentsByTenant = new Map<string, number>();
-  periodPayments.forEach(p => {
+  periodCombinedPayments.forEach(p => {
     const current = paymentsByTenant.get(p.tenant_id) || 0;
-    paymentsByTenant.set(p.tenant_id, current + Number(p.betrag));
+    paymentsByTenant.set(p.tenant_id, current + Number(p.amount));
   });
 
 
@@ -500,8 +504,8 @@ export default function Reports() {
       const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
-      const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
-      const totalPaid = tenantPayments.reduce((sum, p) => sum + Number(p.betrag), 0);
+      const tenantPayments = periodCombinedPayments.filter(p => p.tenant_id === tenant.id);
+      const totalPaid = tenantPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       
       // Zahlungsaufteilung berechnen (BK → Heizung → Miete)
       const invoiceAmounts: InvoiceAmounts = {
@@ -542,7 +546,7 @@ export default function Reports() {
         paymentCount: tenantPayments.length
       };
     });
-  }, [relevantTenants, allUnits, properties, periodPayments, monthMultiplier]);
+  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp)
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
@@ -908,7 +912,7 @@ export default function Reports() {
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {periodPayments.length} Zahlungen
+                {periodCombinedPayments.length} Zahlungen
               </div>
             </div>
           </CardContent>
@@ -933,7 +937,7 @@ export default function Reports() {
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
-            IST-Einnahmen aus {periodPayments.length} Zahlungen (payments) • Ausgaben aus {expenseTransactions.length} Buchungen
+            IST-Einnahmen aus {periodCombinedPayments.length} Zahlungen (payments + transactions) • Ausgaben aus {expenseTransactions.length} Buchungen
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1621,11 +1625,11 @@ export default function Reports() {
                 : 0;
               const sollBetrag = sollMonatlich * monthMultiplier;
               
-              // HABEN = IST-Zahlungen aus periodPayments für diesen Mieter (gleicher Zeitraum!)
+              // HABEN = IST-Zahlungen aus periodCombinedPayments für diesen Mieter (gleicher Zeitraum!)
               const tenantPayments = activeTenant 
-                ? periodPayments.filter(p => p.tenant_id === activeTenant.id)
+                ? periodCombinedPayments.filter(p => p.tenant_id === activeTenant.id)
                 : [];
-              const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+              const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
               
               // SALDO = Soll - Haben
               const saldo = sollBetrag - habenBetrag;

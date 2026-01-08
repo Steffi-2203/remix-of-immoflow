@@ -33,6 +33,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { useAssignPaymentWithSplit, calculatePaymentSplit } from '@/hooks/usePaymentSplit';
+import { useCombinedPayments } from '@/hooks/useCombinedPayments';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -69,6 +70,7 @@ export default function PaymentList() {
   const { data: payments } = usePayments();
   const { data: transactions, isLoading: transactionsLoading } = useTransactions();
   const { data: categories } = useAccountCategories();
+  const { data: combinedPayments } = useCombinedPayments();
   const updateTransaction = useUpdateTransaction();
   const assignPaymentWithSplit = useAssignPaymentWithSplit();
 
@@ -153,7 +155,7 @@ export default function PaymentList() {
     return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
   }, [payments, propertyUnitIds, tenants, searchQuery]);
 
-  // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from payments)
+  // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from combined payments)
   // Also calculate Unterzahlung and Überzahlung separately per tenant
   const stats = useMemo(() => {
     const now = new Date();
@@ -181,9 +183,9 @@ export default function PaymentList() {
             Number(t.betriebskosten_vorschuss || 0) + 
             Number(t.heizungskosten_vorschuss || 0), 0);
     
-    // IST from payments table for current month (same as Reports page)
-    const thisMonthPayments = (payments || []).filter(p => {
-      const date = new Date(p.eingangs_datum);
+    // IST from COMBINED payments (payments table + transactions with tenant_id)
+    const thisMonthPayments = (combinedPayments || []).filter(p => {
+      const date = new Date(p.date);
       if (date.getMonth() + 1 !== currentMonth || date.getFullYear() !== currentYear) return false;
       
       // Filter by property if selected
@@ -194,7 +196,7 @@ export default function PaymentList() {
       return true;
     });
     
-    const totalIst = thisMonthPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+    const totalIst = thisMonthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     
     // Calculate per-tenant saldos to separate Unterzahlung and Überzahlung
     let totalUnterzahlung = 0;
@@ -207,7 +209,7 @@ export default function PaymentList() {
       
       const istTenant = thisMonthPayments
         .filter(p => p.tenant_id === tenant.id)
-        .reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
       
       const saldoTenant = istTenant - sollTenant;
       
@@ -225,12 +227,12 @@ export default function PaymentList() {
       totalUeberzahlung,
       paymentCount: thisMonthPayments.length,
     };
-  }, [tenants, payments, propertyUnitIds, units]);
+  }, [tenants, combinedPayments, propertyUnitIds, units, selectedPropertyId]);
 
   // Calculate open items (offene Posten) per tenant - using same logic as Reports page
-  // SOLL from tenant data, IST from payments table
+  // SOLL from tenant data, IST from COMBINED payments (payments + transactions)
   const openItemsPerTenant = useMemo(() => {
-    if (!tenants || !payments || !units) return [];
+    if (!tenants || !combinedPayments || !units) return [];
 
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -258,14 +260,14 @@ export default function PaymentList() {
                            Number(tenant.heizungskosten_vorschuss || 0);
       const totalSoll = monthlyTotal; // For current month
       
-      // IST from payments table for current month
-      const tenantPayments = payments.filter(p => {
+      // IST from COMBINED payments for current month
+      const tenantPayments = combinedPayments.filter(p => {
         if (p.tenant_id !== tenant.id) return false;
-        const paymentDate = new Date(p.eingangs_datum);
+        const paymentDate = new Date(p.date);
         return paymentDate.getMonth() + 1 === currentMonth && 
                paymentDate.getFullYear() === currentYear;
       });
-      const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+      const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       
       // Saldo: negative = owes money (SOLL > IST means tenant needs to pay)
       const saldo = totalIst - totalSoll;
@@ -296,9 +298,9 @@ export default function PaymentList() {
         oldestOverdueDays: daysOverdue,
         mahnstatus,
       };
-    }).filter(item => item.saldo < 0) // Only show tenants with outstanding balance
+    }).filter(item => item.saldo !== 0) // Show both underpayments AND overpayments
       .sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
-  }, [tenants, payments, units, propertyUnitIds]);
+  }, [tenants, combinedPayments, units, propertyUnitIds, selectedPropertyId]);
 
   const openItemsStats = {
     totalTenants: openItemsPerTenant.length,
