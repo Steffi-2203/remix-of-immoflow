@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, X, Pencil, ChevronDown, ChevronUp, Save, Trash2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +65,22 @@ interface BatchResultsSummaryProps {
   onClose: () => void;
 }
 
+const initializeItems = (results: BatchResultItem[]): BatchResultItem[] => 
+  results.map(r => ({
+    ...r,
+    selected: true,
+    saved: false,
+    edited: {
+      bezeichnung: r.beschreibung || r.lieferant || '',
+      betrag: r.betrag?.toString().replace('.', ',') || '',
+      datum: r.datum || new Date().toISOString().split('T')[0],
+      beleg_nummer: r.rechnungsnummer || '',
+      category: r.kategorie || 'betriebskosten_umlagefaehig',
+      expense_type: (r.expense_type as ExpenseType) || 'sonstiges',
+      notizen: r.iban ? `IBAN: ${r.iban}` : '',
+    },
+  }));
+
 export function BatchResultsSummary({
   open,
   onOpenChange,
@@ -73,22 +89,14 @@ export function BatchResultsSummary({
   onSaveAll,
   onClose,
 }: BatchResultsSummaryProps) {
-  const [items, setItems] = useState<BatchResultItem[]>(() =>
-    results.map(r => ({
-      ...r,
-      selected: true,
-      saved: false,
-      edited: {
-        bezeichnung: r.beschreibung || r.lieferant || '',
-        betrag: r.betrag?.toString().replace('.', ',') || '',
-        datum: r.datum || new Date().toISOString().split('T')[0],
-        beleg_nummer: r.rechnungsnummer || '',
-        category: r.kategorie || 'betriebskosten_umlagefaehig',
-        expense_type: (r.expense_type as ExpenseType) || 'sonstiges',
-        notizen: r.iban ? `IBAN: ${r.iban}` : '',
-      },
-    }))
-  );
+  const [items, setItems] = useState<BatchResultItem[]>(() => initializeItems(results));
+  
+  // Update items when results change (e.g., when dialog opens with new batch)
+  useEffect(() => {
+    if (open && results.length > 0) {
+      setItems(initializeItems(results));
+    }
+  }, [open, results]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<string>('');
   const [saving, setSaving] = useState(false);
