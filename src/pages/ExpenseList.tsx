@@ -1327,20 +1327,38 @@ export default function ExpenseList() {
                             href={(expense as any).beleg_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                            className="group relative block"
+                            title="Beleg öffnen"
                           >
-                            <FileText className="h-4 w-4" />
-                            <ExternalLink className="h-3 w-3" />
+                            {(expense as any).beleg_url.toLowerCase().endsWith('.pdf') ? (
+                              // PDF: Show icon with hover effect
+                              <div className="flex items-center justify-center w-10 h-10 rounded border bg-muted/50 group-hover:bg-primary/10 group-hover:border-primary/30 transition-colors">
+                                <FileText className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
+                              </div>
+                            ) : (
+                              // Image: Show thumbnail
+                              <div className="relative w-10 h-10 rounded border overflow-hidden group-hover:ring-2 group-hover:ring-primary/50 transition-all">
+                                <img
+                                  src={(expense as any).beleg_url}
+                                  alt="Beleg"
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                  <ExternalLink className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 drop-shadow-md transition-opacity" />
+                                </div>
+                              </div>
+                            )}
                           </a>
                         ) : (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-primary"
+                            className="h-8 px-2 text-xs text-muted-foreground hover:text-primary"
                             onClick={() => openEditDialog(expense as any)}
                           >
                             <Upload className="h-3 w-3 mr-1" />
-                            Beleg einfügen
+                            Beleg
                           </Button>
                         )}
                       </TableCell>
