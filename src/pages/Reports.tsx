@@ -412,9 +412,9 @@ export default function Reports() {
   const totalExpensesFromTransactions = expenseTransactions
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
-  // ====== RENDITE-BERECHNUNG (IST-Basis) ======
-  // Nettoertrag = IST-Mieteinnahmen - Instandhaltungskosten
-  const nettoertrag = totalIstEinnahmen - instandhaltungskostenFromTransactions;
+  // ====== RENDITE-BERECHNUNG (IST-Basis AUS TRANSAKTIONEN) ======
+  // Nettoertrag = IST-Mieteinnahmen (aus Transaktionen) - Instandhaltungskosten
+  const nettoertrag = mieteFromTransactions - instandhaltungskostenFromTransactions;
   const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
 
   // Vacancy rate
@@ -428,7 +428,7 @@ export default function Reports() {
     : Number(selectedProperty?.total_qm || 0);
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   
-  // Rendite basierend auf Transaktionen
+  // Rendite basierend auf Transaktionen (Mieteinnahmen aus kategorisierten Transaktionen)
   const annualYieldFromTransactions = estimatedPropertyValue > 0 
     ? (annualNettoertrag / estimatedPropertyValue) * 100 
     : 0;
@@ -839,7 +839,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Mieteinnahmen {periodLabel} (IST)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{totalIstEinnahmenMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   nur Miete (ohne BK/Heizung)
@@ -847,7 +847,7 @@ export default function Reports() {
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {periodPayments.length} Zahlungen
+                {incomeTransactions.filter(t => t.category_id === mieteinnahmenCategoryId).length} Buchungen
               </div>
             </div>
           </CardContent>
