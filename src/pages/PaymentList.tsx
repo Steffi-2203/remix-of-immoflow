@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -164,25 +165,15 @@ export default function PaymentList() {
       ? units?.filter(u => propertyUnitIds.includes(u.id)) 
       : units;
     
-    // Hilfsfunktion: Prüft ob ein Mieter im aktuellen Monat aktiv ist (Mietbeginn berücksichtigen)
-    const isTenantActiveThisMonth = (tenant: NonNullable<typeof tenants>[number]) => {
-      if (!tenant.mietbeginn) return false;
-      const mietbeginn = new Date(tenant.mietbeginn);
-      const mietbeginnYear = mietbeginn.getFullYear();
-      const mietbeginnMonth = mietbeginn.getMonth() + 1;
-      
-      // Mietbeginn muss im aktuellen Monat oder davor sein
-      if (mietbeginnYear < currentYear) return true;
-      if (mietbeginnYear === currentYear && mietbeginnMonth <= currentMonth) return true;
-      return false;
-    };
-    
-    // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
-    // WICHTIG: Nur Mieter deren Mietbeginn im aktuellen Monat oder davor liegt
-    const activeTenants = (relevantUnits || [])
-      .map(unit => tenants?.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
-      .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-      .filter(isTenantActiveThisMonth);
+    // Verwendet zentrale Utility-Funktion für konsistente Logik
+    // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Monat
+    const activeTenants = getActiveTenantsForPeriod(
+      relevantUnits || [],
+      tenants || [],
+      selectedPropertyId,
+      currentYear,
+      currentMonth
+    );
     
     // SOLL from tenant data (same as Reports page)
     const totalSoll = activeTenants.reduce((sum, t) => 
@@ -250,25 +241,15 @@ export default function PaymentList() {
       ? units.filter(u => propertyUnitIds.includes(u.id)) 
       : units;
     
-    // Hilfsfunktion: Prüft ob ein Mieter im aktuellen Monat aktiv ist (Mietbeginn berücksichtigen)
-    const isTenantActiveThisMonth = (tenant: NonNullable<typeof tenants>[number]) => {
-      if (!tenant.mietbeginn) return false;
-      const mietbeginn = new Date(tenant.mietbeginn);
-      const mietbeginnYear = mietbeginn.getFullYear();
-      const mietbeginnMonth = mietbeginn.getMonth() + 1;
-      
-      // Mietbeginn muss im aktuellen Monat oder davor sein
-      if (mietbeginnYear < currentYear) return true;
-      if (mietbeginnYear === currentYear && mietbeginnMonth <= currentMonth) return true;
-      return false;
-    };
-    
-    // WICHTIG: Nur EIN aktiver Mieter pro Unit, um Duplikate zu vermeiden
-    // WICHTIG: Nur Mieter deren Mietbeginn im aktuellen Monat oder davor liegt
-    const activeTenants = relevantUnits
-      .map(unit => tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
-      .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-      .filter(isTenantActiveThisMonth);
+    // Verwendet zentrale Utility-Funktion für konsistente Logik
+    // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Monat
+    const activeTenants = getActiveTenantsForPeriod(
+      relevantUnits,
+      tenants,
+      selectedPropertyId,
+      currentYear,
+      currentMonth
+    );
     
     return activeTenants.map(tenant => {
       // SOLL from tenant data (same as Reports page)

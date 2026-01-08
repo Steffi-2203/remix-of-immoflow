@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getActiveTenantsForPeriod } from './tenantFilterUtils';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -38,6 +39,8 @@ interface TenantData {
   betriebskosten_vorschuss: number;
   heizungskosten_vorschuss: number;
   status: string;
+  mietbeginn: string | null;
+  mietende?: string | null;
 }
 
 interface InvoiceData {
@@ -765,10 +768,16 @@ export const generateOffenePostenReport = (
 
   // Filter units
   const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
-  const unitIds = targetUnits.map(u => u.id);
   
-  // Get active tenants for these units
-  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id) && t.status === 'aktiv');
+  // Get active tenants for these units - using central utility for consistent logic
+  // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Zeitraum
+  const relevantTenants = getActiveTenantsForPeriod(
+    targetUnits,
+    tenants,
+    selectedPropertyId,
+    selectedYear,
+    reportPeriod === 'monthly' ? selectedMonth : undefined
+  );
   const tenantIds = relevantTenants.map(t => t.id);
   
   // Calculate month multiplier for SOLL
