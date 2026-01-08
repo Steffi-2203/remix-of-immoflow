@@ -925,62 +925,76 @@ export default function Reports() {
                 </div>
               </div>
               
-              {/* SOLL vs IST Vergleich - Miete, BK, Heizung */}
+              {/* SOLL vs IST Vergleich - Miete, BK, Heizung mit Zahlungsaufteilung */}
               <div className="mt-4 p-4 rounded-lg border border-border bg-muted/50 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground mb-3">SOLL vs IST Vergleich</p>
-                
-                {/* Miete */}
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-foreground">Miete</p>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">IST:</span>
-                    <span>€{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollGrundmiete - mieteFromTransactions > 0.01 ? 'text-destructive' : periodSollGrundmiete - mieteFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
-                    <span>Differenz:</span>
-                    <span>{periodSollGrundmiete - mieteFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollGrundmiete - mieteFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
-                  </div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-muted-foreground">SOLL vs IST Vergleich</p>
+                  <Badge variant="outline" className="text-xs">
+                    Aufteilung: BK → Heizung → Miete
+                  </Badge>
                 </div>
                 
-                <div className="border-t border-border pt-2"></div>
-                
-                {/* Betriebskosten */}
+                {/* Betriebskosten - werden zuerst bedient */}
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-foreground">Betriebskosten</p>
+                  <p className="text-xs font-medium text-foreground flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center">1</span>
+                    Betriebskosten
+                  </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
                     <span>€{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">IST:</span>
-                    <span>€{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground">IST (aus Zahlungen):</span>
+                    <span>€{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollBk - bkFromTransactions > 0.01 ? 'text-destructive' : periodSollBk - bkFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollBk - paymentAllocationDetails.bkAnteil > 0.01 ? 'text-destructive' : periodSollBk - paymentAllocationDetails.bkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollBk - bkFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollBk - bkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{periodSollBk - paymentAllocationDetails.bkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollBk - paymentAllocationDetails.bkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
                 <div className="border-t border-border pt-2"></div>
                 
-                {/* Heizung */}
+                {/* Heizung - wird als zweites bedient */}
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-foreground">Heizung</p>
+                  <p className="text-xs font-medium text-foreground flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center">2</span>
+                    Heizung
+                  </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
                     <span>€{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">IST:</span>
-                    <span>€{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground">IST (aus Zahlungen):</span>
+                    <span>€{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollHk - hkFromTransactions > 0.01 ? 'text-destructive' : periodSollHk - hkFromTransactions < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollHk - paymentAllocationDetails.hkAnteil > 0.01 ? 'text-destructive' : periodSollHk - paymentAllocationDetails.hkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollHk - hkFromTransactions > 0 ? '-' : '+'}€{Math.abs(periodSollHk - hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{periodSollHk - paymentAllocationDetails.hkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollHk - paymentAllocationDetails.hkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+                
+                <div className="border-t border-border pt-2"></div>
+                
+                {/* Miete - wird zuletzt bedient */}
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center">3</span>
+                    Miete
+                  </p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">SOLL:</span>
+                    <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">IST (aus Zahlungen):</span>
+                    <span>€{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className={`flex justify-between text-sm font-semibold ${periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0.01 ? 'text-destructive' : periodSollGrundmiete - paymentAllocationDetails.mieteAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                    <span>Differenz:</span>
+                    <span>{periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollGrundmiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -994,14 +1008,18 @@ export default function Reports() {
                     <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm font-medium">
-                    <span className="text-muted-foreground">IST:</span>
-                    <span>€{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-muted-foreground">IST (eingegangen):</span>
+                    <span>€{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-bold ${periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) > 0.01 ? 'text-destructive' : periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions) > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - (mieteFromTransactions + bkFromTransactions + hkFromTransactions)).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
+                
+                <p className="text-[10px] text-muted-foreground pt-2 border-t border-dashed">
+                  Zahlungen werden nach AT-Standard aufgeteilt: Zuerst BK, dann Heizung, zuletzt Miete.
+                </p>
               </div>
             </div>
 
