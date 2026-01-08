@@ -390,6 +390,89 @@ export function usePaymentSync() {
     },
   });
 
+  // Sync existing transactions to payments (for migration - transactions → payments)
+  const syncExistingTransactionsToPayments = useMutation({
+    mutationFn: async () => {
+      if (!categories) throw new Error('Categories not loaded');
+
+      const mieteinnahmenCategory = getMieteinnahmenCategory();
+      if (!mieteinnahmenCategory) throw new Error('Mieteinnahmen category not found');
+
+      // Get all income transactions with Mieteinnahmen category that have a tenant_id
+      const { data: incomeTransactions, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('category_id', mieteinnahmenCategory.id)
+        .gt('amount', 0)
+        .not('tenant_id', 'is', null);
+
+      if (fetchError) throw fetchError;
+      if (!incomeTransactions || incomeTransactions.length === 0) {
+        return { synced: 0, skipped: 0 };
+      }
+
+      // Get existing payments to check for duplicates
+      const { data: existingPayments } = await supabase
+        .from('payments')
+        .select('eingangs_datum, betrag, tenant_id');
+
+      let syncedCount = 0;
+      let skippedCount = 0;
+
+      for (const transaction of incomeTransactions) {
+        if (!transaction.tenant_id) {
+          skippedCount++;
+          continue;
+        }
+
+        // Check for duplicate (same date, amount, tenant)
+        const isDuplicate = existingPayments?.some(p =>
+          p.eingangs_datum === transaction.transaction_date &&
+          Math.abs(Number(p.betrag) - Number(transaction.amount)) < 0.01 &&
+          p.tenant_id === transaction.tenant_id
+        );
+
+        if (isDuplicate) {
+          skippedCount++;
+          continue;
+        }
+
+        const { error: paymentError } = await supabase
+          .from('payments')
+          .insert({
+            tenant_id: transaction.tenant_id,
+            invoice_id: null,
+            betrag: Number(transaction.amount),
+            zahlungsart: 'ueberweisung',
+            referenz: transaction.reference || transaction.description || null,
+            eingangs_datum: transaction.transaction_date,
+            buchungs_datum: transaction.booking_date || transaction.transaction_date,
+          });
+
+        if (paymentError) {
+          console.error('Failed to sync transaction to payment:', paymentError);
+          skippedCount++;
+        } else {
+          syncedCount++;
+        }
+      }
+
+      return { synced: syncedCount, skipped: skippedCount };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      if (result.synced > 0) {
+        toast.success(`${result.synced} Transaktion(en) erfolgreich in Zahlungen synchronisiert`);
+      } else {
+        toast.info('Keine neuen Transaktionen zum Synchronisieren gefunden (evtl. fehlt tenant_id)');
+      }
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Synchronisieren der Transaktionen');
+      console.error('Sync transactions to payments error:', error);
+    },
+  });
+
   // Delete transaction with cascade sync (also deletes linked expenses/payments/splits)
   const deleteTransactionWithSync = useMutation({
     mutationFn: async (transactionId: string) => {
@@ -472,6 +555,7 @@ export function usePaymentSync() {
     deleteTransactionWithSync,
     syncExistingTransactionsToExpenses,
     syncExistingPaymentsToTransactions,
+    syncExistingTransactionsToPayments,
     getMieteinnahmenCategory,
     getCategoryNameById,
     CATEGORY_TO_EXPENSE_MAPPING,
