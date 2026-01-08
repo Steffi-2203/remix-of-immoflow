@@ -63,7 +63,7 @@ import {
 import { useProperties } from '@/hooks/useProperties';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
-import { InvoiceDropZone } from '@/components/ocr/InvoiceDropZone';
+import { InvoiceDropZone, QueuedFile } from '@/components/ocr/InvoiceDropZone';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -131,6 +131,12 @@ export default function ExpenseList() {
   const [pdfSelectorOpen, setPdfSelectorOpen] = useState(false);
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const ocrInvoice = useOCRInvoice();
+  
+  // Batch processing state
+  const [batchQueue, setBatchQueue] = useState<QueuedFile[]>([]);
+  const [batchIndex, setBatchIndex] = useState(0);
+  const [batchResults, setBatchResults] = useState<any[]>([]);
+  const [batchCancelled, setBatchCancelled] = useState(false);
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
   const { data: expenses, isLoading } = useExpenses(propertyFilter, selectedYear);
@@ -526,6 +532,165 @@ export default function ExpenseList() {
     await processOcrFile(ocrFile, imageDataUrl);
   };
 
+  // Handle batch file selection
+  const handleBatchSelect = async (files: File[]) => {
+    setBatchCancelled(false);
+    setBatchResults([]);
+    setBatchIndex(0);
+    
+    // Generate previews for queue display
+    const queueItems: QueuedFile[] = await Promise.all(
+      files.map(async (file) => {
+        let previewUrl: string | null = null;
+        
+        if (file.type.startsWith('image/')) {
+          previewUrl = URL.createObjectURL(file);
+        } else if (file.type === 'application/pdf') {
+          try {
+            const pdfjsLib = await import('pdfjs-dist');
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const page = await pdf.getPage(1);
+            const scale = 0.3;
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const context = canvas.getContext('2d');
+            if (context) {
+              await page.render({ canvasContext: context, viewport }).promise;
+              previewUrl = canvas.toDataURL('image/png');
+            }
+          } catch {
+            // Preview generation failed, continue without preview
+          }
+        }
+        
+        return {
+          file,
+          previewUrl,
+          status: 'pending' as const,
+        };
+      })
+    );
+    
+    setBatchQueue(queueItems);
+    
+    // Start processing first file
+    processBatchItem(queueItems, 0);
+  };
+
+  // Process single batch item
+  const processBatchItem = async (queue: QueuedFile[], index: number) => {
+    if (index >= queue.length || batchCancelled) {
+      // Batch complete
+      if (!batchCancelled && batchResults.length > 0) {
+        toast({
+          title: 'Stapelverarbeitung abgeschlossen',
+          description: `${batchResults.length} Rechnungen wurden analysiert.`,
+        });
+      }
+      setBatchQueue([]);
+      setBatchIndex(0);
+      return;
+    }
+
+    const item = queue[index];
+    
+    // Update status to processing
+    setBatchQueue(prev => prev.map((q, i) => 
+      i === index ? { ...q, status: 'processing' as const } : q
+    ));
+    setBatchIndex(index);
+    
+    try {
+      // For PDFs, we need to handle page selection - for now, process first page
+      let result;
+      
+      if (item.file.type === 'application/pdf') {
+        // Convert first page to image for OCR
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        const arrayBuffer = await item.file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const scale = 2;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
+        if (context) {
+          await page.render({ canvasContext: context, viewport }).promise;
+          const imageDataUrl = canvas.toDataURL('image/png');
+          const base64 = imageDataUrl.split(',')[1];
+          
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) throw new Error('Nicht angemeldet');
+          
+          const { data, error } = await supabase.functions.invoke('ocr-invoice', {
+            body: { imageBase64: base64, mimeType: 'image/png' },
+          });
+          
+          if (error) throw new Error(error.message);
+          if (data?.error) throw new Error(data.error);
+          result = data.data;
+        }
+      } else {
+        result = await ocrInvoice.mutateAsync(item.file);
+      }
+      
+      // Update status to done
+      setBatchQueue(prev => prev.map((q, i) => 
+        i === index ? { ...q, status: 'done' as const } : q
+      ));
+      
+      // Store result
+      setBatchResults(prev => [...prev, { ...result, fileName: item.file.name }]);
+      
+      // Pre-fill form with first result
+      if (index === 0) {
+        setNewExpense(prev => ({
+          ...prev,
+          bezeichnung: result.beschreibung || result.lieferant || '',
+          betrag: result.betrag?.toString().replace('.', ',') || '',
+          datum: result.datum || format(new Date(), 'yyyy-MM-dd'),
+          beleg_nummer: result.rechnungsnummer || '',
+          category: result.kategorie || 'betriebskosten_umlagefaehig',
+          expense_type: result.expense_type as ExpenseType || 'sonstiges',
+          notizen: result.iban ? `IBAN: ${result.iban}` : '',
+        }));
+        setDialogOpen(true);
+      }
+      
+      // Process next item
+      setTimeout(() => processBatchItem(queue, index + 1), 500);
+      
+    } catch (error) {
+      console.error('Batch item OCR failed:', error);
+      
+      // Update status to error
+      setBatchQueue(prev => prev.map((q, i) => 
+        i === index ? { ...q, status: 'error' as const, error: error instanceof Error ? error.message : 'Fehler' } : q
+      ));
+      
+      // Continue with next item
+      setTimeout(() => processBatchItem(queue, index + 1), 500);
+    }
+  };
+
+  // Cancel batch processing
+  const handleCancelBatch = () => {
+    setBatchCancelled(true);
+    setBatchQueue([]);
+    setBatchIndex(0);
+    toast({
+      title: 'Stapelverarbeitung abgebrochen',
+      description: `${batchResults.length} Rechnungen wurden verarbeitet.`,
+    });
+  };
+
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   return (
@@ -594,7 +759,11 @@ export default function ExpenseList() {
             processOcrFile(file);
           }
         }}
-        disabled={ocrProcessing}
+        onBatchSelect={handleBatchSelect}
+        disabled={ocrProcessing || batchQueue.length > 0}
+        queue={batchQueue.length > 0 ? batchQueue : undefined}
+        currentIndex={batchIndex}
+        onCancelQueue={handleCancelBatch}
         className="mb-6"
       />
 
