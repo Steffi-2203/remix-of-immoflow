@@ -545,10 +545,30 @@ export default function Banking() {
 
   return (
     <MainLayout 
-      title="Banking & Buchhaltung" 
+      title="Banking" 
       subtitle="Kontoauszüge importieren, kategorisieren und auswerten"
     >
       <div className="space-y-6">
+        {/* OCR Shortcut */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-primary/10">
+                  <Sparkles className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Belege & Rechnungen scannen (OCR)</h3>
+                  <p className="text-sm text-muted-foreground">Kosten automatisch per KI aus Rechnungen erfassen</p>
+                </div>
+              </div>
+              <Button onClick={() => window.location.href = '/kosten'} className="shrink-0">
+                <Upload className="h-4 w-4 mr-2" />
+                Zur OCR Drop Zone
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>

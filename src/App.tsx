@@ -63,6 +63,7 @@ const App = () => (
             <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><Banking /></ProtectedRoute>} />
+            <Route path="/kosten" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
