@@ -5,8 +5,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, FileText, CheckSquare, Square } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
+// Configure PDF.js worker - use unpkg for reliable ESM module loading
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 interface PagePreview {
   pageNumber: number;
