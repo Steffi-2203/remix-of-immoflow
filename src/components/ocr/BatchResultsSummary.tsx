@@ -31,6 +31,7 @@ import {
 
 export interface BatchResultItem {
   fileName: string;
+  file?: File; // Original file for upload
   lieferant?: string;
   beschreibung?: string;
   betrag?: number;

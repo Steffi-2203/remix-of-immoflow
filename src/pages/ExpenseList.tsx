@@ -647,8 +647,8 @@ export default function ExpenseList() {
         i === index ? { ...q, status: 'done' as const } : q
       ));
       
-      // Store result
-      const newResult: BatchResultItem = { ...result, fileName: item.file.name };
+      // Store result with original file reference
+      const newResult: BatchResultItem = { ...result, fileName: item.file.name, file: item.file };
       const newAccumulatedResults = [...accumulatedResults, newResult];
       
       // Process next item
@@ -677,6 +677,15 @@ export default function ExpenseList() {
       
       const date = new Date(item.edited.datum);
       
+      // Upload the original file if available
+      let beleg_url: string | undefined;
+      if (item.file) {
+        const url = await uploadFile(item.file, propertyId);
+        if (url) {
+          beleg_url = url;
+        }
+      }
+      
       await createExpense.mutateAsync({
         property_id: propertyId,
         category: item.edited.category,
@@ -688,12 +697,13 @@ export default function ExpenseList() {
         notizen: item.edited.notizen || undefined,
         year: date.getFullYear(),
         month: date.getMonth() + 1,
+        beleg_url,
       } as any);
     }
     
     toast({
       title: 'Kosten gespeichert',
-      description: `${items.length} Einträge wurden erfolgreich gespeichert.`,
+      description: `${items.length} Einträge mit Belegen wurden erfolgreich gespeichert.`,
     });
   };
 
