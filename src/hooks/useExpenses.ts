@@ -29,9 +29,11 @@ export interface Expense {
   betrag: number;
   datum: string;
   beleg_nummer: string | null;
+  beleg_url: string | null;
   notizen: string | null;
   year: number;
   month: number;
+  transaction_id: string | null;
   created_at: string;
   updated_at: string;
 }
