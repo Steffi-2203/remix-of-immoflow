@@ -413,11 +413,11 @@ export default function ExpenseList() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Accept images for OCR
-    if (!file.type.startsWith('image/')) {
+    // Accept images and PDFs for OCR
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
       toast({
         title: 'Ungültiges Format',
-        description: 'Bitte ein Bild der Rechnung hochladen (JPG, PNG).',
+        description: 'Bitte ein Bild (JPG, PNG) oder PDF der Rechnung hochladen.',
         variant: 'destructive',
       });
       return;
@@ -464,17 +464,22 @@ export default function ExpenseList() {
               <Sparkles className="h-5 w-5 text-primary" />
               Rechnung wird analysiert
             </DialogTitle>
-            <DialogDescription>
-              Die Rechnung wird mit KI analysiert und die Daten automatisch extrahiert.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center py-8">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-sm text-muted-foreground">
-              {ocrFile?.name}
-            </p>
-          </div>
-        </DialogContent>
+          <DialogDescription>
+            {ocrFile?.type === 'application/pdf' 
+              ? 'Das PDF wird mit KI analysiert und die Rechnungsdaten automatisch extrahiert.'
+              : 'Die Rechnung wird mit KI analysiert und die Daten automatisch extrahiert.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col items-center py-8">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-sm text-muted-foreground">
+            {ocrFile?.name}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {ocrFile?.type === 'application/pdf' ? 'PDF wird verarbeitet...' : 'Bild wird analysiert...'}
+          </p>
+        </div>
+      </DialogContent>
       </Dialog>
 
       {/* Actions Bar */}
@@ -519,7 +524,7 @@ export default function ExpenseList() {
         <input
           ref={ocrFileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           capture="environment"
           onChange={handleOcrFileChange}
           className="hidden"

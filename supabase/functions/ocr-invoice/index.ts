@@ -247,13 +247,14 @@ WICHTIG für österreichische USt:
               },
               {
                 type: "text",
-                text: `Analysiere diese Rechnung und extrahiere ALLE sichtbaren Daten.
+                text: `Analysiere diese Rechnung (${mimeType === 'application/pdf' ? 'PDF-Dokument' : 'Bild'}) und extrahiere ALLE sichtbaren Daten.
 
 WICHTIG:
 - Extrahiere den BRUTTO-Gesamtbetrag (inkl. USt)
 - Extrahiere den NETTO-Betrag (ohne USt) falls sichtbar
 - Extrahiere den USt-Betrag und USt-Satz falls angegeben
 - Achte auf Leistungszeitraum (von/bis)
+- Bei PDF: Analysiere alle Seiten falls es mehrere gibt
 - Gib null für nicht lesbare/fehlende Felder zurück`
               }
             ]
