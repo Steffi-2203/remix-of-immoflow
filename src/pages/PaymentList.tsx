@@ -28,7 +28,7 @@ import {
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
-import { useInvoices } from '@/hooks/useInvoices';
+import { usePayments } from '@/hooks/usePayments';
 import { useTransactions, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { useAssignPaymentWithSplit, calculatePaymentSplit } from '@/hooks/usePaymentSplit';
@@ -65,7 +65,7 @@ export default function PaymentList() {
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: properties } = useProperties();
-  const { data: invoices } = useInvoices();
+  const { data: payments } = usePayments();
   const { data: transactions, isLoading: transactionsLoading } = useTransactions();
   const { data: categories } = useAccountCategories();
   const updateTransaction = useUpdateTransaction();
@@ -148,9 +148,14 @@ export default function PaymentList() {
     };
   }, [rentalIncomeTransactions]);
 
-  // Calculate open items (offene Posten) per tenant - based on invoices vs transactions
+  // Calculate open items (offene Posten) per tenant - using same logic as Reports page
+  // SOLL from tenant data, IST from payments table
   const openItemsPerTenant = useMemo(() => {
-    if (!tenants || !invoices || !rentalIncomeTransactions) return [];
+    if (!tenants || !payments || !units) return [];
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
 
     let activeTenants = tenants.filter(t => t.status === 'aktiv');
     
@@ -160,43 +165,35 @@ export default function PaymentList() {
     }
     
     return activeTenants.map(tenant => {
-      // Get all invoices for this tenant
-      const tenantInvoices = invoices.filter(i => i.tenant_id === tenant.id);
-      const openInvoices = tenantInvoices.filter(i => i.status === 'offen' || i.status === 'teilbezahlt' || i.status === 'ueberfaellig');
+      // SOLL from tenant data (same as Reports page)
+      const monthlyTotal = Number(tenant.grundmiete || 0) + 
+                           Number(tenant.betriebskosten_vorschuss || 0) + 
+                           Number(tenant.heizungskosten_vorschuss || 0);
+      const totalSoll = monthlyTotal; // For current month
       
-      // Calculate total Soll (what should be paid)
-      const totalSoll = tenantInvoices.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0);
+      // IST from payments table for current month
+      const tenantPayments = payments.filter(p => {
+        if (p.tenant_id !== tenant.id) return false;
+        const paymentDate = new Date(p.eingangs_datum);
+        return paymentDate.getMonth() + 1 === currentMonth && 
+               paymentDate.getFullYear() === currentYear;
+      });
+      const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
       
-      // Calculate total Ist from transactions (what was paid)
-      const tenantPayments = rentalIncomeTransactions.filter(t => t.tenant_id === tenant.id);
-      const totalIst = tenantPayments.reduce((sum, t) => sum + Number(t.amount), 0);
-      
-      // Saldo (negative = owes money)
+      // Saldo: negative = owes money (SOLL > IST means tenant needs to pay)
       const saldo = totalIst - totalSoll;
       
-      // Find oldest overdue invoice for Mahnstatus
-      const today = new Date();
-      let oldestOverdueDays = 0;
-      let oldestOverdueInvoice: any = null;
-      
-      openInvoices.forEach(inv => {
-        const dueDate = new Date(inv.faellig_am);
-        if (dueDate < today) {
-          const daysDue = differenceInDays(today, dueDate);
-          if (daysDue > oldestOverdueDays) {
-            oldestOverdueDays = daysDue;
-            oldestOverdueInvoice = inv;
-          }
-        }
-      });
+      // Days overdue: if we're past the 5th of the month and saldo is negative
+      const dayOfMonth = now.getDate();
+      const daysOverdue = saldo < 0 && dayOfMonth > 5 ? dayOfMonth - 5 : 0;
 
-      // Determine Mahnstatus
+      // Determine Mahnstatus based on days overdue
       let mahnstatus = 'aktuell';
-      if (oldestOverdueDays > 30) {
+      if (daysOverdue > 30) {
         mahnstatus = '2. Mahnung';
-      } else if (oldestOverdueDays > 14) {
+      } else if (daysOverdue > 14) {
         mahnstatus = '1. Mahnung';
-      } else if (oldestOverdueDays > 0) {
+      } else if (daysOverdue > 0) {
         mahnstatus = 'Zahlungserinnerung';
       }
 
@@ -206,17 +203,15 @@ export default function PaymentList() {
       return {
         tenant,
         unit,
-        openInvoices,
         totalSoll,
         totalIst,
         saldo,
-        oldestOverdueDays,
-        oldestOverdueInvoice,
+        oldestOverdueDays: daysOverdue,
         mahnstatus,
       };
-    }).filter(item => item.saldo < 0 || item.openInvoices.length > 0)
+    }).filter(item => item.saldo < 0) // Only show tenants with outstanding balance
       .sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
-  }, [tenants, invoices, rentalIncomeTransactions, units]);
+  }, [tenants, payments, units, propertyUnitIds]);
 
   const openItemsStats = {
     totalTenants: openItemsPerTenant.length,
