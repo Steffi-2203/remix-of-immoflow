@@ -63,6 +63,7 @@ import {
 import { useProperties } from '@/hooks/useProperties';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
+import { InvoiceDropZone } from '@/components/ocr/InvoiceDropZone';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -582,6 +583,20 @@ export default function ExpenseList() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Drop Zone for Invoice Upload */}
+      <InvoiceDropZone 
+        onFileSelect={(file) => {
+          setOcrFile(file);
+          if (file.type === 'application/pdf') {
+            setPdfSelectorOpen(true);
+          } else {
+            processOcrFile(file);
+          }
+        }}
+        disabled={ocrProcessing}
+        className="mb-6"
+      />
 
       {/* Actions Bar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
