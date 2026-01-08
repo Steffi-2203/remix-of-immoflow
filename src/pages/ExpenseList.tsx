@@ -62,9 +62,11 @@ import {
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
+import { useExpenseTransactionMatch, useAutoMatchExpenses } from '@/hooks/useExpenseTransactionMatch';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
 import { InvoiceDropZone, QueuedFile } from '@/components/ocr/InvoiceDropZone';
 import { BatchResultsSummary, BatchResultItem } from '@/components/ocr/BatchResultsSummary';
+import { TransactionMatchBadge } from '@/components/expenses/TransactionMatchBadge';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -147,9 +149,13 @@ export default function ExpenseList() {
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
+  const autoMatch = useAutoMatchExpenses();
+  
+  // Expense-Transaction matching
+  const expensesWithMatches = useExpenseTransactionMatch(expenses || []);
 
-  // Filter expenses
-  const filteredExpenses = expenses?.filter(expense => {
+  // Filter expenses with matches
+  const filteredExpenses = expensesWithMatches?.filter(expense => {
     if (activeTab !== 'all' && expense.category !== activeTab) return false;
     if (!searchQuery) return true;
     const searchLower = searchQuery.toLowerCase();
@@ -159,6 +165,19 @@ export default function ExpenseList() {
       (expense as any).properties?.name?.toLowerCase().includes(searchLower)
     );
   });
+  
+  // Count unmatched expenses with suggestions for auto-match
+  const unmatchedWithSuggestions = expensesWithMatches.filter(
+    e => !e.transaction_id && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
+  );
+  
+  const handleAutoMatchAll = () => {
+    const highConfidenceMatches = unmatchedWithSuggestions.map(e => ({
+      expenseId: e.id,
+      transactionId: e.suggestedMatches[0].transactionId,
+    }));
+    autoMatch.mutate(highConfidenceMatches);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
     const file = e.target.files?.[0];
@@ -842,6 +861,19 @@ export default function ExpenseList() {
           </SelectContent>
         </Select>
 
+        {/* Auto-Match Button */}
+        {unmatchedWithSuggestions.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={handleAutoMatchAll}
+            disabled={autoMatch.isPending}
+            className="border-amber-500 text-amber-700 hover:bg-amber-500/10"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {unmatchedWithSuggestions.length} automatisch verknüpfen
+          </Button>
+        )}
+
         <div className="flex-1" />
 
         {/* OCR Scan Button */}
@@ -1156,6 +1188,7 @@ export default function ExpenseList() {
                     <TableHead>Bezeichnung</TableHead>
                     <TableHead>Kategorie</TableHead>
                     <TableHead>Art</TableHead>
+                    <TableHead>Bank</TableHead>
                     <TableHead>Beleg-Nr.</TableHead>
                     <TableHead>Scan</TableHead>
                     <TableHead className="text-right">Betrag</TableHead>
@@ -1185,6 +1218,13 @@ export default function ExpenseList() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {expenseTypeLabels[expense.expense_type]}
+                      </TableCell>
+                      <TableCell>
+                        <TransactionMatchBadge
+                          expenseId={expense.id}
+                          linkedTransaction={expense.linkedTransaction}
+                          suggestedMatches={expense.suggestedMatches}
+                        />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {expense.beleg_nummer || '-'}

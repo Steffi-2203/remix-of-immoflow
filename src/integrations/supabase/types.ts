@@ -123,6 +123,7 @@ export type Database = {
           month: number
           notizen: string | null
           property_id: string
+          transaction_id: string | null
           updated_at: string
           year: number
         }
@@ -139,6 +140,7 @@ export type Database = {
           month: number
           notizen?: string | null
           property_id: string
+          transaction_id?: string | null
           updated_at?: string
           year: number
         }
@@ -155,6 +157,7 @@ export type Database = {
           month?: number
           notizen?: string | null
           property_id?: string
+          transaction_id?: string | null
           updated_at?: string
           year?: number
         }
@@ -164,6 +167,13 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
