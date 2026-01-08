@@ -423,10 +423,10 @@ export function InvoiceDropZone({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'relative border-2 border-dashed rounded-lg p-8 transition-all cursor-pointer',
-        'flex flex-col items-center justify-center gap-3 text-center',
-        isDragOver && !disabled && 'border-primary bg-primary/5 scale-[1.02]',
-        !isDragOver && !disabled && 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50',
+        'relative border-2 border-dashed rounded-xl p-12 transition-all cursor-pointer min-h-[200px]',
+        'flex flex-col items-center justify-center gap-4 text-center',
+        isDragOver && !disabled && 'border-primary bg-primary/10 scale-[1.02] shadow-lg shadow-primary/20',
+        !isDragOver && !disabled && 'border-primary/40 bg-primary/5 hover:border-primary hover:bg-primary/10 hover:shadow-md',
         disabled && 'opacity-50 cursor-not-allowed',
         dragError && 'border-destructive bg-destructive/5',
         className
@@ -434,43 +434,51 @@ export function InvoiceDropZone({
     >
       {dragError ? (
         <>
-          <div className="p-3 rounded-full bg-destructive/10">
-            <X className="h-6 w-6 text-destructive" />
+          <div className="p-4 rounded-xl bg-destructive/10">
+            <X className="h-10 w-10 text-destructive" />
           </div>
-          <p className="text-sm font-medium text-destructive">{dragError}</p>
+          <p className="text-lg font-semibold text-destructive">{dragError}</p>
         </>
       ) : (
         <>
+          {/* OCR Badge */}
+          <div className="absolute top-3 right-3 bg-primary/10 text-primary text-xs font-medium px-2.5 py-1 rounded-full">
+            OCR-Analyse
+          </div>
+
           <div className={cn(
-            'p-3 rounded-full transition-colors',
-            isDragOver ? 'bg-primary/10' : 'bg-muted'
+            'p-4 rounded-xl transition-all',
+            isDragOver ? 'bg-primary/20 scale-110' : 'bg-primary/10'
           )}>
             <Upload className={cn(
-              'h-6 w-6 transition-colors',
-              isDragOver ? 'text-primary' : 'text-muted-foreground'
+              'h-10 w-10 transition-colors',
+              isDragOver ? 'text-primary animate-bounce' : 'text-primary/70'
             )} />
           </div>
           
-          <div className="space-y-1">
+          <div className="space-y-2">
             <p className={cn(
-              'text-sm font-medium transition-colors',
+              'text-lg font-semibold transition-colors',
               isDragOver ? 'text-primary' : 'text-foreground'
             )}>
-              {isDragOver ? 'Dateien hier ablegen' : 'Rechnungen hier ablegen'}
+              {isDragOver ? 'Jetzt loslassen!' : 'Rechnungen hier ablegen oder klicken'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Dateien per Drag & Drop ablegen oder klicken zum Auswählen
             </p>
             <p className="text-xs text-muted-foreground">
-              oder klicken zum Auswählen (mehrere möglich)
+              Mehrere Dateien gleichzeitig möglich • Max. 20 MB pro Datei
             </p>
           </div>
 
-          <div className="flex items-center gap-4 mt-2">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Image className="h-3.5 w-3.5" />
-              <span>JPG, PNG</span>
+          <div className="flex items-center gap-6 mt-3">
+            <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
+              <Image className="h-5 w-5 text-primary" />
+              <span className="text-sm font-medium">JPG, PNG</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              <span>PDF</span>
+            <div className="flex items-center gap-2 bg-muted/50 px-3 py-1.5 rounded-full">
+              <FileText className="h-5 w-5 text-primary" />
+              <span className="text-sm font-medium">PDF</span>
             </div>
           </div>
         </>
