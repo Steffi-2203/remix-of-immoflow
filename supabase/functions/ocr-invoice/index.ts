@@ -8,6 +8,7 @@ const corsHeaders = {
 interface OCRResult {
   lieferant: string | null;
   betrag: number | null;
+  netto_betrag: number | null;
   datum: string | null;
   rechnungsnummer: string | null;
   iban: string | null;
@@ -16,6 +17,166 @@ interface OCRResult {
   kategorie: "betriebskosten_umlagefaehig" | "instandhaltung" | null;
   expense_type: string | null;
   beschreibung: string | null;
+  leistungszeitraum_von: string | null;
+  leistungszeitraum_bis: string | null;
+  validierung: ValidationReport;
+}
+
+interface ValidationReport {
+  ist_valide: boolean;
+  warnungen: string[];
+  fehler: string[];
+  korrekturen: string[];
+  unsichere_felder: string[];
+}
+
+// Validate and correct extracted data
+function validateAndCorrectData(data: any): { correctedData: any; validation: ValidationReport } {
+  const validation: ValidationReport = {
+    ist_valide: true,
+    warnungen: [],
+    fehler: [],
+    korrekturen: [],
+    unsichere_felder: []
+  };
+
+  const correctedData = { ...data };
+
+  // 1. Check if required fields exist
+  if (!correctedData.lieferant) {
+    validation.unsichere_felder.push("lieferant");
+    correctedData.lieferant = "UNSICHER - nicht erkannt";
+  }
+
+  if (!correctedData.betrag || correctedData.betrag <= 0) {
+    validation.fehler.push("Brutto-Betrag fehlt oder ist ungültig");
+    validation.ist_valide = false;
+  }
+
+  if (!correctedData.datum) {
+    validation.unsichere_felder.push("datum");
+  }
+
+  // 2. Validate USt calculation (Brutto = Netto + USt)
+  if (correctedData.betrag && correctedData.ust_betrag !== null && correctedData.ust_betrag !== undefined) {
+    const expectedNetto = correctedData.betrag - correctedData.ust_betrag;
+    
+    if (correctedData.netto_betrag) {
+      const difference = Math.abs(correctedData.netto_betrag - expectedNetto);
+      if (difference > 0.02) { // Allow 2 cent tolerance for rounding
+        validation.warnungen.push(
+          `Betragsabweichung: Netto (${correctedData.netto_betrag}€) + USt (${correctedData.ust_betrag}€) ≠ Brutto (${correctedData.betrag}€)`
+        );
+        // Auto-correct netto based on brutto - ust
+        correctedData.netto_betrag = Math.round(expectedNetto * 100) / 100;
+        validation.korrekturen.push(
+          `Netto-Betrag korrigiert auf ${correctedData.netto_betrag}€ (Brutto - USt)`
+        );
+      }
+    } else {
+      correctedData.netto_betrag = Math.round(expectedNetto * 100) / 100;
+      validation.korrekturen.push(
+        `Netto-Betrag berechnet: ${correctedData.netto_betrag}€`
+      );
+    }
+  }
+
+  // 3. Validate USt rate is reasonable (Austria: 0%, 10%, 13%, 20%)
+  if (correctedData.ust_satz !== null && correctedData.ust_satz !== undefined) {
+    const validRates = [0, 10, 13, 20];
+    if (!validRates.includes(correctedData.ust_satz)) {
+      validation.warnungen.push(
+        `Ungewöhnlicher USt-Satz: ${correctedData.ust_satz}% (Übliche Sätze: 0%, 10%, 13%, 20%)`
+      );
+    }
+
+    // Cross-check USt calculation if we have netto and ust_betrag
+    if (correctedData.netto_betrag && correctedData.ust_betrag) {
+      const expectedUst = correctedData.netto_betrag * (correctedData.ust_satz / 100);
+      const ustDifference = Math.abs(correctedData.ust_betrag - expectedUst);
+      
+      if (ustDifference > 0.02) {
+        validation.warnungen.push(
+          `USt-Berechnung prüfen: ${correctedData.netto_betrag}€ × ${correctedData.ust_satz}% = ${expectedUst.toFixed(2)}€, aber ${correctedData.ust_betrag}€ angegeben`
+        );
+      }
+    }
+  }
+
+  // 4. Validate date logic (invoice date vs. service period)
+  if (correctedData.datum && correctedData.leistungszeitraum_bis) {
+    const invoiceDate = new Date(correctedData.datum);
+    const servicePeriodEnd = new Date(correctedData.leistungszeitraum_bis);
+    
+    if (invoiceDate < servicePeriodEnd) {
+      validation.warnungen.push(
+        `Rechnungsdatum (${correctedData.datum}) liegt VOR Ende des Leistungszeitraums (${correctedData.leistungszeitraum_bis})`
+      );
+    }
+  }
+
+  // 5. Validate date is not in the future
+  if (correctedData.datum) {
+    const invoiceDate = new Date(correctedData.datum);
+    const today = new Date();
+    
+    if (invoiceDate > today) {
+      validation.warnungen.push(
+        `Rechnungsdatum (${correctedData.datum}) liegt in der Zukunft`
+      );
+      validation.unsichere_felder.push("datum");
+    }
+  }
+
+  // 6. Check IBAN format (basic validation)
+  if (correctedData.iban) {
+    const cleanIban = correctedData.iban.replace(/\s/g, '').toUpperCase();
+    if (cleanIban.length < 15 || cleanIban.length > 34) {
+      validation.warnungen.push(`IBAN-Format prüfen: ${correctedData.iban}`);
+      validation.unsichere_felder.push("iban");
+    }
+    // Normalize IBAN
+    correctedData.iban = cleanIban;
+  }
+
+  // 7. Validate expense_type matches kategorie
+  const betriebskostenTypes = [
+    "versicherung", "grundsteuer", "muellabfuhr", "wasser_abwasser", 
+    "heizung", "strom_allgemein", "hausbetreuung", "lift", 
+    "gartenpflege", "schneeraeumung", "verwaltung", "ruecklage"
+  ];
+  const instandhaltungTypes = ["reparatur", "sanierung", "sonstiges"];
+
+  if (correctedData.kategorie && correctedData.expense_type) {
+    if (correctedData.kategorie === "betriebskosten_umlagefaehig" && 
+        instandhaltungTypes.includes(correctedData.expense_type)) {
+      validation.korrekturen.push(
+        `Kategorie korrigiert von "betriebskosten_umlagefaehig" zu "instandhaltung" basierend auf expense_type "${correctedData.expense_type}"`
+      );
+      correctedData.kategorie = "instandhaltung";
+    } else if (correctedData.kategorie === "instandhaltung" && 
+               betriebskostenTypes.includes(correctedData.expense_type)) {
+      validation.korrekturen.push(
+        `Kategorie korrigiert von "instandhaltung" zu "betriebskosten_umlagefaehig" basierend auf expense_type "${correctedData.expense_type}"`
+      );
+      correctedData.kategorie = "betriebskosten_umlagefaehig";
+    }
+  }
+
+  // 8. Mark fields that couldn't be extracted
+  const optionalFields = ['rechnungsnummer', 'iban', 'ust_betrag', 'ust_satz', 'leistungszeitraum_von', 'leistungszeitraum_bis'];
+  for (const field of optionalFields) {
+    if (correctedData[field] === null || correctedData[field] === undefined) {
+      validation.unsichere_felder.push(field);
+    }
+  }
+
+  // Set overall validity
+  if (validation.fehler.length > 0) {
+    validation.ist_valide = false;
+  }
+
+  return { correctedData, validation };
 }
 
 serve(async (req) => {
@@ -40,16 +201,30 @@ serve(async (req) => {
 
     console.log("Processing invoice image with OCR...");
 
-    const systemPrompt = `Du bist ein OCR-Spezialist für Eingangsrechnungen in der Immobilienverwaltung.
-Analysiere das Bild einer Rechnung und extrahiere alle relevanten Daten.
+    const systemPrompt = `Du bist eine spezialisierte KI für Hausverwaltungssoftware (österreichisches Mietrecht).
 
-Kategorisiere die Rechnung nach folgendem Schema:
+Deine Aufgabe ist:
+- OCR-Rechnungstexte zu analysieren
+- Rechnungen korrekt zu erkennen
+- Buchungsdaten strukturiert vorzubereiten
+
+STRENGE REGELN:
+1. Arbeite ausschließlich mit den im Bild sichtbaren Daten
+2. Wenn Informationen fehlen oder widersprüchlich sind, gib null zurück
+3. Erfinde KEINE Daten - nur extrahieren was tatsächlich sichtbar ist
+4. Bei Beträgen: Unterscheide klar zwischen Netto, Brutto und USt
+
+KATEGORISIERUNG für Hausverwaltung:
 - betriebskosten_umlagefaehig: Versicherung, Grundsteuer, Müllabfuhr, Wasser/Abwasser, Heizung, Strom (Allgemein), Hausbetreuung, Lift, Gartenpflege, Schneeräumung, Verwaltung, Rücklage
-- instandhaltung: Reparaturen, Sanierung, Renovierung
+- instandhaltung: Reparaturen, Sanierung, Renovierung, Instandhaltungsarbeiten
 
-Bestimme auch den expense_type basierend auf dem Inhalt:
-- versicherung, grundsteuer, muellabfuhr, wasser_abwasser, heizung, strom_allgemein, hausbetreuung, lift, gartenpflege, schneeraeumung, verwaltung, ruecklage (für Betriebskosten)
-- reparatur, sanierung, sonstiges (für Instandhaltung)`;
+EXPENSE_TYPES:
+- Betriebskosten: versicherung, grundsteuer, muellabfuhr, wasser_abwasser, heizung, strom_allgemein, hausbetreuung, lift, gartenpflege, schneeraeumung, verwaltung, ruecklage
+- Instandhaltung: reparatur, sanierung, sonstiges
+
+WICHTIG für österreichische USt:
+- Übliche Sätze: 0%, 10%, 13%, 20%
+- Prüfe ob Brutto = Netto + USt`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -72,7 +247,14 @@ Bestimme auch den expense_type basierend auf dem Inhalt:
               },
               {
                 type: "text",
-                text: "Analysiere diese Rechnung und extrahiere alle Daten."
+                text: `Analysiere diese Rechnung und extrahiere ALLE sichtbaren Daten.
+
+WICHTIG:
+- Extrahiere den BRUTTO-Gesamtbetrag (inkl. USt)
+- Extrahiere den NETTO-Betrag (ohne USt) falls sichtbar
+- Extrahiere den USt-Betrag und USt-Satz falls angegeben
+- Achte auf Leistungszeitraum (von/bis)
+- Gib null für nicht lesbare/fehlende Felder zurück`
               }
             ]
           }
@@ -82,17 +264,21 @@ Bestimme auch den expense_type basierend auf dem Inhalt:
             type: "function",
             function: {
               name: "extract_invoice_data",
-              description: "Extrahiere strukturierte Daten aus einer Rechnung",
+              description: "Extrahiere strukturierte Daten aus einer Rechnung für Hausverwaltung",
               parameters: {
                 type: "object",
                 properties: {
                   lieferant: { 
                     type: "string", 
-                    description: "Name des Lieferanten/Rechnungsstellers" 
+                    description: "Name des Lieferanten/Rechnungsstellers - null wenn nicht erkennbar" 
                   },
                   betrag: { 
                     type: "number", 
-                    description: "Brutto-Gesamtbetrag der Rechnung in Euro" 
+                    description: "BRUTTO-Gesamtbetrag der Rechnung in Euro (inkl. USt)" 
+                  },
+                  netto_betrag: { 
+                    type: "number", 
+                    description: "NETTO-Betrag der Rechnung in Euro (ohne USt) - null wenn nicht angegeben" 
                   },
                   datum: { 
                     type: "string", 
@@ -100,24 +286,24 @@ Bestimme auch den expense_type basierend auf dem Inhalt:
                   },
                   rechnungsnummer: { 
                     type: "string", 
-                    description: "Rechnungsnummer" 
+                    description: "Rechnungsnummer - null wenn nicht erkennbar" 
                   },
                   iban: { 
                     type: "string", 
-                    description: "IBAN für die Überweisung" 
+                    description: "IBAN für die Überweisung - null wenn nicht angegeben" 
                   },
                   ust_betrag: { 
                     type: "number", 
-                    description: "Umsatzsteuer-Betrag in Euro" 
+                    description: "Umsatzsteuer-Betrag in Euro - null wenn nicht angegeben" 
                   },
                   ust_satz: { 
                     type: "number", 
-                    description: "USt-Satz in Prozent (z.B. 20 oder 10)" 
+                    description: "USt-Satz in Prozent (z.B. 20, 10, 13, 0) - null wenn nicht erkennbar" 
                   },
                   kategorie: { 
                     type: "string", 
                     enum: ["betriebskosten_umlagefaehig", "instandhaltung"],
-                    description: "Kategorie der Ausgabe" 
+                    description: "Kategorie der Ausgabe für Hausverwaltung" 
                   },
                   expense_type: { 
                     type: "string", 
@@ -126,7 +312,15 @@ Bestimme auch den expense_type basierend auf dem Inhalt:
                   },
                   beschreibung: { 
                     type: "string", 
-                    description: "Kurze Beschreibung des Rechnungsinhalts" 
+                    description: "Kurze Beschreibung des Rechnungsinhalts (max 100 Zeichen)" 
+                  },
+                  leistungszeitraum_von: {
+                    type: "string",
+                    description: "Beginn des Leistungszeitraums im Format YYYY-MM-DD - null wenn nicht angegeben"
+                  },
+                  leistungszeitraum_bis: {
+                    type: "string",
+                    description: "Ende des Leistungszeitraums im Format YYYY-MM-DD - null wenn nicht angegeben"
                   }
                 },
                 required: ["lieferant", "betrag", "datum", "kategorie", "expense_type", "beschreibung"]
@@ -165,13 +359,25 @@ Bestimme auch den expense_type basierend auf dem Inhalt:
       throw new Error("Unexpected response format from AI");
     }
 
-    const extractedData: OCRResult = JSON.parse(toolCall.function.arguments);
-    console.log("Extracted data:", extractedData);
+    const rawExtractedData = JSON.parse(toolCall.function.arguments);
+    console.log("Raw extracted data:", rawExtractedData);
+
+    // Validate and correct the data
+    const { correctedData, validation } = validateAndCorrectData(rawExtractedData);
+    
+    // Add validation report to response
+    const finalData: OCRResult = {
+      ...correctedData,
+      validierung: validation
+    };
+
+    console.log("Final validated data:", finalData);
+    console.log("Validation report:", validation);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        data: extractedData 
+        data: finalData 
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
