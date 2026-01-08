@@ -518,6 +518,10 @@ export default function ExpenseList() {
         notizen: result.iban ? `IBAN: ${result.iban}` : '',
       }));
 
+      // Automatically set the OCR file as the receipt
+      setSelectedFile(file);
+      setHasReceipt(true);
+
       setOcrDialogOpen(false);
       setDialogOpen(true);
       
