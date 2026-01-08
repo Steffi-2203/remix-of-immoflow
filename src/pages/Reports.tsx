@@ -308,6 +308,7 @@ export default function Reports() {
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
   const bkVorauszCategoryId = categories?.find(c => c.name === 'Betriebskostenvorauszahlungen')?.id;
+  const hkVorauszCategoryId = categories?.find(c => c.name === 'Heizungskostenvorauszahlungen')?.id;
   const instandhaltungCategoryIds = categories
     ?.filter(c => INSTANDHALTUNG_CATEGORIES.includes(c.name))
     .map(c => c.id) || [];
@@ -380,6 +381,22 @@ export default function Reports() {
   // ====== AUSGABEN AUS TRANSAKTIONEN (negative Beträge) ======
   const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+
+  // ====== IST-EINNAHMEN AUS TRANSAKTIONEN (kategorisiert) ======
+  // Mieteinnahmen aus Transaktionen mit Kategorie "Mieteinnahmen"
+  const mieteFromTransactions = incomeTransactions
+    .filter(t => t.category_id === mieteinnahmenCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  
+  // Betriebskostenvorauszahlungen aus Transaktionen
+  const bkFromTransactions = incomeTransactions
+    .filter(t => t.category_id === bkVorauszCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  
+  // Heizungskostenvorauszahlungen aus Transaktionen
+  const hkFromTransactions = incomeTransactions
+    .filter(t => t.category_id === hkVorauszCategoryId)
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   // Instandhaltungskosten (mindern die Rendite)
   const instandhaltungskostenFromTransactions = expenseTransactions
@@ -855,16 +872,16 @@ export default function Reports() {
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
-            IST-Einnahmen aus {periodPayments.length} Mietzahlungen • Ausgaben aus {expenseTransactions.length} Buchungen
+            IST-Einnahmen aus {incomeTransactions.length} Buchungen • Ausgaben aus {expenseTransactions.length} Buchungen
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Einnahmen (IST aus payments - aufgeschlüsselt) */}
+            {/* Einnahmen (IST aus Transaktionen - kategorisiert) */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-success flex items-center gap-2">
                 <ArrowUpRight className="h-4 w-4" />
-                Einnahmen (IST) - Zahlungszuordnung
+                Einnahmen (IST) - aus Buchhaltung
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
@@ -873,7 +890,7 @@ export default function Reports() {
                     <p className="text-xs text-muted-foreground">Eigentumsrelevant</p>
                   </div>
                   <span className="font-semibold text-success">
-                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
@@ -882,7 +899,7 @@ export default function Reports() {
                     <p className="text-xs text-muted-foreground">Durchlaufposten</p>
                   </div>
                   <span className="font-semibold text-muted-foreground">
-                    €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
@@ -891,19 +908,19 @@ export default function Reports() {
                     <p className="text-xs text-muted-foreground">Durchlaufposten</p>
                   </div>
                   <span className="font-semibold text-muted-foreground">
-                    €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-border bg-muted/50">
                   <span className="text-sm">Gesamt eingegangen</span>
                   <span className="font-semibold">
-                    €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-success bg-success/10">
                   <span className="font-semibold">IST-Mieteinnahmen</span>
                   <span className="font-bold text-success text-lg">
-                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -917,11 +934,11 @@ export default function Reports() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>IST Miete:</span>
-                  <span>€{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  <span>€{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
-                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0 ? 'text-destructive' : 'text-success'}`}>
+                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGrundmiete - mieteFromTransactions > 0 ? 'text-destructive' : 'text-success'}`}>
                   <span>Differenz:</span>
-                  <span>€{(periodSollGrundmiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  <span>€{(periodSollGrundmiete - mieteFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
