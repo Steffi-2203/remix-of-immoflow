@@ -47,6 +47,7 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
 import { useCombinedPayments } from '@/hooks/useCombinedPayments';
+import { useMrgAllocation } from '@/hooks/useMrgAllocation';
 import { allocatePayment, type InvoiceAmounts } from '@/lib/paymentAllocation';
 import { toast } from 'sonner';
 import {
@@ -191,8 +192,15 @@ export default function Reports() {
   const { data: categories, isLoading: isLoadingCategories } = useAccountCategories();
   const { syncExistingPaymentsToTransactions } = usePaymentSync();
   const { data: combinedPayments, isLoading: isLoadingCombined } = useCombinedPayments();
+  
+  // Central MRG allocation for Offene Posten - uses same logic as PaymentList
+  const { allocations: mrgAllocations, totals: mrgTotals, isLoading: mrgLoading } = useMrgAllocation(
+    selectedPropertyId,
+    selectedYear,
+    selectedMonth
+  );
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingCombined;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingCombined || mrgLoading;
 
   // Generate monthly invoices for the selected period
   const handleGenerateInvoices = useCallback(async () => {
@@ -1595,204 +1603,128 @@ export default function Reports() {
           </div>
         </CardHeader>
         <CardContent>
-          {(() => {
-            // Zeige ALLE Einheiten mit IST-Zahlungen aus PAYMENTS-Tabelle
-            // WICHTIG: Nutze den gleichen Zeitraum wie der SOLL/IST-Vergleich (periodPayments)
-            const today = new Date();
-
-            // Calculate balance per UNIT (not tenant)
-            interface UnitBalance {
-              unitId: string;
-              unitNummer: string;
-              unitType: string;
-              propertyName: string;
-              tenantName: string;
-              sollBetrag: number; // aus SOLL (tenants) x monthMultiplier
-              habenBetrag: number; // IST aus periodPayments (gleicher Zeitraum wie SOLL/IST)
-              saldo: number;
-              daysOverdue: number;
-              isLeerstand: boolean;
-            }
-
-            const unitBalances: UnitBalance[] = [];
-
-            // Alle relevanten Units durchgehen
-            units?.forEach(unit => {
-              const property = properties?.find(p => p.id === unit.property_id);
-              
-              // Aktiver Mieter für diese Unit
-              const activeTenant = allTenants?.find(t => 
-                t.unit_id === unit.id && t.status === 'aktiv'
-              );
-              
-              // SOLL = Monatliche SOLL-Werte aus tenant x monthMultiplier (gleich wie SOLL/IST)
-              const sollMonatlich = activeTenant 
-                ? Number(activeTenant.grundmiete || 0) + 
-                  Number(activeTenant.betriebskosten_vorschuss || 0) + 
-                  Number(activeTenant.heizungskosten_vorschuss || 0)
-                : 0;
-              const sollBetrag = sollMonatlich * monthMultiplier;
-              
-              // HABEN = IST-Zahlungen aus periodCombinedPayments für diesen Mieter (gleicher Zeitraum!)
-              const tenantPayments = activeTenant 
-                ? periodCombinedPayments.filter(p => p.tenant_id === activeTenant.id)
-                : [];
-              const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-              
-              // SALDO = Soll - Haben
-              const saldo = sollBetrag - habenBetrag;
-
-              // Überfällige Tage berechnen basierend auf SOLL vs IST
-              // Wenn Unterzahlung und mehr als 30 Tage seit Jahresbeginn
-              const today = new Date();
-              const daysSinceYearStart = Math.floor((today.getTime() - new Date(selectedYear, 0, 1).getTime()) / (1000 * 60 * 60 * 24));
-              const daysOverdue = saldo > 0 && daysSinceYearStart > 30 ? Math.min(daysSinceYearStart - 30, 365) : 0;
-
-              // Zeige alle Units (auch Leerstand mit 0-Werten wenn gewünscht)
-              unitBalances.push({
-                unitId: unit.id,
-                unitNummer: unit.top_nummer || '-',
-                unitType: unitTypeLabels[unit.type] || unit.type,
-                propertyName: property?.name || '-',
-                tenantName: activeTenant 
-                  ? `${activeTenant.first_name} ${activeTenant.last_name}`
-                  : 'Leerstand',
-                sollBetrag,
-                habenBetrag,
-                saldo,
-                daysOverdue,
-                isLeerstand: unit.status === 'leerstand',
-              });
-            });
-
-            // Sort: underpayments first, then by amount
-            unitBalances.sort((a, b) => {
-              if (a.saldo > 0 && b.saldo <= 0) return -1;
-              if (a.saldo <= 0 && b.saldo > 0) return 1;
-              return Math.abs(b.saldo) - Math.abs(a.saldo);
-            });
-
-            // Calculations
-            const totalSoll = unitBalances.reduce((sum, t) => sum + t.sollBetrag, 0);
-            const totalHaben = unitBalances.reduce((sum, t) => sum + t.habenBetrag, 0);
-            const totalSaldo = unitBalances.reduce((sum, t) => sum + t.saldo, 0);
-            const underpaidUnits = unitBalances.filter(t => t.saldo > 0);
-            const overpaidUnits = unitBalances.filter(t => t.saldo < 0);
-            const totalUnterzahlung = underpaidUnits.reduce((sum, t) => sum + t.saldo, 0);
-            const totalUeberzahlung = Math.abs(overpaidUnits.reduce((sum, t) => sum + t.saldo, 0));
-
-            if (unitBalances.length === 0) {
-              return (
-                <div className="text-center py-8 text-muted-foreground">
-                  Keine Daten für {periodLabel} vorhanden.
+          {mrgAllocations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Keine Daten für {periodLabel} vorhanden.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Soll (aus Mieterdaten)</p>
+                  <p className="text-lg font-bold text-foreground">
+                    €{mrgTotals.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </p>
                 </div>
-              );
-            }
-
-            return (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Soll (aus Mieterdaten)</p>
-                    <p className="text-lg font-bold text-foreground">
-                      €{totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Haben (IST-Zahlungen)</p>
-                    <p className="text-lg font-bold text-foreground">
-                      €{totalHaben.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                    <p className="text-xs text-muted-foreground">Unterzahlungen</p>
-                    <p className="text-lg font-bold text-destructive">
-                      €{totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{underpaidUnits.length} Einheiten</p>
-                  </div>
-                  <div className="rounded-lg border border-success/30 bg-success/5 p-3">
-                    <p className="text-xs text-muted-foreground">Überzahlungen</p>
-                    <p className="text-lg font-bold text-success">
-                      €{totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{overpaidUnits.length} Einheiten</p>
-                  </div>
+                <div className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted-foreground">Haben (IST-Zahlungen)</p>
+                  <p className="text-lg font-bold text-foreground">
+                    €{mrgTotals.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </p>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[180px]">Einheit / Mieter</TableHead>
-                        <TableHead>Typ</TableHead>
-                        <TableHead className="text-right">Soll</TableHead>
-                        <TableHead className="text-right">Haben (IST)</TableHead>
-                        <TableHead>Überfällig</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Saldo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {unitBalances.slice(0, 15).map((ub) => {
-                        let statusLabel = 'Ausgeglichen';
-                        let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
-                        if (ub.isLeerstand) {
-                          statusLabel = 'Leerstand';
-                          statusVariant = 'secondary';
-                        } else if (ub.saldo > 0) {
-                          statusLabel = 'Unterzahlung';
-                          statusVariant = 'destructive';
-                        } else if (ub.saldo < 0) {
-                          statusLabel = 'Überzahlung';
-                          statusVariant = 'default';
-                        }
-                        
-                        return (
-                          <TableRow key={ub.unitId}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">Top {ub.unitNummer}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {ub.tenantName} • {ub.propertyName}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {ub.unitType}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              €{ub.sollBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              €{ub.habenBetrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                            </TableCell>
-                            <TableCell>
-                              {ub.daysOverdue > 0 ? (
-                                <span className="text-destructive font-medium">{ub.daysOverdue} Tage</span>
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={statusVariant}>{statusLabel}</Badge>
-                            </TableCell>
-                            <TableCell className={`text-right font-bold ${ub.saldo > 0 ? 'text-destructive' : ub.saldo < 0 ? 'text-success' : ''}`}>
-                              €{ub.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  {unitBalances.length > 15 && (
-                    <p className="text-sm text-muted-foreground text-center mt-4">
-                      ... und {unitBalances.length - 15} weitere Einheiten. PDF für vollständige Liste exportieren.
-                    </p>
-                  )}
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                  <p className="text-xs text-muted-foreground">Unterzahlungen</p>
+                  <p className="text-lg font-bold text-destructive">
+                    €{mrgTotals.totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {mrgAllocations.filter(a => a.saldo > 0).length} Mieter
+                  </p>
                 </div>
-              </>
-            );
-          })()}
+                <div className="rounded-lg border border-success/30 bg-success/5 p-3">
+                  <p className="text-xs text-muted-foreground">Überzahlungen</p>
+                  <p className="text-lg font-bold text-success">
+                    €{mrgTotals.totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {mrgAllocations.filter(a => a.saldo < 0).length} Mieter
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[180px]">Einheit / Mieter</TableHead>
+                      <TableHead className="text-right">BK SOLL</TableHead>
+                      <TableHead className="text-right">BK IST</TableHead>
+                      <TableHead className="text-right">HK SOLL</TableHead>
+                      <TableHead className="text-right">HK IST</TableHead>
+                      <TableHead className="text-right">Miete SOLL</TableHead>
+                      <TableHead className="text-right">Miete IST</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mrgAllocations.slice(0, 15).map((alloc) => {
+                      let statusLabel = 'Ausgeglichen';
+                      let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
+                      if (alloc.status === 'offen') {
+                        statusLabel = 'Offen';
+                        statusVariant = 'secondary';
+                      } else if (alloc.saldo < 0) {
+                        statusLabel = 'Unterzahlung';
+                        statusVariant = 'destructive';
+                      } else if (alloc.saldo > 0) {
+                        statusLabel = 'Überzahlung';
+                        statusVariant = 'default';
+                      } else if (alloc.status === 'vollstaendig') {
+                        statusLabel = 'Bezahlt';
+                        statusVariant = 'outline';
+                      }
+                      
+                      const property = properties?.find(p => p.id === alloc.unit?.property_id);
+                      
+                      return (
+                        <TableRow key={alloc.tenant.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                Top {alloc.unit?.top_nummer || '-'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {alloc.tenant.first_name} {alloc.tenant.last_name} • {property?.name || '-'}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-xs">
+                            €{alloc.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right text-xs ${alloc.diffBk > 0 ? 'text-destructive' : ''}`}>
+                            €{alloc.istBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-right text-xs">
+                            €{alloc.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right text-xs ${alloc.diffHk > 0 ? 'text-destructive' : ''}`}>
+                            €{alloc.istHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-right text-xs">
+                            €{alloc.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right text-xs ${alloc.diffMiete > 0 ? 'text-destructive' : ''}`}>
+                            €{alloc.istMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={statusVariant}>{statusLabel}</Badge>
+                          </TableCell>
+                          <TableCell className={`text-right font-bold ${alloc.saldo > 0 ? 'text-destructive' : alloc.saldo < 0 ? 'text-success' : ''}`}>
+                            €{alloc.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                {mrgAllocations.length > 15 && (
+                  <p className="text-sm text-muted-foreground text-center mt-4">
+                    ... und {mrgAllocations.length - 15} weitere Mieter. PDF für vollständige Liste exportieren.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Detailbericht - Einnahmen/Ausgaben pro Einheit */}
           {selectedReportId === 'detailbericht' && (() => {
