@@ -746,10 +746,11 @@ export default function Reports() {
             properties,
             allUnits,
             allTenants,
-            allInvoices as any,
             allPayments as PaymentData[],
             selectedPropertyId,
-            selectedYear
+            selectedYear,
+            reportPeriod,
+            selectedMonth
           );
           toast.success('Offene Posten Liste wurde erstellt');
           break;

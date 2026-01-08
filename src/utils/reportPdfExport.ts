@@ -739,36 +739,27 @@ export const generateUstVoranmeldung = (
 };
 
 // ====== OFFENE POSTEN REPORT ======
-interface OpenItemInvoice {
-  id: string;
-  tenant_id: string;
-  unit_id: string;
-  year: number;
-  month: number;
-  grundmiete: number;
-  betriebskosten: number;
-  heizungskosten: number;
-  gesamtbetrag: number;
-  status: string;
-  faellig_am: string;
-}
-
 export const generateOffenePostenReport = (
   properties: PropertyData[],
   units: UnitData[],
   tenants: TenantData[],
-  invoices: OpenItemInvoice[],
   payments: PaymentData[],
   selectedPropertyId: string,
-  selectedYear: number
+  selectedYear: number,
+  reportPeriod: 'monthly' | 'yearly',
+  selectedMonth: number
 ) => {
   const doc = new jsPDF('landscape');
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   
+  const periodLabel = reportPeriod === 'monthly' 
+    ? `${monthNames[selectedMonth - 1]} ${selectedYear}`
+    : `Jahr ${selectedYear}`;
+  
   addHeader(
     doc, 
     'Offene Posten Liste', 
-    `Stand: ${new Date().toLocaleDateString('de-AT')}`,
+    `Zeitraum: ${periodLabel} | Stand: ${new Date().toLocaleDateString('de-AT')}`,
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
@@ -776,20 +767,22 @@ export const generateOffenePostenReport = (
   const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
   const unitIds = targetUnits.map(u => u.id);
   
-  // Get tenant IDs for these units
-  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id));
+  // Get active tenants for these units
+  const relevantTenants = tenants.filter(t => unitIds.includes(t.unit_id) && t.status === 'aktiv');
   const tenantIds = relevantTenants.map(t => t.id);
   
-  // Filter invoices for selected year
-  const yearInvoices = invoices.filter(inv => {
-    const matchesUnit = unitIds.includes(inv.unit_id);
-    return matchesUnit && inv.year === selectedYear;
-  });
+  // Calculate month multiplier for SOLL
+  const monthMultiplier = reportPeriod === 'monthly' ? 1 : 12;
 
-  // Filter payments for selected year
-  const yearPayments = payments.filter(p => {
+  // Filter payments by period
+  const periodPayments = payments.filter(p => {
+    if (!tenantIds.includes(p.tenant_id)) return false;
     const paymentDate = new Date(p.eingangs_datum);
-    return tenantIds.includes(p.tenant_id) && paymentDate.getFullYear() === selectedYear;
+    const matchesYear = paymentDate.getFullYear() === selectedYear;
+    if (reportPeriod === 'yearly') {
+      return matchesYear;
+    }
+    return matchesYear && (paymentDate.getMonth() + 1) === selectedMonth;
   });
 
   // Calculate balance per tenant
@@ -802,39 +795,40 @@ export const generateOffenePostenReport = (
     sollBetrag: number;
     habenBetrag: number;
     saldo: number; // Negative = Überzahlung (Guthaben), Positive = Unterzahlung (offen)
-    invoiceCount: number;
     paymentCount: number;
-    oldestDueDate: Date | null;
     daysOverdue: number;
   }
 
   const tenantBalances: TenantBalance[] = [];
   const today = new Date();
 
+  // Calculate days since period start for overdue calculation
+  const periodStart = reportPeriod === 'monthly'
+    ? new Date(selectedYear, selectedMonth - 1, 1)
+    : new Date(selectedYear, 0, 1);
+  const daysSincePeriodStart = Math.max(0, Math.floor((today.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)));
+
   relevantTenants.forEach(tenant => {
-    const tenantInvoices = yearInvoices.filter(inv => inv.tenant_id === tenant.id);
-    const tenantPayments = yearPayments.filter(p => p.tenant_id === tenant.id);
+    const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
     
-    const sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
+    // SOLL from tenant data (like SOLL/IST comparison)
+    const monthlyTotal = Number(tenant.grundmiete || 0) + 
+                         Number(tenant.betriebskosten_vorschuss || 0) + 
+                         Number(tenant.heizungskosten_vorschuss || 0);
+    const sollBetrag = monthlyTotal * monthMultiplier;
+    
+    // IST from payments
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
     const saldo = sollBetrag - habenBetrag;
 
-    // Find oldest unpaid invoice
-    const openInvoices = tenantInvoices.filter(inv => 
-      inv.status === 'offen' || inv.status === 'teilbezahlt' || inv.status === 'ueberfaellig'
-    );
-    const oldestDueDate = openInvoices.length > 0 
-      ? new Date(Math.min(...openInvoices.map(inv => new Date(inv.faellig_am).getTime())))
-      : null;
-    const daysOverdue = oldestDueDate && oldestDueDate < today 
-      ? Math.floor((today.getTime() - oldestDueDate.getTime()) / (1000 * 60 * 60 * 24))
-      : 0;
+    // Days overdue: only if there's unpaid amount and we're past the period start
+    const daysOverdue = saldo > 0 && daysSincePeriodStart > 0 ? daysSincePeriodStart : 0;
 
     const unit = targetUnits.find(u => u.id === tenant.unit_id);
     const property = properties.find(p => p.id === unit?.property_id);
 
-    // Only include if there's activity or a balance
-    if (sollBetrag > 0 || habenBetrag > 0) {
+    // Only include if there's SOLL (active tenant with rent)
+    if (sollBetrag > 0) {
       tenantBalances.push({
         tenantId: tenant.id,
         tenantName: `${tenant.first_name} ${tenant.last_name}`,
@@ -844,9 +838,7 @@ export const generateOffenePostenReport = (
         sollBetrag,
         habenBetrag,
         saldo,
-        invoiceCount: tenantInvoices.length,
         paymentCount: tenantPayments.length,
-        oldestDueDate,
         daysOverdue,
       });
     }
@@ -941,5 +933,8 @@ export const generateOffenePostenReport = (
     },
   });
 
-  doc.save(`Offene_Posten_${selectedYear}.pdf`);
+  const fileName = reportPeriod === 'monthly'
+    ? `Offene_Posten_${monthNames[selectedMonth - 1]}_${selectedYear}.pdf`
+    : `Offene_Posten_${selectedYear}.pdf`;
+  doc.save(fileName);
 };
