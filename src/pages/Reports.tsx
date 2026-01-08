@@ -378,6 +378,7 @@ export default function Reports() {
     paymentsByTenant.set(p.tenant_id, current + Number(p.betrag));
   });
 
+
   // ====== AUSGABEN AUS TRANSAKTIONEN (negative Beträge) ======
   const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
@@ -484,6 +485,63 @@ export default function Reports() {
   const periodSollHk = sollHk * monthMultiplier;
   const periodSollGesamt = periodSollGrundmiete + periodSollBk + periodSollHk;
   
+  // ====== SOLL/IST PRO MIETER BERECHNUNG ======
+  const tenantSollIstDetails = useMemo(() => {
+    return relevantTenants.map(tenant => {
+      const unit = allUnits?.find(u => u.id === tenant.unit_id);
+      const property = properties?.find(p => p.id === unit?.property_id);
+      
+      // SOLL-Werte aus Mieterdaten (monatlich * multiplier)
+      const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      const sollGesamt = sollMiete + sollBk + sollHk;
+      
+      // IST-Werte aus Zahlungen für diesen Mieter
+      const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+      const totalPaid = tenantPayments.reduce((sum, p) => sum + Number(p.betrag), 0);
+      
+      // Zahlungsaufteilung berechnen (BK → Heizung → Miete)
+      const invoiceAmounts: InvoiceAmounts = {
+        grundmiete: sollMiete,
+        betriebskosten: sollBk,
+        heizungskosten: sollHk,
+        gesamtbetrag: sollGesamt
+      };
+      
+      let istBk = 0;
+      let istHk = 0;
+      let istMiete = 0;
+      
+      if (totalPaid > 0) {
+        const allocation = allocatePayment(totalPaid, invoiceAmounts, false);
+        istBk = allocation.allocation.betriebskosten_anteil;
+        istHk = allocation.allocation.heizung_anteil;
+        istMiete = allocation.allocation.miete_anteil;
+      }
+      
+      return {
+        tenantId: tenant.id,
+        tenantName: `${tenant.first_name} ${tenant.last_name}`,
+        unitName: unit?.top_nummer || 'N/A',
+        propertyName: property?.name || 'N/A',
+        sollMiete,
+        sollBk,
+        sollHk,
+        sollGesamt,
+        istMiete,
+        istBk,
+        istHk,
+        istGesamt: totalPaid,
+        diffMiete: sollMiete - istMiete,
+        diffBk: sollBk - istBk,
+        diffHk: sollHk - istHk,
+        diffGesamt: sollGesamt - totalPaid,
+        paymentCount: tenantPayments.length
+      };
+    });
+  }, [relevantTenants, allUnits, properties, periodPayments, monthMultiplier]);
+
   // USt aus SOLL-Werten berechnen (nach Einheitstyp)
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
     const betrag = Number(t.grundmiete || 0) * monthMultiplier;
@@ -1081,6 +1139,169 @@ export default function Reports() {
           </div>
         </CardContent>
       </Card>
+
+      {/* SOLL/IST pro Mieter */}
+      {tenantSollIstDetails.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              SOLL/IST Vergleich pro Mieter
+              <Badge variant="outline" className="text-xs font-normal">
+                Aufteilung: BK → Heizung → Miete
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              {periodLabel} • {tenantSollIstDetails.length} aktive Mieter
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mieter</TableHead>
+                    <TableHead>Einheit</TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex flex-col items-end">
+                        <span>BK</span>
+                        <span className="text-[10px] text-blue-500 font-normal">①</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex flex-col items-end">
+                        <span>Heizung</span>
+                        <span className="text-[10px] text-orange-500 font-normal">②</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <div className="flex flex-col items-end">
+                        <span>Miete</span>
+                        <span className="text-[10px] text-green-500 font-normal">③</span>
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Gesamt</TableHead>
+                    <TableHead className="text-right">Differenz</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tenantSollIstDetails.map((detail) => (
+                    <TableRow key={detail.tenantId}>
+                      <TableCell>
+                        <div>
+                          <span className="font-medium">{detail.tenantName}</span>
+                          {selectedPropertyId === 'all' && (
+                            <p className="text-xs text-muted-foreground">{detail.propertyName}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{detail.unitName}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground">
+                            SOLL: €{detail.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-sm font-medium">
+                            IST: €{detail.istBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className={`text-xs font-semibold ${detail.diffBk > 0.01 ? 'text-destructive' : detail.diffBk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                            {detail.diffBk > 0 ? '-' : '+'}€{Math.abs(detail.diffBk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground">
+                            SOLL: €{detail.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-sm font-medium">
+                            IST: €{detail.istHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className={`text-xs font-semibold ${detail.diffHk > 0.01 ? 'text-destructive' : detail.diffHk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                            {detail.diffHk > 0 ? '-' : '+'}€{Math.abs(detail.diffHk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground">
+                            SOLL: €{detail.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-sm font-medium">
+                            IST: €{detail.istMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className={`text-xs font-semibold ${detail.diffMiete > 0.01 ? 'text-destructive' : detail.diffMiete < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                            {detail.diffMiete > 0 ? '-' : '+'}€{Math.abs(detail.diffMiete).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground">
+                            SOLL: €{detail.sollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-sm font-medium">
+                            IST: €{detail.istGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className={`text-sm font-bold ${detail.diffGesamt > 0.01 ? 'text-destructive' : detail.diffGesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {detail.diffGesamt > 0 ? '-' : '+'}€{Math.abs(detail.diffGesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {detail.paymentCount} Zahlung{detail.paymentCount !== 1 ? 'en' : ''}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {/* Summenzeile */}
+                  <TableRow className="bg-muted/50 font-semibold">
+                    <TableCell colSpan={2}>Gesamt</TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-0.5">
+                        <div className="text-xs">SOLL: €{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-0.5">
+                        <div className="text-xs">SOLL: €{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-0.5">
+                        <div className="text-xs">SOLL: €{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="space-y-0.5">
+                        <div className="text-xs">SOLL: €{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className={`font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                        {periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4 flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center">1</span>
+              BK zuerst
+              <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center">2</span>
+              Heizung
+              <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center">3</span>
+              Miete zuletzt
+              <span className="ml-2">• Rot = Unterdeckung, Grün = Überdeckung</span>
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Report Cards */}
       <h2 className="text-lg font-semibold text-foreground mb-4">Verfügbare Reports</h2>
