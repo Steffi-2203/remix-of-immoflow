@@ -3,9 +3,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ExpenseCategory, ExpenseType } from '@/hooks/useExpenses';
 
-interface OCRResult {
+export interface ValidationReport {
+  ist_valide: boolean;
+  warnungen: string[];
+  fehler: string[];
+  korrekturen: string[];
+  unsichere_felder: string[];
+}
+
+export interface OCRResult {
   lieferant: string | null;
   betrag: number | null;
+  netto_betrag: number | null;
   datum: string | null;
   rechnungsnummer: string | null;
   iban: string | null;
@@ -14,6 +23,9 @@ interface OCRResult {
   kategorie: ExpenseCategory | null;
   expense_type: ExpenseType | null;
   beschreibung: string | null;
+  leistungszeitraum_von: string | null;
+  leistungszeitraum_bis: string | null;
+  validierung: ValidationReport;
 }
 
 export function useOCRInvoice() {
@@ -43,8 +55,24 @@ export function useOCRInvoice() {
       
       return data.data as OCRResult;
     },
-    onSuccess: () => {
-      toast.success('Rechnung erfolgreich analysiert');
+    onSuccess: (data) => {
+      const validation = data.validierung;
+      
+      if (validation.fehler.length > 0) {
+        toast.error('Rechnung analysiert - mit Fehlern', {
+          description: validation.fehler.join(', ')
+        });
+      } else if (validation.warnungen.length > 0) {
+        toast.warning('Rechnung analysiert - bitte prüfen', {
+          description: `${validation.warnungen.length} Warnung(en)`
+        });
+      } else if (validation.korrekturen.length > 0) {
+        toast.success('Rechnung analysiert und korrigiert', {
+          description: `${validation.korrekturen.length} Korrektur(en) durchgeführt`
+        });
+      } else {
+        toast.success('Rechnung erfolgreich analysiert');
+      }
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'Fehler bei der OCR-Analyse';
