@@ -741,12 +741,21 @@ export const generateUstVoranmeldung = (
   doc.save(`USt-Voranmeldung_${periodLabel.replace(' ', '_')}.pdf`);
 };
 
+// Interface for combined payments (from useCombinedPayments)
+export interface CombinedPaymentData {
+  id: string;
+  tenant_id: string;
+  amount: number;
+  date: string;
+  source: 'payments' | 'transactions';
+}
+
 // ====== OFFENE POSTEN REPORT ======
 export const generateOffenePostenReport = (
   properties: PropertyData[],
   units: UnitData[],
   tenants: TenantData[],
-  payments: PaymentData[],
+  combinedPayments: CombinedPaymentData[],
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
@@ -783,10 +792,10 @@ export const generateOffenePostenReport = (
   // Calculate month multiplier for SOLL
   const monthMultiplier = reportPeriod === 'monthly' ? 1 : 12;
 
-  // Filter payments by period
-  const periodPayments = payments.filter(p => {
+  // Filter combined payments by period (uses 'date' and 'amount' fields)
+  const periodPayments = combinedPayments.filter(p => {
     if (!tenantIds.includes(p.tenant_id)) return false;
-    const paymentDate = new Date(p.eingangs_datum);
+    const paymentDate = new Date(p.date);
     const matchesYear = paymentDate.getFullYear() === selectedYear;
     if (reportPeriod === 'yearly') {
       return matchesYear;
@@ -826,8 +835,8 @@ export const generateOffenePostenReport = (
                          Number(tenant.heizungskosten_vorschuss || 0);
     const sollBetrag = monthlyTotal * monthMultiplier;
     
-    // IST from payments
-    const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+    // IST from combined payments (uses 'amount' field)
+    const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const saldo = sollBetrag - habenBetrag;
 
     // Days overdue: only if there's unpaid amount and we're past the period start

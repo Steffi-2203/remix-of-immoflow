@@ -748,11 +748,19 @@ export default function Reports() {
           break;
         case 'offeneposten':
           console.log('Generating Offene Posten report...');
+          // Use combinedPayments for correct SOLL/IST calculation
+          const combinedPaymentsData = (combinedPayments || []).map(p => ({
+            id: p.id,
+            tenant_id: p.tenant_id,
+            amount: p.amount,
+            date: p.date,
+            source: p.source,
+          }));
           generateOffenePostenReport(
             properties,
             allUnits,
             allTenants,
-            allPayments as PaymentData[],
+            combinedPaymentsData,
             selectedPropertyId,
             selectedYear,
             reportPeriod,
