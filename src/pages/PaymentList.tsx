@@ -132,21 +132,52 @@ export default function PaymentList() {
     });
   }, [rentalIncomeTransactions, searchQuery, tenants]);
 
-  // Calculate stats from transactions
+  // Calculate stats using SAME LOGIC as Reports page (SOLL from tenants, IST from payments)
   const stats = useMemo(() => {
     const now = new Date();
-    const thisMonthTransactions = rentalIncomeTransactions.filter(t => {
-      const date = new Date(t.transaction_date);
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    // Filter active tenants by property if selected
+    let activeTenants = tenants?.filter(t => t.status === 'aktiv') || [];
+    if (propertyUnitIds) {
+      activeTenants = activeTenants.filter(t => propertyUnitIds.includes(t.unit_id));
+    }
+    
+    // SOLL from tenant data (same as Reports page)
+    const totalSoll = activeTenants.reduce((sum, t) => 
+      sum + Number(t.grundmiete || 0) + 
+            Number(t.betriebskosten_vorschuss || 0) + 
+            Number(t.heizungskosten_vorschuss || 0), 0);
+    
+    // IST from payments table for current month (same as Reports page)
+    const thisMonthPayments = (payments || []).filter(p => {
+      const date = new Date(p.eingangs_datum);
+      if (date.getMonth() + 1 !== currentMonth || date.getFullYear() !== currentYear) return false;
+      
+      // Filter by property if selected
+      if (propertyUnitIds) {
+        const tenant = tenants?.find(t => t.id === p.tenant_id);
+        return tenant && propertyUnitIds.includes(tenant.unit_id);
+      }
+      return true;
     });
+    
+    const totalIst = thisMonthPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
+    const saldo = totalIst - totalSoll;
 
     return {
+      totalSoll,
+      totalIst,
+      saldo,
+      paymentCount: thisMonthPayments.length,
+      // For transaction display (keeping for backward compatibility)
       total: rentalIncomeTransactions.length,
       totalAmount: rentalIncomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0),
-      thisMonth: thisMonthTransactions.length,
-      thisMonthAmount: thisMonthTransactions.reduce((sum, t) => sum + Number(t.amount), 0),
+      thisMonth: thisMonthPayments.length,
+      thisMonthAmount: totalIst,
     };
-  }, [rentalIncomeTransactions]);
+  }, [tenants, payments, propertyUnitIds, rentalIncomeTransactions]);
 
   // Calculate open items (offene Posten) per tenant - using same logic as Reports page
   // SOLL from tenant data, IST from payments table
@@ -409,45 +440,17 @@ export default function PaymentList() {
         </Select>
       </div>
 
-      {/* Statistics */}
+      {/* Statistics - SOLL/IST matching Reports logic */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <CreditCard className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Zahlungen gesamt</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Euro className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Gesamtbetrag</p>
-                <p className="text-2xl font-bold">€ {stats.totalAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <CreditCard className="h-5 w-5 text-blue-600" />
+                <Euro className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Diesen Monat</p>
-                <p className="text-2xl font-bold">{stats.thisMonth}</p>
+                <p className="text-sm text-muted-foreground">SOLL (diesen Monat)</p>
+                <p className="text-2xl font-bold">€ {stats.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
           </CardContent>
@@ -460,8 +463,40 @@ export default function PaymentList() {
                 <Euro className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Betrag diesen Monat</p>
-                <p className="text-2xl font-bold">€ {stats.thisMonthAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm text-muted-foreground">IST (diesen Monat)</p>
+                <p className="text-2xl font-bold">€ {stats.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${stats.saldo >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                <Euro className={`h-5 w-5 ${stats.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Saldo</p>
+                <p className={`text-2xl font-bold ${stats.saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  € {stats.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                <AlertTriangle className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Offene Posten</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  € {openItemsStats.totalOpenAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
               </div>
             </div>
           </CardContent>
