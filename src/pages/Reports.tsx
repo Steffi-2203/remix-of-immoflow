@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -45,6 +45,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
+import { allocatePayment, type InvoiceAmounts } from '@/lib/paymentAllocation';
 import { toast } from 'sonner';
 import {
   generateRenditeReport,
@@ -303,8 +304,6 @@ export default function Reports() {
     }
     return year === selectedYear && month === selectedMonth;
   }) || [];
-  
-  const totalPaymentsAmount = periodPayments.reduce((sum, p) => sum + Number(p.betrag), 0);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
@@ -316,9 +315,60 @@ export default function Reports() {
     ?.filter(c => BETRIEBSKOSTEN_CATEGORIES.includes(c.name))
     .map(c => c.id) || [];
 
-  // ====== IST-EINNAHMEN AUS PAYMENTS-TABELLE ======
-  // Payments sind die tatsächlichen Mietzahlungen
-  const totalIstEinnahmen = totalPaymentsAmount;
+  // ====== IST-EINNAHMEN AUS PAYMENTS-TABELLE (NUR MIETE-ANTEIL) ======
+  // Zahlungsaufteilung: BK → Heizung → Miete
+  // Für die Buchhaltungsübersicht zeigen wir nur den Miete-Anteil
+  
+  const paymentAllocationDetails = useMemo(() => {
+    let totalMieteAnteil = 0;
+    let totalBkAnteil = 0;
+    let totalHkAnteil = 0;
+    let totalGesamt = 0;
+    
+    periodPayments.forEach(p => {
+      // Finde den Mieter für diese Zahlung
+      const tenant = allTenants?.find(t => t.id === p.tenant_id);
+      if (!tenant) {
+        // Wenn kein Mieter gefunden, zähle alles als Miete
+        totalMieteAnteil += Number(p.betrag);
+        totalGesamt += Number(p.betrag);
+        return;
+      }
+      
+      // Erstelle die Invoice-Beträge aus Mieterdaten
+      const invoiceAmounts: InvoiceAmounts = {
+        grundmiete: Number(tenant.grundmiete || 0),
+        betriebskosten: Number(tenant.betriebskosten_vorschuss || 0),
+        heizungskosten: Number(tenant.heizungskosten_vorschuss || 0),
+        gesamtbetrag: Number(tenant.grundmiete || 0) + 
+                      Number(tenant.betriebskosten_vorschuss || 0) + 
+                      Number(tenant.heizungskosten_vorschuss || 0)
+      };
+      
+      // Berechne die Zuordnung (BK → Heizung → Miete)
+      const allocation = allocatePayment(Number(p.betrag), invoiceAmounts, false);
+      
+      totalBkAnteil += allocation.allocation.betriebskosten_anteil;
+      totalHkAnteil += allocation.allocation.heizung_anteil;
+      totalMieteAnteil += allocation.allocation.miete_anteil;
+      totalGesamt += Number(p.betrag);
+    });
+    
+    return {
+      mieteAnteil: totalMieteAnteil,
+      bkAnteil: totalBkAnteil,
+      hkAnteil: totalHkAnteil,
+      gesamt: totalGesamt
+    };
+  }, [periodPayments, allTenants]);
+  
+  // IST-Einnahmen = NUR Miete-Anteil (ohne BK und Heizung)
+  const totalIstEinnahmenMiete = paymentAllocationDetails.mieteAnteil;
+  const totalIstEinnahmenGesamt = paymentAllocationDetails.gesamt;
+  
+  // Für Abwärtskompatibilität
+  const totalIstEinnahmen = totalIstEinnahmenMiete;
+  const totalPaymentsAmount = totalIstEinnahmenGesamt;
   
   // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
   const paymentsByTenant = new Map<string, number>();
@@ -770,17 +820,17 @@ export default function Reports() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Umsatz {periodLabel} (IST)</p>
+                <p className="text-sm text-muted-foreground">Mieteinnahmen {periodLabel} (IST)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{totalIstEinnahmenMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  aus {periodPayments.length} Mietzahlungen
+                  nur Miete (ohne BK/Heizung)
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                Zahlungseingänge
+                {periodPayments.length} Zahlungen
               </div>
             </div>
           </CardContent>
@@ -810,44 +860,68 @@ export default function Reports() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Einnahmen (IST aus payments) */}
+            {/* Einnahmen (IST aus payments - aufgeschlüsselt) */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-success flex items-center gap-2">
                 <ArrowUpRight className="h-4 w-4" />
-                Einnahmen (IST)
+                Einnahmen (IST) - Zahlungszuordnung
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
                   <div>
-                    <span className="text-sm">Mietzahlungen eingegangen</span>
-                    <p className="text-xs text-muted-foreground">{periodPayments.length} Zahlungen</p>
+                    <span className="text-sm font-medium">Miete (Netto-Ertrag)</span>
+                    <p className="text-xs text-muted-foreground">Eigentumsrelevant</p>
                   </div>
                   <span className="font-semibold text-success">
-                    €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
+                  <div>
+                    <span className="text-sm">Betriebskosten</span>
+                    <p className="text-xs text-muted-foreground">Durchlaufposten</p>
+                  </div>
+                  <span className="font-semibold text-muted-foreground">
+                    €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
+                  <div>
+                    <span className="text-sm">Heizung</span>
+                    <p className="text-xs text-muted-foreground">Durchlaufposten</p>
+                  </div>
+                  <span className="font-semibold text-muted-foreground">
+                    €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg border border-border bg-muted/50">
+                  <span className="text-sm">Gesamt eingegangen</span>
+                  <span className="font-semibold">
+                    €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-success bg-success/10">
-                  <span className="font-semibold">Gesamt IST-Einnahmen</span>
+                  <span className="font-semibold">IST-Mieteinnahmen</span>
                   <span className="font-bold text-success text-lg">
-                    €{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
               
-              {/* SOLL vs IST Vergleich */}
+              {/* SOLL vs IST Vergleich - nur Miete */}
               <div className="mt-4 p-3 rounded-lg border border-border bg-muted/50">
-                <p className="text-xs font-medium text-muted-foreground mb-2">SOLL vs IST Vergleich</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">SOLL vs IST Vergleich (nur Miete)</p>
                 <div className="flex justify-between text-sm">
-                  <span>SOLL (Vorschreibung):</span>
-                  <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  <span>SOLL Miete:</span>
+                  <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>IST (Eingegangen):</span>
-                  <span>€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  <span>IST Miete:</span>
+                  <span>€{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
-                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGesamt - totalIstEinnahmen > 0 ? 'text-destructive' : 'text-success'}`}>
+                <div className={`flex justify-between text-sm font-semibold mt-1 pt-1 border-t ${periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0 ? 'text-destructive' : 'text-success'}`}>
                   <span>Differenz:</span>
-                  <span>€{(periodSollGesamt - totalIstEinnahmen).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                  <span>€{(periodSollGrundmiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
