@@ -30,6 +30,8 @@ import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useBankAccounts, useCreateBankAccount, useUpdateBankAccount, useDeleteBankAccount, useBankBalance } from '@/hooks/useBankAccounts';
 import { useAccountCategories, useCreateAccountCategory, useDeleteAccountCategory } from '@/hooks/useAccountCategories';
+import { useLinkedExpensesMap } from '@/hooks/useLinkedExpenses';
+import { ExpenseLinkBadge } from '@/components/banking/ExpenseLinkBadge';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
@@ -99,6 +101,7 @@ export default function Banking() {
   const { data: learnedMatches = [] } = useLearnedMatches();
   const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useBankAccounts();
   const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
+  const linkedExpensesMap = useLinkedExpensesMap();
   
   const { createTransactionWithSync, deleteTransactionWithSync } = usePaymentSync();
   const createTransactions = useCreateTransactions();
@@ -1096,6 +1099,7 @@ export default function Banking() {
                         <TableHead>Beschreibung</TableHead>
                         <TableHead>Kategorie</TableHead>
                         <TableHead>Zuordnung</TableHead>
+                        <TableHead>Beleg</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Betrag</TableHead>
                         <TableHead className="text-center w-16">Aktion</TableHead>
@@ -1106,6 +1110,7 @@ export default function Banking() {
                         const unitInfo = getUnitInfo(transaction.unit_id);
                         const tenantName = getTenantName(transaction.tenant_id);
                         const category = categories.find(c => c.id === transaction.category_id);
+                        const linkedExpense = linkedExpensesMap.get(transaction.id);
                         
                         return (
                           <TableRow key={transaction.id}>
@@ -1148,6 +1153,12 @@ export default function Banking() {
                               ) : (
                                 <span className="text-muted-foreground text-sm">-</span>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              <ExpenseLinkBadge
+                                transactionId={transaction.id}
+                                linkedExpense={linkedExpense}
+                              />
                             </TableCell>
                             <TableCell>
                               <Badge variant={
