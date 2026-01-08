@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -569,10 +570,7 @@ export default function ExpenseList() {
         } else if (file.type === 'application/pdf') {
           try {
             const pdfjsLib = await import('pdfjs-dist');
-            pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-              'pdfjs-dist/build/pdf.worker.min.mjs',
-              import.meta.url
-            ).toString();
+            pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             const page = await pdf.getPage(1);
@@ -634,10 +632,7 @@ export default function ExpenseList() {
       if (item.file.type === 'application/pdf') {
         // Convert first page to image for OCR
         const pdfjsLib = await import('pdfjs-dist');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url
-        ).toString();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
         const arrayBuffer = await item.file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);

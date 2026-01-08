@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Upload, FileText, Image, X, Check, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -92,10 +93,8 @@ export function InvoiceDropZone({
   const generatePdfPreview = async (file: File): Promise<string | null> => {
     try {
       const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
-        import.meta.url
-      ).toString();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+      
       
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
