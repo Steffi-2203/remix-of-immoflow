@@ -56,6 +56,7 @@ import { toast } from 'sonner';
 
 export default function PaymentList() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
@@ -88,12 +89,33 @@ export default function PaymentList() {
     return [mieteinnahmenCategory?.id, bkCategory?.id, hkCategory?.id].filter(Boolean);
   }, [mieteinnahmenCategory, bkCategory, hkCategory]);
 
+  // Get unit IDs for selected property
+  const propertyUnitIds = useMemo(() => {
+    if (!units || selectedPropertyId === 'all') return null;
+    return units.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+  }, [units, selectedPropertyId]);
+
   const rentalIncomeTransactions = useMemo(() => {
     if (!transactions || incomeCategories.length === 0) return [];
-    return transactions
-      .filter(t => incomeCategories.includes(t.category_id) && t.amount > 0)
-      .sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
-  }, [transactions, incomeCategories]);
+    let filtered = transactions
+      .filter(t => incomeCategories.includes(t.category_id) && t.amount > 0);
+    
+    // Filter by property if selected
+    if (propertyUnitIds) {
+      filtered = filtered.filter(t => {
+        // Check via unit_id on transaction
+        if (t.unit_id && propertyUnitIds.includes(t.unit_id)) return true;
+        // Check via tenant's unit
+        if (t.tenant_id) {
+          const tenant = tenants?.find(ten => ten.id === t.tenant_id);
+          if (tenant && propertyUnitIds.includes(tenant.unit_id)) return true;
+        }
+        return false;
+      });
+    }
+    
+    return filtered.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
+  }, [transactions, incomeCategories, propertyUnitIds, tenants]);
 
   // Filter by search query
   const filteredTransactions = useMemo(() => {
@@ -130,7 +152,12 @@ export default function PaymentList() {
   const openItemsPerTenant = useMemo(() => {
     if (!tenants || !invoices || !rentalIncomeTransactions) return [];
 
-    const activeTenants = tenants.filter(t => t.status === 'aktiv');
+    let activeTenants = tenants.filter(t => t.status === 'aktiv');
+    
+    // Filter by property if selected
+    if (propertyUnitIds) {
+      activeTenants = activeTenants.filter(t => propertyUnitIds.includes(t.unit_id));
+    }
     
     return activeTenants.map(tenant => {
       // Get all invoices for this tenant
@@ -360,7 +387,7 @@ export default function PaymentList() {
         </AlertDescription>
       </Alert>
 
-      {/* Search Bar */}
+      {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -372,6 +399,19 @@ export default function PaymentList() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="Liegenschaft wählen" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Liegenschaften</SelectItem>
+            {properties?.map((property) => (
+              <SelectItem key={property.id} value={property.id}>
+                {property.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Statistics */}
