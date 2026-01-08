@@ -1565,9 +1565,9 @@ export default function Reports() {
                 <AlertCircle className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <CardTitle>Offene Posten / Salden {selectedYear}</CardTitle>
+                <CardTitle>Offene Posten / Salden {periodLabel}</CardTitle>
                 <CardDescription>
-                  Mietrechnungen vs. Mieteinnahmen (aus Buchhaltung)
+                  SOLL (aus Mieterdaten) vs. IST (aus Zahlungen) - gleicher Zeitraum wie SOLL/IST-Vergleich
                   {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
                 </CardDescription>
               </div>
@@ -1581,18 +1581,8 @@ export default function Reports() {
         <CardContent>
           {(() => {
             // Zeige ALLE Einheiten mit IST-Zahlungen aus PAYMENTS-Tabelle
+            // WICHTIG: Nutze den gleichen Zeitraum wie der SOLL/IST-Vergleich (periodPayments)
             const today = new Date();
-            
-            // Alle Zahlungen für das Jahr aus payments-Tabelle
-            const yearPayments = (allPayments || []).filter(p => {
-              const paymentDate = new Date(p.eingangs_datum);
-              return paymentDate.getFullYear() === selectedYear;
-            });
-
-            // Filter invoices for selected year
-            const yearInvoices = (invoices || []).filter(inv => 
-              unitIds.includes(inv.unit_id) && inv.year === selectedYear
-            );
 
             // Calculate balance per UNIT (not tenant)
             interface UnitBalance {
@@ -1601,17 +1591,14 @@ export default function Reports() {
               unitType: string;
               propertyName: string;
               tenantName: string;
-              sollBetrag: number; // aus SOLL (tenants) x Monate
-              habenBetrag: number; // IST aus payments
+              sollBetrag: number; // aus SOLL (tenants) x monthMultiplier
+              habenBetrag: number; // IST aus periodPayments (gleicher Zeitraum wie SOLL/IST)
               saldo: number;
               daysOverdue: number;
               isLeerstand: boolean;
             }
 
             const unitBalances: UnitBalance[] = [];
-            
-            // Wie viele Monate im Jahr?
-            const monthsInYear = 12;
 
             // Alle relevanten Units durchgehen
             units?.forEach(unit => {
@@ -1622,17 +1609,17 @@ export default function Reports() {
                 t.unit_id === unit.id && t.status === 'aktiv'
               );
               
-              // SOLL = Monatliche SOLL-Werte aus tenant x 12 Monate
+              // SOLL = Monatliche SOLL-Werte aus tenant x monthMultiplier (gleich wie SOLL/IST)
               const sollMonatlich = activeTenant 
                 ? Number(activeTenant.grundmiete || 0) + 
                   Number(activeTenant.betriebskosten_vorschuss || 0) + 
                   Number(activeTenant.heizungskosten_vorschuss || 0)
                 : 0;
-              const sollBetrag = sollMonatlich * monthsInYear;
+              const sollBetrag = sollMonatlich * monthMultiplier;
               
-              // HABEN = IST-Zahlungen aus payments für diesen Mieter
+              // HABEN = IST-Zahlungen aus periodPayments für diesen Mieter (gleicher Zeitraum!)
               const tenantPayments = activeTenant 
-                ? yearPayments.filter(p => p.tenant_id === activeTenant.id)
+                ? periodPayments.filter(p => p.tenant_id === activeTenant.id)
                 : [];
               const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
               
@@ -1681,7 +1668,7 @@ export default function Reports() {
             if (unitBalances.length === 0) {
               return (
                 <div className="text-center py-8 text-muted-foreground">
-                  Keine Daten für {selectedYear} vorhanden.
+                  Keine Daten für {periodLabel} vorhanden.
                 </div>
               );
             }
@@ -1690,7 +1677,7 @@ export default function Reports() {
               <>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs text-muted-foreground">Soll (Rechnungen)</p>
+                    <p className="text-xs text-muted-foreground">Soll (aus Mieterdaten)</p>
                     <p className="text-lg font-bold text-foreground">
                       €{totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                     </p>
