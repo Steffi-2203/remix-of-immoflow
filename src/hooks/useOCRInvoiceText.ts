@@ -3,17 +3,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { ExpenseCategory, ExpenseType } from '@/hooks/useExpenses';
 
+export interface UstPruefung {
+  reverse_charge_erkannt: boolean;
+  uid_lieferant_valide: boolean | null;
+  uid_empfaenger_valide: boolean | null;
+  ust_satz_korrekt: boolean;
+}
+
 export interface ValidationReport {
   ist_valide: boolean;
   warnungen: string[];
   fehler: string[];
   korrekturen: string[];
   unsichere_felder: string[];
+  ust_pruefung: UstPruefung;
 }
 
 export interface OCRTextResult {
   rechnungsart: string | null;
   lieferant: string | null;
+  lieferant_uid: string | null;
+  empfaenger_uid: string | null;
   rechnungsnummer: string | null;
   rechnungsdatum: string | null;
   leistungszeitraum_von: string | null;
@@ -29,6 +39,8 @@ export interface OCRTextResult {
   bic: string | null;
   kategorie: ExpenseCategory | null;
   expense_type: ExpenseType | null;
+  reverse_charge: boolean;
+  steuerhinweis: string | null;
   validierung: ValidationReport;
 }
 
@@ -55,6 +67,13 @@ export function useOCRInvoiceText() {
     },
     onSuccess: (data) => {
       const validation = data.validierung;
+      
+      // Show Reverse-Charge warning prominently
+      if (validation.ust_pruefung.reverse_charge_erkannt) {
+        toast.warning('Reverse-Charge Rechnung erkannt', {
+          description: 'Steuerschuld geht auf Leistungsempfänger über'
+        });
+      }
       
       if (validation.fehler.length > 0) {
         toast.error('Rechnung analysiert - mit Fehlern', {
