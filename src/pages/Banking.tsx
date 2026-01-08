@@ -1968,6 +1968,11 @@ export default function Banking() {
             <form onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              const unitIdValue = formData.get('unitId') as string;
+              const unitId = unitIdValue && unitIdValue !== 'none' ? unitIdValue : null;
+              
+              // Find tenant for the selected unit
+              const tenant = unitId ? tenants.find(t => t.unit_id === unitId && t.status === 'aktiv') : null;
               
               try {
                 await updateTransaction.mutateAsync({
@@ -1976,12 +1981,13 @@ export default function Banking() {
                   amount: parseFloat((formData.get('amount') as string).replace(',', '.')),
                   transaction_date: formData.get('date') as string,
                   category_id: formData.get('categoryId') as string || null,
-                  unit_id: formData.get('unitId') as string || null,
+                  unit_id: unitId,
+                  tenant_id: tenant?.id || null,
                   property_id: formData.get('propertyId') as string || null,
                   counterpart_name: formData.get('counterpartName') as string || null,
                   reference: formData.get('reference') as string || null,
                   notes: formData.get('notes') as string || null,
-                  status: formData.get('unitId') ? 'matched' : 'unmatched',
+                  status: unitId ? 'matched' : 'unmatched',
                 });
                 toast.success('Buchung erfolgreich aktualisiert');
                 setShowEditDialog(false);
