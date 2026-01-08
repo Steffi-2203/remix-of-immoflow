@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
-import { Upload, FileText, Image, X } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Upload, FileText, Image, X, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface InvoiceDropZoneProps {
   onFileSelect: (file: File) => void;
@@ -11,6 +12,9 @@ interface InvoiceDropZoneProps {
 export function InvoiceDropZone({ onFileSelect, disabled, className }: InvoiceDropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [dragError, setDragError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const validateFile = useCallback((file: File): string | null => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
@@ -26,14 +30,76 @@ export function InvoiceDropZone({ onFileSelect, disabled, className }: InvoiceDr
     return null;
   }, []);
 
+  // Generate preview when file is selected
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    if (selectedFile.type.startsWith('image/')) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+
+    // For PDFs, generate first page preview
+    if (selectedFile.type === 'application/pdf') {
+      setLoadingPreview(true);
+      generatePdfPreview(selectedFile).then(url => {
+        setPreviewUrl(url);
+        setLoadingPreview(false);
+      }).catch(() => {
+        setPreviewUrl(null);
+        setLoadingPreview(false);
+      });
+    }
+  }, [selectedFile]);
+
+  const generatePdfPreview = async (file: File): Promise<string | null> => {
+    try {
+      const pdfjsLib = await import('pdfjs-dist');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      
+      const scale = 0.5;
+      const viewport = page.getViewport({ scale });
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      
+      await page.render({ canvasContext: context, viewport }).promise;
+      return canvas.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  };
+
+  const handleFileSelection = useCallback((file: File) => {
+    const error = validateFile(file);
+    if (error) {
+      setDragError(error);
+      setTimeout(() => setDragError(null), 3000);
+      return;
+    }
+    setSelectedFile(file);
+  }, [validateFile]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!disabled) {
+    if (!disabled && !selectedFile) {
       setIsDragOver(true);
       setDragError(null);
     }
-  }, [disabled]);
+  }, [disabled, selectedFile]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -47,25 +113,16 @@ export function InvoiceDropZone({ onFileSelect, disabled, className }: InvoiceDr
     e.stopPropagation();
     setIsDragOver(false);
 
-    if (disabled) return;
+    if (disabled || selectedFile) return;
 
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
 
-    const file = files[0]; // Only process first file
-    const error = validateFile(file);
-    
-    if (error) {
-      setDragError(error);
-      setTimeout(() => setDragError(null), 3000);
-      return;
-    }
-
-    onFileSelect(file);
-  }, [disabled, validateFile, onFileSelect]);
+    handleFileSelection(files[0]);
+  }, [disabled, selectedFile, handleFileSelection]);
 
   const handleClick = useCallback(() => {
-    if (disabled) return;
+    if (disabled || selectedFile) return;
     
     const input = document.createElement('input');
     input.type = 'file';
@@ -73,18 +130,86 @@ export function InvoiceDropZone({ onFileSelect, disabled, className }: InvoiceDr
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        const error = validateFile(file);
-        if (error) {
-          setDragError(error);
-          setTimeout(() => setDragError(null), 3000);
-          return;
-        }
-        onFileSelect(file);
+        handleFileSelection(file);
       }
     };
     input.click();
-  }, [disabled, validateFile, onFileSelect]);
+  }, [disabled, selectedFile, handleFileSelection]);
 
+  const handleConfirm = useCallback(() => {
+    if (selectedFile) {
+      onFileSelect(selectedFile);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+    }
+  }, [selectedFile, onFileSelect]);
+
+  const handleCancel = useCallback(() => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+  }, []);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Preview mode
+  if (selectedFile) {
+    const isPdf = selectedFile.type === 'application/pdf';
+    
+    return (
+      <div className={cn(
+        'relative border-2 border-primary rounded-lg p-4 transition-all',
+        'flex flex-col items-center gap-4',
+        className
+      )}>
+        {/* Preview */}
+        <div className="relative w-full max-w-xs aspect-[3/4] bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+          {loadingPreview ? (
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          ) : previewUrl ? (
+            <img 
+              src={previewUrl} 
+              alt="Vorschau" 
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <FileText className="h-12 w-12" />
+              <span className="text-xs">Keine Vorschau</span>
+            </div>
+          )}
+          {isPdf && (
+            <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded">
+              PDF
+            </div>
+          )}
+        </div>
+
+        {/* File info */}
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium truncate max-w-[250px]">{selectedFile.name}</p>
+          <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={disabled}>
+            <X className="h-4 w-4 mr-1" />
+            Abbrechen
+          </Button>
+          <Button size="sm" onClick={handleConfirm} disabled={disabled}>
+            <Check className="h-4 w-4 mr-1" />
+            Analysieren
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Drop zone mode
   return (
     <div
       onClick={handleClick}
