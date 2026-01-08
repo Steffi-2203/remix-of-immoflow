@@ -113,6 +113,11 @@ export default function ExpenseList() {
   const [hasReceipt, setHasReceipt] = useState<boolean>(false); // Default to false (ohne Beleg)
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [useCustomAbrechnungsjahr, setUseCustomAbrechnungsjahr] = useState(false);
+  const [customAbrechnungsjahr, setCustomAbrechnungsjahr] = useState(currentYear - 1);
+  
+  // Verbrauchsabhängige Kostenarten, die oft im Folgejahr abgerechnet werden
+  const verbrauchsabhaengigeKosten: ExpenseType[] = ['heizung', 'wasser_abwasser'];
   
   // Edit state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -238,6 +243,8 @@ export default function ExpenseList() {
     setNewExpense(initialExpenseState);
     setHasReceipt(false);
     setSelectedFile(null);
+    setUseCustomAbrechnungsjahr(false);
+    setCustomAbrechnungsjahr(currentYear - 1);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -315,6 +322,11 @@ export default function ExpenseList() {
 
       const date = new Date(newExpense.datum);
       
+      // Bei verbrauchsabhängigen Kosten mit custom Abrechnungsjahr: verwende dieses Jahr
+      const bookingYear = useCustomAbrechnungsjahr ? customAbrechnungsjahr : date.getFullYear();
+      // Für verbrauchsabhängige Kosten buchen wir auf Dezember des Abrechnungsjahres (Jahresabschluss)
+      const bookingMonth = useCustomAbrechnungsjahr ? 12 : date.getMonth() + 1;
+      
       await createExpense.mutateAsync({
         property_id: newExpense.property_id,
         category: newExpense.category,
@@ -324,8 +336,8 @@ export default function ExpenseList() {
         datum: newExpense.datum,
         beleg_nummer: newExpense.beleg_nummer || undefined,
         notizen: newExpense.notizen || undefined,
-        year: date.getFullYear(),
-        month: date.getMonth() + 1,
+        year: bookingYear,
+        month: bookingMonth,
         beleg_url,
       } as any);
 
@@ -993,7 +1005,7 @@ export default function ExpenseList() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Datum</Label>
+                  <Label>Rechnungsdatum</Label>
                   <Input
                     type="date"
                     value={newExpense.datum}
@@ -1001,6 +1013,59 @@ export default function ExpenseList() {
                   />
                 </div>
               </div>
+
+              {/* Abrechnungsjahr Option für verbrauchsabhängige Kosten */}
+              {verbrauchsabhaengigeKosten.includes(newExpense.expense_type) && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label className="text-blue-900 dark:text-blue-100">Abrechnung für Vorjahr?</Label>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        Verbrauchsabrechnungen kommen oft erst im Folgejahr
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={useCustomAbrechnungsjahr ? 'default' : 'outline'}
+                        onClick={() => setUseCustomAbrechnungsjahr(true)}
+                      >
+                        Ja
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={!useCustomAbrechnungsjahr ? 'default' : 'outline'}
+                        onClick={() => setUseCustomAbrechnungsjahr(false)}
+                      >
+                        Nein
+                      </Button>
+                    </div>
+                  </div>
+                  {useCustomAbrechnungsjahr && (
+                    <div className="flex items-center gap-3">
+                      <Label className="text-blue-900 dark:text-blue-100">Abrechnungsjahr:</Label>
+                      <Select
+                        value={customAbrechnungsjahr.toString()}
+                        onValueChange={(v) => setCustomAbrechnungsjahr(parseInt(v))}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {years.map(year => (
+                            <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-xs text-blue-700 dark:text-blue-300">
+                        Wird unter {customAbrechnungsjahr} gebucht
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Belegnummer (optional)</Label>
