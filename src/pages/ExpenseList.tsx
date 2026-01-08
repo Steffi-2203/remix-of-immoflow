@@ -1125,38 +1125,49 @@ export default function ExpenseList() {
               {/* File Upload - only shown when hasReceipt is true */}
               {hasReceipt === true && (
                 <div className="space-y-2">
-                  <Label>Rechnungsbeleg hochladen</Label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="application/pdf,image/*"
-                      onChange={(e) => handleFileChange(e, false)}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full"
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      {selectedFile ? selectedFile.name : 'Beleg hochladen'}
-                    </Button>
-                    {selectedFile && (
+                  <Label>Rechnungsbeleg</Label>
+                  {selectedFile ? (
+                    // Show already selected file (e.g., from OCR)
+                    <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                      <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">Wird automatisch als Beleg gespeichert</p>
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         onClick={() => setSelectedFile(null)}
+                        className="flex-shrink-0"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    PDF oder Bild, max. 10 MB
-                  </p>
+                    </div>
+                  ) : (
+                    // Show upload button when no file selected
+                    <div className="flex flex-col gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="application/pdf,image/*"
+                        onChange={(e) => handleFileChange(e, false)}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full"
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Beleg hochladen
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        PDF oder Bild, max. 10 MB
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
