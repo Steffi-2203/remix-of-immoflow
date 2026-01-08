@@ -897,15 +897,15 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Mieteinnahmen {periodLabel} (IST)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  nur Miete (ohne BK/Heizung)
+                  nur Miete (nach BK→HK→Miete)
                 </p>
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {incomeTransactions.filter(t => t.category_id === mieteinnahmenCategoryId).length} Buchungen
+                {periodPayments.length} Zahlungen
               </div>
             </div>
           </CardContent>
@@ -930,55 +930,56 @@ export default function Reports() {
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
-            IST-Einnahmen aus {incomeTransactions.length} Buchungen • Ausgaben aus {expenseTransactions.length} Buchungen
+            IST-Einnahmen aus {periodPayments.length} Zahlungen (payments) • Ausgaben aus {expenseTransactions.length} Buchungen
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Einnahmen (IST aus Transaktionen - kategorisiert) */}
+            {/* Einnahmen (IST aus Payments - mit Zahlungsaufteilung BK→HK→Miete) */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-success flex items-center gap-2">
                 <ArrowUpRight className="h-4 w-4" />
-                Einnahmen (IST) - aus Buchhaltung
+                Einnahmen (IST) - aus Zahlungen
+                <Badge variant="outline" className="text-xs ml-2">BK → HK → Miete</Badge>
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-success/20 bg-success/5">
                   <div>
                     <span className="text-sm font-medium">Miete (Netto-Ertrag)</span>
-                    <p className="text-xs text-muted-foreground">Eigentumsrelevant</p>
+                    <p className="text-xs text-muted-foreground">Eigentumsrelevant • nach BK+HK</p>
                   </div>
                   <span className="font-semibold text-success">
-                    €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
                   <div>
                     <span className="text-sm">Betriebskosten</span>
-                    <p className="text-xs text-muted-foreground">Durchlaufposten</p>
+                    <p className="text-xs text-muted-foreground">Durchlaufposten • 1. Priorität</p>
                   </div>
                   <span className="font-semibold text-muted-foreground">
-                    €{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-muted bg-muted/30">
                   <div>
                     <span className="text-sm">Heizung</span>
-                    <p className="text-xs text-muted-foreground">Durchlaufposten</p>
+                    <p className="text-xs text-muted-foreground">Durchlaufposten • 2. Priorität</p>
                   </div>
                   <span className="font-semibold text-muted-foreground">
-                    €{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-border bg-muted/50">
                   <span className="text-sm">Gesamt eingegangen</span>
                   <span className="font-semibold">
-                    €{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-success bg-success/10">
-                  <span className="font-semibold">IST-Mieteinnahmen</span>
+                  <span className="font-semibold">IST-Mieteinnahmen (nach Aufteilung)</span>
                   <span className="font-bold text-success text-lg">
-                    €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
