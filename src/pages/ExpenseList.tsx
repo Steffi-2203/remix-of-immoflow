@@ -62,6 +62,7 @@ import {
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
+import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -126,6 +127,8 @@ export default function ExpenseList() {
 
   // OCR state
   const [ocrFile, setOcrFile] = useState<File | null>(null);
+  const [pdfSelectorOpen, setPdfSelectorOpen] = useState(false);
+  const [ocrProcessing, setOcrProcessing] = useState(false);
   const ocrInvoice = useOCRInvoice();
 
   const propertyFilter = selectedProperty === 'all' ? undefined : selectedProperty;
@@ -413,6 +416,11 @@ export default function ExpenseList() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Reset input so same file can be selected again
+    if (ocrFileInputRef.current) {
+      ocrFileInputRef.current.value = '';
+    }
+
     // Accept images and PDFs for OCR
     if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
       toast({
@@ -424,10 +432,50 @@ export default function ExpenseList() {
     }
 
     setOcrFile(file);
+
+    // For PDFs, show page selector
+    if (file.type === 'application/pdf') {
+      setPdfSelectorOpen(true);
+      return;
+    }
+
+    // For images, process directly
+    await processOcrFile(file);
+  };
+
+  // Process OCR with image data
+  const processOcrFile = async (file: File, imageDataUrl?: string) => {
     setOcrDialogOpen(true);
+    setOcrProcessing(true);
 
     try {
-      const result = await ocrInvoice.mutateAsync(file);
+      let result;
+      
+      if (imageDataUrl) {
+        // Use provided image data (from PDF page selector)
+        const base64 = imageDataUrl.split(',')[1];
+        const mimeType = 'image/png';
+        
+        // Call the OCR function directly with the converted image
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error('Nicht angemeldet');
+        }
+        
+        const { data, error } = await supabase.functions.invoke('ocr-invoice', {
+          body: {
+            imageBase64: base64,
+            mimeType: mimeType,
+          },
+        });
+        
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+        result = data.data;
+      } else {
+        // Use the hook for regular files
+        result = await ocrInvoice.mutateAsync(file);
+      }
       
       // Pre-fill the form with OCR data
       setNewExpense(prev => ({
@@ -443,10 +491,38 @@ export default function ExpenseList() {
 
       setOcrDialogOpen(false);
       setDialogOpen(true);
+      
+      toast({
+        title: 'Rechnung analysiert',
+        description: 'Die Daten wurden in das Formular übernommen.',
+      });
     } catch (error) {
-      setOcrDialogOpen(false);
       console.error('OCR failed:', error);
+      toast({
+        title: 'OCR fehlgeschlagen',
+        description: error instanceof Error ? error.message : 'Die Rechnung konnte nicht analysiert werden.',
+        variant: 'destructive',
+      });
+    } finally {
+      setOcrDialogOpen(false);
+      setOcrProcessing(false);
     }
+  };
+
+  // Handle PDF page selection
+  const handlePdfPagesSelected = async (selectedPages: number[], imageDataUrl?: string) => {
+    setPdfSelectorOpen(false);
+    
+    if (!ocrFile || !imageDataUrl) {
+      toast({
+        title: 'Fehler',
+        description: 'Keine Seiten ausgewählt.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    await processOcrFile(ocrFile, imageDataUrl);
   };
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
@@ -456,30 +532,55 @@ export default function ExpenseList() {
       title="Buchhaltung"
       subtitle="Kosten erfassen und kategorisieren"
     >
+      {/* PDF Page Selector Dialog */}
+      <Dialog open={pdfSelectorOpen} onOpenChange={setPdfSelectorOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              PDF-Seiten auswählen
+            </DialogTitle>
+            <DialogDescription>
+              Wählen Sie die Seiten aus, die analysiert werden sollen.
+            </DialogDescription>
+          </DialogHeader>
+          {ocrFile && (
+            <PdfPageSelector
+              file={ocrFile}
+              onPagesSelected={handlePdfPagesSelected}
+              onCancel={() => {
+                setPdfSelectorOpen(false);
+                setOcrFile(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* OCR Processing Dialog */}
-      <Dialog open={ocrDialogOpen} onOpenChange={setOcrDialogOpen}>
+      <Dialog open={ocrDialogOpen} onOpenChange={(open) => !ocrProcessing && setOcrDialogOpen(open)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
               Rechnung wird analysiert
             </DialogTitle>
-          <DialogDescription>
-            {ocrFile?.type === 'application/pdf' 
-              ? 'Das PDF wird mit KI analysiert und die Rechnungsdaten automatisch extrahiert.'
-              : 'Die Rechnung wird mit KI analysiert und die Daten automatisch extrahiert.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col items-center py-8">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-sm text-muted-foreground">
-            {ocrFile?.name}
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            {ocrFile?.type === 'application/pdf' ? 'PDF wird verarbeitet...' : 'Bild wird analysiert...'}
-          </p>
-        </div>
-      </DialogContent>
+            <DialogDescription>
+              {ocrFile?.type === 'application/pdf' 
+                ? 'Die ausgewählten Seiten werden mit KI analysiert.'
+                : 'Die Rechnung wird mit KI analysiert und die Daten automatisch extrahiert.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-8">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <p className="text-sm text-muted-foreground">
+              {ocrFile?.name}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              KI analysiert die Rechnungsdaten...
+            </p>
+          </div>
+        </DialogContent>
       </Dialog>
 
       {/* Actions Bar */}
