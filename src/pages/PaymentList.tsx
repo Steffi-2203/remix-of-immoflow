@@ -231,6 +231,7 @@ export default function PaymentList() {
 
   // Calculate open items (offene Posten) per tenant - using same logic as Reports page
   // SOLL from tenant data, IST from COMBINED payments (payments + transactions)
+  // Mit MRG-konformer Zahlungsaufteilung: BK → HK → Miete
   const openItemsPerTenant = useMemo(() => {
     if (!tenants || !combinedPayments || !units) return [];
 
@@ -255,10 +256,10 @@ export default function PaymentList() {
     
     return activeTenants.map(tenant => {
       // SOLL from tenant data (same as Reports page)
-      const monthlyTotal = Number(tenant.grundmiete || 0) + 
-                           Number(tenant.betriebskosten_vorschuss || 0) + 
-                           Number(tenant.heizungskosten_vorschuss || 0);
-      const totalSoll = monthlyTotal; // For current month
+      const sollBk = Number(tenant.betriebskosten_vorschuss || 0);
+      const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
+      const sollMiete = Number(tenant.grundmiete || 0);
+      const totalSoll = sollBk + sollHk + sollMiete;
       
       // IST from COMBINED payments for current month
       const tenantPayments = combinedPayments.filter(p => {
@@ -269,7 +270,25 @@ export default function PaymentList() {
       });
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       
-      // Saldo: negative = owes money (SOLL > IST means tenant needs to pay)
+      // MRG-konforme Aufteilung: BK → HK → Miete
+      let remaining = totalIst;
+      const istBk = Math.min(remaining, sollBk);
+      remaining -= istBk;
+      const istHk = Math.min(remaining, sollHk);
+      remaining -= istHk;
+      const istMiete = Math.min(remaining, sollMiete);
+      remaining -= istMiete;
+      
+      // Überzahlung (wenn mehr gezahlt als SOLL)
+      const ueberzahlung = remaining > 0 ? remaining : 0;
+      
+      // Unterzahlung pro Komponente
+      const diffBk = sollBk - istBk;
+      const diffHk = sollHk - istHk;
+      const diffMiete = sollMiete - istMiete;
+      const unterzahlung = diffBk + diffHk + diffMiete;
+      
+      // Saldo: positiv = Überzahlung, negativ = Unterzahlung
       const saldo = totalIst - totalSoll;
       
       // Days overdue: if we're past the 5th of the month and saldo is negative
@@ -292,20 +311,34 @@ export default function PaymentList() {
       return {
         tenant,
         unit,
+        // SOLL-Werte
+        sollBk,
+        sollHk,
+        sollMiete,
         totalSoll,
+        // IST-Werte (MRG-konform aufgeteilt)
+        istBk,
+        istHk,
+        istMiete,
         totalIst,
+        // Differenzen
+        diffBk,
+        diffHk,
+        diffMiete,
+        ueberzahlung,
+        unterzahlung,
         saldo,
         oldestOverdueDays: daysOverdue,
         mahnstatus,
       };
-    }).filter(item => item.saldo !== 0) // Show both underpayments AND overpayments
-      .sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
+    }).sort((a, b) => a.saldo - b.saldo); // Sort by saldo ascending (most debt first)
   }, [tenants, combinedPayments, units, propertyUnitIds, selectedPropertyId]);
 
   const openItemsStats = {
-    totalTenants: openItemsPerTenant.length,
-    totalOpenAmount: openItemsPerTenant.reduce((sum, item) => sum + Math.abs(Math.min(0, item.saldo)), 0),
-    overdueCount: openItemsPerTenant.filter(item => item.oldestOverdueDays > 0).length,
+    totalTenants: openItemsPerTenant.filter(item => item.saldo !== 0).length,
+    totalOpenAmount: openItemsPerTenant.reduce((sum, item) => sum + Math.max(0, item.unterzahlung), 0),
+    overdueCount: openItemsPerTenant.filter(item => item.oldestOverdueDays > 0 && item.saldo < 0).length,
+    totalUeberzahlung: openItemsPerTenant.reduce((sum, item) => sum + item.ueberzahlung, 0),
   };
 
   // Helper to get tenant and unit info for a transaction
@@ -646,7 +679,7 @@ export default function PaymentList() {
 
         {/* Open Items Tab */}
         <TabsContent value="openitems">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -654,7 +687,7 @@ export default function PaymentList() {
                     <Users className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Mieter mit Rückstand</p>
+                    <p className="text-sm text-muted-foreground">Mieter mit Saldo</p>
                     <p className="text-2xl font-bold">{openItemsStats.totalTenants}</p>
                   </div>
                 </div>
@@ -667,8 +700,21 @@ export default function PaymentList() {
                     <Euro className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Offener Gesamtbetrag</p>
+                    <p className="text-sm text-muted-foreground">Gesamt Unterzahlung</p>
                     <p className="text-2xl font-bold text-red-600">€ {openItemsStats.totalOpenAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                    <Euro className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Gesamt Überzahlung</p>
+                    <p className="text-2xl font-bold text-green-600">€ {openItemsStats.totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
                   </div>
                 </div>
               </CardContent>
@@ -704,49 +750,71 @@ export default function PaymentList() {
                     <TableRow>
                       <TableHead>Mieter</TableHead>
                       <TableHead>Top</TableHead>
-                      <TableHead className="text-right">Soll</TableHead>
-                      <TableHead className="text-right">Gezahlt</TableHead>
+                      <TableHead className="text-right">BK Soll</TableHead>
+                      <TableHead className="text-right">BK Ist</TableHead>
+                      <TableHead className="text-right">HK Soll</TableHead>
+                      <TableHead className="text-right">HK Ist</TableHead>
+                      <TableHead className="text-right">Miete Soll</TableHead>
+                      <TableHead className="text-right">Miete Ist</TableHead>
                       <TableHead className="text-right">Saldo</TableHead>
-                      <TableHead>Tage überfällig</TableHead>
-                      <TableHead>Mahnstatus</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {openItemsPerTenant.map((item) => (
-                      <TableRow key={item.tenant.id}>
-                        <TableCell className="font-medium">
-                          {item.tenant.first_name} {item.tenant.last_name}
-                        </TableCell>
-                        <TableCell>{item.unit?.top_nummer || '-'}</TableCell>
-                        <TableCell className="text-right">
-                          € {item.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          € {item.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-red-600">
-                          € {item.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>
-                          {item.oldestOverdueDays > 0 ? (
-                            <span className="text-orange-600 font-medium">{item.oldestOverdueDays} Tage</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {item.mahnstatus === 'aktuell' ? (
-                            <Badge variant="secondary">Aktuell</Badge>
-                          ) : item.mahnstatus === 'Zahlungserinnerung' ? (
-                            <Badge className="bg-yellow-100 text-yellow-800">Zahlungserinnerung</Badge>
-                          ) : item.mahnstatus === '1. Mahnung' ? (
-                            <Badge className="bg-orange-100 text-orange-800">1. Mahnung</Badge>
-                          ) : (
-                            <Badge className="bg-red-100 text-red-800">2. Mahnung</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {openItemsPerTenant.map((item) => {
+                      const hasUnterzahlung = item.saldo < -0.01;
+                      const hasUeberzahlung = item.saldo > 0.01;
+                      const isVollstaendig = Math.abs(item.saldo) < 0.01;
+                      
+                      return (
+                        <TableRow key={item.tenant.id} className={hasUnterzahlung ? 'bg-red-50/50 dark:bg-red-950/20' : hasUeberzahlung ? 'bg-green-50/50 dark:bg-green-950/20' : ''}>
+                          <TableCell className="font-medium">
+                            {item.tenant.first_name} {item.tenant.last_name}
+                          </TableCell>
+                          <TableCell>{item.unit?.top_nummer || '-'}</TableCell>
+                          {/* BK */}
+                          <TableCell className="text-right text-muted-foreground">
+                            € {item.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right ${item.diffBk > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            € {item.istBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          {/* HK */}
+                          <TableCell className="text-right text-muted-foreground">
+                            € {item.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right ${item.diffHk > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            € {item.istHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          {/* Miete */}
+                          <TableCell className="text-right text-muted-foreground">
+                            € {item.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className={`text-right ${item.diffMiete > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            € {item.istMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          {/* Saldo */}
+                          <TableCell className={`text-right font-bold ${hasUnterzahlung ? 'text-red-600' : hasUeberzahlung ? 'text-green-600' : ''}`}>
+                            {hasUeberzahlung && '+'}€ {item.saldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>
+                            {isVollstaendig ? (
+                              <Badge className="bg-green-100 text-green-800">Bezahlt</Badge>
+                            ) : hasUeberzahlung ? (
+                              <Badge className="bg-blue-100 text-blue-800">Überzahlung</Badge>
+                            ) : item.mahnstatus === 'aktuell' ? (
+                              <Badge variant="secondary">Offen</Badge>
+                            ) : item.mahnstatus === 'Zahlungserinnerung' ? (
+                              <Badge className="bg-yellow-100 text-yellow-800">Zahlungserinnerung</Badge>
+                            ) : item.mahnstatus === '1. Mahnung' ? (
+                              <Badge className="bg-orange-100 text-orange-800">1. Mahnung</Badge>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-800">2. Mahnung</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
