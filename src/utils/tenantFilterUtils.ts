@@ -65,7 +65,7 @@ export function isTenantActiveInPeriod(
  * Wichtig:
  * - Pro Unit kann nur EIN Mieter im Zeitraum aktiv gewesen sein
  * - Aktive UND beendete Mieter werden berücksichtigt (für historische Perioden)
- * - Nur Mieter mit Mietbeginn im oder vor dem Zeitraum werden einbezogen
+ * - Mietbeginn wird NICHT geprüft - alle aktiven Mieter werden einbezogen
  * - Bei beendeten Mietern: Mietende muss im oder nach dem Zeitraum liegen
  * - Ein Mieter kann mehrere Units haben (z.B. Geschäft + Garage)
  */
