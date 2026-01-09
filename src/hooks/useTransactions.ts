@@ -232,9 +232,25 @@ export function useUpdateTransaction() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TransactionUpdate & { id: string }) => {
+      // Auto-set status to 'matched' if unit, tenant, property, or category is assigned
+      const finalUpdates = { ...updates };
+      
+      // If any assignment field is being set, auto-update status to matched
+      const hasAssignment = 
+        updates.unit_id || 
+        updates.tenant_id || 
+        updates.property_id || 
+        updates.category_id;
+      
+      // Only auto-update status if not explicitly set and there's an assignment
+      if (hasAssignment && !updates.status) {
+        finalUpdates.status = 'matched';
+        finalUpdates.matched_at = new Date().toISOString();
+      }
+      
       const { data, error } = await supabase
         .from('transactions')
-        .update(updates)
+        .update(finalUpdates)
         .eq('id', id)
         .select()
         .single();
