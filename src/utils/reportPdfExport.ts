@@ -1210,9 +1210,19 @@ interface BankAccountData {
   opening_balance_date: string | null;
 }
 
+export interface CombinedPaymentData {
+  id: string;
+  tenant_id: string;
+  amount: number;
+  date: string;
+  source: 'payments' | 'transactions';
+  description?: string;
+}
+
 interface PlausibilityReportData {
   bankAccounts: BankAccountData[];
-  transactions: TransactionData[];
+  transactions: TransactionData[]; // For expenses (negative amounts)
+  combinedPayments: CombinedPaymentData[]; // For income (from payments + transactions)
   properties: PropertyData[];
   units: UnitData[];
   tenants: TenantData[];
@@ -1224,12 +1234,17 @@ interface PlausibilityReportData {
 
 export const generatePlausibilityReport = (data: PlausibilityReportData) => {
   const doc = new jsPDF();
-  const { bankAccounts, transactions, properties, units, tenants, categories, selectedYear, startDate, endDate } = data;
+  const { bankAccounts, transactions, combinedPayments, properties, units, tenants, categories, selectedYear, startDate, endDate } = data;
 
-  // Filter transactions for the period
+  // Filter transactions for the period (for expenses)
   const periodTransactions = transactions.filter(t => {
     const txDate = t.transaction_date;
     return txDate >= startDate && txDate <= endDate;
+  });
+  
+  // Filter combined payments for the period (for income)
+  const periodPayments = combinedPayments.filter(p => {
+    return p.date >= startDate && p.date <= endDate;
   });
 
   // Helper to format currency
@@ -1308,15 +1323,14 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
 
   currentY = (doc as any).lastAutoTable.finalY + 15;
 
-  // ===== SECTION 2: Income by Property/Tenant =====
+  // ===== SECTION 2: Income by Property/Tenant (from combinedPayments) =====
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.text('2. Einnahmen nach Liegenschaft & Mieter', 14, currentY);
   currentY += 8;
 
-  // Group income transactions by property, then by tenant
-  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
-  
+  // Group payments by property, then by tenant
+  // We need to find property via tenant -> unit -> property
   type PropertyIncome = {
     propertyId: string;
     propertyName: string;
@@ -1325,51 +1339,42 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
   };
 
   const incomeByProperty: PropertyIncome[] = [];
-
-  // Group by property
-  const propertyGroups = new Map<string, TransactionData[]>();
-  const noPropertyTx: TransactionData[] = [];
+  const propertyGroups = new Map<string, { tenantId: string; amount: number }[]>();
+  let unassignedIncome = 0;
   
-  for (const tx of incomeTransactions) {
-    if (tx.property_id) {
-      const existing = propertyGroups.get(tx.property_id) || [];
-      existing.push(tx);
-      propertyGroups.set(tx.property_id, existing);
-    } else if (tx.unit_id) {
-      // Find property via unit
-      const unit = units.find(u => u.id === tx.unit_id);
-      if (unit) {
-        const existing = propertyGroups.get(unit.property_id) || [];
-        existing.push(tx);
-        propertyGroups.set(unit.property_id, existing);
-      } else {
-        noPropertyTx.push(tx);
-      }
-    } else {
-      noPropertyTx.push(tx);
+  for (const payment of periodPayments) {
+    const tenant = tenants.find(t => t.id === payment.tenant_id);
+    if (!tenant) {
+      unassignedIncome += payment.amount;
+      continue;
     }
+    
+    const unit = units.find(u => u.id === tenant.unit_id);
+    if (!unit) {
+      unassignedIncome += payment.amount;
+      continue;
+    }
+    
+    const propertyId = unit.property_id;
+    const existing = propertyGroups.get(propertyId) || [];
+    existing.push({ tenantId: payment.tenant_id, amount: payment.amount });
+    propertyGroups.set(propertyId, existing);
   }
 
   // Build income summary per property
-  for (const [propId, txList] of propertyGroups) {
+  for (const [propId, paymentList] of propertyGroups) {
     const property = properties.find(p => p.id === propId);
     const propertyName = property?.name || 'Unbekannt';
     
     // Group by tenant
-    const tenantGroups = new Map<string, number>();
-    let unassigned = 0;
-    
-    for (const tx of txList) {
-      if (tx.tenant_id) {
-        const current = tenantGroups.get(tx.tenant_id) || 0;
-        tenantGroups.set(tx.tenant_id, current + tx.amount);
-      } else {
-        unassigned += tx.amount;
-      }
+    const tenantTotals = new Map<string, number>();
+    for (const p of paymentList) {
+      const current = tenantTotals.get(p.tenantId) || 0;
+      tenantTotals.set(p.tenantId, current + p.amount);
     }
     
     const tenantEntries: { tenantId: string; tenantName: string; amount: number }[] = [];
-    for (const [tenantId, amount] of tenantGroups) {
+    for (const [tenantId, amount] of tenantTotals) {
       const tenant = tenants.find(t => t.id === tenantId);
       tenantEntries.push({
         tenantId,
@@ -1378,31 +1383,29 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
       });
     }
     
-    if (unassigned > 0) {
-      tenantEntries.push({ tenantId: '', tenantName: 'Nicht zugeordnet', amount: unassigned });
-    }
-    
     tenantEntries.sort((a, b) => b.amount - a.amount);
     
     incomeByProperty.push({
       propertyId: propId,
       propertyName,
       tenants: tenantEntries,
-      total: txList.reduce((s, t) => s + t.amount, 0),
+      total: paymentList.reduce((s, p) => s + p.amount, 0),
     });
   }
 
-  // Add unassigned to any property
-  if (noPropertyTx.length > 0) {
+  // Add unassigned income
+  if (unassignedIncome > 0) {
     incomeByProperty.push({
       propertyId: '',
       propertyName: 'Nicht zugeordnet',
-      tenants: [{ tenantId: '', tenantName: '-', amount: noPropertyTx.reduce((s, t) => s + t.amount, 0) }],
-      total: noPropertyTx.reduce((s, t) => s + t.amount, 0),
+      tenants: [{ tenantId: '', tenantName: '-', amount: unassignedIncome }],
+      total: unassignedIncome,
     });
   }
 
   incomeByProperty.sort((a, b) => b.total - a.total);
+  
+  const totalIncome = periodPayments.reduce((s, p) => s + p.amount, 0);
 
   // Build table rows
   const incomeRows: string[][] = [];
@@ -1417,9 +1420,9 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Liegenschaft', 'Mieter', 'Einnahmen']],
+    head: [['Liegenschaft', 'Mieter', 'Einnahmen (IST)']],
     body: incomeRows,
-    foot: [['Gesamt Einnahmen', '', fmt(incomeTransactions.reduce((s, t) => s + t.amount, 0))]],
+    foot: [['Gesamt Einnahmen', '', fmt(totalIncome)]],
     theme: 'striped',
     headStyles: { fillColor: [34, 197, 94], textColor: 255 },
     footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
@@ -1540,9 +1543,9 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
   currentY += 8;
 
   const totalOpeningBalance = accountSummaries.reduce((s, a) => s + a.openingBalance, 0);
-  const totalIncome = incomeTransactions.reduce((s, t) => s + t.amount, 0);
+  const totalIncomeForPlausibility = periodPayments.reduce((s, p) => s + p.amount, 0);
   const totalExpenses = expenseTransactions.reduce((s, t) => s + Math.abs(t.amount), 0);
-  const calculatedClosingBalance = totalOpeningBalance + totalIncome - totalExpenses;
+  const calculatedClosingBalance = totalOpeningBalance + totalIncomeForPlausibility - totalExpenses;
   const actualClosingBalance = accountSummaries.reduce((s, a) => s + a.closingBalance, 0);
   const difference = calculatedClosingBalance - actualClosingBalance;
 
@@ -1551,7 +1554,7 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
     head: [['Position', 'Betrag']],
     body: [
       ['Anfangsbestand (alle Konten)', fmt(totalOpeningBalance)],
-      ['+ Einnahmen gesamt', fmt(totalIncome)],
+      ['+ Einnahmen gesamt (IST)', fmt(totalIncomeForPlausibility)],
       ['- Ausgaben gesamt', fmt(totalExpenses)],
       ['= Berechneter Endbestand', fmt(calculatedClosingBalance)],
       ['Tatsächlicher Endbestand', fmt(actualClosingBalance)],

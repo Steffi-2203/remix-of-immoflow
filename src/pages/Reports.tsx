@@ -846,6 +846,16 @@ export default function Reports() {
             bank_account_id: t.bank_account_id,
           }));
           
+          // Prepare combined payments data for income
+          const combinedPaymentsForReport = (combinedPayments || []).map(p => ({
+            id: p.id,
+            tenant_id: p.tenant_id,
+            amount: p.amount,
+            date: p.date,
+            source: p.source,
+            description: p.description,
+          }));
+          
           generatePlausibilityReport({
             bankAccounts: (bankAccounts || []).map(ba => ({
               id: ba.id,
@@ -856,6 +866,7 @@ export default function Reports() {
               opening_balance_date: ba.opening_balance_date,
             })),
             transactions: plausibilityTransactions,
+            combinedPayments: combinedPaymentsForReport,
             properties: properties || [],
             units: allUnits || [],
             tenants: allTenants || [],
