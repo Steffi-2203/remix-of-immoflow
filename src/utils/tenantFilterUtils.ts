@@ -24,7 +24,7 @@ interface UnitForFilter {
  * 
  * Regeln:
  * - Mieter muss Status 'aktiv' ODER 'beendet' haben (nicht 'leerstand')
- * - Mietbeginn wird NICHT mehr geprüft - alle aktiven Mieter werden angezeigt
+ * - Mietbeginn muss VOR oder IM Zeitraum liegen (Mieter mit späterem Mietbeginn werden ausgeschlossen)
  * - Bei 'beendet' Mietern: Mietende muss im oder nach dem Zeitraum liegen
  *   (damit ehemalige Mieter für historische Perioden berücksichtigt werden)
  */
@@ -36,7 +36,23 @@ export function isTenantActiveInPeriod(
   // Leerstand ist nie relevant
   if (tenant.status === 'leerstand') return false;
   
-  // Aktive Mieter sind immer relevant (Mietbeginn wird ignoriert)
+  // Mietbeginn prüfen - Mieter ist nur relevant wenn Mietbeginn <= Ende des Zeitraums
+  if (tenant.mietbeginn) {
+    const mietbeginn = new Date(tenant.mietbeginn);
+    const mietbeginnYear = mietbeginn.getFullYear();
+    const mietbeginnMonth = mietbeginn.getMonth() + 1;
+    
+    if (periodMonth === undefined) {
+      // Yearly: Mietbeginn muss im Jahr oder früher sein
+      if (mietbeginnYear > periodYear) return false;
+    } else {
+      // Monthly: Mietbeginn muss im Monat oder früher sein
+      if (mietbeginnYear > periodYear) return false;
+      if (mietbeginnYear === periodYear && mietbeginnMonth > periodMonth) return false;
+    }
+  }
+  
+  // Aktive Mieter (mit gültigem Mietbeginn) sind relevant
   if (tenant.status === 'aktiv') return true;
   
   // Beendete Mieter: Mietende muss im oder nach dem Zeitraum liegen
@@ -65,7 +81,7 @@ export function isTenantActiveInPeriod(
  * Wichtig:
  * - Pro Unit kann nur EIN Mieter im Zeitraum aktiv gewesen sein
  * - Aktive UND beendete Mieter werden berücksichtigt (für historische Perioden)
- * - Mietbeginn wird NICHT geprüft - alle aktiven Mieter werden einbezogen
+ * - Mietbeginn muss VOR oder IM Zeitraum liegen (Mieter mit späterem Mietbeginn ausgeschlossen)
  * - Bei beendeten Mietern: Mietende muss im oder nach dem Zeitraum liegen
  * - Ein Mieter kann mehrere Units haben (z.B. Geschäft + Garage)
  */
