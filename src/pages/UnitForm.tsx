@@ -4,9 +4,10 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, Home, BarChart3, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Home, BarChart3, AlertTriangle, Scale, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useDistributionKeys } from '@/hooks/useDistributionKeys';
@@ -37,7 +38,22 @@ const unitTypes = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
+const mrgScopeOptions = [
+  { value: 'vollanwendung', label: 'Vollanwendung', description: 'Altbau vor 1945/1953, voller Mieterschutz' },
+  { value: 'teilanwendung', label: 'Teilanwendung', description: 'Neubauten mit bestimmten Schutzbestimmungen' },
+  { value: 'ausgenommen', label: 'Ausgenommen', description: 'Nicht dem MRG unterliegend' },
+];
+
+const ausstattungsKategorien = [
+  { value: 'A', label: 'Kategorie A', description: 'Mit Zentralheizung/Etagenheizung und Bad/WC' },
+  { value: 'B', label: 'Kategorie B', description: 'Mit Bad/WC (mind. 1,5m²), ohne Heizung' },
+  { value: 'C', label: 'Kategorie C', description: 'Mit WC und Wasserentnahme im Inneren' },
+  { value: 'D', label: 'Kategorie D', description: 'Ohne WC oder Wasserentnahme' },
+];
+
 type UnitType = 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
+type MrgScope = 'vollanwendung' | 'teilanwendung' | 'ausgenommen';
+type Ausstattungskategorie = 'A' | 'B' | 'C' | 'D';
 
 interface FormData {
   top_nummer: string;
@@ -45,6 +61,10 @@ interface FormData {
   floor: string;
   qm: string;
   mea: string;
+  mrg_scope: MrgScope;
+  ausstattungskategorie: Ausstattungskategorie;
+  nutzflaeche_mrg: string;
+  richtwertmiete_basis: string;
 }
 
 export default function UnitForm() {
@@ -69,6 +89,10 @@ export default function UnitForm() {
     floor: '',
     qm: '',
     mea: '',
+    mrg_scope: 'vollanwendung',
+    ausstattungskategorie: 'A',
+    nutzflaeche_mrg: '',
+    richtwertmiete_basis: '',
   });
 
   // Distribution key values stored separately by key_id
@@ -83,6 +107,10 @@ export default function UnitForm() {
         floor: existingUnit.floor?.toString() || '',
         qm: existingUnit.qm?.toString() || '',
         mea: existingUnit.mea?.toString() || '',
+        mrg_scope: (existingUnit as any).mrg_scope || 'vollanwendung',
+        ausstattungskategorie: (existingUnit as any).ausstattungskategorie || 'A',
+        nutzflaeche_mrg: (existingUnit as any).nutzflaeche_mrg?.toString() || '',
+        richtwertmiete_basis: (existingUnit as any).richtwertmiete_basis?.toString() || '',
       });
     }
   }, [existingUnit]);
@@ -160,7 +188,7 @@ export default function UnitForm() {
       return;
     }
 
-    // Prepare unit data (basic fields only)
+    // Prepare unit data (basic fields + MRG fields)
     const unitData: any = {
       property_id: propertyId!,
       top_nummer: formData.top_nummer.trim(),
@@ -168,6 +196,10 @@ export default function UnitForm() {
       floor: formData.floor ? parseInt(formData.floor) : null,
       qm: parseFloat(formData.qm) || 0,
       mea: parseFloat(formData.mea) || 0,
+      mrg_scope: formData.mrg_scope,
+      ausstattungskategorie: formData.ausstattungskategorie,
+      nutzflaeche_mrg: formData.nutzflaeche_mrg ? parseFloat(formData.nutzflaeche_mrg) : parseFloat(formData.qm) || 0,
+      richtwertmiete_basis: formData.richtwertmiete_basis ? parseFloat(formData.richtwertmiete_basis) : 0,
     };
 
     // Also update legacy vs_* columns for backward compatibility
@@ -346,6 +378,164 @@ export default function UnitForm() {
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* MRG Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5" />
+              MRG-Einstellungen (Mietrechtsgesetz)
+            </CardTitle>
+            <CardDescription>
+              Rechtliche Einordnung dieser Einheit nach dem österreichischen Mietrechtsgesetz
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* MRG Anwendungsbereich */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="mrg_scope">MRG-Anwendungsbereich</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p><strong>Vollanwendung:</strong> Altbauten vor 1945/1953, strengste Mieterschutzbestimmungen</p>
+                        <p className="mt-1"><strong>Teilanwendung:</strong> Neubauten mit gewissen Schutzbestimmungen</p>
+                        <p className="mt-1"><strong>Ausgenommen:</strong> z.B. Einfamilienhäuser, befristete Untervermietung</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Select
+                  value={formData.mrg_scope}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, mrg_scope: value as MrgScope }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Anwendungsbereich wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mrgScopeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div>
+                          <span className="font-medium">{option.label}</span>
+                          <span className="text-muted-foreground ml-2 text-xs">– {option.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Ausstattungskategorie */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ausstattungskategorie">Ausstattungskategorie (§15a MRG)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Die Kategorie bestimmt den maximalen Erhaltungsbeitrag (§14 MRG) und die Richtwertmiete.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Select
+                  value={formData.ausstattungskategorie}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, ausstattungskategorie: value as Ausstattungskategorie }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kategorie wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ausstattungsKategorien.map((kat) => (
+                      <SelectItem key={kat.value} value={kat.value}>
+                        <div>
+                          <span className="font-medium">{kat.label}</span>
+                          <span className="text-muted-foreground ml-2 text-xs">– {kat.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Nutzfläche nach §17 MRG */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="nutzflaeche_mrg">Nutzfläche nach §17 MRG (m²)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Die Nutzfläche nach §17 MRG kann von der tatsächlichen Fläche abweichen (z.B. bei Terrassen, Balkonen).</p>
+                        <p className="mt-1">Wenn leer, wird die allgemeine Nutzfläche verwendet.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Input
+                  id="nutzflaeche_mrg"
+                  name="nutzflaeche_mrg"
+                  type="number"
+                  step="0.01"
+                  value={formData.nutzflaeche_mrg}
+                  onChange={handleChange}
+                  placeholder={formData.qm || 'Wie oben'}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leer lassen = automatisch von Nutzfläche übernehmen
+                </p>
+              </div>
+
+              {/* Richtwertmiete Basis */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="richtwertmiete_basis">Richtwert-Basis (€/m²)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Der Basisrichtwert für dieses Bundesland. Zu- und Abschläge werden bei der Mietzinsberechnung berücksichtigt.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Input
+                  id="richtwertmiete_basis"
+                  name="richtwertmiete_basis"
+                  type="number"
+                  step="0.01"
+                  value={formData.richtwertmiete_basis}
+                  onChange={handleChange}
+                  placeholder="z.B. 6.67"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Wien 2024: €6,67/m² (wird jährlich valorisiert)
+                </p>
+              </div>
+            </div>
+
+            {/* MRG Info Box */}
+            {formData.mrg_scope === 'vollanwendung' && (
+              <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+                <Scale className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
+                  <strong>Vollanwendung MRG:</strong> Es gelten strenge Mieterschutzbestimmungen, 
+                  Richtwertmiete, §14 Erhaltungsbeiträge und die BK-Abrechnung muss §21-24 MRG entsprechen.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 
