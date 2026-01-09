@@ -1060,6 +1060,48 @@ export type Database = {
           },
         ]
       }
+      unit_distribution_values: {
+        Row: {
+          created_at: string
+          distribution_key_id: string
+          id: string
+          unit_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          distribution_key_id: string
+          id?: string
+          unit_id: string
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          distribution_key_id?: string
+          id?: string
+          unit_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_distribution_values_distribution_key_id_fkey"
+            columns: ["distribution_key_id"]
+            isOneToOne: false
+            referencedRelation: "distribution_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unit_distribution_values_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       unit_documents: {
         Row: {
           file_url: string

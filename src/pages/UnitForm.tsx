@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, Save, Loader2, Home, BarChart3, AlertTriangle } from 'lucide-react';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
+import { useDistributionKeys } from '@/hooks/useDistributionKeys';
+import { useDistributionKeysWithValues, useSaveUnitDistributionValues, VS_COLUMN_TO_KEY_CODE } from '@/hooks/useUnitDistributionValues';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import {
@@ -35,30 +37,6 @@ const unitTypes = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
-// All 20 distribution keys with their labels and units
-const distributionKeyFields = [
-  { key: 'vs_qm', label: 'Quadratmeter', unit: 'm²', description: 'Nutzfläche' },
-  { key: 'vs_mea', label: 'MEA', unit: '‰', description: 'Miteigentumsanteile' },
-  { key: 'vs_personen', label: 'Personenanzahl', unit: 'Pers.', description: 'Bewohner' },
-  { key: 'vs_heizung_verbrauch', label: 'Heizungsverbrauch', unit: 'kWh', description: 'Heizverbrauch' },
-  { key: 'vs_wasser_verbrauch', label: 'Wasserverbrauch', unit: 'm³', description: 'Wasserverbrauch' },
-  { key: 'vs_lift_wohnung', label: 'Lift Wohnung', unit: 'Anteil', description: 'Liftkosten Wohnung' },
-  { key: 'vs_lift_geschaeft', label: 'Lift Geschäft', unit: 'Anteil', description: 'Liftkosten Geschäft' },
-  { key: 'vs_muell', label: 'Müllentsorgung', unit: 'Anteil', description: 'Müllgebühren' },
-  { key: 'vs_strom_allgemein', label: 'Allgemeinstrom', unit: 'Anteil', description: 'Strom Allgemein' },
-  { key: 'vs_versicherung', label: 'Versicherung', unit: 'Anteil', description: 'Gebäudeversicherung' },
-  { key: 'vs_hausbetreuung', label: 'Hausbetreuung', unit: 'Anteil', description: 'Hausbetreuung' },
-  { key: 'vs_garten', label: 'Gartenpflege', unit: 'Anteil', description: 'Gartenpflege' },
-  { key: 'vs_schneeraeumung', label: 'Schneeräumung', unit: 'Anteil', description: 'Winterdienst' },
-  { key: 'vs_kanal', label: 'Kanalgebühren', unit: 'Anteil', description: 'Kanal' },
-  { key: 'vs_grundsteuer', label: 'Grundsteuer', unit: 'Anteil', description: 'Grundsteuer' },
-  { key: 'vs_verwaltung', label: 'Verwaltungskosten', unit: 'Anteil', description: 'Verwaltung' },
-  { key: 'vs_ruecklage', label: 'Rücklage', unit: 'Anteil', description: 'Instandhaltung' },
-  { key: 'vs_sonstiges_1', label: 'Sonstiges 1', unit: 'Anteil', description: 'Frei definierbar' },
-  { key: 'vs_sonstiges_2', label: 'Sonstiges 2', unit: 'Anteil', description: 'Frei definierbar' },
-  { key: 'vs_sonstiges_3', label: 'Sonstiges 3', unit: 'Anteil', description: 'Frei definierbar' },
-];
-
 type UnitType = 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
 
 interface FormData {
@@ -67,7 +45,6 @@ interface FormData {
   floor: string;
   qm: string;
   mea: string;
-  [key: string]: string | UnitType;
 }
 
 export default function UnitForm() {
@@ -77,63 +54,99 @@ export default function UnitForm() {
 
   const { data: property } = useProperty(propertyId);
   const { data: existingUnit, isLoading: isLoadingUnit } = useUnit(unitId);
+  const { data: distributionKeys, isLoading: isLoadingKeys } = useDistributionKeys();
+  const { data: keysWithValues } = useDistributionKeysWithValues(unitId);
   const createUnit = useCreateUnit();
   const updateUnit = useUpdateUnit();
+  const saveDistributionValues = useSaveUnitDistributionValues();
   
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<FormData>(() => {
-    const initial: FormData = {
-      top_nummer: '',
-      type: 'wohnung',
-      floor: '',
-      qm: '',
-      mea: '',
-    };
-    // Initialize all distribution key fields
-    distributionKeyFields.forEach(field => {
-      initial[field.key] = '';
-    });
-    return initial;
+  // Basic form data
+  const [formData, setFormData] = useState<FormData>({
+    top_nummer: '',
+    type: 'wohnung',
+    floor: '',
+    qm: '',
+    mea: '',
   });
 
+  // Distribution key values stored separately by key_id
+  const [distributionValues, setDistributionValues] = useState<Record<string, string>>({});
+
+  // Load existing unit data
   useEffect(() => {
     if (existingUnit) {
-      const newFormData: FormData = {
+      setFormData({
         top_nummer: existingUnit.top_nummer || '',
         type: existingUnit.type || 'wohnung',
         floor: existingUnit.floor?.toString() || '',
         qm: existingUnit.qm?.toString() || '',
         mea: existingUnit.mea?.toString() || '',
-      };
-      
-      // Set distribution key values from existing unit
-      distributionKeyFields.forEach(field => {
-        const value = (existingUnit as any)[field.key];
-        newFormData[field.key] = value?.toString() || '';
       });
-      
-      setFormData(newFormData);
     }
   }, [existingUnit]);
 
+  // Load distribution values when keysWithValues is available
+  useEffect(() => {
+    if (keysWithValues && keysWithValues.length > 0) {
+      const values: Record<string, string> = {};
+      keysWithValues.forEach(key => {
+        values[key.id] = key.value?.toString() || '';
+      });
+      setDistributionValues(values);
+    }
+  }, [keysWithValues]);
+
+  // For new units or units without distribution values, try to get values from legacy vs_* columns
+  useEffect(() => {
+    if (existingUnit && distributionKeys && distributionKeys.length > 0 && !keysWithValues?.some(k => k.value > 0)) {
+      const values: Record<string, string> = {};
+      
+      distributionKeys.forEach(key => {
+        // Find which vs_* column maps to this key_code
+        const vsColumn = Object.entries(VS_COLUMN_TO_KEY_CODE).find(([_, code]) => code === key.key_code)?.[0];
+        if (vsColumn && existingUnit[vsColumn as keyof typeof existingUnit] !== undefined) {
+          const legacyValue = existingUnit[vsColumn as keyof typeof existingUnit];
+          if (legacyValue && legacyValue !== 0) {
+            values[key.id] = legacyValue.toString();
+          }
+        }
+      });
+      
+      if (Object.keys(values).length > 0) {
+        setDistributionValues(prev => ({ ...prev, ...values }));
+      }
+    }
+  }, [existingUnit, distributionKeys, keysWithValues]);
+
   // Auto-sync qm and mea to distribution keys when they change
   useEffect(() => {
-    if (formData.qm && !formData.vs_qm) {
-      setFormData(prev => ({ ...prev, vs_qm: prev.qm }));
+    if (formData.qm && distributionKeys) {
+      const qmKey = distributionKeys.find(k => k.key_code === 'qm');
+      if (qmKey && !distributionValues[qmKey.id]) {
+        setDistributionValues(prev => ({ ...prev, [qmKey.id]: formData.qm }));
+      }
     }
-  }, [formData.qm]);
+  }, [formData.qm, distributionKeys]);
 
   useEffect(() => {
-    if (formData.mea && !formData.vs_mea) {
-      setFormData(prev => ({ ...prev, vs_mea: prev.mea }));
+    if (formData.mea && distributionKeys) {
+      const meaKey = distributionKeys.find(k => k.key_code === 'mea');
+      if (meaKey && !distributionValues[meaKey.id]) {
+        setDistributionValues(prev => ({ ...prev, [meaKey.id]: formData.mea }));
+      }
     }
-  }, [formData.mea]);
+  }, [formData.mea, distributionKeys]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setValidationError(null);
+  };
+
+  const handleDistributionValueChange = (keyId: string, value: string) => {
+    setDistributionValues(prev => ({ ...prev, [keyId]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,6 +160,7 @@ export default function UnitForm() {
       return;
     }
 
+    // Prepare unit data (basic fields only)
     const unitData: any = {
       property_id: propertyId!,
       top_nummer: formData.top_nummer.trim(),
@@ -156,31 +170,72 @@ export default function UnitForm() {
       mea: parseFloat(formData.mea) || 0,
     };
 
-    // Add all distribution key values
-    distributionKeyFields.forEach(field => {
-      const value = formData[field.key];
-      if (field.key === 'vs_personen') {
-        unitData[field.key] = value ? parseInt(value as string) : 0;
-      } else {
-        unitData[field.key] = value ? parseFloat(value as string) : 0;
-      }
-    });
+    // Also update legacy vs_* columns for backward compatibility
+    if (distributionKeys) {
+      distributionKeys.forEach(key => {
+        const vsColumn = Object.entries(VS_COLUMN_TO_KEY_CODE).find(([_, code]) => code === key.key_code)?.[0];
+        if (vsColumn) {
+          const value = distributionValues[key.id];
+          if (key.input_type === 'anzahl') {
+            unitData[vsColumn] = value ? parseInt(value) : 0;
+          } else {
+            unitData[vsColumn] = value ? parseFloat(value) : 0;
+          }
+        }
+      });
+    }
 
     try {
+      let savedUnitId = unitId;
+      
       if (isEditing && unitId) {
         await updateUnit.mutateAsync({ id: unitId, ...unitData });
       } else {
-        await createUnit.mutateAsync(unitData);
+        const newUnit = await createUnit.mutateAsync(unitData);
+        savedUnitId = newUnit.id;
       }
+
+      // Save distribution values to the new table
+      if (savedUnitId && distributionKeys) {
+        const valuesToSave = distributionKeys
+          .filter(key => key.is_active)
+          .map(key => ({
+            distribution_key_id: key.id,
+            value: distributionValues[key.id] ? parseFloat(distributionValues[key.id]) : 0,
+          }));
+
+        await saveDistributionValues.mutateAsync({
+          unitId: savedUnitId,
+          values: valuesToSave,
+        });
+      }
+
       navigate(`/liegenschaften/${propertyId}`);
     } catch (error) {
       // Error handling is done in the hooks
     }
   };
 
-  const isSubmitting = createUnit.isPending || updateUnit.isPending;
+  const getInputStep = (inputType: string) => {
+    switch (inputType) {
+      case 'anzahl':
+        return '1';
+      case 'qm':
+      case 'mea':
+      case 'promille':
+      case 'direkteingabe':
+      default:
+        return '0.01';
+    }
+  };
 
-  if (isEditing && isLoadingUnit) {
+  const isSubmitting = createUnit.isPending || updateUnit.isPending || saveDistributionValues.isPending;
+  const isLoading = isLoadingUnit || isLoadingKeys;
+
+  // Get only active distribution keys for display
+  const activeDistributionKeys = distributionKeys?.filter(k => k.is_active) || [];
+
+  if (isEditing && isLoading) {
     return (
       <MainLayout title="Laden..." subtitle="">
         <div className="flex items-center justify-center py-12">
@@ -294,39 +349,53 @@ export default function UnitForm() {
           </CardContent>
         </Card>
 
-        {/* Distribution Keys */}
+        {/* Distribution Keys - Dynamic from Settings */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Verteilerschlüssel (20 Schlüssel)
+              Verteilerschlüssel ({activeDistributionKeys.length} aktive Schlüssel)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
               Geben Sie die Werte für die Betriebskostenverteilung dieser Einheit ein. 
-              Die Verteilung erfolgt anteilig zu den Gesamtwerten der Liegenschaft.
+              Die Schlüssel können in den Einstellungen konfiguriert werden.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {distributionKeyFields.map((field) => (
-                <div key={field.key} className="space-y-2">
-                  <Label htmlFor={field.key} className="text-sm">
-                    {field.label}
-                    <span className="text-muted-foreground ml-1">({field.unit})</span>
-                  </Label>
-                  <Input
-                    id={field.key}
-                    name={field.key}
-                    type="number"
-                    step={field.key === 'vs_personen' ? '1' : '0.01'}
-                    min="0"
-                    value={formData[field.key] as string}
-                    onChange={handleChange}
-                    placeholder="0"
-                  />
-                </div>
-              ))}
-            </div>
+            {isLoadingKeys ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : activeDistributionKeys.length === 0 ? (
+              <Alert>
+                <AlertDescription>
+                  Keine aktiven Verteilerschlüssel gefunden. Bitte konfigurieren Sie diese in den Einstellungen.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {activeDistributionKeys.map((key) => (
+                  <div key={key.id} className="space-y-2">
+                    <Label htmlFor={`dist-${key.id}`} className="text-sm">
+                      {key.name}
+                      <span className="text-muted-foreground ml-1">({key.unit})</span>
+                    </Label>
+                    <Input
+                      id={`dist-${key.id}`}
+                      type="number"
+                      step={getInputStep(key.input_type)}
+                      min="0"
+                      value={distributionValues[key.id] || ''}
+                      onChange={(e) => handleDistributionValueChange(key.id, e.target.value)}
+                      placeholder="0"
+                    />
+                    {key.description && (
+                      <p className="text-xs text-muted-foreground">{key.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
