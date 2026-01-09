@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,13 +58,17 @@ interface NewBankAccount {
 }
 
 export default function Banking() {
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'manual';
+  const initialStatus = searchParams.get('status') || 'all';
+  
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importTransactions, setImportTransactions] = useState<ImportTransaction[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newAccount, setNewAccount] = useState<NewBankAccount>({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '' });
@@ -620,7 +625,7 @@ export default function Banking() {
           </Card>
         </div>
 
-        <Tabs defaultValue="manual">
+        <Tabs defaultValue={initialTab}>
           <TabsList className="flex-wrap">
             <TabsTrigger value="manual">
               <Pencil className="h-4 w-4 mr-1" />
