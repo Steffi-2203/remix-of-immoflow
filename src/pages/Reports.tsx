@@ -730,6 +730,10 @@ export default function Reports() {
   // VAT liability from invoices (alt)
   const vatLiability = totalUst - vorsteuerFromExpenses;
 
+  // Kombinierte Vorsteuer aus Banking + Kosten & Belege
+  const combinedVorsteuer = vorsteuerFromTransactions + vorsteuerFromExpenses;
+  const combinedVatLiability = totalUstEinnahmen - combinedVorsteuer;
+
   // Period label for display
   const periodLabel = reportPeriod === 'yearly' 
     ? `Jahr ${selectedYear}` 
@@ -1526,7 +1530,7 @@ export default function Reports() {
             <div>
               <CardTitle>USt-Voranmeldung {periodLabel}</CardTitle>
               <CardDescription>
-                Einnahmen aus {relevantTenants.length} aktiven Mietern (SOLL), Vorsteuer aus {expenseTransactions.length} Ausgaben
+                Einnahmen aus {relevantTenants.length} aktiven Mietern (SOLL), Vorsteuer aus {expenseTransactions.length} Banking-Buchungen + {periodExpenses.length} Belege
                 {selectedPropertyId !== 'all' && selectedProperty && ` für ${selectedProperty.name}`}
               </CardDescription>
             </div>
@@ -1572,18 +1576,19 @@ export default function Reports() {
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Ausgaben (Vorsteuer)</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{totalExpensesFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{(totalExpensesFromTransactions + totalExpensesFromCosts).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <div className="text-xs text-muted-foreground mt-1">
-                  <p>Vorsteuer: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>Banking: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>Belege: €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
-              <div className={`rounded-lg border p-3 ${vatLiabilityFromTransactions >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
+              <div className={`rounded-lg border p-3 ${combinedVatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
                 <p className="text-xs text-muted-foreground">
-                  {vatLiabilityFromTransactions >= 0 ? 'Zahllast' : 'Gutschrift'}
+                  {combinedVatLiability >= 0 ? 'Zahllast' : 'Gutschrift'}
                 </p>
-                <p className={`text-lg font-bold ${vatLiabilityFromTransactions >= 0 ? 'text-success' : 'text-primary'}`}>
-                  €{Math.abs(vatLiabilityFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                <p className={`text-lg font-bold ${combinedVatLiability >= 0 ? 'text-success' : 'text-primary'}`}>
+                  €{Math.abs(combinedVatLiability).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -1644,18 +1649,19 @@ export default function Reports() {
             <div className="rounded-lg border border-border p-4">
               <p className="text-sm text-muted-foreground">Vorsteuer (aus Ausgaben)</p>
               <p className="text-2xl font-bold text-foreground mt-2">
-                €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{combinedVorsteuer.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
-              <div className="mt-2 text-xs text-muted-foreground">
-                <p>{expenseTransactions.length} Ausgaben-Buchungen</p>
+              <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                <p>Banking: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} ({expenseTransactions.length} Buchungen)</p>
+                <p>Belege: €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })} ({periodExpenses.length} Belege)</p>
               </div>
             </div>
-            <div className={`rounded-lg border p-4 ${vatLiabilityFromTransactions >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
+            <div className={`rounded-lg border p-4 ${combinedVatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
               <p className="text-sm text-muted-foreground">
-                {vatLiabilityFromTransactions >= 0 ? 'Zahllast' : 'Gutschrift'}
+                {combinedVatLiability >= 0 ? 'Zahllast' : 'Gutschrift'}
               </p>
-              <p className={`text-2xl font-bold mt-2 ${vatLiabilityFromTransactions >= 0 ? 'text-success' : 'text-primary'}`}>
-                €{Math.abs(vatLiabilityFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              <p className={`text-2xl font-bold mt-2 ${combinedVatLiability >= 0 ? 'text-success' : 'text-primary'}`}>
+                €{Math.abs(combinedVatLiability).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-2 text-xs text-muted-foreground">
                 {reportPeriod === 'monthly' && (
