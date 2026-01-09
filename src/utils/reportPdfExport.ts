@@ -569,62 +569,18 @@ export const generateUstVoranmeldung = (
   );
 
   // ====== EINNAHMEN AUS MIETERDATEN (SOLL-BESTEUERUNG) ======
-  // Direkt aus Mieterdaten berechnen - nicht aus monthly_invoices
-  // Berücksichtigt Mietbeginn: Mieter zahlt nur wenn mietbeginn <= letzter Tag des Monats
+  // Verwendet zentrale Utility-Funktion für konsistente Filterlogik
+  // - Nur EIN Mieter pro Unit
+  // - Mietbeginn muss im oder vor dem Zeitraum liegen
+  // - Beendete Mieter werden berücksichtigt wenn mietende im Zeitraum liegt
   
-  // Ermittle relevante Units basierend auf Property-Filter
-  const relevantUnits = selectedPropertyId === 'all' 
-    ? units 
-    : units.filter(u => u.property_id === selectedPropertyId);
-  const relevantUnitIds = relevantUnits.map(u => u.id);
-  
-  // Filtere Mieter die im Zeitraum aktiv sind
-  // Ein Mieter erscheint nur, wenn er in der Periode noch Mieter ist
-  // (mietbeginn <= Periodenende UND (mietende ist null ODER mietende >= Periodenbeginn))
-  const activeTenants = tenants.filter(t => {
-    // Muss zur relevanten Property gehören
-    if (!relevantUnitIds.includes(t.unit_id)) return false;
-    
-    // Muss aktiv oder beendet sein (nicht leerstand)
-    if (t.status !== 'aktiv' && t.status !== 'beendet') return false;
-    
-    const periodMonth = selectedMonth || 1;
-    
-    // Mietbeginn prüfen: Muss im oder vor dem Zeitraum beginnen
-    if (t.mietbeginn) {
-      const mietbeginn = new Date(t.mietbeginn);
-      const mietbeginnYear = mietbeginn.getFullYear();
-      const mietbeginnMonth = mietbeginn.getMonth() + 1;
-      
-      if (reportPeriod === 'yearly') {
-        if (mietbeginnYear > selectedYear) return false;
-      } else {
-        // Mietbeginn muss im oder vor dem Monat liegen
-        if (mietbeginnYear > selectedYear) return false;
-        if (mietbeginnYear === selectedYear && mietbeginnMonth > periodMonth) return false;
-      }
-    }
-    
-    // Mietende prüfen (unabhängig vom Status!)
-    // Wenn mietende vor dem Periodenbeginn liegt, ist der Mieter nicht mehr relevant
-    if (t.mietende) {
-      const mietende = new Date(t.mietende);
-      const mietendeYear = mietende.getFullYear();
-      const mietendeMonth = mietende.getMonth() + 1;
-      
-      if (reportPeriod === 'yearly') {
-        // Mietende muss im Jahr oder später sein
-        if (mietendeYear < selectedYear) return false;
-      } else {
-        // Mietende 31.12.26 → im Januar 2027 nicht mehr erscheinen
-        // Mietende muss im Monat oder später sein
-        if (mietendeYear < selectedYear) return false;
-        if (mietendeYear === selectedYear && mietendeMonth < periodMonth) return false;
-      }
-    }
-    
-    return true;
-  });
+  const activeTenants = getActiveTenantsForPeriod(
+    units,
+    tenants,
+    selectedPropertyId,
+    selectedYear,
+    reportPeriod === 'monthly' ? selectedMonth : undefined
+  );
   
   // Berechne SOLL-Einnahmen aus Mieterdaten mit korrekten USt-Sätzen
   let bruttoGrundmiete = 0;
