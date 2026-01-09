@@ -109,6 +109,59 @@ export type Database = {
           },
         ]
       }
+      distribution_keys: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          input_type: string
+          is_active: boolean
+          is_system: boolean
+          key_code: string
+          name: string
+          organization_id: string | null
+          sort_order: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          input_type?: string
+          is_active?: boolean
+          is_system?: boolean
+          key_code: string
+          name: string
+          organization_id?: string | null
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          input_type?: string
+          is_active?: boolean
+          is_system?: boolean
+          key_code?: string
+          name?: string
+          organization_id?: string | null
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distribution_keys_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           beleg_nummer: string | null

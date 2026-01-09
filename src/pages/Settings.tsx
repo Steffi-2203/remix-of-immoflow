@@ -6,6 +6,7 @@ import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -23,7 +24,7 @@ export default function Settings() {
 
   return (
     <MainLayout title="Einstellungen" subtitle="Verwalten Sie Ihr Konto">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Account Section */}
         <Card>
           <CardHeader>
@@ -75,6 +76,9 @@ export default function Settings() {
             )}
           </CardContent>
         </Card>
+
+        {/* Distribution Keys Section */}
+        <DistributionKeySettings />
       </div>
     </MainLayout>
   );
