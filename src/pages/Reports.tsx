@@ -1256,50 +1256,44 @@ export default function Reports() {
               </div>
             </div>
 
-            {/* Ausgaben */}
+            {/* Ausgaben - NUR aus Kosten & Belege */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-destructive flex items-center gap-2">
                 <ArrowDownRight className="h-4 w-4" />
-                Ausgaben (Banking + Kosten & Belege)
+                Ausgaben (aus Kosten & Belege)
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
                   <div>
                     <span className="text-sm">Betriebskosten</span>
                     <p className="text-xs text-muted-foreground">
-                      Umlagefähig • Banking: €{betriebskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} + Belege: €{betriebskostenFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      Umlagefähig auf Mieter
                     </p>
                   </div>
                   <span className="font-semibold text-destructive">
-                    €{combinedBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{betriebskostenFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-orange-500/20 bg-orange-500/5">
                   <div>
                     <span className="text-sm">Instandhaltung</span>
                     <p className="text-xs text-muted-foreground">
-                      Mindert Rendite • Banking: €{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} + Belege: €{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      Mindert Rendite (nicht umlagefähig)
                     </p>
                   </div>
                   <span className="font-semibold text-orange-600">
-                    €{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
-                  <span className="text-sm">Sonstige Ausgaben</span>
-                  <span className="font-semibold text-destructive">
-                    €{(combinedTotalExpenses - combinedBetriebskosten - combinedInstandhaltung).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-destructive bg-destructive/10">
                   <div>
                     <span className="font-semibold">Gesamt Ausgaben</span>
                     <p className="text-xs text-muted-foreground">
-                      {expenseTransactions.length} Buchungen + {periodExpenses.length} Belege
+                      {periodExpenses.length} Belege erfasst
                     </p>
                   </div>
                   <span className="font-bold text-destructive text-lg">
-                    €{combinedTotalExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{totalExpensesFromCosts.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -1313,11 +1307,11 @@ export default function Reports() {
                 <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
                 <p className="text-sm text-muted-foreground">
                   IST-Mieteinnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
-                  - Instandhaltung (€{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
+                  - Instandhaltung (€{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
                 </p>
               </div>
               <span className="font-bold text-primary text-2xl">
-                €{nettoertrag.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{(mieteFromTransactions - instandhaltungFromExpenses).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
