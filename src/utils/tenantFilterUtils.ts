@@ -23,40 +23,72 @@ interface UnitForFilter {
  * Prüft ob ein Mieter im gegebenen Zeitraum für SOLL-Berechnungen relevant ist
  * 
  * Regeln:
- * - Mieter muss Status 'aktiv' haben
+ * - Mieter muss Status 'aktiv' ODER 'beendet' haben (nicht 'leerstand')
  * - Mietbeginn muss vorhanden sein
  * - Mietbeginn muss im ausgewählten Zeitraum oder davor liegen
- * - Mietende wird NICHT geprüft (beendete Mieter bekommen anderen Status)
+ * - Bei 'beendet' Mietern: Mietende muss im oder nach dem Zeitraum liegen
+ *   (damit ehemalige Mieter für historische Perioden berücksichtigt werden)
  */
 export function isTenantActiveInPeriod(
   tenant: TenantForFilter,
   periodYear: number,
   periodMonth?: number // undefined = yearly
 ): boolean {
-  if (tenant.status !== 'aktiv') return false;
+  // Leerstand ist nie relevant
+  if (tenant.status === 'leerstand') return false;
   if (!tenant.mietbeginn) return false;
   
   const mietbeginn = new Date(tenant.mietbeginn);
   const mietbeginnYear = mietbeginn.getFullYear();
   const mietbeginnMonth = mietbeginn.getMonth() + 1;
   
+  // Mietbeginn muss im oder vor dem Zeitraum liegen
+  let beginnValid = false;
   if (periodMonth === undefined) {
     // Yearly: Mietbeginn muss im Jahr oder davor sein
-    return mietbeginnYear <= periodYear;
+    beginnValid = mietbeginnYear <= periodYear;
   } else {
     // Monthly: Mietbeginn muss im Monat oder davor sein
-    if (mietbeginnYear < periodYear) return true;
-    if (mietbeginnYear === periodYear && mietbeginnMonth <= periodMonth) return true;
-    return false;
+    if (mietbeginnYear < periodYear) {
+      beginnValid = true;
+    } else if (mietbeginnYear === periodYear && mietbeginnMonth <= periodMonth) {
+      beginnValid = true;
+    }
   }
+  
+  if (!beginnValid) return false;
+  
+  // Aktive Mieter sind immer relevant (wenn Mietbeginn passt)
+  if (tenant.status === 'aktiv') return true;
+  
+  // Beendete Mieter: Mietende muss im oder nach dem Zeitraum liegen
+  if (tenant.status === 'beendet' && tenant.mietende) {
+    const mietende = new Date(tenant.mietende);
+    const mietendeYear = mietende.getFullYear();
+    const mietendeMonth = mietende.getMonth() + 1;
+    
+    if (periodMonth === undefined) {
+      // Yearly: Mietende muss im Jahr oder später sein
+      return mietendeYear >= periodYear;
+    } else {
+      // Monthly: Mietende muss im Monat oder später sein
+      if (mietendeYear > periodYear) return true;
+      if (mietendeYear === periodYear && mietendeMonth >= periodMonth) return true;
+      return false;
+    }
+  }
+  
+  return false;
 }
 
 /**
- * Gibt genau EINEN aktiven Mieter pro Unit zurück, gefiltert nach Periode
+ * Gibt alle relevanten Mieter pro Unit zurück, gefiltert nach Periode
  * 
  * Wichtig:
- * - Pro Unit kann nur EIN Mieter aktiv sein (keine Duplikate)
+ * - Pro Unit kann nur EIN Mieter im Zeitraum aktiv gewesen sein
+ * - Aktive UND beendete Mieter werden berücksichtigt (für historische Perioden)
  * - Nur Mieter mit Mietbeginn im oder vor dem Zeitraum werden einbezogen
+ * - Bei beendeten Mietern: Mietende muss im oder nach dem Zeitraum liegen
  * - Ein Mieter kann mehrere Units haben (z.B. Geschäft + Garage)
  */
 export function getActiveTenantsForPeriod<T extends TenantForFilter>(
@@ -71,11 +103,29 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
     ? units 
     : units.filter(u => u.property_id === propertyId);
   
-  // Für jede Unit: Finde den aktiven Mieter und prüfe Mietbeginn
-  return relevantUnits
-    .map(unit => tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv'))
-    .filter((t): t is T => t !== null && t !== undefined)
-    .filter(t => isTenantActiveInPeriod(t, periodYear, periodMonth));
+  const relevantTenants: T[] = [];
+  
+  // Für jede Unit: Finde Mieter die im Zeitraum aktiv waren
+  relevantUnits.forEach(unit => {
+    // Alle Mieter dieser Unit die im Zeitraum aktiv waren
+    const unitTenants = tenants.filter(t => 
+      t.unit_id === unit.id && isTenantActiveInPeriod(t, periodYear, periodMonth)
+    );
+    
+    // Normalerweise sollte nur ein Mieter pro Unit im Zeitraum aktiv sein
+    // Bei Überschneidungen (sollte nicht passieren) nehmen wir den aktiven zuerst
+    unitTenants.sort((a, b) => {
+      if (a.status === 'aktiv' && b.status !== 'aktiv') return -1;
+      if (a.status !== 'aktiv' && b.status === 'aktiv') return 1;
+      return 0;
+    });
+    
+    if (unitTenants.length > 0) {
+      relevantTenants.push(unitTenants[0]);
+    }
+  });
+  
+  return relevantTenants;
 }
 
 /**
