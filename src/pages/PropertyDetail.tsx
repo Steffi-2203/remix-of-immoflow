@@ -26,6 +26,7 @@ import {
   Crown,
   Upload,
   Users,
+  AlertTriangle,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
@@ -419,6 +420,54 @@ export default function PropertyDetail() {
         </TabsContent>
 
         <TabsContent value="distribution" className="space-y-4">
+          {/* Distribution Key Validation Warnings */}
+          {(() => {
+            const unitsQmSum = units?.reduce((acc, unit) => acc + (Number((unit as any).vs_qm) || Number(unit.qm) || 0), 0) || 0;
+            const unitsMeaSum = units?.reduce((acc, unit) => acc + (Number((unit as any).vs_mea) || Number(unit.mea) || 0), 0) || 0;
+            const propertyQm = Number(property.total_qm) || 0;
+            const propertyMea = Number(property.total_mea) || 0;
+            
+            const qmDiff = propertyQm - unitsQmSum;
+            const meaDiff = propertyMea - unitsMeaSum;
+            const hasQmMismatch = Math.abs(qmDiff) > 0.01;
+            const hasMeaMismatch = Math.abs(meaDiff) > 0.01;
+            
+            if (hasQmMismatch || hasMeaMismatch) {
+              return (
+                <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-destructive mb-2">
+                        Verteilerschlüssel nicht vollständig zugeordnet!
+                      </h4>
+                      <div className="space-y-1 text-sm">
+                        {hasQmMismatch && (
+                          <p className="text-destructive">
+                            <strong>Quadratmeter:</strong> Liegenschaft hat {propertyQm.toLocaleString('de-AT')} m², 
+                            aber nur {unitsQmSum.toLocaleString('de-AT')} m² sind auf Einheiten verteilt. 
+                            <span className="font-bold"> Differenz: {qmDiff.toLocaleString('de-AT')} m²</span>
+                          </p>
+                        )}
+                        {hasMeaMismatch && (
+                          <p className="text-destructive">
+                            <strong>MEA:</strong> Liegenschaft hat {propertyMea.toLocaleString('de-AT')}‰, 
+                            aber nur {unitsMeaSum.toLocaleString('de-AT')}‰ sind auf Einheiten verteilt. 
+                            <span className="font-bold"> Differenz: {meaDiff.toLocaleString('de-AT')}‰</span>
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Bitte korrigieren Sie die Werte in den Einheiten oder passen Sie die Liegenschafts-Gesamtwerte an.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+          
           <div className="rounded-xl border border-border bg-card p-6">
             <h3 className="font-semibold text-foreground mb-4">Verteilerschlüssel-Summen aller Einheiten</h3>
             <p className="text-sm text-muted-foreground mb-6">
@@ -426,44 +475,65 @@ export default function PropertyDetail() {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { key: 'vs_qm', label: 'Quadratmeter', unit: 'm²', fallback: 'qm' },
-                { key: 'vs_mea', label: 'MEA', unit: '‰', fallback: 'mea' },
-                { key: 'vs_personen', label: 'Personenanzahl', unit: 'Pers.', fallback: null },
-                { key: 'vs_heizung_verbrauch', label: 'Heizungsverbrauch', unit: 'kWh', fallback: null },
-                { key: 'vs_wasser_verbrauch', label: 'Wasserverbrauch', unit: 'm³', fallback: null },
-                { key: 'vs_lift_wohnung', label: 'Lift Wohnung', unit: 'Anteil', fallback: null },
-                { key: 'vs_lift_geschaeft', label: 'Lift Geschäft', unit: 'Anteil', fallback: null },
-                { key: 'vs_muell', label: 'Müllentsorgung', unit: 'Anteil', fallback: null },
-                { key: 'vs_strom_allgemein', label: 'Allgemeinstrom', unit: 'Anteil', fallback: null },
-                { key: 'vs_versicherung', label: 'Versicherung', unit: 'Anteil', fallback: null },
-                { key: 'vs_hausbetreuung', label: 'Hausbetreuung', unit: 'Anteil', fallback: null },
-                { key: 'vs_garten', label: 'Gartenpflege', unit: 'Anteil', fallback: null },
-                { key: 'vs_schneeraeumung', label: 'Schneeräumung', unit: 'Anteil', fallback: null },
-                { key: 'vs_kanal', label: 'Kanalgebühren', unit: 'Anteil', fallback: null },
-                { key: 'vs_grundsteuer', label: 'Grundsteuer', unit: 'Anteil', fallback: null },
-                { key: 'vs_verwaltung', label: 'Verwaltungskosten', unit: 'Anteil', fallback: null },
-                { key: 'vs_ruecklage', label: 'Rücklage', unit: 'Anteil', fallback: null },
-                { key: 'vs_sonstiges_1', label: 'Sonstiges 1', unit: 'Anteil', fallback: null },
-                { key: 'vs_sonstiges_2', label: 'Sonstiges 2', unit: 'Anteil', fallback: null },
-                { key: 'vs_sonstiges_3', label: 'Sonstiges 3', unit: 'Anteil', fallback: null },
+                { key: 'vs_qm', label: 'Quadratmeter', unit: 'm²', fallback: 'qm', propertyTotal: Number(property.total_qm) },
+                { key: 'vs_mea', label: 'MEA', unit: '‰', fallback: 'mea', propertyTotal: Number(property.total_mea) },
+                { key: 'vs_personen', label: 'Personenanzahl', unit: 'Pers.', fallback: null, propertyTotal: null },
+                { key: 'vs_heizung_verbrauch', label: 'Heizungsverbrauch', unit: 'kWh', fallback: null, propertyTotal: null },
+                { key: 'vs_wasser_verbrauch', label: 'Wasserverbrauch', unit: 'm³', fallback: null, propertyTotal: null },
+                { key: 'vs_lift_wohnung', label: 'Lift Wohnung', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_lift_geschaeft', label: 'Lift Geschäft', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_muell', label: 'Müllentsorgung', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_strom_allgemein', label: 'Allgemeinstrom', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_versicherung', label: 'Versicherung', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_hausbetreuung', label: 'Hausbetreuung', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_garten', label: 'Gartenpflege', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_schneeraeumung', label: 'Schneeräumung', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_kanal', label: 'Kanalgebühren', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_grundsteuer', label: 'Grundsteuer', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_verwaltung', label: 'Verwaltungskosten', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_ruecklage', label: 'Rücklage', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_sonstiges_1', label: 'Sonstiges 1', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_sonstiges_2', label: 'Sonstiges 2', unit: 'Anteil', fallback: null, propertyTotal: null },
+                { key: 'vs_sonstiges_3', label: 'Sonstiges 3', unit: 'Anteil', fallback: null, propertyTotal: null },
               ].map((field) => {
                 const sum = units?.reduce((acc, unit) => {
                   const value = (unit as any)[field.key] ?? (field.fallback ? (unit as any)[field.fallback] : 0);
                   return acc + (Number(value) || 0);
                 }, 0) || 0;
                 
+                const hasMismatch = field.propertyTotal !== null && Math.abs(field.propertyTotal - sum) > 0.01;
+                
                 return (
                   <div
                     key={field.key}
-                    className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "rounded-lg border p-3 transition-colors",
+                      hasMismatch 
+                        ? "border-destructive bg-destructive/5" 
+                        : "border-border hover:bg-muted/30"
+                    )}
                   >
-                    <p className="text-sm text-muted-foreground">{field.label}</p>
-                    <p className="text-xl font-bold text-foreground mt-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">{field.label}</p>
+                      {hasMismatch && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                    </div>
+                    <p className={cn(
+                      "text-xl font-bold mt-1",
+                      hasMismatch ? "text-destructive" : "text-foreground"
+                    )}>
                       {field.key === 'vs_personen' 
                         ? sum.toLocaleString('de-AT')
                         : sum.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       <span className="text-sm font-normal text-muted-foreground ml-1">{field.unit}</span>
                     </p>
+                    {field.propertyTotal !== null && (
+                      <p className={cn(
+                        "text-xs mt-1",
+                        hasMismatch ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        Soll: {field.propertyTotal.toLocaleString('de-AT')} {field.unit}
+                      </p>
+                    )}
                   </div>
                 );
               })}
