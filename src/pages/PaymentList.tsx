@@ -23,7 +23,8 @@ import {
   Clock,
   Users,
   Info,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -55,6 +56,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { TenantPaymentDetailDialog } from '@/components/payments/TenantPaymentDetailDialog';
 
 export default function PaymentList() {
   const now = new Date();
@@ -66,6 +68,10 @@ export default function PaymentList() {
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [splitPreview, setSplitPreview] = useState<{ bk: number; hk: number; miete: number } | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [selectedDetailTenant, setSelectedDetailTenant] = useState<any>(null);
+  const [selectedDetailUnit, setSelectedDetailUnit] = useState<any>(null);
+  
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: properties } = useProperties();
@@ -432,6 +438,7 @@ export default function PaymentList() {
                     <TableHead className="text-right">SOLL</TableHead>
                     <TableHead className="text-right">IST</TableHead>
                     <TableHead className="text-right">Differenz</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -455,7 +462,7 @@ export default function PaymentList() {
                     if (groupedByProperty.length === 0) {
                       return (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                             Keine Mieter gefunden
                           </TableCell>
                         </TableRow>
@@ -465,7 +472,7 @@ export default function PaymentList() {
                     return groupedByProperty.flatMap(({ property, allocations }) => [
                       // Property Header
                       <TableRow key={`header-${property.id}`} className="bg-muted/50">
-                        <TableCell colSpan={5} className="font-semibold text-primary">
+                        <TableCell colSpan={6} className="font-semibold text-primary">
                           🏠 {property.name}
                         </TableCell>
                       </TableRow>,
@@ -478,7 +485,12 @@ export default function PaymentList() {
                         return (
                           <TableRow 
                             key={item.tenant.id}
-                            className={differenz < -0.01 ? 'bg-red-50/30 dark:bg-red-950/10' : differenz > 0.01 ? 'bg-green-50/30 dark:bg-green-950/10' : ''}
+                            className={`cursor-pointer hover:bg-muted/50 transition-colors ${differenz < -0.01 ? 'bg-red-50/30 dark:bg-red-950/10' : differenz > 0.01 ? 'bg-green-50/30 dark:bg-green-950/10' : ''}`}
+                            onClick={() => {
+                              setSelectedDetailTenant(item.tenant);
+                              setSelectedDetailUnit(item.unit);
+                              setDetailDialogOpen(true);
+                            }}
                           >
                             <TableCell className="font-medium">{item.unit?.top_nummer || '-'}</TableCell>
                             <TableCell>{item.tenant.first_name} {item.tenant.last_name}</TableCell>
@@ -490,6 +502,9 @@ export default function PaymentList() {
                             </TableCell>
                             <TableCell className={`text-right font-bold ${differenz < -0.01 ? 'text-red-600' : differenz > 0.01 ? 'text-green-600' : ''}`}>
                               {differenz > 0 ? '+' : ''}€ {differenz.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             </TableCell>
                           </TableRow>
                         );
@@ -877,6 +892,16 @@ export default function PaymentList() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Tenant Payment Detail Dialog */}
+      <TenantPaymentDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        tenant={selectedDetailTenant}
+        unit={selectedDetailUnit}
+        year={selectedYear}
+        month={selectedMonth}
+      />
     </MainLayout>
   );
 }
