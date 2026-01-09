@@ -45,6 +45,7 @@ import {
   Trash2,
   FileText,
   Landmark,
+  Scale,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
@@ -90,6 +91,25 @@ const statusStyles: Record<string, string> = {
   aktiv: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   leerstand: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   beendet: 'bg-muted text-muted-foreground',
+};
+
+const mrgScopeLabels: Record<string, string> = {
+  vollanwendung: 'Vollanwendung MRG',
+  teilanwendung: 'Teilanwendung MRG',
+  ausgenommen: 'Vom MRG ausgenommen',
+};
+
+const mrgScopeStyles: Record<string, string> = {
+  vollanwendung: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  teilanwendung: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  ausgenommen: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+};
+
+const kategorieLabels: Record<string, string> = {
+  A: 'Kategorie A (Heizung + Bad/WC)',
+  B: 'Kategorie B (Bad/WC)',
+  C: 'Kategorie C (WC + Wasser)',
+  D: 'Kategorie D (Substandard)',
 };
 
 const invoiceStatusLabels: Record<string, string> = {
@@ -453,7 +473,7 @@ export default function UnitDetail() {
       </div>
 
       {/* Unit Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -511,7 +531,56 @@ export default function UnitDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* MRG Status Card */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Scale className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">MRG-Status</p>
+                <Badge className={mrgScopeStyles[(unit as any).mrg_scope || 'vollanwendung']}>
+                  {(unit as any).mrg_scope ? mrgScopeLabels[(unit as any).mrg_scope] : 'Vollanwendung MRG'}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* MRG Details Card */}
+      {(unit as any).mrg_scope === 'vollanwendung' && (
+        <Card className="mb-6 border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <Scale className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-medium text-blue-900 dark:text-blue-100">MRG-Vollanwendung</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Ausstattung:</span>
+                    <span className="ml-2 font-medium">{kategorieLabels[(unit as any).ausstattungskategorie || 'A']}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Nutzfläche §17:</span>
+                    <span className="ml-2 font-medium">
+                      {Number((unit as any).nutzflaeche_mrg || unit.qm).toLocaleString('de-AT')} m²
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Richtwert-Basis:</span>
+                    <span className="ml-2 font-medium">
+                      {(unit as any).richtwertmiete_basis ? `€ ${Number((unit as any).richtwertmiete_basis).toLocaleString('de-AT')}/m²` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Rent Expectation Card */}
       {unitId && (
