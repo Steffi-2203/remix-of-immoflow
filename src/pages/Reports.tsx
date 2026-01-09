@@ -487,6 +487,41 @@ export default function Reports() {
     reportPeriod === 'monthly' ? selectedMonth : undefined
   );
   
+  // Ermittle Mieter mit zukünftigem Mietbeginn (für Warnhinweis)
+  const futureTenants = useMemo(() => {
+    if (!allTenants || !allUnits) return [];
+    
+    // Filter nach Property wenn ausgewählt
+    const relevantUnitIds = selectedPropertyId === 'all' 
+      ? allUnits.map(u => u.id)
+      : allUnits.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+    
+    return allTenants.filter(t => {
+      if (t.status !== 'aktiv') return false;
+      if (!relevantUnitIds.includes(t.unit_id)) return false;
+      if (!t.mietbeginn) return false;
+      
+      const mietbeginn = new Date(t.mietbeginn);
+      const mietbeginnYear = mietbeginn.getFullYear();
+      const mietbeginnMonth = mietbeginn.getMonth() + 1;
+      
+      if (reportPeriod === 'yearly') {
+        return mietbeginnYear > selectedYear;
+      } else {
+        if (mietbeginnYear > selectedYear) return true;
+        if (mietbeginnYear === selectedYear && mietbeginnMonth > selectedMonth) return true;
+        return false;
+      }
+    }).map(t => {
+      const unit = allUnits.find(u => u.id === t.unit_id);
+      return {
+        ...t,
+        unitTopNummer: unit?.top_nummer || 'N/A',
+        mietbeginnFormatted: t.mietbeginn ? new Date(t.mietbeginn).toLocaleDateString('de-AT') : '-'
+      };
+    });
+  }, [allTenants, allUnits, selectedPropertyId, selectedYear, selectedMonth, reportPeriod]);
+  
   // Monatliche SOLL-Summen aus Mieterdaten
   const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
   const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
@@ -876,6 +911,31 @@ export default function Reports() {
           Mieteinnahmen synchronisieren
         </Button>
       </div>
+
+      {/* Warnung: Mieter mit zukünftigem Mietbeginn */}
+      {futureTenants.length > 0 && (
+        <div className="mb-6 p-4 border border-warning/50 bg-warning/10 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-warning">
+                {futureTenants.length} Mieter mit Mietbeginn nach {periodLabel}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Diese Mieter sind zwar als "aktiv" gespeichert, aber ihr Mietbeginn liegt nach dem gewählten Abrechnungszeitraum. 
+                Sie werden daher korrekt aus SOLL-Berechnungen, USt-Voranmeldung und OP-Liste ausgeschlossen.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {futureTenants.map(t => (
+                  <Badge key={t.id} variant="outline" className="text-xs">
+                    {t.unitTopNummer} {t.first_name} {t.last_name} (ab {t.mietbeginnFormatted})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Stats - JETZT AUS TRANSAKTIONEN */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
