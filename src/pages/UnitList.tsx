@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, Filter, Home, Building2, Car, Loader2, Users, AlertTriangle, Clock } from 'lucide-react';
+import { Search, Filter, Home, Building2, Car, Loader2, Users, AlertTriangle, Clock, Scale } from 'lucide-react';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useTenants } from '@/hooks/useTenants';
@@ -62,6 +62,18 @@ const statusStyles: Record<string, string> = {
   aktiv: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   leerstand: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   beendet: 'bg-muted text-muted-foreground',
+};
+
+const mrgScopeLabels: Record<string, string> = {
+  vollanwendung: 'Voll-MRG',
+  teilanwendung: 'Teil-MRG',
+  ausgenommen: 'Kein MRG',
+};
+
+const mrgScopeStyles: Record<string, string> = {
+  vollanwendung: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  teilanwendung: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  ausgenommen: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
 };
 
 export default function UnitList() {
@@ -242,6 +254,7 @@ export default function UnitList() {
                   <TableHead>Liegenschaft</TableHead>
                   <TableHead>Typ</TableHead>
                   <TableHead>Fläche</TableHead>
+                  <TableHead>MRG</TableHead>
                   <TableHead>Mieter</TableHead>
                   <TableHead>Mietvertrag</TableHead>
                   <TableHead className="text-right">Gesamt</TableHead>
@@ -281,6 +294,22 @@ export default function UnitList() {
                         <Badge variant="secondary">{unitTypeLabels[unit.type]}</Badge>
                       </TableCell>
                       <TableCell>{Number(unit.qm).toLocaleString('de-AT')} m²</TableCell>
+                      <TableCell>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge className={mrgScopeStyles[(unit as any).mrg_scope || 'vollanwendung']}>
+                                <Scale className="h-3 w-3 mr-1" />
+                                {mrgScopeLabels[(unit as any).mrg_scope || 'vollanwendung']}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p><strong>Kategorie:</strong> {(unit as any).ausstattungskategorie || 'A'}</p>
+                              <p><strong>Nutzfläche §17:</strong> {Number((unit as any).nutzflaeche_mrg || unit.qm).toLocaleString('de-AT')} m²</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
                       <TableCell>
                         {tenant ? (
                           <div className="flex items-center gap-2">
