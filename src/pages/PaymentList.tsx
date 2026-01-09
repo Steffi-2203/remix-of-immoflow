@@ -375,68 +375,120 @@ export default function PaymentList() {
         </Select>
       </div>
 
-      {/* Statistics - SOLL/IST matching Reports logic */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Euro className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">SOLL (diesen Monat)</p>
-                <p className="text-2xl font-bold">€ {stats.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-              </div>
+      {/* Kumulierte Mieter-Saldo-Übersicht */}
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold">Kumulierte Saldo-Übersicht ({format(now, 'MMMM yyyy', { locale: de })})</h3>
+          </div>
+          
+          {mrgLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          </CardContent>
-        </Card>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Top</TableHead>
+                    <TableHead>Mieter</TableHead>
+                    <TableHead className="text-right">SOLL</TableHead>
+                    <TableHead className="text-right">IST</TableHead>
+                    <TableHead className="text-right">Differenz</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(() => {
+                    // Gruppiere nach Property und sortiere nach Top-Nummer
+                    const groupedByProperty = (properties || [])
+                      .filter(p => selectedPropertyId === 'all' || p.id === selectedPropertyId)
+                      .map(property => {
+                        const propertyUnits = (units || []).filter(u => u.property_id === property.id);
+                        const propertyAllocations = mrgAllocations
+                          .filter(alloc => propertyUnits.some(u => u.id === alloc.unit?.id))
+                          .sort((a, b) => {
+                            const topA = a.unit?.top_nummer || '';
+                            const topB = b.unit?.top_nummer || '';
+                            return topA.localeCompare(topB, 'de', { numeric: true });
+                          });
+                        return { property, allocations: propertyAllocations };
+                      })
+                      .filter(g => g.allocations.length > 0);
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Euro className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">IST (diesen Monat)</p>
-                <p className="text-2xl font-bold">€ {stats.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                    if (groupedByProperty.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                            Keine Mieter gefunden
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <Euro className="h-5 w-5 text-red-600" />
+                    return groupedByProperty.flatMap(({ property, allocations }) => [
+                      // Property Header
+                      <TableRow key={`header-${property.id}`} className="bg-muted/50">
+                        <TableCell colSpan={5} className="font-semibold text-primary">
+                          🏠 {property.name}
+                        </TableCell>
+                      </TableRow>,
+                      // Tenant rows
+                      ...allocations.map(item => {
+                        const sollTotal = item.sollBk + item.sollHk + item.sollMiete;
+                        const istTotal = item.istBk + item.istHk + item.istMiete;
+                        const differenz = istTotal - sollTotal;
+                        
+                        return (
+                          <TableRow 
+                            key={item.tenant.id}
+                            className={differenz < -0.01 ? 'bg-red-50/30 dark:bg-red-950/10' : differenz > 0.01 ? 'bg-green-50/30 dark:bg-green-950/10' : ''}
+                          >
+                            <TableCell className="font-medium">{item.unit?.top_nummer || '-'}</TableCell>
+                            <TableCell>{item.tenant.first_name} {item.tenant.last_name}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              € {sollTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              € {istTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className={`text-right font-bold ${differenz < -0.01 ? 'text-red-600' : differenz > 0.01 ? 'text-green-600' : ''}`}>
+                              {differenz > 0 ? '+' : ''}€ {differenz.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }),
+                    ]);
+                  })()}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          
+          {/* Summary row */}
+          {!mrgLoading && (
+            <div className="mt-4 pt-4 border-t flex flex-wrap gap-6 text-sm">
+              <div>
+                <span className="text-muted-foreground">Gesamt SOLL: </span>
+                <span className="font-semibold">€ {stats.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Saldo Unterzahlung</p>
-                <p className="text-2xl font-bold text-red-600">
-                  € {stats.totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Euro className="h-5 w-5 text-green-600" />
+                <span className="text-muted-foreground">Gesamt IST: </span>
+                <span className="font-semibold">€ {stats.totalIst.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Überzahlung</p>
-                <p className="text-2xl font-bold text-green-600">
-                  € {stats.totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                </p>
+                <span className="text-muted-foreground">Unterzahlungen: </span>
+                <span className="font-semibold text-red-600">€ {stats.totalUnterzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Überzahlungen: </span>
+                <span className="font-semibold text-green-600">€ {stats.totalUeberzahlung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Tabs for Payments and Open Items */}
       <Tabs defaultValue="payments" className="space-y-4">
