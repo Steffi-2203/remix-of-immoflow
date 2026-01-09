@@ -110,7 +110,7 @@ export default function ExpenseList() {
   };
   
   const [newExpense, setNewExpense] = useState(initialExpenseState);
-  const [hasReceipt, setHasReceipt] = useState<boolean>(false); // Default to false (ohne Beleg)
+  const [hasReceipt, setHasReceipt] = useState<boolean | null>(null); // null = not yet selected
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [useCustomAbrechnungsjahr, setUseCustomAbrechnungsjahr] = useState(false);
@@ -241,7 +241,7 @@ export default function ExpenseList() {
   // Reset dialog state
   const resetNewExpenseDialog = () => {
     setNewExpense(initialExpenseState);
-    setHasReceipt(false);
+    setHasReceipt(null);
     setSelectedFile(null);
     setUseCustomAbrechnungsjahr(false);
     setCustomAbrechnungsjahr(currentYear - 1);
@@ -289,6 +289,16 @@ export default function ExpenseList() {
       toast({
         title: 'Datum fehlt',
         description: 'Bitte wählen Sie ein Datum aus.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Require user to choose receipt option
+    if (hasReceipt === null) {
+      toast({
+        title: 'Beleg-Option wählen',
+        description: 'Bitte wählen Sie „Ja, Beleg vorhanden" oder „Nein, ohne Beleg".',
         variant: 'destructive',
       });
       return;
