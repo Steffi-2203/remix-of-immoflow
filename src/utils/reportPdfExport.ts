@@ -527,6 +527,20 @@ export const generateUmsatzReport = (
 };
 
 // ====== UST VORANMELDUNG ======
+// USt-Sätze nach Einheitstyp (österreichische Regelung)
+const getVatRatesForUnitType = (unitType: string): { miete: number; bk: number; heizung: number } => {
+  switch (unitType) {
+    case 'wohnung':
+      return { miete: 10, bk: 10, heizung: 20 };
+    case 'geschaeft':
+    case 'stellplatz':
+    case 'garage':
+    case 'lager':
+    default:
+      return { miete: 20, bk: 20, heizung: 20 };
+  }
+};
+
 export const generateUstVoranmeldung = (
   properties: PropertyData[],
   units: UnitData[],
@@ -554,45 +568,108 @@ export const generateUstVoranmeldung = (
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
-  // ====== EINNAHMEN AUS MIETRECHNUNGEN (SOLL-BESTEUERUNG) ======
-  // Filter invoices for period and property (via unit_id -> property_id)
-  const periodInvoices = invoices.filter(inv => {
-    // Period filter
-    let periodMatch = false;
-    if (reportPeriod === 'yearly') {
-      periodMatch = inv.year === selectedYear;
-    } else {
-      periodMatch = inv.year === selectedYear && inv.month === selectedMonth;
-    }
-    if (!periodMatch) return false;
-    
-    // Property filter (über unit_id)
-    if (selectedPropertyId === 'all') return true;
-    
-    const unit = units.find(u => u.id === inv.unit_id);
-    return unit?.property_id === selectedPropertyId;
-  });
-
-  // Berechne Einnahmen aus Invoices (mit korrekter USt-Aufschlüsselung)
-  const bruttoGrundmiete = periodInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-  const bruttoBk = periodInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-  const bruttoHeizung = periodInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+  // ====== EINNAHMEN AUS MIETERDATEN (SOLL-BESTEUERUNG) ======
+  // Direkt aus Mieterdaten berechnen - nicht aus monthly_invoices
+  // Berücksichtigt Mietbeginn: Mieter zahlt nur wenn mietbeginn <= letzter Tag des Monats
   
-  // USt aus Invoices berechnen (mit den gespeicherten Steuersätzen)
-  const ustGrundmiete = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.grundmiete || 0), Number(inv.ust_satz_miete || 0)), 0);
-  const ustBk = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.betriebskosten || 0), Number(inv.ust_satz_bk || 10)), 0);
-  const ustHeizung = periodInvoices.reduce((sum, inv) => 
-    sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
+  // Ermittle relevante Units basierend auf Property-Filter
+  const relevantUnits = selectedPropertyId === 'all' 
+    ? units 
+    : units.filter(u => u.property_id === selectedPropertyId);
+  const relevantUnitIds = relevantUnits.map(u => u.id);
+  
+  // Filtere Mieter die im Zeitraum aktiv sind
+  const activeTenants = tenants.filter(t => {
+    // Muss zur relevanten Property gehören
+    if (!relevantUnitIds.includes(t.unit_id)) return false;
+    
+    // Muss aktiv oder beendet sein
+    if (t.status !== 'aktiv' && t.status !== 'beendet') return false;
+    
+    // Mietbeginn prüfen: Muss im oder vor dem Zeitraum beginnen
+    if (t.mietbeginn) {
+      const mietbeginn = new Date(t.mietbeginn);
+      const mietbeginnYear = mietbeginn.getFullYear();
+      const mietbeginnMonth = mietbeginn.getMonth() + 1;
+      
+      if (reportPeriod === 'yearly') {
+        // Mietbeginn muss im Jahr sein
+        if (mietbeginnYear > selectedYear) return false;
+      } else {
+        // Mietbeginn muss im oder vor dem Monat liegen
+        // (Monat zählt ab dem Tag an dem Mietbeginn ist)
+        const lastDayOfMonth = new Date(selectedYear, selectedMonth || 1, 0);
+        if (mietbeginn > lastDayOfMonth) return false;
+      }
+    }
+    
+    // Bei beendeten Mietern: Mietende prüfen
+    if (t.status === 'beendet' && t.mietende) {
+      const mietende = new Date(t.mietende);
+      const mietendeYear = mietende.getFullYear();
+      const mietendeMonth = mietende.getMonth() + 1;
+      
+      if (reportPeriod === 'yearly') {
+        if (mietendeYear < selectedYear) return false;
+      } else {
+        // Mietende muss >= 1. des Monats sein
+        const firstDayOfMonth = new Date(selectedYear, (selectedMonth || 1) - 1, 1);
+        if (mietende < firstDayOfMonth) return false;
+      }
+    }
+    
+    return true;
+  });
+  
+  // Berechne SOLL-Einnahmen aus Mieterdaten mit korrekten USt-Sätzen
+  let bruttoGrundmiete = 0;
+  let bruttoBk = 0;
+  let bruttoHeizung = 0;
+  let ustGrundmiete = 0;
+  let ustBk = 0;
+  let ustHeizung = 0;
+  
+  const mieteSaetze = new Set<number>();
+  const bkSaetze = new Set<number>();
+  const heizungSaetze = new Set<number>();
+  
+  activeTenants.forEach(tenant => {
+    const unit = units.find(u => u.id === tenant.unit_id);
+    const unitType = unit?.type || 'wohnung';
+    const vatRates = getVatRatesForUnitType(unitType);
+    
+    const miete = Number(tenant.grundmiete || 0);
+    const bk = Number(tenant.betriebskosten_vorschuss || 0);
+    const heizung = Number(tenant.heizungskosten_vorschuss || 0);
+    
+    // Bei yearly: Multiplikator für relevante Monate berechnen
+    let multiplier = 1;
+    if (reportPeriod === 'yearly') {
+      // Berechne wie viele Monate der Mieter im Jahr aktiv war
+      const mietbeginn = tenant.mietbeginn ? new Date(tenant.mietbeginn) : new Date(selectedYear, 0, 1);
+      const mietende = tenant.mietende ? new Date(tenant.mietende) : new Date(selectedYear, 11, 31);
+      
+      const startMonth = mietbeginn.getFullYear() < selectedYear ? 1 : mietbeginn.getMonth() + 1;
+      const endMonth = mietende.getFullYear() > selectedYear ? 12 : mietende.getMonth() + 1;
+      
+      multiplier = Math.max(0, endMonth - startMonth + 1);
+    }
+    
+    bruttoGrundmiete += miete * multiplier;
+    bruttoBk += bk * multiplier;
+    bruttoHeizung += heizung * multiplier;
+    
+    ustGrundmiete += calculateVatFromGross(miete * multiplier, vatRates.miete);
+    ustBk += calculateVatFromGross(bk * multiplier, vatRates.bk);
+    ustHeizung += calculateVatFromGross(heizung * multiplier, vatRates.heizung);
+    
+    mieteSaetze.add(vatRates.miete);
+    bkSaetze.add(vatRates.bk);
+    heizungSaetze.add(vatRates.heizung);
+  });
 
   const totalEinnahmen = bruttoGrundmiete + bruttoBk + bruttoHeizung;
   const totalUstEinnahmen = ustGrundmiete + ustBk + ustHeizung;
-
-  // Ermittle USt-Satz-Spannen für Anzeige
-  const mieteSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_miete || 0)));
-  const bkSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_bk || 10)));
-  const heizungSaetze = new Set(periodInvoices.map(inv => Number(inv.ust_satz_heizung || 20)));
   
   const formatSatzSpanne = (saetze: Set<number>): string => {
     const arr = Array.from(saetze).sort((a, b) => a - b);
@@ -655,14 +732,14 @@ export const generateUstVoranmeldung = (
   // USt-Zahllast
   const vatLiability = totalUstEinnahmen - vorsteuer;
 
-  // Section 1: Einnahmen aus Mietrechnungen (Soll)
+  // Section 1: Einnahmen aus Mieterdaten (Soll)
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('1. Einnahmen aus Mietrechnungen (Soll-Besteuerung)', 14, 50);
+  doc.text('1. Einnahmen aus Mieterdaten (Soll-Besteuerung)', 14, 50);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text(`${periodInvoices.length} Rechnungen im Zeitraum`, 14, 56);
+  doc.text(`${activeTenants.length} aktive Mieter im Zeitraum`, 14, 56);
   doc.setTextColor(0);
 
   autoTable(doc, {
