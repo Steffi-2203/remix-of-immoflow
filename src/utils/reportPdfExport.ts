@@ -779,7 +779,7 @@ export const generateOffenePostenReport = (
   const targetUnits = selectedPropertyId === 'all' ? units : units.filter(u => u.property_id === selectedPropertyId);
   
   // Get active tenants for these units - using central utility for consistent logic
-  // WICHTIG: Nur EIN aktiver Mieter pro Unit, nur Mieter mit Mietbeginn im/vor dem Zeitraum
+  // WICHTIG: Nur EIN aktiver Mieter pro Unit, Mietbeginn wird NICHT geprüft
   const relevantTenants = getActiveTenantsForPeriod(
     targetUnits,
     tenants,
