@@ -579,12 +579,16 @@ export const generateUstVoranmeldung = (
   const relevantUnitIds = relevantUnits.map(u => u.id);
   
   // Filtere Mieter die im Zeitraum aktiv sind
+  // Ein Mieter erscheint nur, wenn er in der Periode noch Mieter ist
+  // (mietbeginn <= Periodenende UND (mietende ist null ODER mietende >= Periodenbeginn))
   const activeTenants = tenants.filter(t => {
     // Muss zur relevanten Property gehören
     if (!relevantUnitIds.includes(t.unit_id)) return false;
     
-    // Muss aktiv oder beendet sein
+    // Muss aktiv oder beendet sein (nicht leerstand)
     if (t.status !== 'aktiv' && t.status !== 'beendet') return false;
+    
+    const periodMonth = selectedMonth || 1;
     
     // Mietbeginn prüfen: Muss im oder vor dem Zeitraum beginnen
     if (t.mietbeginn) {
@@ -593,29 +597,29 @@ export const generateUstVoranmeldung = (
       const mietbeginnMonth = mietbeginn.getMonth() + 1;
       
       if (reportPeriod === 'yearly') {
-        // Mietbeginn muss im Jahr sein
         if (mietbeginnYear > selectedYear) return false;
       } else {
         // Mietbeginn muss im oder vor dem Monat liegen
-        // Mieter mit Mietbeginn am 01.02. erscheint NICHT im Januar
-        const periodMonth = selectedMonth || 1;
         if (mietbeginnYear > selectedYear) return false;
         if (mietbeginnYear === selectedYear && mietbeginnMonth > periodMonth) return false;
       }
     }
     
-    // Bei beendeten Mietern: Mietende prüfen
-    if (t.status === 'beendet' && t.mietende) {
+    // Mietende prüfen (unabhängig vom Status!)
+    // Wenn mietende vor dem Periodenbeginn liegt, ist der Mieter nicht mehr relevant
+    if (t.mietende) {
       const mietende = new Date(t.mietende);
       const mietendeYear = mietende.getFullYear();
       const mietendeMonth = mietende.getMonth() + 1;
       
       if (reportPeriod === 'yearly') {
+        // Mietende muss im Jahr oder später sein
         if (mietendeYear < selectedYear) return false;
       } else {
-        // Mietende muss >= 1. des Monats sein
-        const firstDayOfMonth = new Date(selectedYear, (selectedMonth || 1) - 1, 1);
-        if (mietende < firstDayOfMonth) return false;
+        // Mietende 31.12.26 → im Januar 2027 nicht mehr erscheinen
+        // Mietende muss im Monat oder später sein
+        if (mietendeYear < selectedYear) return false;
+        if (mietendeYear === selectedYear && mietendeMonth < periodMonth) return false;
       }
     }
     
