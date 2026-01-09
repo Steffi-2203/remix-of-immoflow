@@ -24,8 +24,7 @@ interface UnitForFilter {
  * 
  * Regeln:
  * - Mieter muss Status 'aktiv' ODER 'beendet' haben (nicht 'leerstand')
- * - Mietbeginn muss vorhanden sein
- * - Mietbeginn muss im ausgewählten Zeitraum oder davor liegen
+ * - Mietbeginn wird NICHT mehr geprüft - alle aktiven Mieter werden angezeigt
  * - Bei 'beendet' Mietern: Mietende muss im oder nach dem Zeitraum liegen
  *   (damit ehemalige Mieter für historische Perioden berücksichtigt werden)
  */
@@ -36,29 +35,8 @@ export function isTenantActiveInPeriod(
 ): boolean {
   // Leerstand ist nie relevant
   if (tenant.status === 'leerstand') return false;
-  if (!tenant.mietbeginn) return false;
   
-  const mietbeginn = new Date(tenant.mietbeginn);
-  const mietbeginnYear = mietbeginn.getFullYear();
-  const mietbeginnMonth = mietbeginn.getMonth() + 1;
-  
-  // Mietbeginn muss im oder vor dem Zeitraum liegen
-  let beginnValid = false;
-  if (periodMonth === undefined) {
-    // Yearly: Mietbeginn muss im Jahr oder davor sein
-    beginnValid = mietbeginnYear <= periodYear;
-  } else {
-    // Monthly: Mietbeginn muss im Monat oder davor sein
-    if (mietbeginnYear < periodYear) {
-      beginnValid = true;
-    } else if (mietbeginnYear === periodYear && mietbeginnMonth <= periodMonth) {
-      beginnValid = true;
-    }
-  }
-  
-  if (!beginnValid) return false;
-  
-  // Aktive Mieter sind immer relevant (wenn Mietbeginn passt)
+  // Aktive Mieter sind immer relevant (Mietbeginn wird ignoriert)
   if (tenant.status === 'aktiv') return true;
   
   // Beendete Mieter: Mietende muss im oder nach dem Zeitraum liegen
