@@ -681,6 +681,65 @@ export type Database = {
           },
         ]
       }
+      property_owners: {
+        Row: {
+          address: string | null
+          bic: string | null
+          city: string | null
+          created_at: string
+          email: string | null
+          iban: string | null
+          id: string
+          is_primary: boolean
+          name: string
+          ownership_share: number
+          phone: string | null
+          postal_code: string | null
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          bic?: string | null
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          iban?: string | null
+          id?: string
+          is_primary?: boolean
+          name: string
+          ownership_share?: number
+          phone?: string | null
+          postal_code?: string | null
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          bic?: string | null
+          city?: string | null
+          created_at?: string
+          email?: string | null
+          iban?: string | null
+          id?: string
+          is_primary?: boolean
+          name?: string
+          ownership_share?: number
+          phone?: string | null
+          postal_code?: string | null
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_owners_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rent_expectations: {
         Row: {
           created_at: string | null

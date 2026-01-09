@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
@@ -264,6 +265,7 @@ export default function PropertyDetail() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="units">Einheiten</TabsTrigger>
+          <TabsTrigger value="owners">Eigentümer</TabsTrigger>
           <TabsTrigger value="distribution">Verteilerschlüssel</TabsTrigger>
           <TabsTrigger value="costs">Betriebskosten</TabsTrigger>
           <TabsTrigger value="documents">Dokumente</TabsTrigger>
@@ -410,6 +412,10 @@ export default function PropertyDetail() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="owners" className="space-y-4">
+          {id && <PropertyOwnersCard propertyId={id} />}
         </TabsContent>
 
         <TabsContent value="distribution" className="space-y-4">
