@@ -939,7 +939,7 @@ export default function ExpenseList() {
               Kosten erfassen
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] grid-rows-[auto_1fr_auto] overflow-hidden">
             <DialogHeader>
               <DialogTitle>Neue Kosten erfassen</DialogTitle>
               <DialogDescription>
@@ -947,7 +947,7 @@ export default function ExpenseList() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto pr-2 min-h-0">
               <div className="space-y-2">
                 <Label>Liegenschaft</Label>
                 <Select
