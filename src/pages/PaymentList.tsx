@@ -57,13 +57,15 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 export default function PaymentList() {
+  const now = new Date();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [splitPreview, setSplitPreview] = useState<{ bk: number; hk: number; miete: number } | null>(null);
-
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: properties } = useProperties();
@@ -156,14 +158,10 @@ export default function PaymentList() {
   }, [payments, propertyUnitIds, tenants, searchQuery]);
 
   // Use central MRG allocation hook for consistent logic with Reports
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-  
   const { allocations: mrgAllocations, totals: mrgTotals, isLoading: mrgLoading } = useMrgAllocation(
     selectedPropertyId,
-    currentYear,
-    currentMonth
+    selectedYear,
+    selectedMonth
   );
 
   // Stats from central MRG allocation
@@ -373,6 +371,43 @@ export default function PaymentList() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={String(selectedMonth)} onValueChange={(v) => setSelectedMonth(Number(v))}>
+          <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectValue placeholder="Monat" />
+          </SelectTrigger>
+          <SelectContent>
+            {[
+              { value: 1, label: 'Jänner' },
+              { value: 2, label: 'Februar' },
+              { value: 3, label: 'März' },
+              { value: 4, label: 'April' },
+              { value: 5, label: 'Mai' },
+              { value: 6, label: 'Juni' },
+              { value: 7, label: 'Juli' },
+              { value: 8, label: 'August' },
+              { value: 9, label: 'September' },
+              { value: 10, label: 'Oktober' },
+              { value: 11, label: 'November' },
+              { value: 12, label: 'Dezember' },
+            ].map((m) => (
+              <SelectItem key={m.value} value={String(m.value)}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
+          <SelectTrigger className="w-full sm:w-[100px]">
+            <SelectValue placeholder="Jahr" />
+          </SelectTrigger>
+          <SelectContent>
+            {Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i).map((year) => (
+              <SelectItem key={year} value={String(year)}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Kumulierte Mieter-Saldo-Übersicht */}
@@ -380,7 +415,7 @@ export default function PaymentList() {
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <Users className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">Kumulierte Saldo-Übersicht ({format(now, 'MMMM yyyy', { locale: de })})</h3>
+            <h3 className="font-semibold">Kumulierte Saldo-Übersicht ({format(new Date(selectedYear, selectedMonth - 1), 'MMMM yyyy', { locale: de })})</h3>
           </div>
           
           {mrgLoading ? (
