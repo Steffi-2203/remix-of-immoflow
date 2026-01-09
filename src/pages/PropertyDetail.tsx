@@ -155,6 +155,15 @@ export default function PropertyDetail() {
     return sum;
   }, 0) || 0;
 
+  // Calculate distribution key validation
+  const unitsQmSum = units?.reduce((acc, unit) => acc + (Number((unit as any).vs_qm) || Number(unit.qm) || 0), 0) || 0;
+  const unitsMeaSum = units?.reduce((acc, unit) => acc + (Number((unit as any).vs_mea) || Number(unit.mea) || 0), 0) || 0;
+  const propertyQm = Number(property?.total_qm) || 0;
+  const propertyMea = Number(property?.total_mea) || 0;
+  const qmDiff = propertyQm - unitsQmSum;
+  const meaDiff = propertyMea - unitsMeaSum;
+  const hasDistributionMismatch = Math.abs(qmDiff) > 0.01 || Math.abs(meaDiff) > 0.01;
+
   return (
     <MainLayout
       title={property.name}
@@ -262,12 +271,61 @@ export default function PropertyDetail() {
         </div>
       </div>
 
+      {/* Global Distribution Key Warning */}
+      {hasDistributionMismatch && (
+        <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-destructive">
+                ⚠️ Verteilerschlüssel stimmen nicht überein!
+              </h4>
+              <p className="text-sm text-destructive mt-1">
+                {Math.abs(qmDiff) > 0.01 && (
+                  <span className="block">
+                    <strong>m²:</strong> {propertyQm.toLocaleString('de-AT')} m² Liegenschaft vs. {unitsQmSum.toLocaleString('de-AT')} m² Einheiten 
+                    ({qmDiff > 0 ? 'fehlen' : 'zuviel'}: {Math.abs(qmDiff).toLocaleString('de-AT')} m²)
+                  </span>
+                )}
+                {Math.abs(meaDiff) > 0.01 && (
+                  <span className="block">
+                    <strong>MEA:</strong> {propertyMea.toLocaleString('de-AT')}‰ Liegenschaft vs. {unitsMeaSum.toLocaleString('de-AT')}‰ Einheiten 
+                    ({meaDiff > 0 ? 'fehlen' : 'zuviel'}: {Math.abs(meaDiff).toLocaleString('de-AT')}‰)
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Die Mieter zahlen sonst für Leerstände oder nicht erfasste Einheiten mit. Bitte Einheiten oder Liegenschafts-Werte anpassen.
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => setActiveTab('distribution')}
+            >
+              Details anzeigen
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="units">Einheiten</TabsTrigger>
+          <TabsTrigger value="units" className="relative">
+            Einheiten
+            {hasDistributionMismatch && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="owners">Eigentümer</TabsTrigger>
-          <TabsTrigger value="distribution">Verteilerschlüssel</TabsTrigger>
+          <TabsTrigger value="distribution" className="relative">
+            Verteilerschlüssel
+            {hasDistributionMismatch && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="costs">Betriebskosten</TabsTrigger>
           <TabsTrigger value="documents">Dokumente</TabsTrigger>
         </TabsList>
