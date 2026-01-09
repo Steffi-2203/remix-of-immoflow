@@ -135,7 +135,7 @@ export function BankingWidget() {
         )}
 
         {totalUnmatched > 0 && (
-          <Link to="/buchhaltung" className="block mt-4">
+          <Link to="/buchhaltung?tab=transactions&status=unmatched" className="block mt-4">
             <Button variant="outline" className="w-full" size="sm">
               <AlertCircle className="h-4 w-4 mr-2 text-orange-500" />
               {totalUnmatched} offene Zuordnung{totalUnmatched !== 1 ? 'en' : ''} bearbeiten
