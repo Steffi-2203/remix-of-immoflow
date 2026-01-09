@@ -597,9 +597,10 @@ export const generateUstVoranmeldung = (
         if (mietbeginnYear > selectedYear) return false;
       } else {
         // Mietbeginn muss im oder vor dem Monat liegen
-        // (Monat zählt ab dem Tag an dem Mietbeginn ist)
-        const lastDayOfMonth = new Date(selectedYear, selectedMonth || 1, 0);
-        if (mietbeginn > lastDayOfMonth) return false;
+        // Mieter mit Mietbeginn am 01.02. erscheint NICHT im Januar
+        const periodMonth = selectedMonth || 1;
+        if (mietbeginnYear > selectedYear) return false;
+        if (mietbeginnYear === selectedYear && mietbeginnMonth > periodMonth) return false;
       }
     }
     
