@@ -435,12 +435,25 @@ export const generateUmsatzReport = (
     selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
   );
 
-  // Filter transactions for period
+  // Filter transactions for period - including unit-based property matching
   const periodTransactions = transactions.filter(t => {
     const date = new Date(t.transaction_date);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
-    const matchesProp = selectedPropertyId === 'all' || t.property_id === selectedPropertyId;
+    
+    // Property matching: direct OR via unit_id
+    let matchesProp = selectedPropertyId === 'all';
+    if (!matchesProp) {
+      // Direct property assignment
+      if (t.property_id === selectedPropertyId) {
+        matchesProp = true;
+      }
+      // Via unit assignment
+      else if (t.unit_id) {
+        const unit = units.find(u => u.id === t.unit_id);
+        matchesProp = unit?.property_id === selectedPropertyId;
+      }
+    }
     
     if (reportPeriod === 'yearly') {
       return matchesProp && year === selectedYear;
@@ -467,15 +480,23 @@ export const generateUmsatzReport = (
   doc.text(`Ausgaben: ${formatCurrency(totalExpenses)} (${expenseTransactions.length} Buchungen)`, 14, 60);
   doc.text(`Ergebnis: ${formatCurrency(netResult)}`, 14, 67);
 
-  // Transaction table
+  // Transaction table - with unit info
   const tableData = periodTransactions.slice(0, 50).map(t => {
     const category = categories.find(c => c.id === t.category_id);
-    const property = properties.find(p => p.id === t.property_id);
+    const unit = units.find(u => u.id === t.unit_id);
+    const property = t.property_id 
+      ? properties.find(p => p.id === t.property_id)
+      : unit ? properties.find(p => p.id === unit.property_id) : null;
     const isIncome = t.amount > 0;
+    
+    // Show property name with unit if available
+    const locationInfo = unit 
+      ? `${property?.name || '-'} / Top ${unit.top_nummer}`
+      : property?.name || '-';
     
     return [
       new Date(t.transaction_date).toLocaleDateString('de-AT'),
-      property?.name || '-',
+      locationInfo,
       t.description || '-',
       category?.name || 'Nicht kategorisiert',
       isIncome ? formatCurrency(t.amount) : '-',
@@ -485,7 +506,7 @@ export const generateUmsatzReport = (
 
   autoTable(doc, {
     startY: 75,
-    head: [['Datum', 'Liegenschaft', 'Beschreibung', 'Kategorie', 'Einnahme', 'Ausgabe']],
+    head: [['Datum', 'Liegenschaft / Einheit', 'Beschreibung', 'Kategorie', 'Einnahme', 'Ausgabe']],
     body: tableData,
     foot: [['Summe', '', '', '', formatCurrency(totalIncome), formatCurrency(totalExpenses)]],
     theme: 'striped',
