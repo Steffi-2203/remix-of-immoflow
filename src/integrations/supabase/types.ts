@@ -113,11 +113,14 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          erlaubter_schluessel: string[] | null
           id: string
           input_type: string
           is_active: boolean
           is_system: boolean
           key_code: string
+          mrg_konform: boolean | null
+          mrg_paragraph: string | null
           name: string
           organization_id: string | null
           sort_order: number
@@ -127,11 +130,14 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          erlaubter_schluessel?: string[] | null
           id?: string
           input_type?: string
           is_active?: boolean
           is_system?: boolean
           key_code: string
+          mrg_konform?: boolean | null
+          mrg_paragraph?: string | null
           name: string
           organization_id?: string | null
           sort_order?: number
@@ -141,11 +147,14 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          erlaubter_schluessel?: string[] | null
           id?: string
           input_type?: string
           is_active?: boolean
           is_system?: boolean
           key_code?: string
+          mrg_konform?: boolean | null
+          mrg_paragraph?: string | null
           name?: string
           organization_id?: string | null
           sort_order?: number
@@ -173,7 +182,10 @@ export type Database = {
           datum: string
           expense_type: Database["public"]["Enums"]["expense_type"]
           id: string
+          ist_umlagefaehig: boolean | null
           month: number
+          mrg_kategorie: Database["public"]["Enums"]["mrg_bk_kategorie"] | null
+          mrg_paragraph: string | null
           notizen: string | null
           property_id: string
           transaction_id: string | null
@@ -190,7 +202,10 @@ export type Database = {
           datum: string
           expense_type?: Database["public"]["Enums"]["expense_type"]
           id?: string
+          ist_umlagefaehig?: boolean | null
           month: number
+          mrg_kategorie?: Database["public"]["Enums"]["mrg_bk_kategorie"] | null
+          mrg_paragraph?: string | null
           notizen?: string | null
           property_id: string
           transaction_id?: string | null
@@ -207,7 +222,10 @@ export type Database = {
           datum?: string
           expense_type?: Database["public"]["Enums"]["expense_type"]
           id?: string
+          ist_umlagefaehig?: boolean | null
           month?: number
+          mrg_kategorie?: Database["public"]["Enums"]["mrg_bk_kategorie"] | null
+          mrg_paragraph?: string | null
           notizen?: string | null
           property_id?: string
           transaction_id?: string | null
@@ -369,6 +387,116 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      mrg_abrechnungen: {
+        Row: {
+          abrechnung_erstellt_am: string | null
+          abrechnung_versendet_am: string | null
+          abrechnungsjahr: number
+          abrechnungszeitraum_bis: string
+          abrechnungszeitraum_von: string
+          created_at: string
+          einsicht_bis: string | null
+          einsicht_gewaehrt: boolean | null
+          frist_abrechnung: string
+          id: string
+          property_id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          abrechnung_erstellt_am?: string | null
+          abrechnung_versendet_am?: string | null
+          abrechnungsjahr: number
+          abrechnungszeitraum_bis: string
+          abrechnungszeitraum_von: string
+          created_at?: string
+          einsicht_bis?: string | null
+          einsicht_gewaehrt?: boolean | null
+          frist_abrechnung: string
+          id?: string
+          property_id: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          abrechnung_erstellt_am?: string | null
+          abrechnung_versendet_am?: string | null
+          abrechnungsjahr?: number
+          abrechnungszeitraum_bis?: string
+          abrechnungszeitraum_von?: string
+          created_at?: string
+          einsicht_bis?: string | null
+          einsicht_gewaehrt?: boolean | null
+          frist_abrechnung?: string
+          id?: string
+          property_id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mrg_abrechnungen_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mrg_richtwerte: {
+        Row: {
+          bundesland: string
+          created_at: string
+          gueltig_ab: string
+          gueltig_bis: string | null
+          id: string
+          richtwert_pro_qm: number
+        }
+        Insert: {
+          bundesland: string
+          created_at?: string
+          gueltig_ab: string
+          gueltig_bis?: string | null
+          id?: string
+          richtwert_pro_qm: number
+        }
+        Update: {
+          bundesland?: string
+          created_at?: string
+          gueltig_ab?: string
+          gueltig_bis?: string | null
+          id?: string
+          richtwert_pro_qm?: number
+        }
+        Relationships: []
+      }
+      mrg_ruecklage_grenzen: {
+        Row: {
+          betrag_pro_qm: number
+          created_at: string
+          gueltig_ab: string
+          gueltig_bis: string | null
+          id: string
+          kategorie: Database["public"]["Enums"]["ausstattungskategorie"]
+        }
+        Insert: {
+          betrag_pro_qm: number
+          created_at?: string
+          gueltig_ab: string
+          gueltig_bis?: string | null
+          id?: string
+          kategorie: Database["public"]["Enums"]["ausstattungskategorie"]
+        }
+        Update: {
+          betrag_pro_qm?: number
+          created_at?: string
+          gueltig_ab?: string
+          gueltig_bis?: string | null
+          id?: string
+          kategorie?: Database["public"]["Enums"]["ausstattungskategorie"]
+        }
+        Relationships: []
       }
       operating_cost_settlements: {
         Row: {
@@ -554,6 +682,9 @@ export type Database = {
       properties: {
         Row: {
           address: string
+          baubewilligung_nach_1945: boolean | null
+          baubewilligung_nach_1953: boolean | null
+          baujahr_mrg: number | null
           betriebskosten_gesamt: number
           bk_anteil_garage: number
           bk_anteil_geschaeft: number
@@ -562,12 +693,15 @@ export type Database = {
           city: string
           country: string
           created_at: string
+          foerderung_erhalten: boolean | null
           heizung_anteil_geschaeft: number
           heizung_anteil_wohnung: number
           heizungskosten_gesamt: number
           id: string
           name: string
           postal_code: string
+          richtwert_bundesland: string | null
+          stichtag_mrg: string | null
           total_mea: number
           total_qm: number
           total_units: number
@@ -575,6 +709,9 @@ export type Database = {
         }
         Insert: {
           address: string
+          baubewilligung_nach_1945?: boolean | null
+          baubewilligung_nach_1953?: boolean | null
+          baujahr_mrg?: number | null
           betriebskosten_gesamt?: number
           bk_anteil_garage?: number
           bk_anteil_geschaeft?: number
@@ -583,12 +720,15 @@ export type Database = {
           city: string
           country?: string
           created_at?: string
+          foerderung_erhalten?: boolean | null
           heizung_anteil_geschaeft?: number
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
           name: string
           postal_code: string
+          richtwert_bundesland?: string | null
+          stichtag_mrg?: string | null
           total_mea?: number
           total_qm?: number
           total_units?: number
@@ -596,6 +736,9 @@ export type Database = {
         }
         Update: {
           address?: string
+          baubewilligung_nach_1945?: boolean | null
+          baubewilligung_nach_1953?: boolean | null
+          baujahr_mrg?: number | null
           betriebskosten_gesamt?: number
           bk_anteil_garage?: number
           bk_anteil_geschaeft?: number
@@ -604,12 +747,15 @@ export type Database = {
           city?: string
           country?: string
           created_at?: string
+          foerderung_erhalten?: boolean | null
           heizung_anteil_geschaeft?: number
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
           name?: string
           postal_code?: string
+          richtwert_bundesland?: string | null
+          stichtag_mrg?: string | null
           total_mea?: number
           total_qm?: number
           total_units?: number
@@ -1198,12 +1344,18 @@ export type Database = {
       }
       units: {
         Row: {
+          ausstattungskategorie:
+            | Database["public"]["Enums"]["ausstattungskategorie"]
+            | null
           created_at: string
           floor: number | null
           id: string
           mea: number
+          mrg_scope: Database["public"]["Enums"]["mrg_scope"] | null
+          nutzflaeche_mrg: number | null
           property_id: string
           qm: number
+          richtwertmiete_basis: number | null
           status: Database["public"]["Enums"]["tenant_status"]
           top_nummer: string
           type: Database["public"]["Enums"]["unit_type"]
@@ -1230,12 +1382,18 @@ export type Database = {
           vs_wasser_verbrauch: number | null
         }
         Insert: {
+          ausstattungskategorie?:
+            | Database["public"]["Enums"]["ausstattungskategorie"]
+            | null
           created_at?: string
           floor?: number | null
           id?: string
           mea?: number
+          mrg_scope?: Database["public"]["Enums"]["mrg_scope"] | null
+          nutzflaeche_mrg?: number | null
           property_id: string
           qm?: number
+          richtwertmiete_basis?: number | null
           status?: Database["public"]["Enums"]["tenant_status"]
           top_nummer: string
           type?: Database["public"]["Enums"]["unit_type"]
@@ -1262,12 +1420,18 @@ export type Database = {
           vs_wasser_verbrauch?: number | null
         }
         Update: {
+          ausstattungskategorie?:
+            | Database["public"]["Enums"]["ausstattungskategorie"]
+            | null
           created_at?: string
           floor?: number | null
           id?: string
           mea?: number
+          mrg_scope?: Database["public"]["Enums"]["mrg_scope"] | null
+          nutzflaeche_mrg?: number | null
           property_id?: string
           qm?: number
+          richtwertmiete_basis?: number | null
           status?: Database["public"]["Enums"]["tenant_status"]
           top_nummer?: string
           type?: Database["public"]["Enums"]["unit_type"]
@@ -1356,6 +1520,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "property_manager"
+      ausstattungskategorie: "A" | "B" | "C" | "D"
       expense_category: "betriebskosten_umlagefaehig" | "instandhaltung"
       expense_type:
         | "versicherung"
@@ -1374,6 +1539,29 @@ export type Database = {
         | "sanierung"
         | "sonstiges"
       invoice_status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig"
+      mrg_bk_kategorie:
+        | "wasserversorgung"
+        | "abwasserentsorgung"
+        | "rauchfangkehrer"
+        | "muellabfuhr"
+        | "schaedlingsbekaempfung"
+        | "beleuchtung_allgemein"
+        | "feuerversicherung"
+        | "haftpflicht_haus"
+        | "leitungswasserschaden"
+        | "hausbesorger"
+        | "hausbetreuung"
+        | "lift_betrieb"
+        | "lift_wartung"
+        | "gemeinschaftsanlagen"
+        | "oeffentliche_abgaben"
+        | "verwaltungshonorar"
+        | "ruecklage"
+        | "heizung_betrieb"
+        | "heizung_wartung"
+        | "warmwasser"
+        | "nicht_umlagefaehig"
+      mrg_scope: "vollanwendung" | "teilanwendung" | "ausgenommen"
       payment_type: "sepa" | "ueberweisung" | "bar" | "sonstiges"
       settlement_status: "entwurf" | "berechnet" | "versendet" | "abgeschlossen"
       subscription_status: "trial" | "active" | "cancelled" | "expired"
@@ -1514,6 +1702,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "property_manager"],
+      ausstattungskategorie: ["A", "B", "C", "D"],
       expense_category: ["betriebskosten_umlagefaehig", "instandhaltung"],
       expense_type: [
         "versicherung",
@@ -1533,6 +1722,30 @@ export const Constants = {
         "sonstiges",
       ],
       invoice_status: ["offen", "bezahlt", "teilbezahlt", "ueberfaellig"],
+      mrg_bk_kategorie: [
+        "wasserversorgung",
+        "abwasserentsorgung",
+        "rauchfangkehrer",
+        "muellabfuhr",
+        "schaedlingsbekaempfung",
+        "beleuchtung_allgemein",
+        "feuerversicherung",
+        "haftpflicht_haus",
+        "leitungswasserschaden",
+        "hausbesorger",
+        "hausbetreuung",
+        "lift_betrieb",
+        "lift_wartung",
+        "gemeinschaftsanlagen",
+        "oeffentliche_abgaben",
+        "verwaltungshonorar",
+        "ruecklage",
+        "heizung_betrieb",
+        "heizung_wartung",
+        "warmwasser",
+        "nicht_umlagefaehig",
+      ],
+      mrg_scope: ["vollanwendung", "teilanwendung", "ausgenommen"],
       payment_type: ["sepa", "ueberweisung", "bar", "sonstiges"],
       settlement_status: ["entwurf", "berechnet", "versendet", "abgeschlossen"],
       subscription_status: ["trial", "active", "cancelled", "expired"],
