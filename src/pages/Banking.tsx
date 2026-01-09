@@ -1163,6 +1163,14 @@ export default function Banking() {
                               <ExpenseLinkBadge
                                 transactionId={transaction.id}
                                 linkedExpense={linkedExpense}
+                                transaction={{
+                                  id: transaction.id,
+                                  amount: Number(transaction.amount),
+                                  transaction_date: transaction.transaction_date,
+                                  counterpart_name: transaction.counterpart_name,
+                                  description: transaction.description,
+                                  property_id: transaction.property_id,
+                                }}
                               />
                             </TableCell>
                             <TableCell>
