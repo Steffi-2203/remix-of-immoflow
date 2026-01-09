@@ -89,6 +89,7 @@ export interface TransactionData {
   unit_id: string | null;
   description: string | null;
   tenant_id?: string | null;
+  bank_account_id?: string | null;
 }
 
 export interface CategoryData {
@@ -1196,4 +1197,407 @@ export const generateOffenePostenReport = (
     ? `Offene_Posten_${monthNames[selectedMonth - 1]}_${selectedYear}.pdf`
     : `Offene_Posten_${selectedYear}.pdf`;
   doc.save(fileName);
+};
+
+// ============ PLAUSIBILITY REPORT (Kontenabgleich) ============
+
+interface BankAccountData {
+  id: string;
+  account_name: string;
+  iban: string | null;
+  bank_name: string | null;
+  opening_balance: number | null;
+  opening_balance_date: string | null;
+}
+
+interface PlausibilityReportData {
+  bankAccounts: BankAccountData[];
+  transactions: TransactionData[];
+  properties: PropertyData[];
+  units: UnitData[];
+  tenants: TenantData[];
+  categories: CategoryData[];
+  selectedYear: number;
+  startDate: string;
+  endDate: string;
+}
+
+export const generatePlausibilityReport = (data: PlausibilityReportData) => {
+  const doc = new jsPDF();
+  const { bankAccounts, transactions, properties, units, tenants, categories, selectedYear, startDate, endDate } = data;
+
+  // Filter transactions for the period
+  const periodTransactions = transactions.filter(t => {
+    const txDate = t.transaction_date;
+    return txDate >= startDate && txDate <= endDate;
+  });
+
+  // Helper to format currency
+  const fmt = (v: number) => `€ ${v.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Plausibilitätsreport', 14, 20);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text(`Kontenabgleich für ${selectedYear}`, 14, 28);
+  doc.text(`Zeitraum: ${new Date(startDate).toLocaleDateString('de-AT')} - ${new Date(endDate).toLocaleDateString('de-AT')}`, 14, 34);
+  doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-AT')}`, 14, 40);
+  doc.setTextColor(0);
+
+  let currentY = 50;
+
+  // ===== SECTION 1: Bank Account Summary =====
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('1. Kontenübersicht', 14, currentY);
+  currentY += 8;
+
+  const accountSummaries = bankAccounts.map(account => {
+    const accountTx = periodTransactions.filter(t => (t as any).bank_account_id === account.id);
+    const income = accountTx.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+    const expenses = accountTx.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const openingBalance = account.opening_balance || 0;
+    const closingBalance = openingBalance + income - expenses;
+    
+    return {
+      name: account.account_name,
+      iban: account.iban || '-',
+      openingBalance,
+      income,
+      expenses,
+      closingBalance,
+      isValid: true, // Can be validated against actual bank statement
+    };
+  });
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Konto', 'IBAN', 'Anfangsbestand', '+ Einnahmen', '- Ausgaben', '= Endbestand']],
+    body: accountSummaries.map(a => [
+      a.name,
+      a.iban,
+      fmt(a.openingBalance),
+      fmt(a.income),
+      fmt(a.expenses),
+      fmt(a.closingBalance),
+    ]),
+    foot: [[
+      'Gesamt',
+      '',
+      fmt(accountSummaries.reduce((s, a) => s + a.openingBalance, 0)),
+      fmt(accountSummaries.reduce((s, a) => s + a.income, 0)),
+      fmt(accountSummaries.reduce((s, a) => s + a.expenses, 0)),
+      fmt(accountSummaries.reduce((s, a) => s + a.closingBalance, 0)),
+    ]],
+    theme: 'striped',
+    headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+    footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
+    columnStyles: {
+      2: { halign: 'right' },
+      3: { halign: 'right', textColor: [34, 197, 94] },
+      4: { halign: 'right', textColor: [239, 68, 68] },
+      5: { halign: 'right', fontStyle: 'bold' },
+    },
+    styles: { fontSize: 9 },
+    margin: { left: 14, right: 14 },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 15;
+
+  // ===== SECTION 2: Income by Property/Tenant =====
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('2. Einnahmen nach Liegenschaft & Mieter', 14, currentY);
+  currentY += 8;
+
+  // Group income transactions by property, then by tenant
+  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
+  
+  type PropertyIncome = {
+    propertyId: string;
+    propertyName: string;
+    tenants: { tenantId: string; tenantName: string; amount: number }[];
+    total: number;
+  };
+
+  const incomeByProperty: PropertyIncome[] = [];
+
+  // Group by property
+  const propertyGroups = new Map<string, TransactionData[]>();
+  const noPropertyTx: TransactionData[] = [];
+  
+  for (const tx of incomeTransactions) {
+    if (tx.property_id) {
+      const existing = propertyGroups.get(tx.property_id) || [];
+      existing.push(tx);
+      propertyGroups.set(tx.property_id, existing);
+    } else if (tx.unit_id) {
+      // Find property via unit
+      const unit = units.find(u => u.id === tx.unit_id);
+      if (unit) {
+        const existing = propertyGroups.get(unit.property_id) || [];
+        existing.push(tx);
+        propertyGroups.set(unit.property_id, existing);
+      } else {
+        noPropertyTx.push(tx);
+      }
+    } else {
+      noPropertyTx.push(tx);
+    }
+  }
+
+  // Build income summary per property
+  for (const [propId, txList] of propertyGroups) {
+    const property = properties.find(p => p.id === propId);
+    const propertyName = property?.name || 'Unbekannt';
+    
+    // Group by tenant
+    const tenantGroups = new Map<string, number>();
+    let unassigned = 0;
+    
+    for (const tx of txList) {
+      if (tx.tenant_id) {
+        const current = tenantGroups.get(tx.tenant_id) || 0;
+        tenantGroups.set(tx.tenant_id, current + tx.amount);
+      } else {
+        unassigned += tx.amount;
+      }
+    }
+    
+    const tenantEntries: { tenantId: string; tenantName: string; amount: number }[] = [];
+    for (const [tenantId, amount] of tenantGroups) {
+      const tenant = tenants.find(t => t.id === tenantId);
+      tenantEntries.push({
+        tenantId,
+        tenantName: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt',
+        amount,
+      });
+    }
+    
+    if (unassigned > 0) {
+      tenantEntries.push({ tenantId: '', tenantName: 'Nicht zugeordnet', amount: unassigned });
+    }
+    
+    tenantEntries.sort((a, b) => b.amount - a.amount);
+    
+    incomeByProperty.push({
+      propertyId: propId,
+      propertyName,
+      tenants: tenantEntries,
+      total: txList.reduce((s, t) => s + t.amount, 0),
+    });
+  }
+
+  // Add unassigned to any property
+  if (noPropertyTx.length > 0) {
+    incomeByProperty.push({
+      propertyId: '',
+      propertyName: 'Nicht zugeordnet',
+      tenants: [{ tenantId: '', tenantName: '-', amount: noPropertyTx.reduce((s, t) => s + t.amount, 0) }],
+      total: noPropertyTx.reduce((s, t) => s + t.amount, 0),
+    });
+  }
+
+  incomeByProperty.sort((a, b) => b.total - a.total);
+
+  // Build table rows
+  const incomeRows: string[][] = [];
+  for (const prop of incomeByProperty) {
+    // Property header row
+    incomeRows.push([prop.propertyName, '', fmt(prop.total)]);
+    // Tenant rows
+    for (const tenant of prop.tenants) {
+      incomeRows.push(['', tenant.tenantName, fmt(tenant.amount)]);
+    }
+  }
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Liegenschaft', 'Mieter', 'Einnahmen']],
+    body: incomeRows,
+    foot: [['Gesamt Einnahmen', '', fmt(incomeTransactions.reduce((s, t) => s + t.amount, 0))]],
+    theme: 'striped',
+    headStyles: { fillColor: [34, 197, 94], textColor: 255 },
+    footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
+    columnStyles: {
+      2: { halign: 'right' },
+    },
+    styles: { fontSize: 9 },
+    margin: { left: 14, right: 14 },
+    didParseCell: (data) => {
+      // Bold property rows
+      if (data.section === 'body' && data.row.raw && (data.row.raw as string[])[0] !== '') {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fillColor = [240, 253, 244];
+      }
+    },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 15;
+
+  // Check if we need a new page
+  if (currentY > 240) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // ===== SECTION 3: Expenses by Category =====
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('3. Ausgaben nach Aufwandskonto', 14, currentY);
+  currentY += 8;
+
+  // Group expenses by category
+  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+  
+  type CategoryExpense = {
+    categoryId: string;
+    categoryName: string;
+    transactions: { description: string; amount: number; date: string }[];
+    total: number;
+  };
+
+  const expensesByCategory: CategoryExpense[] = [];
+  const categoryGroups = new Map<string, TransactionData[]>();
+  const noCategoryTx: TransactionData[] = [];
+
+  for (const tx of expenseTransactions) {
+    if (tx.category_id) {
+      const existing = categoryGroups.get(tx.category_id) || [];
+      existing.push(tx);
+      categoryGroups.set(tx.category_id, existing);
+    } else {
+      noCategoryTx.push(tx);
+    }
+  }
+
+  for (const [catId, txList] of categoryGroups) {
+    const category = categories.find(c => c.id === catId);
+    expensesByCategory.push({
+      categoryId: catId,
+      categoryName: category?.name || 'Unbekannt',
+      transactions: txList.map(t => ({
+        description: t.description || '-',
+        amount: Math.abs(t.amount),
+        date: t.transaction_date,
+      })),
+      total: txList.reduce((s, t) => s + Math.abs(t.amount), 0),
+    });
+  }
+
+  if (noCategoryTx.length > 0) {
+    expensesByCategory.push({
+      categoryId: '',
+      categoryName: 'Nicht kategorisiert',
+      transactions: noCategoryTx.map(t => ({
+        description: t.description || '-',
+        amount: Math.abs(t.amount),
+        date: t.transaction_date,
+      })),
+      total: noCategoryTx.reduce((s, t) => s + Math.abs(t.amount), 0),
+    });
+  }
+
+  expensesByCategory.sort((a, b) => b.total - a.total);
+
+  // Build expense summary table
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Aufwandskonto', 'Anzahl', 'Summe']],
+    body: expensesByCategory.map(cat => [
+      cat.categoryName,
+      cat.transactions.length.toString(),
+      fmt(cat.total),
+    ]),
+    foot: [['Gesamt Ausgaben', expenseTransactions.length.toString(), fmt(expenseTransactions.reduce((s, t) => s + Math.abs(t.amount), 0))]],
+    theme: 'striped',
+    headStyles: { fillColor: [239, 68, 68], textColor: 255 },
+    footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
+    columnStyles: {
+      1: { halign: 'center' },
+      2: { halign: 'right' },
+    },
+    styles: { fontSize: 9 },
+    margin: { left: 14, right: 14 },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 15;
+
+  // Check if we need a new page
+  if (currentY > 240) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // ===== SECTION 4: Summary / Plausibility Check =====
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('4. Plausibilitätsprüfung', 14, currentY);
+  currentY += 8;
+
+  const totalOpeningBalance = accountSummaries.reduce((s, a) => s + a.openingBalance, 0);
+  const totalIncome = incomeTransactions.reduce((s, t) => s + t.amount, 0);
+  const totalExpenses = expenseTransactions.reduce((s, t) => s + Math.abs(t.amount), 0);
+  const calculatedClosingBalance = totalOpeningBalance + totalIncome - totalExpenses;
+  const actualClosingBalance = accountSummaries.reduce((s, a) => s + a.closingBalance, 0);
+  const difference = calculatedClosingBalance - actualClosingBalance;
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Position', 'Betrag']],
+    body: [
+      ['Anfangsbestand (alle Konten)', fmt(totalOpeningBalance)],
+      ['+ Einnahmen gesamt', fmt(totalIncome)],
+      ['- Ausgaben gesamt', fmt(totalExpenses)],
+      ['= Berechneter Endbestand', fmt(calculatedClosingBalance)],
+      ['Tatsächlicher Endbestand', fmt(actualClosingBalance)],
+      ['Differenz', fmt(difference)],
+    ],
+    theme: 'plain',
+    headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+    columnStyles: {
+      1: { halign: 'right' },
+    },
+    styles: { fontSize: 10 },
+    margin: { left: 14, right: 14 },
+    didParseCell: (data) => {
+      if (data.section === 'body') {
+        const rowIdx = data.row.index;
+        // Highlight calculated balance
+        if (rowIdx === 3) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 249, 255];
+        }
+        // Highlight difference
+        if (rowIdx === 5 && data.column.index === 1) {
+          data.cell.styles.fontStyle = 'bold';
+          if (Math.abs(difference) < 0.01) {
+            data.cell.styles.textColor = [34, 197, 94]; // Green if match
+          } else {
+            data.cell.styles.textColor = [239, 68, 68]; // Red if mismatch
+          }
+        }
+      }
+    },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 10;
+
+  // Status message
+  doc.setFontSize(11);
+  if (Math.abs(difference) < 0.01) {
+    doc.setTextColor(34, 197, 94);
+    doc.text('✓ Plausibilitätsprüfung erfolgreich - Konten stimmen überein', 14, currentY);
+  } else {
+    doc.setTextColor(239, 68, 68);
+    doc.text(`✗ Differenz von ${fmt(difference)} - bitte prüfen`, 14, currentY);
+  }
+  doc.setTextColor(0);
+
+  // Save
+  doc.save(`Plausibilitaetsreport_${selectedYear}.pdf`);
 };

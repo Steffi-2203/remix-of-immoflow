@@ -36,6 +36,7 @@ import {
   Receipt,
   AlertCircle,
   Plus,
+  Calculator,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -56,10 +57,12 @@ import {
   generateUmsatzReport,
   generateUstVoranmeldung,
   generateOffenePostenReport,
+  generatePlausibilityReport,
   type PaymentData,
   type TransactionData,
   type CategoryData,
 } from '@/utils/reportPdfExport';
+import { useBankAccounts } from '@/hooks/useBankAccounts';
 
 // Berechnet Netto aus Brutto
 const calculateNetFromGross = (gross: number, vatRate: number): number => {
@@ -137,6 +140,13 @@ const reports = [
     color: 'bg-primary/10 text-primary',
   },
   {
+    id: 'plausibilitaet',
+    title: 'Plausibilitätsreport',
+    description: 'Kontenabgleich: Anfangsbestand + Einnahmen - Ausgaben = Endbestand',
+    icon: Calculator,
+    color: 'bg-emerald-500/10 text-emerald-600',
+  },
+  {
     id: 'ust',
     title: 'USt-Voranmeldung',
     description: 'Umsatzsteuer vs. Vorsteuer für das Finanzamt',
@@ -190,6 +200,7 @@ export default function Reports() {
   const { data: allPayments, isLoading: isLoadingPayments } = usePayments();
   const { data: allTransactions, isLoading: isLoadingTransactions } = useTransactions();
   const { data: categories, isLoading: isLoadingCategories } = useAccountCategories();
+  const { data: bankAccounts, isLoading: isLoadingBankAccounts } = useBankAccounts();
   const { syncExistingPaymentsToTransactions } = usePaymentSync();
   const { data: combinedPayments, isLoading: isLoadingCombined } = useCombinedPayments();
   
@@ -200,7 +211,7 @@ export default function Reports() {
     selectedMonth
   );
 
-  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingCombined || mrgLoading;
+  const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingBankAccounts || isLoadingCombined || mrgLoading;
 
   // Generate monthly invoices for the selected period
   const handleGenerateInvoices = useCallback(async () => {
@@ -811,6 +822,49 @@ export default function Reports() {
             selectedMonth
           );
           toast.success('Offene Posten Liste wurde erstellt');
+          break;
+        case 'plausibilitaet':
+          console.log('Generating Plausibility report...');
+          // Calculate date range based on period
+          const startDate = reportPeriod === 'yearly' 
+            ? `${selectedYear}-01-01`
+            : `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+          const endDate = reportPeriod === 'yearly'
+            ? `${selectedYear}-12-31`
+            : new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+          
+          // Prepare transaction data with bank_account_id
+          const plausibilityTransactions = (allTransactions || []).map(t => ({
+            id: t.id,
+            amount: t.amount,
+            transaction_date: t.transaction_date,
+            category_id: t.category_id,
+            property_id: t.property_id,
+            unit_id: t.unit_id,
+            description: t.description,
+            tenant_id: t.tenant_id,
+            bank_account_id: t.bank_account_id,
+          }));
+          
+          generatePlausibilityReport({
+            bankAccounts: (bankAccounts || []).map(ba => ({
+              id: ba.id,
+              account_name: ba.account_name,
+              iban: ba.iban,
+              bank_name: ba.bank_name,
+              opening_balance: ba.opening_balance,
+              opening_balance_date: ba.opening_balance_date,
+            })),
+            transactions: plausibilityTransactions,
+            properties: properties || [],
+            units: allUnits || [],
+            tenants: allTenants || [],
+            categories: categoryData,
+            selectedYear,
+            startDate,
+            endDate,
+          });
+          toast.success('Plausibilitätsreport wurde erstellt');
           break;
         default:
           toast.error('Report nicht gefunden');
