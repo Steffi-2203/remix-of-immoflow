@@ -42,7 +42,7 @@ export function BankingWidget() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-lg font-semibold">Letzte Zahlungseingänge</CardTitle>
-        <Link to="/banking">
+        <Link to="/buchhaltung">
           <Button variant="ghost" size="sm">
             Alle anzeigen
             <ArrowRight className="h-4 w-4 ml-1" />
@@ -77,7 +77,7 @@ export function BankingWidget() {
           <div className="text-center py-8 text-muted-foreground">
             <Upload className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p className="text-sm">Noch keine Transaktionen</p>
-            <Link to="/banking">
+            <Link to="/buchhaltung">
               <Button variant="outline" size="sm" className="mt-3">
                 <Upload className="h-4 w-4 mr-2" />
                 Kontoauszug importieren
@@ -135,7 +135,7 @@ export function BankingWidget() {
         )}
 
         {totalUnmatched > 0 && (
-          <Link to="/banking" className="block mt-4">
+          <Link to="/buchhaltung" className="block mt-4">
             <Button variant="outline" className="w-full" size="sm">
               <AlertCircle className="h-4 w-4 mr-2 text-orange-500" />
               {totalUnmatched} offene Zuordnung{totalUnmatched !== 1 ? 'en' : ''} bearbeiten
