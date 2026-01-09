@@ -768,7 +768,8 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            allExpenses
           );
           toast.success('Umsatzreport wurde erstellt');
           break;

@@ -68,6 +68,7 @@ interface ExpenseData {
   property_id: string;
   year: number;
   month: number;
+  datum: string;
 }
 
 export interface PaymentData {
@@ -87,6 +88,7 @@ export interface TransactionData {
   property_id: string | null;
   unit_id: string | null;
   description: string | null;
+  tenant_id?: string | null;
 }
 
 export interface CategoryData {
@@ -419,7 +421,8 @@ export const generateUmsatzReport = (
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
-  selectedMonth?: number
+  selectedMonth?: number,
+  expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF('landscape');
   const periodLabel = reportPeriod === 'yearly' 
@@ -444,12 +447,9 @@ export const generateUmsatzReport = (
     // Property matching: direct OR via unit_id
     let matchesProp = selectedPropertyId === 'all';
     if (!matchesProp) {
-      // Direct property assignment
       if (t.property_id === selectedPropertyId) {
         matchesProp = true;
-      }
-      // Via unit assignment
-      else if (t.unit_id) {
+      } else if (t.unit_id) {
         const unit = units.find(u => u.id === t.unit_id);
         matchesProp = unit?.property_id === selectedPropertyId;
       }
@@ -461,65 +461,180 @@ export const generateUmsatzReport = (
     return matchesProp && year === selectedYear && month === selectedMonth;
   });
 
+  // Filter expenses for period
+  const periodExpenses = (expenses || []).filter(e => {
+    const date = new Date(e.datum);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    const matchesProp = selectedPropertyId === 'all' || e.property_id === selectedPropertyId;
+    
+    if (reportPeriod === 'yearly') {
+      return matchesProp && year === selectedYear;
+    }
+    return matchesProp && year === selectedYear && month === selectedMonth;
+  });
+
   // Calculate totals from transactions
   const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
   
-  const totalIncome = incomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
-  const totalExpenses = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const totalIncomeFromTransactions = incomeTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalExpensesFromTransactions = expenseTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  
+  // Calculate totals from expenses (Kosten & Belege)
+  const totalExpensesFromCosts = periodExpenses.reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const totalIncome = totalIncomeFromTransactions;
+  const totalExpenses = totalExpensesFromTransactions + totalExpensesFromCosts;
   const netResult = totalIncome - totalExpenses;
 
   // Summary text
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('Zusammenfassung aus Buchhaltung', 14, 45);
+  doc.text('Zusammenfassung', 14, 45);
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Einnahmen: ${formatCurrency(totalIncome)} (${incomeTransactions.length} Buchungen)`, 14, 53);
-  doc.text(`Ausgaben: ${formatCurrency(totalExpenses)} (${expenseTransactions.length} Buchungen)`, 14, 60);
-  doc.text(`Ergebnis: ${formatCurrency(netResult)}`, 14, 67);
+  doc.text(`Einnahmen (Zahlungen): ${formatCurrency(totalIncomeFromTransactions)} (${incomeTransactions.length} Buchungen)`, 14, 53);
+  doc.text(`Ausgaben (Banking): ${formatCurrency(totalExpensesFromTransactions)} (${expenseTransactions.length} Buchungen)`, 14, 60);
+  doc.text(`Ausgaben (Kosten/Belege): ${formatCurrency(totalExpensesFromCosts)} (${periodExpenses.length} Belege)`, 14, 67);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Ergebnis: ${formatCurrency(netResult)}`, 14, 77);
+  doc.setFont('helvetica', 'normal');
 
-  // Transaction table - with unit info
-  const tableData = periodTransactions.slice(0, 50).map(t => {
-    const category = categories.find(c => c.id === t.category_id);
+  // Combined table data: Transactions + Expenses
+  interface ReportRow {
+    date: Date;
+    location: string;
+    description: string;
+    category: string;
+    income: number;
+    expense: number;
+    source: 'transaction' | 'expense';
+  }
+  
+  const allRows: ReportRow[] = [];
+  
+  // Add income transactions with tenant name
+  incomeTransactions.forEach(t => {
     const unit = units.find(u => u.id === t.unit_id);
     const property = t.property_id 
       ? properties.find(p => p.id === t.property_id)
       : unit ? properties.find(p => p.id === unit.property_id) : null;
-    const isIncome = t.amount > 0;
+    const tenant = t.tenant_id ? tenants.find(tn => tn.id === t.tenant_id) : null;
+    const category = categories.find(c => c.id === t.category_id);
     
-    // Show property name with unit if available
+    // Build description with tenant name
+    let description = t.description || '-';
+    if (tenant) {
+      description = `${tenant.first_name} ${tenant.last_name}${t.description ? ` - ${t.description}` : ''}`;
+    }
+    
     const locationInfo = unit 
       ? `${property?.name || '-'} / Top ${unit.top_nummer}`
       : property?.name || '-';
     
-    return [
-      new Date(t.transaction_date).toLocaleDateString('de-AT'),
-      locationInfo,
-      t.description || '-',
-      category?.name || 'Nicht kategorisiert',
-      isIncome ? formatCurrency(t.amount) : '-',
-      !isIncome ? formatCurrency(Math.abs(t.amount)) : '-',
-    ];
+    allRows.push({
+      date: new Date(t.transaction_date),
+      location: locationInfo,
+      description,
+      category: category?.name || 'Mieteinnahme',
+      income: Number(t.amount),
+      expense: 0,
+      source: 'transaction'
+    });
   });
+  
+  // Add expense transactions
+  expenseTransactions.forEach(t => {
+    const unit = units.find(u => u.id === t.unit_id);
+    const property = t.property_id 
+      ? properties.find(p => p.id === t.property_id)
+      : unit ? properties.find(p => p.id === unit.property_id) : null;
+    const category = categories.find(c => c.id === t.category_id);
+    
+    const locationInfo = unit 
+      ? `${property?.name || '-'} / Top ${unit.top_nummer}`
+      : property?.name || '-';
+    
+    allRows.push({
+      date: new Date(t.transaction_date),
+      location: locationInfo,
+      description: t.description || '-',
+      category: category?.name || 'Ausgabe',
+      income: 0,
+      expense: Math.abs(Number(t.amount)),
+      source: 'transaction'
+    });
+  });
+  
+  // Add expenses from Kosten & Belege
+  periodExpenses.forEach(e => {
+    const property = properties.find(p => p.id === e.property_id);
+    
+    // Map expense_type to readable category
+    const expenseTypeLabels: Record<string, string> = {
+      'versicherung': 'Versicherung',
+      'grundsteuer': 'Grundsteuer',
+      'muellabfuhr': 'Müllabfuhr',
+      'wasser_abwasser': 'Wasser/Abwasser',
+      'heizung': 'Heizung',
+      'strom_allgemein': 'Strom allgemein',
+      'hausbetreuung': 'Hausbetreuung',
+      'lift': 'Lift',
+      'gartenpflege': 'Gartenpflege',
+      'schneeraeumung': 'Schneeräumung',
+      'verwaltung': 'Verwaltung',
+      'ruecklage': 'Rücklage',
+      'reparatur': 'Reparatur',
+      'sanierung': 'Sanierung',
+      'sonstiges': 'Sonstiges'
+    };
+    
+    allRows.push({
+      date: new Date(e.datum),
+      location: property?.name || '-',
+      description: e.bezeichnung,
+      category: expenseTypeLabels[e.expense_type] || e.expense_type,
+      income: 0,
+      expense: Number(e.betrag),
+      source: 'expense'
+    });
+  });
+  
+  // Sort by date descending
+  allRows.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  // Build table
+  const tableData = allRows.slice(0, 60).map(row => [
+    row.date.toLocaleDateString('de-AT'),
+    row.location,
+    row.description,
+    row.category,
+    row.income > 0 ? formatCurrency(row.income) : '-',
+    row.expense > 0 ? formatCurrency(row.expense) : '-',
+  ]);
 
   autoTable(doc, {
-    startY: 75,
-    head: [['Datum', 'Liegenschaft / Einheit', 'Beschreibung', 'Kategorie', 'Einnahme', 'Ausgabe']],
+    startY: 85,
+    head: [['Datum', 'Liegenschaft', 'Beschreibung', 'Kategorie', 'Einnahme', 'Ausgabe']],
     body: tableData,
     foot: [['Summe', '', '', '', formatCurrency(totalIncome), formatCurrency(totalExpenses)]],
     theme: 'striped',
     headStyles: { fillColor: [16, 185, 129] },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
     styles: { fontSize: 8 },
+    columnStyles: {
+      2: { cellWidth: 60 }, // Description wider
+    }
   });
 
-  if (periodTransactions.length > 50) {
+  if (allRows.length > 60) {
     const y = (doc as any).lastAutoTable?.finalY || 200;
     doc.setFontSize(9);
     doc.setTextColor(100);
-    doc.text(`... und ${periodTransactions.length - 50} weitere Buchungen`, 14, y + 10);
+    doc.text(`... und ${allRows.length - 60} weitere Einträge`, 14, y + 10);
     doc.setTextColor(0);
   }
 
