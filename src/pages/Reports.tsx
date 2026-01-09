@@ -437,9 +437,34 @@ export default function Reports() {
   const totalExpensesFromTransactions = expenseTransactions
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
-  // ====== RENDITE-BERECHNUNG (IST-Basis AUS TRANSAKTIONEN) ======
-  // Nettoertrag = IST-Mieteinnahmen (aus Transaktionen) - Instandhaltungskosten
-  const nettoertrag = mieteFromTransactions - instandhaltungskostenFromTransactions;
+  // ====== AUSGABEN AUS KOSTEN & BELEGE (expenses table) ======
+  // Kategorien für Betriebskosten aus expenses
+  const expenseTypeToBetriebskosten = [
+    'versicherung', 'grundsteuer', 'muellabfuhr', 'wasser_abwasser', 
+    'strom_allgemein', 'hausbetreuung', 'lift', 'gartenpflege', 
+    'schneeraeumung', 'verwaltung', 'ruecklage', 'heizung'
+  ];
+  const expenseTypeToInstandhaltung = ['reparatur', 'sanierung'];
+  
+  const betriebskostenFromExpenses = periodExpenses
+    .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const instandhaltungFromExpenses = periodExpenses
+    .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const totalExpensesFromCosts = periodExpenses
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+
+  // ====== KOMBINIERTE AUSGABEN (Transaktionen + Kosten & Belege) ======
+  const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpenses;
+  const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpenses;
+  const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCosts;
+
+  // ====== RENDITE-BERECHNUNG (IST-Basis) ======
+  // Nettoertrag = IST-Mieteinnahmen - Instandhaltungskosten (Banking + Belege)
+  const nettoertrag = mieteFromTransactions - combinedInstandhaltung;
   const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
 
   // Vacancy rate
@@ -1079,7 +1104,7 @@ export default function Reports() {
         <CardHeader>
           <CardTitle>Buchhaltungsübersicht {periodLabel}</CardTitle>
           <CardDescription>
-            IST-Einnahmen aus {periodCombinedPayments.length} Zahlungen (payments + transactions) • Ausgaben aus {expenseTransactions.length} Buchungen
+            IST-Einnahmen aus {periodCombinedPayments.length} Zahlungen • Ausgaben aus {expenseTransactions.length} Buchungen + {periodExpenses.length} Belege
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1235,37 +1260,46 @@ export default function Reports() {
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-destructive flex items-center gap-2">
                 <ArrowDownRight className="h-4 w-4" />
-                Ausgaben
+                Ausgaben (Banking + Kosten & Belege)
               </h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
                   <div>
                     <span className="text-sm">Betriebskosten</span>
-                    <p className="text-xs text-muted-foreground">Umlagefähig auf Mieter</p>
+                    <p className="text-xs text-muted-foreground">
+                      Umlagefähig • Banking: €{betriebskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} + Belege: €{betriebskostenFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
                   </div>
                   <span className="font-semibold text-destructive">
-                    €{betriebskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{combinedBetriebskosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-orange-500/20 bg-orange-500/5">
                   <div>
                     <span className="text-sm">Instandhaltung</span>
-                    <p className="text-xs text-muted-foreground">Mindert Rendite</p>
+                    <p className="text-xs text-muted-foreground">
+                      Mindert Rendite • Banking: €{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} + Belege: €{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </p>
                   </div>
                   <span className="font-semibold text-orange-600">
-                    €{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border border-destructive/20 bg-destructive/5">
                   <span className="text-sm">Sonstige Ausgaben</span>
                   <span className="font-semibold text-destructive">
-                    €{(totalExpensesFromTransactions - betriebskostenFromTransactions - instandhaltungskostenFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{(combinedTotalExpenses - combinedBetriebskosten - combinedInstandhaltung).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-destructive bg-destructive/10">
-                  <span className="font-semibold">Gesamt Ausgaben</span>
+                  <div>
+                    <span className="font-semibold">Gesamt Ausgaben</span>
+                    <p className="text-xs text-muted-foreground">
+                      {expenseTransactions.length} Buchungen + {periodExpenses.length} Belege
+                    </p>
+                  </div>
                   <span className="font-bold text-destructive text-lg">
-                    €{totalExpensesFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    €{combinedTotalExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -1278,8 +1312,8 @@ export default function Reports() {
               <div>
                 <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
                 <p className="text-sm text-muted-foreground">
-                  IST-Einnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
-                  - Instandhaltung (€{instandhaltungskostenFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
+                  IST-Mieteinnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
+                  - Instandhaltung (€{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
                 </p>
               </div>
               <span className="font-bold text-primary text-2xl">
