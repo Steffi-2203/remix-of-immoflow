@@ -15,6 +15,9 @@ export interface Organization {
   trial_ends_at: string | null;
   created_at: string;
   updated_at: string;
+  iban: string | null;
+  bic: string | null;
+  sepa_creditor_id: string | null;
 }
 
 // Unlimited usage - no subscription limits

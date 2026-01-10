@@ -1,4 +1,5 @@
-import { Building2, User, Mail, Calendar, Sparkles, Shield, Users, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { Building2, User, Mail, Calendar, Sparkles, Shield, FileText, Pencil, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,19 @@ import { DistributionKeySettings } from '@/components/settings/DistributionKeySe
 import { FAQSection } from '@/components/settings/FAQSection';
 import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
+import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDialog';
+import { UserRoleManager } from '@/components/settings/UserRoleManager';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useIsAdmin } from '@/hooks/useAdmin';
+import { useUserRole } from '@/hooks/useUserRole';
+
+// Mask IBAN for display
+function maskIban(iban: string | null): string {
+  if (!iban) return '—';
+  if (iban.length <= 8) return iban;
+  return `${iban.slice(0, 4)} **** **** ${iban.slice(-4)}`;
+}
 
 export default function Settings() {
   const { user } = useAuth();
@@ -23,6 +34,8 @@ export default function Settings() {
   const { resetTour } = useFeatureTour();
   const navigate = useNavigate();
   const { data: isAdmin } = useIsAdmin();
+  const { data: userRole } = useUserRole();
+  const [showEditOrg, setShowEditOrg] = useState(false);
   
   // Initialize session timeout
   useSessionTimeout();
@@ -31,6 +44,8 @@ export default function Settings() {
     resetTour();
     navigate('/dashboard');
   };
+
+  const canViewFinancials = userRole === 'admin' || userRole === 'finance';
 
   if (isLoading) {
     return (
@@ -78,12 +93,20 @@ export default function Settings() {
 
             {/* Organization Section */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Organisation
-                </CardTitle>
-                <CardDescription>Ihre Organisationsdetails</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Organisation
+                  </CardTitle>
+                  <CardDescription>Ihre Organisationsdetails</CardDescription>
+                </div>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={() => setShowEditOrg(true)}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Bearbeiten
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -94,8 +117,33 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">Status</p>
                   <Badge className="bg-green-100 text-green-800">Aktiv</Badge>
                 </div>
+                
+                {/* Financial data - only visible to Admin/Finance */}
+                {canViewFinancials && organization && (
+                  <div className="pt-4 border-t space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Bankdaten</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">IBAN</p>
+                        <p className="font-mono text-sm">{maskIban(organization.iban)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">BIC</p>
+                        <p className="font-mono text-sm">{organization.bic || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">SEPA-Gläubiger-ID</p>
+                        <p className="font-mono text-sm">{organization.sepa_creditor_id || '—'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {organization?.created_at && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 pt-4 border-t">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Mitglied seit</p>
@@ -147,37 +195,29 @@ export default function Settings() {
 
           {isAdmin && (
             <TabsContent value="admin" className="space-y-6">
+              {/* User Role Manager - inline */}
+              <UserRoleManager />
+
+              {/* Other Admin Links */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Shield className="h-5 w-5" />
-                    Administration
+                    Weitere Verwaltung
                   </CardTitle>
                   <CardDescription>
-                    Systemweite Einstellungen und Benutzerverwaltung
+                    Zusätzliche Administrationsoptionen
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-3">
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
                     <Button variant="outline" asChild className="justify-start h-auto py-4">
                       <Link to="/admin">
                         <Building2 className="h-5 w-5 mr-3" />
                         <div className="text-left">
                           <div className="font-medium">Organisationen</div>
                           <div className="text-sm text-muted-foreground">
-                            Alle Organisationen und Abonnements verwalten
-                          </div>
-                        </div>
-                      </Link>
-                    </Button>
-                    
-                    <Button variant="outline" asChild className="justify-start h-auto py-4">
-                      <Link to="/admin/users">
-                        <Users className="h-5 w-5 mr-3" />
-                        <div className="text-left">
-                          <div className="font-medium">Benutzerverwaltung</div>
-                          <div className="text-sm text-muted-foreground">
-                            Rollen und Berechtigungen zuweisen
+                            Alle Organisationen verwalten
                           </div>
                         </div>
                       </Link>
@@ -189,7 +229,7 @@ export default function Settings() {
                         <div className="text-left">
                           <div className="font-medium">Audit-Logs</div>
                           <div className="text-sm text-muted-foreground">
-                            Protokollierung aller Datenänderungen (DSGVO)
+                            Protokollierung aller Datenänderungen
                           </div>
                         </div>
                       </Link>
@@ -201,6 +241,12 @@ export default function Settings() {
           )}
         </Tabs>
       </div>
+
+      <OrganizationEditDialog
+        organization={organization ?? null}
+        open={showEditOrg}
+        onOpenChange={setShowEditOrg}
+      />
     </MainLayout>
   );
 }
