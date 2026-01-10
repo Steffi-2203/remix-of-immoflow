@@ -58,6 +58,7 @@ import {
   generateUstVoranmeldung,
   generateOffenePostenReport,
   generatePlausibilityReport,
+  generateDetailReport,
   type PaymentData,
   type TransactionData,
   type CategoryData,
@@ -906,6 +907,21 @@ export default function Reports() {
           });
           toast.success('Plausibilitätsreport wurde erstellt');
           break;
+        case 'detailbericht':
+          console.log('Generating Detail report...');
+          generateDetailReport({
+            properties: properties || [],
+            units: allUnits || [],
+            tenants: allTenants || [],
+            transactions: transactionData,
+            categories: categoryData,
+            selectedPropertyId,
+            selectedYear,
+            reportPeriod,
+            selectedMonth,
+          });
+          toast.success('Detailbericht wurde erstellt');
+          break;
         default:
           toast.error('Report nicht gefunden');
       }
@@ -1504,7 +1520,7 @@ export default function Reports() {
             <CardContent>
               <div className="flex items-center gap-2 mt-2">
                 {/* PDF-fähige Berichte */}
-                {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten', 'plausibilitaet'].includes(report.id) && (
+                {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten', 'plausibilitaet', 'detailbericht'].includes(report.id) && (
                   <Button size="sm" onClick={() => handleGenerateReport(report.id)}>
                     <Download className="h-4 w-4 mr-2" />
                     PDF Export
