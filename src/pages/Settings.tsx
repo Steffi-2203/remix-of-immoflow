@@ -1,19 +1,29 @@
-import { Building2, User, Mail, Calendar } from 'lucide-react';
+import { Building2, User, Mail, Calendar, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
 import { FAQSection } from '@/components/settings/FAQSection';
 import { HandbookSection } from '@/components/settings/HandbookSection';
+import { useFeatureTour } from '@/hooks/useFeatureTour';
 
 export default function Settings() {
   const { user } = useAuth();
   const { data: organization, isLoading } = useOrganization();
+  const { resetTour } = useFeatureTour();
+  const navigate = useNavigate();
+
+  const handleStartTour = () => {
+    resetTour();
+    navigate('/dashboard');
+  };
 
   if (isLoading) {
     return (
@@ -86,6 +96,26 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Feature Tour Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Einführungstour
+                </CardTitle>
+                <CardDescription>Lernen Sie alle Funktionen der Software kennen</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Starten Sie die interaktive Tour, um einen Überblick über alle wichtigen Funktionen zu erhalten.
+                </p>
+                <Button onClick={handleStartTour}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Tour erneut starten
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
