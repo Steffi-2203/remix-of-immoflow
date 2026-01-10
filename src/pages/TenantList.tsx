@@ -13,12 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Download, Upload, Mail, CreditCard } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { useUnpaidTenantFees, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
 
 const statusLabels = {
   aktiv: 'Aktiv',
@@ -45,6 +47,7 @@ export default function TenantList() {
   const { data: allUnits = [] } = useUnits(); // All units for filtering
   const { data: propertyUnits = [] } = useUnits(selectedPropertyId !== 'all' ? selectedPropertyId : undefined);
   const { data: tenants = [], isLoading, refetch } = useTenants();
+  const { data: unpaidFees = [] } = useUnpaidTenantFees();
   
   const units = selectedPropertyId === 'all' ? allUnits : propertyUnits;
 
@@ -70,6 +73,13 @@ export default function TenantList() {
   const activeCount = filteredTenants.filter(t => t.status === 'aktiv').length;
   const sepaCount = filteredTenants.filter(t => t.sepa_mandat).length;
   const totalKaution = filteredTenants.reduce((sum, t) => sum + (t.kaution || 0), 0);
+
+  // Helper function to get unpaid fees for a tenant
+  const getUnpaidFeesForTenant = (tenantId: string) => {
+    return unpaidFees.filter(fee => fee.tenant_id === tenantId);
+  };
+
+  const tenantsWithFees = filteredTenants.filter(t => getUnpaidFeesForTenant(t.id).length > 0).length;
 
   // Get units for the selected property for import
   const importUnits = selectedPropertyId !== 'all' 
@@ -122,7 +132,7 @@ export default function TenantList() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-2xl font-bold text-foreground">{filteredTenants.length}</p>
           <p className="text-sm text-muted-foreground">Mieter gesamt</p>
@@ -141,6 +151,12 @@ export default function TenantList() {
           </p>
           <p className="text-sm text-muted-foreground">Kautionen gesamt</p>
         </div>
+        {tenantsWithFees > 0 && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <p className="text-2xl font-bold text-destructive">{tenantsWithFees}</p>
+            <p className="text-sm text-muted-foreground">Mieter mit offenen Gebühren</p>
+          </div>
+        )}
       </div>
 
       {/* Tenant Table */}
@@ -178,9 +194,35 @@ export default function TenantList() {
                   >
                     <TableCell>
                       <div>
-                        <p className="font-medium text-foreground">
-                          {tenant.first_name} {tenant.last_name}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-foreground">
+                            {tenant.first_name} {tenant.last_name}
+                          </p>
+                          {getUnpaidFeesForTenant(tenant.id).length > 0 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="destructive" className="cursor-help">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    {getUnpaidFeesForTenant(tenant.id).length} Gebühr(en)
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <div className="text-sm">
+                                    <p className="font-medium mb-1">Offene Gebühren:</p>
+                                    <ul className="space-y-1">
+                                      {getUnpaidFeesForTenant(tenant.id).map(fee => (
+                                        <li key={fee.id}>
+                                          {FEE_TYPE_LABELS[fee.fee_type]}: €{fee.amount.toFixed(2)}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                         <div className="flex items-center gap-3 mt-1">
                           {tenant.email && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
