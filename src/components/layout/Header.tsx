@@ -1,4 +1,4 @@
-import { Bell, Search, User, LogOut, Settings, FlaskConical } from 'lucide-react';
+import { Bell, Search, User, LogOut, Settings, FlaskConical, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsAdmin } from '@/hooks/useAdmin';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useSidebarContext } from '@/contexts/SidebarContext';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -23,6 +25,8 @@ export function Header({ title, subtitle }: HeaderProps) {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { data: isAdmin } = useIsAdmin();
+  const isMobile = useIsMobile();
+  const { openSidebar } = useSidebarContext();
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -35,14 +39,28 @@ export function Header({ title, subtitle }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+      <div className="flex items-center gap-3">
+        {/* Mobile hamburger menu */}
+        {isMobile && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="md:hidden"
+            onClick={openSidebar}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
+        
+        <div>
+          <h1 className="text-lg md:text-xl font-semibold text-foreground">{title}</h1>
+          {subtitle && <p className="text-xs md:text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Search */}
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* Search - hidden on mobile */}
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

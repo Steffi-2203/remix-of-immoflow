@@ -114,7 +114,7 @@ export default function TenantList() {
               CSV Import
             </Button>
           )}
-          <Button onClick={() => navigate('/tenants/new')}>
+          <Button onClick={() => navigate('/mieter/neu')}>
             <Plus className="h-4 w-4 mr-2" />
             Neuer Mieter
           </Button>
@@ -174,7 +174,7 @@ export default function TenantList() {
                   <TableRow 
                     key={tenant.id} 
                     className="hover:bg-muted/30 cursor-pointer"
-                    onClick={() => navigate(`/tenants/${tenant.id}/edit`)}
+                    onClick={() => navigate(`/mieter/${tenant.id}/bearbeiten`)}
                   >
                     <TableCell>
                       <div>
