@@ -35,7 +35,7 @@ export const useAuth = () => {
     return { data, error };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string, inviteToken?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -46,6 +46,8 @@ export const useAuth = () => {
         data: {
           full_name: fullName,
           company_name: companyName,
+          // invite_token tells the backend trigger NOT to create a new organization
+          invite_token: inviteToken,
         },
       },
     });

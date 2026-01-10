@@ -93,10 +93,11 @@ export default function Register() {
     setError(null);
     setSuccess(null);
 
-    // Bei Einladung: Organisationsname aus Einladung verwenden
-    const orgName = isInviteMode ? invite.organization?.name : companyName;
+    // Bei Einladung: KEIN Firmenname übergeben (keine neue Org erstellen) + invite_token setzen
+    const orgName = isInviteMode ? undefined : companyName;
+    const tokenForSignup = isInviteMode ? inviteToken : undefined;
     
-    const { error, data } = await signUp(email, password, fullName, orgName);
+    const { error, data } = await signUp(email, password, fullName, orgName, tokenForSignup ?? undefined);
     
     if (error) {
       if (error.message.includes('User already registered')) {

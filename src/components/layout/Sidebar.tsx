@@ -203,8 +203,7 @@ export function Sidebar() {
           {/* Footer */}
           <div className="absolute bottom-4 left-4 right-4">
             <div className="rounded-lg bg-sidebar-accent p-3">
-              <p className="text-xs text-sidebar-foreground/70">Version 1.0.0</p>
-              <p className="text-xs text-sidebar-foreground/50 mt-1">© 2026 ImmoflowMe by ImmoPepper</p>
+              <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
             </div>
           </div>
         </aside>
@@ -296,8 +295,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="absolute bottom-4 left-4 right-4">
           <div className="rounded-lg bg-sidebar-accent p-3">
-            <p className="text-xs text-sidebar-foreground/70">Version 1.0.0</p>
-            <p className="text-xs text-sidebar-foreground/50 mt-1">© 2026 ImmoflowMe by ImmoPepper</p>
+            <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
           </div>
         </div>
       )}
