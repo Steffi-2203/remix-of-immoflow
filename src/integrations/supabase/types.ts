@@ -956,6 +956,145 @@ export type Database = {
           },
         ]
       }
+      sepa_collection_items: {
+        Row: {
+          amount: number
+          collection_id: string
+          created_at: string
+          id: string
+          mandate_reference: string | null
+          notes: string | null
+          payment_id: string | null
+          return_date: string | null
+          return_reason: string | null
+          status: Database["public"]["Enums"]["sepa_item_status"]
+          tenant_iban: string | null
+          tenant_id: string | null
+          tenant_name: string
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          collection_id: string
+          created_at?: string
+          id?: string
+          mandate_reference?: string | null
+          notes?: string | null
+          payment_id?: string | null
+          return_date?: string | null
+          return_reason?: string | null
+          status?: Database["public"]["Enums"]["sepa_item_status"]
+          tenant_iban?: string | null
+          tenant_id?: string | null
+          tenant_name: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          collection_id?: string
+          created_at?: string
+          id?: string
+          mandate_reference?: string | null
+          notes?: string | null
+          payment_id?: string | null
+          return_date?: string | null
+          return_reason?: string | null
+          status?: Database["public"]["Enums"]["sepa_item_status"]
+          tenant_iban?: string | null
+          tenant_id?: string | null
+          tenant_name?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sepa_collection_items_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "sepa_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sepa_collection_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sepa_collection_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sepa_collection_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sepa_collections: {
+        Row: {
+          collection_date: string
+          created_at: string
+          creditor_iban: string | null
+          creditor_name: string | null
+          id: string
+          item_count: number
+          message_id: string
+          notes: string | null
+          organization_id: string | null
+          status: Database["public"]["Enums"]["sepa_collection_status"]
+          total_amount: number
+          updated_at: string
+          xml_filename: string | null
+        }
+        Insert: {
+          collection_date: string
+          created_at?: string
+          creditor_iban?: string | null
+          creditor_name?: string | null
+          id?: string
+          item_count?: number
+          message_id: string
+          notes?: string | null
+          organization_id?: string | null
+          status?: Database["public"]["Enums"]["sepa_collection_status"]
+          total_amount?: number
+          updated_at?: string
+          xml_filename?: string | null
+        }
+        Update: {
+          collection_date?: string
+          created_at?: string
+          creditor_iban?: string | null
+          creditor_name?: string | null
+          id?: string
+          item_count?: number
+          message_id?: string
+          notes?: string | null
+          organization_id?: string | null
+          status?: Database["public"]["Enums"]["sepa_collection_status"]
+          total_amount?: number
+          updated_at?: string
+          xml_filename?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sepa_collections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlement_items: {
         Row: {
           bk_anteil: number
@@ -1589,6 +1728,12 @@ export type Database = {
         | "nicht_umlagefaehig"
       mrg_scope: "vollanwendung" | "teilanwendung" | "ausgenommen"
       payment_type: "sepa" | "ueberweisung" | "bar" | "sonstiges"
+      sepa_collection_status:
+        | "pending"
+        | "exported"
+        | "partially_completed"
+        | "completed"
+      sepa_item_status: "pending" | "successful" | "returned" | "rejected"
       settlement_status: "entwurf" | "berechnet" | "versendet" | "abgeschlossen"
       subscription_status: "trial" | "active" | "cancelled" | "expired"
       subscription_tier: "starter" | "professional" | "enterprise"
@@ -1781,6 +1926,13 @@ export const Constants = {
       ],
       mrg_scope: ["vollanwendung", "teilanwendung", "ausgenommen"],
       payment_type: ["sepa", "ueberweisung", "bar", "sonstiges"],
+      sepa_collection_status: [
+        "pending",
+        "exported",
+        "partially_completed",
+        "completed",
+      ],
+      sepa_item_status: ["pending", "successful", "returned", "rejected"],
       settlement_status: ["entwurf", "berechnet", "versendet", "abgeschlossen"],
       subscription_status: ["trial", "active", "cancelled", "expired"],
       subscription_tier: ["starter", "professional", "enterprise"],

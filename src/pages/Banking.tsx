@@ -36,6 +36,7 @@ import { ExpenseLinkBadge } from '@/components/banking/ExpenseLinkBadge';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 import { BankStatementOCR } from '@/components/banking/BankStatementOCR';
 import { SepaExportDialog } from '@/components/banking/SepaExportDialog';
+import { SepaCollectionHistory } from '@/components/banking/SepaCollectionHistory';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
@@ -2373,6 +2374,8 @@ export default function Banking() {
 
       {/* SEPA Export Dialog */}
       <SepaExportDialog open={showSepaExport} onOpenChange={setShowSepaExport} />
+
+      {/* SEPA Collection History - shown in main content when needed */}
     </MainLayout>
   );
 }
