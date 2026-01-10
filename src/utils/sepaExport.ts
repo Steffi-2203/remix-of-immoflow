@@ -31,7 +31,7 @@ export interface SepaExportOptions {
 /**
  * Generates a unique message ID for the SEPA file
  */
-function generateMessageId(): string {
+export function generateMessageId(): string {
   const now = new Date();
   const dateStr = now.toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();

@@ -22,12 +22,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization, useUpdateOrganization } from '@/hooks/useOrganization';
-import { generateSepaXml, downloadSepaXml, validateCreditor, SepaCreditor, SepaDebtor } from '@/utils/sepaExport';
+import { useCreateSepaCollection } from '@/hooks/useSepaCollections';
+import { generateSepaXml, downloadSepaXml, validateCreditor, SepaCreditor, SepaDebtor, generateMessageId } from '@/utils/sepaExport';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
 
@@ -42,6 +43,7 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
   const { data: properties } = useProperties();
   const { data: organization } = useOrganization();
   const updateOrganization = useUpdateOrganization();
+  const createSepaCollection = useCreateSepaCollection();
 
   // Creditor form state (from organization)
   const [creditorName, setCreditorName] = useState(organization?.name || '');
@@ -55,6 +57,7 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
   );
   const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set());
   const [batchBooking, setBatchBooking] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get tenants with valid SEPA mandates
   const sepaTenants = useMemo(() => {
@@ -136,7 +139,7 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!isCreditorValid) {
       toast.error('Bitte alle Gläubigerdaten ausfüllen');
       return;
@@ -147,7 +150,10 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
       return;
     }
 
+    setIsExporting(true);
     const month = format(new Date(collectionDate), 'MMMM yyyy');
+    const messageId = generateMessageId();
+    const filename = `SEPA-Lastschrift-${format(new Date(collectionDate), 'yyyy-MM-dd')}.xml`;
 
     const debtors: SepaDebtor[] = selectedTenants.map(t => ({
       id: t.id,
@@ -168,12 +174,36 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
         batchBooking,
       });
 
-      downloadSepaXml(xml, `SEPA-Lastschrift-${format(new Date(collectionDate), 'yyyy-MM-dd')}.xml`);
-      toast.success(`SEPA-Datei mit ${debtors.length} Lastschriften erstellt`);
+      // Save collection to database
+      await createSepaCollection.mutateAsync({
+        organization_id: organization?.id || null,
+        collection_date: collectionDate,
+        message_id: messageId,
+        total_amount: totalAmount,
+        item_count: selectedTenants.length,
+        xml_filename: filename,
+        creditor_name: creditorName,
+        creditor_iban: creditorIban,
+        items: selectedTenants.map(t => ({
+          tenant_id: t.id,
+          unit_id: t.unit?.id || null,
+          amount: t.totalAmount,
+          mandate_reference: t.mandat_reference,
+          tenant_name: `${t.first_name} ${t.last_name}`,
+          tenant_iban: t.iban,
+        })),
+      });
+
+      downloadSepaXml(xml, filename);
+      toast.success(`SEPA-Datei mit ${debtors.length} Lastschriften erstellt`, {
+        description: 'Laden Sie die XML-Datei in Ihr Online-Banking hoch.',
+      });
       onOpenChange(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
       toast.error(`Export fehlgeschlagen: ${message}`);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -383,9 +413,13 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
           </Button>
           <Button 
             onClick={handleExport}
-            disabled={!isCreditorValid || selectedTenants.length === 0}
+            disabled={!isCreditorValid || selectedTenants.length === 0 || isExporting}
           >
-            <Download className="h-4 w-4 mr-2" />
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
             SEPA-XML exportieren
           </Button>
         </DialogFooter>
