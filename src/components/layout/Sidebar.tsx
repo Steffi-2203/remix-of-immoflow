@@ -14,11 +14,14 @@ import {
   BookOpen, 
   Receipt,
   Users,
-  X
+  X,
+  Shield,
+  FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
+import { useIsAdmin } from '@/hooks/useAdmin';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -62,6 +65,11 @@ const navItems: NavItem[] = [
     href: '/zahlungen'
   },
   {
+    label: 'Vorschreibungen',
+    icon: FileText,
+    href: '/vorschreibungen'
+  },
+  {
     label: 'Kosten & Belege',
     icon: Receipt,
     href: '/kosten',
@@ -101,6 +109,7 @@ export function Sidebar() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
+  const { data: isAdmin } = useIsAdmin();
 
   const handleLinkClick = () => {
     // Close sidebar on mobile after clicking a link
@@ -175,6 +184,20 @@ export function Sidebar() {
                 </Link>
               );
             })}
+            {isAdmin && (
+              <Link 
+                to="/admin"
+                onClick={handleLinkClick}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                  'text-white/80 hover:text-white hover:bg-white/10',
+                  location.pathname.startsWith('/admin') && 'bg-white/15 text-white'
+                )}
+              >
+                <Shield className="h-5 w-5 shrink-0" />
+                <span className="flex-1">Administration</span>
+              </Link>
+            )}
           </nav>
 
           {/* Footer */}
@@ -253,6 +276,20 @@ export function Sidebar() {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link 
+            to="/admin"
+            title={collapsed ? 'Administration' : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+              'text-white/80 hover:text-white hover:bg-white/10',
+              location.pathname.startsWith('/admin') && 'bg-white/15 text-white'
+            )}
+          >
+            <Shield className="h-5 w-5 shrink-0" />
+            {!collapsed && <span className="flex-1">Administration</span>}
+          </Link>
+        )}
       </nav>
 
       {/* Footer */}
