@@ -75,6 +75,7 @@ export default function InvoiceList() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(selectedYear, selectedMonth);
   const { data: tenants } = useTenants();
@@ -105,6 +106,40 @@ export default function InvoiceList() {
         description: 'Vorschreibungen konnten nicht erstellt werden.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleGenerateAllMonths = async () => {
+    setIsGeneratingAll(true);
+    let totalCreated = 0;
+    let totalSkipped = 0;
+    
+    try {
+      for (let month = 1; month <= 12; month++) {
+        try {
+          const result = await generateInvoices.mutateAsync({
+            year: selectedYear,
+            month,
+          });
+          totalCreated += result.created || 0;
+          totalSkipped += result.skipped || 0;
+        } catch (error) {
+          console.error(`Error generating invoices for month ${month}:`, error);
+        }
+      }
+      
+      toast({
+        title: 'Alle Vorschreibungen erstellt',
+        description: `${totalCreated} Vorschreibungen erstellt, ${totalSkipped} übersprungen.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Fehler',
+        description: 'Nicht alle Vorschreibungen konnten erstellt werden.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAll(false);
     }
   };
 
@@ -212,14 +247,29 @@ export default function InvoiceList() {
 
         <div className="flex-1" />
 
-        <Button onClick={handleGenerateInvoices} disabled={generateInvoices.isPending}>
-          {generateInvoices.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4 mr-2" />
-          )}
-          Vorschreibungen generieren
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={handleGenerateAllMonths} 
+            disabled={isGeneratingAll || generateInvoices.isPending}
+          >
+            {isGeneratingAll ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            Alle Monate {selectedYear}
+          </Button>
+          
+          <Button onClick={handleGenerateInvoices} disabled={generateInvoices.isPending || isGeneratingAll}>
+            {generateInvoices.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            Vorschreibungen generieren
+          </Button>
+        </div>
       </div>
 
       {/* Statistics */}

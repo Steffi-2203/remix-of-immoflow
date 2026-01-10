@@ -569,9 +569,12 @@ export type Database = {
       }
       organizations: {
         Row: {
+          bic: string | null
           created_at: string
+          iban: string | null
           id: string
           name: string
+          sepa_creditor_id: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: Database["public"]["Enums"]["subscription_status"]
@@ -580,9 +583,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bic?: string | null
           created_at?: string
+          iban?: string | null
           id?: string
           name: string
+          sepa_creditor_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
@@ -591,9 +597,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bic?: string | null
           created_at?: string
+          iban?: string | null
           id?: string
           name?: string
+          sepa_creditor_id?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]

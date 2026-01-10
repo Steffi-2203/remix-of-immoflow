@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
 
 export type SubscriptionTier = 'starter' | 'professional' | 'enterprise';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired';
@@ -189,4 +190,39 @@ export function useSubscriptionLimits() {
 
 export function calculateTrialDaysRemaining(_trialEndsAt: Date | null): number {
   return 0;
+}
+
+export function useUpdateOrganization() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name?: string;
+      iban?: string;
+      bic?: string;
+      sepa_creditor_id?: string;
+    }) => {
+      const { id, ...updateData } = data;
+      
+      const { data: result, error } = await supabase
+        .from('organizations')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization'] });
+      toast.success('Organisation aktualisiert');
+    },
+    onError: (error) => {
+      console.error('Error updating organization:', error);
+      toast.error('Fehler beim Aktualisieren der Organisation');
+    },
+  });
 }

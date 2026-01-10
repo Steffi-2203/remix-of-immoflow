@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { 
   CreditCard, 
   Search, 
@@ -24,7 +25,9 @@ import {
   Users,
   Info,
   ArrowRightLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar,
+  CalendarDays
 } from 'lucide-react';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -35,6 +38,7 @@ import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { useAssignPaymentWithSplit } from '@/hooks/usePaymentSplit';
 import { useCombinedPayments } from '@/hooks/useCombinedPayments';
 import { useMrgAllocation } from '@/hooks/useMrgAllocation';
+import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -65,6 +69,7 @@ export default function PaymentList() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
+  const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
@@ -164,12 +169,24 @@ export default function PaymentList() {
     return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
   }, [payments, propertyUnitIds, tenants, searchQuery]);
 
-  // Use central MRG allocation hook for consistent logic with Reports
-  const { allocations: mrgAllocations, totals: mrgTotals, isLoading: mrgLoading } = useMrgAllocation(
+  // Use central MRG allocation hook for consistent logic with Reports (monthly)
+  const { allocations: mrgAllocationsMonthly, totals: mrgTotalsMonthly, isLoading: mrgLoadingMonthly } = useMrgAllocation(
     selectedPropertyId,
     selectedYear,
     selectedMonth
   );
+
+  // Use yearly MRG allocation hook for cumulative yearly view
+  const { allocations: mrgAllocationsYearly, totals: mrgTotalsYearly, isLoading: mrgLoadingYearly } = useMrgAllocationYearly(
+    selectedPropertyId,
+    selectedYear,
+    selectedMonth // monthCount - shows Jan to selected month
+  );
+
+  // Select data based on view mode
+  const mrgAllocations = viewMode === 'year' ? mrgAllocationsYearly : mrgAllocationsMonthly;
+  const mrgTotals = viewMode === 'year' ? mrgTotalsYearly : mrgTotalsMonthly;
+  const mrgLoading = viewMode === 'year' ? mrgLoadingYearly : mrgLoadingMonthly;
 
   // Stats from central MRG allocation
   const stats = {
@@ -418,6 +435,23 @@ export default function PaymentList() {
             ))}
           </SelectContent>
         </Select>
+        
+        {/* View Mode Toggle */}
+        <ToggleGroup 
+          type="single" 
+          value={viewMode} 
+          onValueChange={(value) => value && setViewMode(value as 'month' | 'year')}
+          className="border rounded-md"
+        >
+          <ToggleGroupItem value="month" aria-label="Monatsansicht" className="px-3">
+            <Calendar className="h-4 w-4 mr-2" />
+            Monat
+          </ToggleGroupItem>
+          <ToggleGroupItem value="year" aria-label="Jahresansicht" className="px-3">
+            <CalendarDays className="h-4 w-4 mr-2" />
+            Jahr (kumuliert)
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Kumulierte Mieter-Saldo-Übersicht */}
@@ -425,7 +459,17 @@ export default function PaymentList() {
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <Users className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">Kumulierte Saldo-Übersicht ({format(new Date(selectedYear, selectedMonth - 1), 'MMMM yyyy', { locale: de })})</h3>
+            <h3 className="font-semibold">
+              {viewMode === 'year' 
+                ? `Kumulierte Jahres-Saldo-Übersicht (Jan - ${format(new Date(selectedYear, selectedMonth - 1), 'MMMM', { locale: de })} ${selectedYear})`
+                : `Kumulierte Saldo-Übersicht (${format(new Date(selectedYear, selectedMonth - 1), 'MMMM yyyy', { locale: de })})`
+              }
+            </h3>
+            {viewMode === 'year' && (
+              <Badge variant="secondary" className="ml-2">
+                {selectedMonth} Monate
+              </Badge>
+            )}
           </div>
           
           {mrgLoading ? (
