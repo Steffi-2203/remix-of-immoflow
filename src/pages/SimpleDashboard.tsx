@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
+import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
 
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
@@ -166,6 +167,9 @@ export default function SimpleDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Sync Status Widget */}
+        <SyncStatusWidget />
 
         {/* Properties Section */}
         <Card className="mt-6">
