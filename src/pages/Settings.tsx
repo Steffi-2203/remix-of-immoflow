@@ -1,4 +1,4 @@
-import { Building2, User, Mail, Calendar, Sparkles } from 'lucide-react';
+import { Building2, User, Mail, Calendar, Sparkles, Shield } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,13 +12,18 @@ import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
 import { FAQSection } from '@/components/settings/FAQSection';
 import { HandbookSection } from '@/components/settings/HandbookSection';
+import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 
 export default function Settings() {
   const { user } = useAuth();
   const { data: organization, isLoading } = useOrganization();
   const { resetTour } = useFeatureTour();
   const navigate = useNavigate();
+  
+  // Initialize session timeout
+  useSessionTimeout();
 
   const handleStartTour = () => {
     resetTour();
@@ -41,6 +46,7 @@ export default function Settings() {
         <Tabs defaultValue="account" className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="account">Konto</TabsTrigger>
+            <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
@@ -118,6 +124,10 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="privacy">
+            <PrivacySettings />
           </TabsContent>
 
           <TabsContent value="distribution">
