@@ -1531,7 +1531,10 @@ export type Database = {
     Enums: {
       app_role: "admin" | "property_manager"
       ausstattungskategorie: "A" | "B" | "C" | "D"
-      expense_category: "betriebskosten_umlagefaehig" | "instandhaltung"
+      expense_category:
+        | "betriebskosten_umlagefaehig"
+        | "instandhaltung"
+        | "sonstige_kosten"
       expense_type:
         | "versicherung"
         | "grundsteuer"
@@ -1713,7 +1716,11 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "property_manager"],
       ausstattungskategorie: ["A", "B", "C", "D"],
-      expense_category: ["betriebskosten_umlagefaehig", "instandhaltung"],
+      expense_category: [
+        "betriebskosten_umlagefaehig",
+        "instandhaltung",
+        "sonstige_kosten",
+      ],
       expense_type: [
         "versicherung",
         "grundsteuer",
