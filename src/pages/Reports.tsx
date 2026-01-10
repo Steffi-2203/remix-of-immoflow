@@ -810,7 +810,8 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            allExpenses
           );
           toast.success('Renditereport wurde erstellt');
           break;
@@ -948,6 +949,7 @@ export default function Reports() {
             selectedYear,
             reportPeriod,
             selectedMonth,
+            expenses: allExpenses,
           });
           toast.success('Detailbericht wurde erstellt');
           break;
