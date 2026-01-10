@@ -1504,7 +1504,7 @@ export default function Reports() {
             <CardContent>
               <div className="flex items-center gap-2 mt-2">
                 {/* PDF-fähige Berichte */}
-                {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten'].includes(report.id) && (
+                {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten', 'plausibilitaet'].includes(report.id) && (
                   <Button size="sm" onClick={() => handleGenerateReport(report.id)}>
                     <Download className="h-4 w-4 mr-2" />
                     PDF Export
