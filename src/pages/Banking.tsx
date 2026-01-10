@@ -665,6 +665,10 @@ export default function Banking() {
               <Brain className="h-4 w-4 mr-1" />
               Gelernte Muster ({learnedMatches.length})
             </TabsTrigger>
+            <TabsTrigger value="sepa">
+              <CreditCard className="h-4 w-4 mr-1" />
+              SEPA-Verlauf
+            </TabsTrigger>
           </TabsList>
 
           {/* OCR Bank Statement Tab */}
@@ -1915,6 +1919,11 @@ export default function Banking() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* SEPA-Verlauf Tab */}
+          <TabsContent value="sepa" className="space-y-4">
+            <SepaCollectionHistory />
           </TabsContent>
         </Tabs>
       </div>
