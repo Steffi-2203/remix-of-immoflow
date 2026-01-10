@@ -667,6 +667,62 @@ export default function Banking() {
 
           {/* OCR Bank Statement Tab */}
           <TabsContent value="ocr-statement" className="space-y-4">
+            {/* Bank account selection with property display */}
+            {bankAccounts.length > 0 && (
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-muted-foreground" />
+                      <Label>Bankkonto:</Label>
+                    </div>
+                    <Select value={selectedBankAccountId || 'none'} onValueChange={(val) => setSelectedBankAccountId(val === 'none' ? null : val)}>
+                      <SelectTrigger className="w-[300px]">
+                        <SelectValue placeholder="Bankkonto auswählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Kein Konto</SelectItem>
+                        {bankAccounts.map(account => {
+                          const linkedProperty = properties.find(p => p.id === account.property_id);
+                          return (
+                            <SelectItem key={account.id} value={account.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{account.account_name}</span>
+                                {account.iban && <span className="text-muted-foreground">({account.iban.slice(-4)})</span>}
+                                {linkedProperty && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Building className="h-3 w-3 mr-1" />
+                                    {linkedProperty.name}
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {/* Show assigned property info when account is selected */}
+                    {selectedBankAccountId && (() => {
+                      const selectedAccount = bankAccounts.find(a => a.id === selectedBankAccountId);
+                      const linkedProperty = selectedAccount?.property_id 
+                        ? properties.find(p => p.id === selectedAccount.property_id)
+                        : null;
+                      return linkedProperty ? (
+                        <Badge className="bg-primary/10 text-primary border-primary/20">
+                          <Building className="h-3 w-3 mr-1" />
+                          Automatische Zuordnung: {linkedProperty.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Keine Liegenschaft zugeordnet - manuelle Zuordnung nötig
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             <BankStatementOCR
               units={units}
               tenants={tenants}
