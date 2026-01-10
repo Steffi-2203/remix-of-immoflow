@@ -14,13 +14,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
 import { useUnpaidTenantFees, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
+import { useHasFinanceAccess } from '@/hooks/useUserRole';
+import { maskEmail } from '@/lib/dataMasking';
 
 const statusLabels = {
   aktiv: 'Aktiv',
@@ -48,6 +50,7 @@ export default function TenantList() {
   const { data: propertyUnits = [] } = useUnits(selectedPropertyId !== 'all' ? selectedPropertyId : undefined);
   const { data: tenants = [], isLoading, refetch } = useTenants();
   const { data: unpaidFees = [] } = useUnpaidTenantFees();
+  const { hasAccess: hasFinanceAccess } = useHasFinanceAccess();
   
   const units = selectedPropertyId === 'all' ? allUnits : propertyUnits;
 
@@ -225,10 +228,22 @@ export default function TenantList() {
                         </div>
                         <div className="flex items-center gap-3 mt-1">
                           {tenant.email && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Mail className="h-3 w-3" />
-                              {tenant.email}
-                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Mail className="h-3 w-3" />
+                                    {hasFinanceAccess ? tenant.email : maskEmail(tenant.email)}
+                                    {!hasFinanceAccess && <ShieldCheck className="h-3 w-3 text-primary" />}
+                                  </span>
+                                </TooltipTrigger>
+                                {!hasFinanceAccess && (
+                                  <TooltipContent>
+                                    <p>E-Mail-Adresse ist geschützt. Finanz-Berechtigung erforderlich.</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                       </div>

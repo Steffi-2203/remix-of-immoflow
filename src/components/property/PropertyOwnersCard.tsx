@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
@@ -39,7 +40,8 @@ import {
   AlertTriangle, 
   Loader2,
   Star,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -50,6 +52,8 @@ import {
   PropertyOwner,
   PropertyOwnerInsert,
 } from '@/hooks/usePropertyOwners';
+import { useHasFinanceAccess } from '@/hooks/useUserRole';
+import { maskIban, maskEmail, isMasked } from '@/lib/dataMasking';
 
 interface PropertyOwnersCardProps {
   propertyId: string;
@@ -86,6 +90,7 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
   const createOwner = useCreatePropertyOwner();
   const updateOwner = useUpdatePropertyOwner();
   const deleteOwner = useDeletePropertyOwner();
+  const { hasAccess: hasFinanceAccess } = useHasFinanceAccess();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -274,7 +279,7 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {owner.email && <div>{owner.email}</div>}
+                        {owner.email && <div>{hasFinanceAccess ? owner.email : maskEmail(owner.email)}</div>}
                         {owner.phone && <div className="text-muted-foreground">{owner.phone}</div>}
                       </div>
                     </TableCell>
@@ -282,7 +287,21 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
                       <Badge variant="outline">{owner.ownership_share}%</Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {owner.iban || '-'}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1">
+                              {owner.iban ? (hasFinanceAccess ? owner.iban : maskIban(owner.iban)) : '-'}
+                              {owner.iban && !hasFinanceAccess && <ShieldCheck className="h-3 w-3 text-primary" />}
+                            </span>
+                          </TooltipTrigger>
+                          {owner.iban && !hasFinanceAccess && (
+                            <TooltipContent>
+                              <p>IBAN ist geschützt. Finanz-Berechtigung erforderlich.</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">

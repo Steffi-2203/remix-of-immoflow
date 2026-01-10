@@ -296,6 +296,13 @@ export type Database = {
             referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "expenses_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       learned_matches: {
@@ -342,6 +349,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learned_matches_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
           {
@@ -426,6 +440,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
           {
@@ -698,6 +719,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -995,6 +1023,36 @@ export type Database = {
           },
         ]
       }
+      sensitive_data_access_log: {
+        Row: {
+          access_type: string
+          accessed_at: string
+          id: string
+          ip_address: unknown
+          record_id: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          access_type: string
+          accessed_at?: string
+          id?: string
+          ip_address?: unknown
+          record_id?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          access_type?: string
+          accessed_at?: string
+          id?: string
+          ip_address?: unknown
+          record_id?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       sepa_collection_items: {
         Row: {
           amount: number
@@ -1067,6 +1125,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sepa_collection_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
           {
@@ -1211,6 +1276,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "settlement_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "settlement_items_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
@@ -1276,6 +1348,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_fees_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1397,6 +1476,13 @@ export type Database = {
             referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transaction_splits_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       transactions: {
@@ -1512,6 +1598,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
           {
@@ -1748,7 +1841,273 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      property_owners_safe: {
+        Row: {
+          address: string | null
+          bic: string | null
+          city: string | null
+          created_at: string | null
+          email: string | null
+          iban: string | null
+          id: string | null
+          is_primary: boolean | null
+          name: string | null
+          ownership_share: number | null
+          phone: string | null
+          postal_code: string | null
+          property_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          bic?: never
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          iban?: never
+          id?: string | null
+          is_primary?: boolean | null
+          name?: string | null
+          ownership_share?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          property_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          bic?: never
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          iban?: never
+          id?: string | null
+          is_primary?: boolean | null
+          name?: string | null
+          ownership_share?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          property_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_owners_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants_safe: {
+        Row: {
+          betriebskosten_vorschuss: number | null
+          bic: string | null
+          created_at: string | null
+          email: string | null
+          first_name: string | null
+          grundmiete: number | null
+          heizungskosten_vorschuss: number | null
+          iban: string | null
+          id: string | null
+          kaution: number | null
+          kaution_bezahlt: boolean | null
+          last_name: string | null
+          mandat_reference: string | null
+          mietbeginn: string | null
+          mietende: string | null
+          phone: string | null
+          sepa_mandat: boolean | null
+          status: Database["public"]["Enums"]["tenant_status"] | null
+          unit_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          betriebskosten_vorschuss?: number | null
+          bic?: never
+          created_at?: string | null
+          email?: string | null
+          first_name?: string | null
+          grundmiete?: number | null
+          heizungskosten_vorschuss?: number | null
+          iban?: never
+          id?: string | null
+          kaution?: number | null
+          kaution_bezahlt?: boolean | null
+          last_name?: string | null
+          mandat_reference?: string | null
+          mietbeginn?: string | null
+          mietende?: string | null
+          phone?: string | null
+          sepa_mandat?: boolean | null
+          status?: Database["public"]["Enums"]["tenant_status"] | null
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          betriebskosten_vorschuss?: number | null
+          bic?: never
+          created_at?: string | null
+          email?: string | null
+          first_name?: string | null
+          grundmiete?: number | null
+          heizungskosten_vorschuss?: number | null
+          iban?: never
+          id?: string | null
+          kaution?: number | null
+          kaution_bezahlt?: boolean | null
+          last_name?: string | null
+          mandat_reference?: string | null
+          mietbeginn?: string | null
+          mietende?: string | null
+          phone?: string | null
+          sepa_mandat?: boolean | null
+          status?: Database["public"]["Enums"]["tenant_status"] | null
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenants_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions_safe: {
+        Row: {
+          amount: number | null
+          bank_account_id: string | null
+          booking_date: string | null
+          category_id: string | null
+          counterpart_iban: string | null
+          counterpart_name: string | null
+          created_at: string | null
+          currency: string | null
+          description: string | null
+          id: string | null
+          is_split: boolean | null
+          match_confidence: number | null
+          matched_at: string | null
+          matched_by: string | null
+          notes: string | null
+          organization_id: string | null
+          property_id: string | null
+          reference: string | null
+          status: string | null
+          tags: string[] | null
+          tenant_id: string | null
+          transaction_date: string | null
+          unit_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount?: number | null
+          bank_account_id?: string | null
+          booking_date?: string | null
+          category_id?: string | null
+          counterpart_iban?: never
+          counterpart_name?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          id?: string | null
+          is_split?: boolean | null
+          match_confidence?: number | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string | null
+          reference?: string | null
+          status?: string | null
+          tags?: string[] | null
+          tenant_id?: string | null
+          transaction_date?: string | null
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number | null
+          bank_account_id?: string | null
+          booking_date?: string | null
+          category_id?: string | null
+          counterpart_iban?: never
+          counterpart_name?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          id?: string | null
+          is_split?: boolean | null
+          match_confidence?: number | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string | null
+          reference?: string | null
+          status?: string | null
+          tags?: string[] | null
+          tenant_id?: string | null
+          transaction_date?: string | null
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "account_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_bank_balance: {
@@ -1759,6 +2118,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: string[]
       }
+      has_finance_access: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1775,9 +2135,13 @@ export type Database = {
         Args: { _property_id: string }
         Returns: boolean
       }
+      log_sensitive_access: {
+        Args: { _access_type: string; _record_id?: string; _table_name: string }
+        Returns: undefined
+      }
     }
     Enums: {
-      app_role: "admin" | "property_manager"
+      app_role: "admin" | "property_manager" | "finance" | "viewer"
       ausstattungskategorie: "A" | "B" | "C" | "D"
       expense_category:
         | "betriebskosten_umlagefaehig"
@@ -1973,7 +2337,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "property_manager"],
+      app_role: ["admin", "property_manager", "finance", "viewer"],
       ausstattungskategorie: ["A", "B", "C", "D"],
       expense_category: [
         "betriebskosten_umlagefaehig",
