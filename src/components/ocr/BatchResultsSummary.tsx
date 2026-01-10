@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, X, Pencil, ChevronDown, ChevronUp, Save, Trash2, Calendar } from 'lucide-react';
+import { Check, Pencil, ChevronUp, Save, Trash2, Calendar, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ import {
   type ExpenseCategory,
   type ExpenseType,
 } from '@/hooks/useExpenses';
+import { usePropertyMatcher } from '@/hooks/usePropertyMatcher';
 
 export interface BatchResultItem {
   fileName: string;
@@ -41,6 +42,13 @@ export interface BatchResultItem {
   kategorie?: ExpenseCategory;
   expense_type?: ExpenseType;
   iban?: string;
+  // Leistungsort für Property-Matching
+  leistungsort_strasse?: string | null;
+  leistungsort_plz?: string | null;
+  leistungsort_stadt?: string | null;
+  // Suggested property from matching
+  suggestedPropertyId?: string;
+  suggestedPropertyConfidence?: number;
   // Editable form state
   edited?: {
     bezeichnung: string;
@@ -65,22 +73,6 @@ interface BatchResultsSummaryProps {
   onClose: () => void;
 }
 
-const initializeItems = (results: BatchResultItem[]): BatchResultItem[] => 
-  results.map(r => ({
-    ...r,
-    selected: true,
-    saved: false,
-    edited: {
-      bezeichnung: r.beschreibung || r.lieferant || '',
-      betrag: r.betrag?.toString().replace('.', ',') || '',
-      datum: r.datum || new Date().toISOString().split('T')[0],
-      beleg_nummer: r.rechnungsnummer || '',
-      category: r.kategorie || 'betriebskosten_umlagefaehig',
-      expense_type: (r.expense_type as ExpenseType) || 'sonstiges',
-      notizen: r.iban ? `IBAN: ${r.iban}` : '',
-    },
-  }));
-
 export function BatchResultsSummary({
   open,
   onOpenChange,
@@ -89,14 +81,46 @@ export function BatchResultsSummary({
   onSaveAll,
   onClose,
 }: BatchResultsSummaryProps) {
-  const [items, setItems] = useState<BatchResultItem[]>(() => initializeItems(results));
+  const { matchPropertyByLeistungsort } = usePropertyMatcher();
   
-  // Update items when results change (e.g., when dialog opens with new batch)
-  useEffect(() => {
-    if (open && results.length > 0) {
-      setItems(initializeItems(results));
-    }
-  }, [open, results]);
+  const initializeItems = (resultsToInit: BatchResultItem[]): BatchResultItem[] => 
+    resultsToInit.map(r => {
+      // Automatisches Property-Matching basierend auf Leistungsort
+      let suggestedPropertyId: string | undefined;
+      let suggestedPropertyConfidence: number | undefined;
+      
+      if (r.leistungsort_strasse || r.leistungsort_plz || r.leistungsort_stadt) {
+        const match = matchPropertyByLeistungsort({
+          strasse: r.leistungsort_strasse || null,
+          plz: r.leistungsort_plz || null,
+          stadt: r.leistungsort_stadt || null,
+        });
+        
+        if (match) {
+          suggestedPropertyId = match.propertyId;
+          suggestedPropertyConfidence = match.confidence;
+        }
+      }
+      
+      return {
+        ...r,
+        selected: true,
+        saved: false,
+        suggestedPropertyId,
+        suggestedPropertyConfidence,
+        edited: {
+          bezeichnung: r.beschreibung || r.lieferant || '',
+          betrag: r.betrag?.toString().replace('.', ',') || '',
+          datum: r.datum || new Date().toISOString().split('T')[0],
+          beleg_nummer: r.rechnungsnummer || '',
+          category: r.kategorie || 'betriebskosten_umlagefaehig',
+          expense_type: (r.expense_type as ExpenseType) || 'sonstiges',
+          notizen: r.iban ? `IBAN: ${r.iban}` : '',
+        },
+      };
+    });
+
+  const [items, setItems] = useState<BatchResultItem[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -108,9 +132,32 @@ export function BatchResultsSummary({
   
   // Verbrauchsabhängige Kostenarten
   const verbrauchsabhaengigeKosten = ['heizung', 'wasser_abwasser'];
+  
+  // Update items when results change (e.g., when dialog opens with new batch)
+  useEffect(() => {
+    if (open && results.length > 0) {
+      const initialized = initializeItems(results);
+      setItems(initialized);
+      
+      // Auto-select property if all items suggest the same property with high confidence
+      const highConfidenceSuggestions = initialized
+        .filter(i => i.suggestedPropertyId && (i.suggestedPropertyConfidence || 0) >= 0.6)
+        .map(i => i.suggestedPropertyId);
+      
+      if (highConfidenceSuggestions.length > 0) {
+        const uniqueProperties = [...new Set(highConfidenceSuggestions)];
+        if (uniqueProperties.length === 1 && uniqueProperties[0]) {
+          setSelectedProperty(uniqueProperties[0]);
+        }
+      }
+    }
+  }, [open, results]);
 
   const selectedCount = items.filter(i => i.selected && !i.saved).length;
   const savedCount = items.filter(i => i.saved).length;
+  
+  // Count items with property suggestions
+  const itemsWithSuggestions = items.filter(i => i.suggestedPropertyId && (i.suggestedPropertyConfidence || 0) >= 0.5).length;
 
   const toggleSelect = (index: number) => {
     setItems(prev => prev.map((item, i) => 
@@ -122,7 +169,7 @@ export function BatchResultsSummary({
     setExpandedIndex(prev => prev === index ? null : index);
   };
 
-  const updateItem = (index: number, field: keyof BatchResultItem['edited'], value: string) => {
+  const updateItem = (index: number, field: keyof NonNullable<BatchResultItem['edited']>, value: string) => {
     setItems(prev => prev.map((item, i) => {
       if (i !== index || !item.edited) return item;
       
@@ -176,6 +223,15 @@ export function BatchResultsSummary({
     if (isNaN(num)) return '—';
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(num);
   };
+  
+  const getConfidenceBadge = (confidence: number) => {
+    if (confidence >= 0.8) {
+      return <Badge variant="default" className="text-xs bg-green-600">Erkannt ({Math.round(confidence * 100)}%)</Badge>;
+    } else if (confidence >= 0.5) {
+      return <Badge variant="secondary" className="text-xs bg-yellow-500 text-black">Möglich ({Math.round(confidence * 100)}%)</Badge>;
+    }
+    return null;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,18 +248,26 @@ export function BatchResultsSummary({
 
         {/* Property selection and Abrechnungsjahr */}
         <div className="space-y-3 py-2 border-b">
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-medium whitespace-nowrap">Liegenschaft:</Label>
-            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Liegenschaft auswählen..." />
-              </SelectTrigger>
-              <SelectContent>
-                {properties.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Label className="text-sm font-medium whitespace-nowrap">Liegenschaft:</Label>
+              <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Liegenschaft auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {itemsWithSuggestions > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                <span>{itemsWithSuggestions} Rechnung(en) mit erkanntem Leistungsort</span>
+              </div>
+            )}
           </div>
           
           {/* Abrechnungsjahr für Verbrauchskosten */}
@@ -275,18 +339,31 @@ export function BatchResultsSummary({
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">
                         {item.edited?.bezeichnung || item.fileName}
                       </span>
                       {item.saved && (
                         <Badge variant="secondary" className="text-xs">Gespeichert</Badge>
                       )}
+                      {!item.saved && item.suggestedPropertyId && item.suggestedPropertyConfidence && (
+                        getConfidenceBadge(item.suggestedPropertyConfidence)
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       <span>{item.fileName}</span>
                       <span>•</span>
                       <span>{item.edited?.datum}</span>
+                      {item.leistungsort_strasse && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {item.leistungsort_strasse}
+                            {item.leistungsort_plz && `, ${item.leistungsort_plz}`}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 

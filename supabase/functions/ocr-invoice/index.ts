@@ -19,6 +19,10 @@ interface OCRResult {
   beschreibung: string | null;
   leistungszeitraum_von: string | null;
   leistungszeitraum_bis: string | null;
+  // Leistungsort für Property-Matching
+  leistungsort_strasse: string | null;
+  leistungsort_plz: string | null;
+  leistungsort_stadt: string | null;
   validierung: ValidationReport;
 }
 
@@ -164,7 +168,7 @@ function validateAndCorrectData(data: any): { correctedData: any; validation: Va
   }
 
   // 8. Mark fields that couldn't be extracted
-  const optionalFields = ['rechnungsnummer', 'iban', 'ust_betrag', 'ust_satz', 'leistungszeitraum_von', 'leistungszeitraum_bis'];
+  const optionalFields = ['rechnungsnummer', 'iban', 'ust_betrag', 'ust_satz', 'leistungszeitraum_von', 'leistungszeitraum_bis', 'leistungsort_strasse', 'leistungsort_plz', 'leistungsort_stadt'];
   for (const field of optionalFields) {
     if (correctedData[field] === null || correctedData[field] === undefined) {
       validation.unsichere_felder.push(field);
@@ -224,7 +228,15 @@ EXPENSE_TYPES:
 
 WICHTIG für österreichische USt:
 - Übliche Sätze: 0%, 10%, 13%, 20%
-- Prüfe ob Brutto = Netto + USt`;
+- Prüfe ob Brutto = Netto + USt
+
+LEISTUNGSORT-ERKENNUNG (WICHTIG für automatische Liegenschafts-Zuordnung):
+- Suche nach: "Leistungsort", "Einsatzort", "Objektadresse", "betreffend Objekt:", "Arbeiten in:", "Lieferadresse", "Verbrauchsstelle"
+- Bei Handwerkerrechnungen steht oft: "Arbeiten ausgeführt in [Adresse]" oder "Baustelle:"
+- Bei Versorgern (Wasser, Strom, Gas): Verbrauchsstelle / Lieferadresse / Versorgungsadresse
+- NICHT den Lieferanten-Sitz extrahieren - nur wo die Leistung erbracht wurde
+- Typische Muster: "Musterstraße 5, 1010 Wien" oder "1010 Wien, Musterstraße 5"
+- Trenne Straße, PLZ und Stadt wenn möglich`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -254,6 +266,7 @@ WICHTIG:
 - Extrahiere den NETTO-Betrag (ohne USt) falls sichtbar
 - Extrahiere den USt-Betrag und USt-Satz falls angegeben
 - Achte auf Leistungszeitraum (von/bis)
+- LEISTUNGSORT: Suche nach der Adresse wo die Leistung erbracht wurde (Baustelle, Einsatzort, Verbrauchsstelle, Objektadresse) - NICHT die Firmenadresse des Lieferanten!
 - Bei PDF: Analysiere alle Seiten falls es mehrere gibt
 - Gib null für nicht lesbare/fehlende Felder zurück`
               }
@@ -322,6 +335,18 @@ WICHTIG:
                   leistungszeitraum_bis: {
                     type: "string",
                     description: "Ende des Leistungszeitraums im Format YYYY-MM-DD - null wenn nicht angegeben"
+                  },
+                  leistungsort_strasse: {
+                    type: "string",
+                    description: "Straße und Hausnummer des Leistungsortes (wo die Arbeit durchgeführt wurde, Baustelle, Verbrauchsstelle) - NICHT die Firmenadresse - null wenn nicht erkennbar"
+                  },
+                  leistungsort_plz: {
+                    type: "string",
+                    description: "PLZ des Leistungsortes - null wenn nicht erkennbar"
+                  },
+                  leistungsort_stadt: {
+                    type: "string",
+                    description: "Stadt/Ort des Leistungsortes - null wenn nicht erkennbar"
                   }
                 },
                 required: ["lieferant", "betrag", "datum", "kategorie", "expense_type", "beschreibung"]
