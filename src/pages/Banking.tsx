@@ -34,6 +34,7 @@ import { useAccountCategories, useCreateAccountCategory, useDeleteAccountCategor
 import { useLinkedExpensesMap } from '@/hooks/useLinkedExpenses';
 import { ExpenseLinkBadge } from '@/components/banking/ExpenseLinkBadge';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
+import { BankStatementOCR } from '@/components/banking/BankStatementOCR';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
@@ -635,6 +636,10 @@ export default function Banking() {
               <Pencil className="h-4 w-4 mr-1" />
               Manuelle Erfassung
             </TabsTrigger>
+            <TabsTrigger value="ocr-statement">
+              <Sparkles className="h-4 w-4 mr-1" />
+              Kontoauszug-Scan
+            </TabsTrigger>
             <TabsTrigger value="import">
               <Upload className="h-4 w-4 mr-1" />
               CSV Import
@@ -657,6 +662,38 @@ export default function Banking() {
               Gelernte Muster ({learnedMatches.length})
             </TabsTrigger>
           </TabsList>
+
+          {/* OCR Bank Statement Tab */}
+          <TabsContent value="ocr-statement" className="space-y-4">
+            <BankStatementOCR
+              units={units}
+              tenants={tenants}
+              properties={properties}
+              learnedMatches={learnedMatches}
+              categories={categories}
+              bankAccountId={selectedBankAccountId}
+              organizationId={organization?.id || null}
+              onImport={async (lines) => {
+                const toInsert = lines.map(line => ({
+                  organization_id: organization?.id || null,
+                  unit_id: line.matchedUnitId,
+                  tenant_id: line.matchedTenantId,
+                  property_id: line.matchedPropertyId,
+                  amount: line.betrag,
+                  currency: 'EUR',
+                  transaction_date: line.datum,
+                  description: line.verwendungszweck,
+                  counterpart_name: line.auftraggeber_empfaenger || null,
+                  counterpart_iban: line.iban || null,
+                  status: line.matchedUnitId ? 'matched' : 'unmatched',
+                  match_confidence: line.confidence,
+                  category_id: line.categoryId,
+                  bank_account_id: selectedBankAccountId,
+                }));
+                await createTransactions.mutateAsync(toInsert);
+              }}
+            />
+          </TabsContent>
 
           {/* Manual Entry Tab */}
           <TabsContent value="manual" className="space-y-4">
