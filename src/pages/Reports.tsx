@@ -64,6 +64,7 @@ import {
   type CategoryData,
 } from '@/utils/reportPdfExport';
 import { useBankAccounts } from '@/hooks/useBankAccounts';
+import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 
 // Berechnet Netto aus Brutto
 const calculateNetFromGross = (gross: number, vatRate: number): number => {
@@ -962,6 +963,9 @@ export default function Reports() {
 
   return (
     <MainLayout title="Reports & Auswertungen" subtitle="Analysen und Berichte für Ihre Immobilien">
+      {/* Data Consistency Alert */}
+      <DataConsistencyAlert />
+      
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         {/* Property Filter */}

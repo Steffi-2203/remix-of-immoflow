@@ -33,6 +33,7 @@ import { useBankAccounts, useCreateBankAccount, useUpdateBankAccount, useDeleteB
 import { useAccountCategories, useCreateAccountCategory, useDeleteAccountCategory } from '@/hooks/useAccountCategories';
 import { useLinkedExpensesMap } from '@/hooks/useLinkedExpenses';
 import { ExpenseLinkBadge } from '@/components/banking/ExpenseLinkBadge';
+import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
@@ -557,6 +558,9 @@ export default function Banking() {
       subtitle="Kontoauszüge importieren, kategorisieren und auswerten"
     >
       <div className="space-y-6">
+        {/* Data Consistency Alert */}
+        <DataConsistencyAlert variant="compact" />
+        
         {/* OCR Shortcut */}
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="pt-6">

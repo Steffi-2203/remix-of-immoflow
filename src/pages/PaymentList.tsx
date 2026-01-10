@@ -57,6 +57,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { TenantPaymentDetailDialog } from '@/components/payments/TenantPaymentDetailDialog';
+import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 
 export default function PaymentList() {
   const now = new Date();
@@ -343,8 +344,11 @@ export default function PaymentList() {
       title="Mieteinnahmen"
       subtitle="Übersicht der Mieteinnahmen aus der Buchhaltung"
     >
+      {/* Data Consistency Alert */}
+      <DataConsistencyAlert variant="compact" />
+
       {/* Info Alert */}
-      <Alert className="mb-6">
+      <Alert className="mb-6 mt-4">
         <Info className="h-4 w-4" />
         <AlertDescription>
           Diese Übersicht zeigt alle Mieteinnahmen aus der Buchhaltung. 
