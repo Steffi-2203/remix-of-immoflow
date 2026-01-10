@@ -1,21 +1,30 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, User, Building } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Mail, Lock, User, Building, Users } from 'lucide-react';
 import { z } from 'zod';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { useInviteByToken, useAcceptInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
 const emailSchema = z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein');
 const passwordSchema = z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein');
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+  
   const { signUp, isAuthenticated, loading: authLoading } = useAuth();
+  
+  // Einladung laden wenn Token vorhanden
+  const { data: invite, isLoading: inviteLoading } = useInviteByToken(inviteToken);
+  const acceptInvite = useAcceptInvite();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,16 +35,26 @@ export default function Register() {
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
 
+  // Email aus Einladung vorbelegen
+  useEffect(() => {
+    if (invite?.email) {
+      setEmail(invite.email);
+    }
+  }, [invite]);
+
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, authLoading, navigate]);
 
+  const isInviteMode = !!invite;
+
   const validateForm = () => {
     setError(null);
     
-    if (!companyName.trim()) {
+    // Firmenname nur bei normaler Registrierung prüfen
+    if (!isInviteMode && !companyName.trim()) {
       setError('Bitte geben Sie einen Firmennamen ein');
       return false;
     }
@@ -74,7 +93,10 @@ export default function Register() {
     setError(null);
     setSuccess(null);
 
-    const { error, data } = await signUp(email, password, fullName, companyName);
+    // Bei Einladung: Organisationsname aus Einladung verwenden
+    const orgName = isInviteMode ? invite.organization?.name : companyName;
+    
+    const { error, data } = await signUp(email, password, fullName, orgName);
     
     if (error) {
       if (error.message.includes('User already registered')) {
@@ -82,17 +104,67 @@ export default function Register() {
       } else {
         setError(error.message);
       }
-    } else if (data?.user) {
-      setSuccess('Konto erfolgreich erstellt! Sie werden angemeldet...');
+      setIsLoading(false);
+      return;
+    }
+    
+    if (data?.user) {
+      // Bei Einladung: Einladung annehmen (Organisation + Rolle zuweisen)
+      if (inviteToken) {
+        try {
+          await acceptInvite.mutateAsync(inviteToken);
+          setSuccess('Konto erstellt und Organisation beigetreten! Sie werden angemeldet...');
+        } catch (acceptError: any) {
+          console.error('Fehler beim Annehmen der Einladung:', acceptError);
+          setError('Konto erstellt, aber Einladung konnte nicht angenommen werden. Bitte kontaktieren Sie den Administrator.');
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        setSuccess('Konto erfolgreich erstellt! Sie werden angemeldet...');
+      }
     }
     
     setIsLoading(false);
   };
 
-  if (authLoading) {
+  if (authLoading || inviteLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Ungültige oder abgelaufene Einladung
+  if (inviteToken && !invite) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Link to="/" className="flex flex-col items-center mb-4 hover:opacity-80 transition-opacity">
+              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-16 w-auto mb-2" />
+              <span className="font-bold text-xl">ImmoflowMe</span>
+            </Link>
+            <CardTitle className="text-2xl text-destructive">Ungültige Einladung</CardTitle>
+            <CardDescription>
+              Diese Einladung ist ungültig oder abgelaufen.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              Bitte kontaktieren Sie den Administrator, der Sie eingeladen hat, um eine neue Einladung zu erhalten.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button asChild>
+                <Link to="/register">Normale Registrierung</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/login">Zur Anmeldung</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -106,13 +178,33 @@ export default function Register() {
             <span className="font-bold text-xl">ImmoflowMe</span>
             <span className="text-xs text-muted-foreground">by ImmoPepper</span>
           </Link>
-          <CardTitle className="text-2xl">Konto erstellen</CardTitle>
+          <CardTitle className="text-2xl">
+            {isInviteMode ? 'Konto erstellen und beitreten' : 'Konto erstellen'}
+          </CardTitle>
           <CardDescription>
-            Starten Sie jetzt mit Ihrer Immobilienverwaltung
+            {isInviteMode 
+              ? 'Erstellen Sie Ihr Konto, um der Organisation beizutreten'
+              : 'Starten Sie jetzt mit Ihrer Immobilienverwaltung'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Einladungs-Banner */}
+            {isInviteMode && (
+              <Alert className="border-primary/50 bg-primary/5">
+                <Users className="h-4 w-4" />
+                <AlertDescription className="flex flex-col gap-1">
+                  <span>Sie wurden eingeladen zu:</span>
+                  <span className="font-semibold">{invite.organization?.name}</span>
+                  <div className="mt-1">
+                    <Badge variant="secondary">
+                      {ROLE_LABELS[invite.role as keyof typeof ROLE_LABELS] || invite.role}
+                    </Badge>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -125,21 +217,24 @@ export default function Register() {
               </Alert>
             )}
             
-            <div className="space-y-2">
-              <Label htmlFor="companyName">Firmenname / Hausverwaltung *</Label>
-              <div className="relative">
-                <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="companyName"
-                  type="text"
-                  placeholder="Name Ihrer Hausverwaltung"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="pl-10"
-                  required
-                />
+            {/* Firmenname nur bei normaler Registrierung */}
+            {!isInviteMode && (
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Firmenname / Hausverwaltung *</Label>
+                <div className="relative">
+                  <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Name Ihrer Hausverwaltung"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="fullName">Name</Label>
@@ -168,8 +263,14 @@ export default function Register() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
                   required
+                  disabled={isInviteMode}
                 />
               </div>
+              {isInviteMode && (
+                <p className="text-xs text-muted-foreground">
+                  E-Mail-Adresse aus Einladung (nicht änderbar)
+                </p>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -208,10 +309,10 @@ export default function Register() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Registrieren...
+                  {isInviteMode ? 'Beitreten...' : 'Registrieren...'}
                 </>
               ) : (
-                'Konto erstellen'
+                isInviteMode ? 'Konto erstellen & beitreten' : 'Konto erstellen'
               )}
             </Button>
           </form>
