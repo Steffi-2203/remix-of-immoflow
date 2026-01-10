@@ -731,29 +731,36 @@ export default function Reports() {
     sum + calculateVatFromGross(Number(inv.heizungskosten || 0), Number(inv.ust_satz_heizung || 20)), 0);
   const totalUst = ustMiete + ustBk + ustHeizung;
 
-  // Vorsteuer from expenses (differenziert nach Kategorie)
-  const expenseTypeToCategory: Record<string, string> = {
-    'versicherung': 'Versicherungen',
-    'grundsteuer': 'Grundsteuer',
-    'muellabfuhr': 'Müllabfuhr',
-    'wasser_abwasser': 'Wasser/Abwasser',
-    'heizung': 'Heizung',
-    'strom_allgemein': 'Strom Allgemein',
-    'hausbetreuung': 'Hausbetreuung/Reinigung',
-    'lift': 'Lift/Aufzug',
-    'gartenpflege': 'Gartenpflege',
-    'schneeraeumung': 'Schneeräumung',
-    'verwaltung': 'Verwaltungskosten',
-    'ruecklage': 'Sonstige Ausgaben',
-    'reparatur': 'Reparaturen',
-    'sanierung': 'Instandhaltung',
-    'sonstiges': 'Sonstige Ausgaben',
+// Direkte USt-Sätze pro expense_type (konsistent mit reportPdfExport.ts)
+  const EXPENSE_TYPE_VAT_RATES: Record<string, number> = {
+    // 20% Normalsteuersatz
+    'heizung': 20,
+    'strom_allgemein': 20,
+    'hausbetreuung': 20,
+    'lift': 20,
+    'gartenpflege': 20,
+    'schneeraeumung': 20,
+    'verwaltung': 20,
+    'reparatur': 20,
+    'sanierung': 20,
+    'sonstiges': 20,
+    'muellabfuhr': 20,
+    // Sonstige Kosten (Kategorie sonstige_kosten)
+    'makler': 20,
+    'notar': 20,
+    // 10% ermäßigter Steuersatz
+    'wasser_abwasser': 10,
+    // 0% - Keine Vorsteuer
+    'versicherung': 0,
+    'grundsteuer': 0,
+    'ruecklage': 0,
+    'grundbuch': 0,      // Gebühren, keine USt
+    'finanzierung': 0,   // Zinsen sind umsatzsteuerfrei
   };
   
   const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
     const betrag = Number(exp.betrag || 0);
-    const categoryName = expenseTypeToCategory[exp.expense_type] || 'Sonstige Ausgaben';
-    const vatRate = CATEGORY_VAT_RATES[categoryName] ?? 20;
+    const vatRate = EXPENSE_TYPE_VAT_RATES[exp.expense_type] ?? 20;
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
 
@@ -1144,7 +1151,10 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">USt-Zahllast (Buchhaltung)</p>
                 <p className="text-2xl font-bold text-foreground mt-1">
-                  €{vatLiabilityFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{combinedVatLiability.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  inkl. {periodExpenses.length} Belege (€{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })} Vorsteuer)
                 </p>
               </div>
               <div className="text-xs text-muted-foreground">{periodLabel}</div>
