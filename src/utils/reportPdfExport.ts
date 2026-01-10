@@ -194,7 +194,8 @@ export const generateRenditeReport = (
   selectedPropertyId: string,
   selectedYear: number,
   reportPeriod: 'monthly' | 'yearly',
-  selectedMonth?: number
+  selectedMonth?: number,
+  expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF();
   const periodLabel = reportPeriod === 'yearly' 
@@ -242,9 +243,30 @@ export const generateRenditeReport = (
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
     // Calculate maintenance costs from transactions
-    const instandhaltung = propertyTransactions
+    const instandhaltungFromTransactions = propertyTransactions
       .filter(t => t.amount < 0 && instandhaltungCategoryIds.includes(t.category_id || ''))
       .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+    // Calculate maintenance costs from expenses (Kosten & Belege)
+    const propertyExpenses = (expenses || []).filter(e => {
+      const date = new Date(e.datum);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const matchesProp = e.property_id === property.id;
+      
+      if (reportPeriod === 'yearly') {
+        return matchesProp && year === selectedYear;
+      }
+      return matchesProp && year === selectedYear && month === selectedMonth;
+    });
+    
+    const expenseTypeToInstandhaltung = ['reparatur', 'sanierung'];
+    const instandhaltungFromExpenses = propertyExpenses
+      .filter(e => e.category === 'instandhaltung' || expenseTypeToInstandhaltung.includes(e.expense_type))
+      .reduce((sum, e) => sum + Number(e.betrag), 0);
+    
+    // Combined maintenance costs (Banking + Belege)
+    const instandhaltung = instandhaltungFromTransactions + instandhaltungFromExpenses;
 
     // Nettoertrag = Mieteinnahmen - Instandhaltung
     const nettoertrag = mieteinnahmen - instandhaltung;
@@ -287,9 +309,29 @@ export const generateRenditeReport = (
   const totalMieteinnahmen = allPeriodTransactions
     .filter(t => t.amount > 0 && t.category_id === mieteinnahmenCategoryId)
     .reduce((sum, t) => sum + Number(t.amount), 0);
-  const totalInstandhaltung = allPeriodTransactions
+  const totalInstandhaltungFromTransactions = allPeriodTransactions
     .filter(t => t.amount < 0 && instandhaltungCategoryIds.includes(t.category_id || ''))
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  
+  // Total maintenance from expenses
+  const allPeriodExpenses = (expenses || []).filter(e => {
+    const date = new Date(e.datum);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const matchesProp = allPropertyIds.includes(e.property_id);
+    
+    if (reportPeriod === 'yearly') {
+      return matchesProp && year === selectedYear;
+    }
+    return matchesProp && year === selectedYear && month === selectedMonth;
+  });
+  
+  const expenseTypeToInstandhaltungTotal = ['reparatur', 'sanierung'];
+  const totalInstandhaltungFromExpenses = allPeriodExpenses
+    .filter(e => e.category === 'instandhaltung' || expenseTypeToInstandhaltungTotal.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const totalInstandhaltung = totalInstandhaltungFromTransactions + totalInstandhaltungFromExpenses;
   const totalNettoertrag = totalMieteinnahmen - totalInstandhaltung;
   const annualTotalNettoertrag = reportPeriod === 'monthly' ? totalNettoertrag * 12 : totalNettoertrag;
   const totalValue = totalQm * 3000;
@@ -312,7 +354,8 @@ export const generateRenditeReport = (
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(100);
   doc.text('Hinweis: Rendite = (Mieteinnahmen - Instandhaltungskosten) / Immobilienwert × 100', 14, y1 + 10);
-  doc.text('Betriebskosten sind nicht enthalten, da diese auf die Mieter umgelegt werden.', 14, y1 + 16);
+  doc.text('Instandhaltungskosten beinhalten Banking-Transaktionen und manuell erfasste Belege.', 14, y1 + 16);
+  doc.text('Betriebskosten sind nicht enthalten, da diese auf die Mieter umgelegt werden.', 14, y1 + 22);
   doc.setTextColor(0);
 
   doc.save(`Renditereport_${periodLabel.replace(' ', '_')}.pdf`);
@@ -1726,6 +1769,7 @@ interface DetailReportParams {
   selectedYear: number;
   reportPeriod: 'monthly' | 'yearly';
   selectedMonth?: number;
+  expenses?: ExpenseData[];
 }
 
 export const generateDetailReport = ({
@@ -1738,6 +1782,7 @@ export const generateDetailReport = ({
   selectedYear,
   reportPeriod,
   selectedMonth,
+  expenses,
 }: DetailReportParams) => {
   const doc = new jsPDF();
   const periodLabel = reportPeriod === 'yearly' 
@@ -1796,12 +1841,37 @@ export const generateDetailReport = ({
   const unassignedIncome = unassignedTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + Number(t.amount), 0);
   const unassignedExpenses = unassignedTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
+  // Filter expenses by period and property
+  const periodExpenses = (expenses || []).filter(e => {
+    const date = new Date(e.datum);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    const matchesProp = selectedPropertyId === 'all' || e.property_id === selectedPropertyId;
+    
+    if (reportPeriod === 'yearly') {
+      return matchesProp && year === selectedYear;
+    }
+    return matchesProp && year === selectedYear && month === selectedMonth;
+  });
+
+  // Group expenses by property
+  const expensesByProperty = new Map<string, number>();
+  periodExpenses.forEach(e => {
+    const current = expensesByProperty.get(e.property_id) || 0;
+    expensesByProperty.set(e.property_id, current + Number(e.betrag));
+  });
+  
+  // Calculate total expenses from Kosten & Belege
+  const totalExpensesFromCosts = periodExpenses.reduce((sum, e) => sum + Number(e.betrag), 0);
+
   // Group by property
   const propertiesData = new Map<string, { 
     property: PropertyData; 
     units: Array<{ unit: UnitData; income: number; expenses: number; tenant: TenantData | null }>; 
     totalIncome: number; 
-    totalExpenses: number 
+    totalExpenses: number;
+    expensesFromCosts: number;
   }>();
 
   const targetProperties = selectedPropertyId === 'all' 
@@ -1814,6 +1884,7 @@ export const generateDetailReport = ({
       units: [],
       totalIncome: 0,
       totalExpenses: 0,
+      expensesFromCosts: expensesByProperty.get(prop.id) || 0,
     });
   });
 
@@ -1855,9 +1926,17 @@ export const generateDetailReport = ({
     doc.text(`${propData.property.address}, ${propData.property.postal_code} ${propData.property.city}`, 14, currentY + 5);
     doc.setTextColor(0);
 
-    // Summary
+    // Summary - include expenses from Kosten & Belege
+    const combinedExpenses = propData.totalExpenses + propData.expensesFromCosts;
     doc.setFontSize(10);
-    doc.text(`Einnahmen: ${formatCurrency(propData.totalIncome)} | Ausgaben: ${formatCurrency(propData.totalExpenses)} | Saldo: ${formatCurrency(propData.totalIncome - propData.totalExpenses)}`, 14, currentY + 12);
+    doc.text(`Einnahmen: ${formatCurrency(propData.totalIncome)} | Ausgaben: ${formatCurrency(combinedExpenses)} | Saldo: ${formatCurrency(propData.totalIncome - combinedExpenses)}`, 14, currentY + 12);
+    if (propData.expensesFromCosts > 0) {
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`(davon ${formatCurrency(propData.expensesFromCosts)} aus Belegen)`, 14, currentY + 18);
+      doc.setTextColor(0);
+      currentY += 6;
+    }
 
     currentY += 18;
 
@@ -1952,9 +2031,11 @@ export const generateDetailReport = ({
     }
   }
 
-  // Grand total
+  // Grand total - include expenses from Kosten & Belege
   const grandTotalIncome = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.totalIncome, 0) + unassignedIncome;
-  const grandTotalExpenses = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.totalExpenses, 0) + unassignedExpenses;
+  const grandTotalExpensesFromTransactions = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.totalExpenses, 0) + unassignedExpenses;
+  const grandTotalExpensesFromCosts = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.expensesFromCosts, 0);
+  const grandTotalExpenses = grandTotalExpensesFromTransactions + grandTotalExpensesFromCosts;
   
   currentY = (doc as any).lastAutoTable?.finalY + 15 || currentY + 15;
   
@@ -1964,13 +2045,19 @@ export const generateDetailReport = ({
   }
 
   doc.setFillColor(219, 234, 254);
-  doc.roundedRect(14, currentY, 180, 25, 3, 3, 'F');
+  doc.roundedRect(14, currentY, 180, grandTotalExpensesFromCosts > 0 ? 35 : 25, 3, 3, 'F');
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('Gesamtübersicht', 20, currentY + 8);
   doc.setFont('helvetica', 'normal');
   doc.text(`Einnahmen: ${formatCurrency(grandTotalIncome)} | Ausgaben: ${formatCurrency(grandTotalExpenses)} | Saldo: ${formatCurrency(grandTotalIncome - grandTotalExpenses)}`, 20, currentY + 18);
+  if (grandTotalExpensesFromCosts > 0) {
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Ausgaben: ${formatCurrency(grandTotalExpensesFromTransactions)} (Banking) + ${formatCurrency(grandTotalExpensesFromCosts)} (Belege)`, 20, currentY + 28);
+    doc.setTextColor(0);
+  }
 
   doc.save(`Detailbericht_${periodLabel.replace(' ', '_')}.pdf`);
 };
