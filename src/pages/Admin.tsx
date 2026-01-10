@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAdminOrganizations, useAdminStats, AdminOrganization } from '@/hooks/useAdmin';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +41,8 @@ import {
   XCircle,
   Clock,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  UserCog
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -152,6 +154,16 @@ export default function Admin() {
   return (
     <MainLayout title="Admin Dashboard" subtitle="Übersicht aller Organisationen">
       <div className="space-y-6">
+        {/* Quick Actions */}
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/admin/users">
+              <UserCog className="h-4 w-4 mr-2" />
+              Benutzerverwaltung
+            </Link>
+          </Button>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>

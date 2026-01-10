@@ -26,6 +26,7 @@ import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
+import AdminUsers from "./pages/AdminUsers";
 import SystemTest from "./pages/SystemTest";
 import Banking from "./pages/Banking";
 import NotFound from "./pages/NotFound";
@@ -76,6 +77,7 @@ const App = () => (
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+            <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
             <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
             <Route path="*" element={<NotFound />} />
