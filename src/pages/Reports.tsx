@@ -744,7 +744,7 @@ export default function Reports() {
     'reparatur': 20,
     'sanierung': 20,
     'sonstiges': 20,
-    'muellabfuhr': 20,
+    'muellabfuhr': 10,  // Ermäßigter Steuersatz in Österreich
     // Sonstige Kosten (Kategorie sonstige_kosten)
     'makler': 20,
     'notar': 20,
