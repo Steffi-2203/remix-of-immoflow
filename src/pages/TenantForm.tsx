@@ -28,6 +28,7 @@ import { useUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useTenant, useCreateTenant, useUpdateTenant } from '@/hooks/useTenants';
 import { format } from 'date-fns';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 
 const tenantSchema = z.object({
   first_name: z.string().trim().min(1, 'Vorname ist erforderlich').max(100),
@@ -276,7 +277,10 @@ export default function TenantForm() {
                   name="mietbeginn"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Mietbeginn *</FormLabel>
+                      <FormLabel className="flex items-center">
+                        Mietbeginn *
+                        <InfoTooltip text="mietbeginn" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="date" {...field} />
                       </FormControl>
@@ -290,7 +294,10 @@ export default function TenantForm() {
                   name="mietende"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Mietende</FormLabel>
+                      <FormLabel className="flex items-center">
+                        Mietende
+                        <InfoTooltip text="mietende" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="date" {...field} />
                       </FormControl>
@@ -307,7 +314,10 @@ export default function TenantForm() {
                   name="kaution"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Kaution (€)</FormLabel>
+                      <FormLabel className="flex items-center">
+                        Kaution (€)
+                        <InfoTooltip text="kaution" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" {...field} />
                       </FormControl>
@@ -350,7 +360,10 @@ export default function TenantForm() {
                   name="grundmiete"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Grundmiete (€) *</FormLabel>
+                      <FormLabel className="flex items-center">
+                        Grundmiete (€) *
+                        <InfoTooltip text="grundmiete" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" {...field} />
                       </FormControl>
@@ -364,7 +377,10 @@ export default function TenantForm() {
                   name="betriebskosten_vorschuss"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>BK-Vorschuss (€) *</FormLabel>
+                      <FormLabel className="flex items-center">
+                        BK-Vorschuss (€) *
+                        <InfoTooltip text="betriebskosten" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" {...field} />
                       </FormControl>
@@ -378,7 +394,10 @@ export default function TenantForm() {
                   name="heizungskosten_vorschuss"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Heizungskosten-Vorschuss (€) *</FormLabel>
+                      <FormLabel className="flex items-center">
+                        Heizungskosten-Vorschuss (€) *
+                        <InfoTooltip text="heizkosten" />
+                      </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" {...field} />
                       </FormControl>
@@ -419,7 +438,10 @@ export default function TenantForm() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
-                    <FormLabel className="font-normal">SEPA-Lastschriftmandat erteilt</FormLabel>
+                    <FormLabel className="font-normal flex items-center">
+                      SEPA-Lastschriftmandat erteilt
+                      <InfoTooltip text="sepa_mandat" />
+                    </FormLabel>
                   </FormItem>
                 )}
               />
@@ -431,7 +453,10 @@ export default function TenantForm() {
                     name="iban"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>IBAN</FormLabel>
+                        <FormLabel className="flex items-center">
+                          IBAN
+                          <InfoTooltip text="iban" />
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="AT12 3456 7890 1234 5678" {...field} />
                         </FormControl>
@@ -445,7 +470,10 @@ export default function TenantForm() {
                     name="bic"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>BIC</FormLabel>
+                        <FormLabel className="flex items-center">
+                          BIC
+                          <InfoTooltip text="bic" />
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="BAWAATWW" {...field} />
                         </FormControl>
@@ -459,7 +487,10 @@ export default function TenantForm() {
                     name="mandat_reference"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Mandatsreferenz</FormLabel>
+                        <FormLabel className="flex items-center">
+                          Mandatsreferenz
+                          <InfoTooltip text="mandat_reference" />
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="MANDAT-001" {...field} />
                         </FormControl>
