@@ -21,6 +21,7 @@ import TenantForm from "./pages/TenantForm";
 import TenantList from "./pages/TenantList";
 import PaymentList from "./pages/PaymentList";
 import ExpenseList from "./pages/ExpenseList";
+import InvoiceList from "./pages/InvoiceList";
 import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import Documents from "./pages/Documents";
@@ -70,6 +71,7 @@ const App = () => (
             <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><Banking /></ProtectedRoute>} />
             <Route path="/kosten" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
+            <Route path="/vorschreibungen" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />

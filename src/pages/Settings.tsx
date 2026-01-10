@@ -1,4 +1,4 @@
-import { Building2, User, Mail, Calendar, Sparkles, Shield } from 'lucide-react';
+import { Building2, User, Mail, Calendar, Sparkles, Shield, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
@@ -15,12 +15,14 @@ import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
+import { useIsAdmin } from '@/hooks/useAdmin';
 
 export default function Settings() {
   const { user } = useAuth();
   const { data: organization, isLoading } = useOrganization();
   const { resetTour } = useFeatureTour();
   const navigate = useNavigate();
+  const { data: isAdmin } = useIsAdmin();
   
   // Initialize session timeout
   useSessionTimeout();
@@ -44,12 +46,13 @@ export default function Settings() {
     <MainLayout title="Einstellungen" subtitle="Verwalten Sie Ihr Konto">
       <div className="max-w-6xl mx-auto">
         <Tabs defaultValue="account" className="w-full">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="account">Konto</TabsTrigger>
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
+            {isAdmin && <TabsTrigger value="admin">Administration</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="account" className="space-y-6">
@@ -141,6 +144,49 @@ export default function Settings() {
           <TabsContent value="handbook">
             <HandbookSection />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="admin" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Administration
+                  </CardTitle>
+                  <CardDescription>
+                    Systemweite Einstellungen und Benutzerverwaltung
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Button variant="outline" asChild className="justify-start h-auto py-4">
+                      <Link to="/admin">
+                        <Building2 className="h-5 w-5 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">Organisationen</div>
+                          <div className="text-sm text-muted-foreground">
+                            Alle Organisationen und Abonnements verwalten
+                          </div>
+                        </div>
+                      </Link>
+                    </Button>
+                    
+                    <Button variant="outline" asChild className="justify-start h-auto py-4">
+                      <Link to="/admin/users">
+                        <Users className="h-5 w-5 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">Benutzerverwaltung</div>
+                          <div className="text-sm text-muted-foreground">
+                            Rollen und Berechtigungen zuweisen
+                          </div>
+                        </div>
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </MainLayout>
