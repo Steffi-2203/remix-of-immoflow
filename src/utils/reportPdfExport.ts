@@ -862,7 +862,7 @@ export const generateUstVoranmeldung = (
     'heizung': 20,
     'strom_allgemein': 20,
     'wasser_abwasser': 10,
-    'muellabfuhr': 10,
+    'muellabfuhr': 20,
     'hausbetreuung': 20,
     'lift': 20,
     'gartenpflege': 20,
