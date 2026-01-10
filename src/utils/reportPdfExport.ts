@@ -783,7 +783,7 @@ export const generateUstVoranmeldung = (
 
   const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
 
-  // Ausgaben nach USt-Satz gruppieren
+  // Ausgaben nach USt-Satz gruppieren (Transaktionen)
   const ausgaben20 = expenseTransactions.filter(t => {
     const catName = categories.find(c => c.id === t.category_id)?.name || '';
     return (CATEGORY_VAT_RATES[catName] ?? 20) === 20;
@@ -797,17 +797,71 @@ export const generateUstVoranmeldung = (
     return CATEGORY_VAT_RATES[catName] === 0;
   });
   
-  const brutto20 = ausgaben20.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-  const brutto10 = ausgaben10.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-  const brutto0 = ausgaben0.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
-  const totalAusgaben = brutto20 + brutto10 + brutto0;
+  const brutto20Trans = ausgaben20.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const brutto10Trans = ausgaben10.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const brutto0Trans = ausgaben0.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+  const totalAusgabenTrans = brutto20Trans + brutto10Trans + brutto0Trans;
   
-  const vorsteuer20 = calculateVatFromGross(brutto20, 20);
-  const vorsteuer10 = calculateVatFromGross(brutto10, 10);
-  const vorsteuer = vorsteuer20 + vorsteuer10;
+  const vorsteuer20Trans = calculateVatFromGross(brutto20Trans, 20);
+  const vorsteuer10Trans = calculateVatFromGross(brutto10Trans, 10);
+  const vorsteuerTrans = vorsteuer20Trans + vorsteuer10Trans;
+
+  // ====== VORSTEUER AUS EXPENSES (Kosten & Belege) ======
+  // Mapping expense_type -> USt-Satz
+  const EXPENSE_TYPE_VAT_RATES: Record<string, number> = {
+    'heizung': 20,
+    'strom_allgemein': 20,
+    'wasser_abwasser': 10,
+    'muellabfuhr': 10,
+    'hausbetreuung': 20,
+    'lift': 20,
+    'gartenpflege': 20,
+    'schneeraeumung': 20,
+    'verwaltung': 20,
+    'reparatur': 20,
+    'sanierung': 20,
+    'sonstiges': 20,
+    'versicherung': 0, // Versicherungen sind umsatzsteuerfrei
+    'grundsteuer': 0,  // Grundsteuer ist keine USt-pflichtige Leistung
+    'ruecklage': 0,    // Rücklagen sind keine Ausgaben mit USt
+  };
+
+  const periodExpenses = expenses.filter(exp => {
+    const expYear = exp.year;
+    const expMonth = exp.month;
+    
+    // Period filter
+    if (reportPeriod === 'yearly') {
+      if (expYear !== selectedYear) return false;
+    } else {
+      if (expYear !== selectedYear || expMonth !== selectedMonth) return false;
+    }
+    
+    // Property filter
+    if (selectedPropertyId === 'all') return true;
+    return exp.property_id === selectedPropertyId;
+  });
+
+  // Expenses nach USt-Satz gruppieren
+  const expenses20 = periodExpenses.filter(exp => (EXPENSE_TYPE_VAT_RATES[exp.expense_type] ?? 20) === 20);
+  const expenses10 = periodExpenses.filter(exp => EXPENSE_TYPE_VAT_RATES[exp.expense_type] === 10);
+  const expenses0 = periodExpenses.filter(exp => EXPENSE_TYPE_VAT_RATES[exp.expense_type] === 0);
+
+  const brutto20Exp = expenses20.reduce((sum, exp) => sum + Number(exp.betrag || 0), 0);
+  const brutto10Exp = expenses10.reduce((sum, exp) => sum + Number(exp.betrag || 0), 0);
+  const brutto0Exp = expenses0.reduce((sum, exp) => sum + Number(exp.betrag || 0), 0);
+  const totalAusgabenExp = brutto20Exp + brutto10Exp + brutto0Exp;
+
+  const vorsteuer20Exp = calculateVatFromGross(brutto20Exp, 20);
+  const vorsteuer10Exp = calculateVatFromGross(brutto10Exp, 10);
+  const vorsteuerExp = vorsteuer20Exp + vorsteuer10Exp;
+
+  // Kombinierte Vorsteuer
+  const combinedVorsteuer = vorsteuerTrans + vorsteuerExp;
+  const totalAusgabenGesamt = totalAusgabenTrans + totalAusgabenExp;
 
   // USt-Zahllast
-  const vatLiability = totalUstEinnahmen - vorsteuer;
+  const vatLiability = totalUstEinnahmen - combinedVorsteuer;
 
   // Section 1: Einnahmen aus Mieterdaten (Soll)
   doc.setFontSize(12);
@@ -836,29 +890,73 @@ export const generateUstVoranmeldung = (
 
   const y1 = (doc as any).lastAutoTable?.finalY || 100;
 
-  // Section 2: Ausgaben / Vorsteuer (nach USt-Sätzen aufgeschlüsselt)
+  // Section 2a: Vorsteuer aus Banking-Transaktionen
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('2. Vorsteuer aus Ausgaben', 14, y1 + 15);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('2a. Banking-Transaktionen', 14, y1 + 25);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text(`${expenseTransactions.length} Ausgaben-Buchungen im Zeitraum`, 14, y1 + 21);
+  doc.text(`${expenseTransactions.length} Buchungen im Zeitraum`, 14, y1 + 31);
   doc.setTextColor(0);
 
   autoTable(doc, {
-    startY: y1 + 25,
+    startY: y1 + 35,
     head: [['Position', 'Anzahl', 'Brutto', 'USt-Satz', 'Vorsteuer']],
     body: [
-      ['Ausgaben (20% USt)', `${ausgaben20.length}`, formatCurrency(brutto20), '20%', formatCurrency(vorsteuer20)],
-      ['Ausgaben (10% USt)', `${ausgaben10.length}`, formatCurrency(brutto10), '10%', formatCurrency(vorsteuer10)],
-      ['Ausgaben (0% USt)', `${ausgaben0.length}`, formatCurrency(brutto0), '0%', formatCurrency(0)],
+      ['Ausgaben (20% USt)', `${ausgaben20.length}`, formatCurrency(brutto20Trans), '20%', formatCurrency(vorsteuer20Trans)],
+      ['Ausgaben (10% USt)', `${ausgaben10.length}`, formatCurrency(brutto10Trans), '10%', formatCurrency(vorsteuer10Trans)],
+      ['Ausgaben (0% USt)', `${ausgaben0.length}`, formatCurrency(brutto0Trans), '0%', formatCurrency(0)],
     ],
-    foot: [['Gesamt Ausgaben', `${expenseTransactions.length}`, formatCurrency(totalAusgaben), '', formatCurrency(vorsteuer)]],
+    foot: [['Summe Transaktionen', `${expenseTransactions.length}`, formatCurrency(totalAusgabenTrans), '', formatCurrency(vorsteuerTrans)]],
     theme: 'plain',
     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
-    footStyles: { fillColor: [219, 234, 254], textColor: [0, 0, 0], fontStyle: 'bold' },
+    footStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold' },
     styles: { fontSize: 10 },
+  });
+
+  const y1a = (doc as any).lastAutoTable?.finalY || 150;
+
+  // Section 2b: Vorsteuer aus Kosten & Belege (Expenses)
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('2b. Kosten & Belege', 14, y1a + 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`${periodExpenses.length} Belege im Zeitraum`, 14, y1a + 16);
+  doc.setTextColor(0);
+
+  autoTable(doc, {
+    startY: y1a + 20,
+    head: [['Position', 'Anzahl', 'Brutto', 'USt-Satz', 'Vorsteuer']],
+    body: [
+      ['Ausgaben (20% USt)', `${expenses20.length}`, formatCurrency(brutto20Exp), '20%', formatCurrency(vorsteuer20Exp)],
+      ['Ausgaben (10% USt)', `${expenses10.length}`, formatCurrency(brutto10Exp), '10%', formatCurrency(vorsteuer10Exp)],
+      ['Ausgaben (0% USt)', `${expenses0.length}`, formatCurrency(brutto0Exp), '0%', formatCurrency(0)],
+    ],
+    foot: [['Summe Belege', `${periodExpenses.length}`, formatCurrency(totalAusgabenExp), '', formatCurrency(vorsteuerExp)]],
+    theme: 'plain',
+    headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+    footStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { fontSize: 10 },
+  });
+
+  const y1b = (doc as any).lastAutoTable?.finalY || 200;
+
+  // Gesamt Vorsteuer
+  autoTable(doc, {
+    startY: y1b + 5,
+    body: [
+      ['Gesamt Ausgaben', formatCurrency(totalAusgabenGesamt), 'Gesamt Vorsteuer', formatCurrency(combinedVorsteuer)],
+    ],
+    theme: 'plain',
+    styles: { fontSize: 10, fontStyle: 'bold' },
+    bodyStyles: { fillColor: [219, 234, 254] },
   });
 
   const y2 = (doc as any).lastAutoTable?.finalY || 150;
@@ -872,7 +970,7 @@ export const generateUstVoranmeldung = (
     startY: y2 + 20,
     body: [
       ['Umsatzsteuer (aus Einnahmen)', formatCurrency(totalUstEinnahmen)],
-      ['./. Vorsteuer (aus Ausgaben)', formatCurrency(vorsteuer)],
+      ['./. Vorsteuer (aus Ausgaben)', formatCurrency(combinedVorsteuer)],
       [vatLiability >= 0 ? 'Zahllast an Finanzamt' : 'Gutschrift vom Finanzamt', formatCurrency(Math.abs(vatLiability))],
     ],
     theme: 'plain',
