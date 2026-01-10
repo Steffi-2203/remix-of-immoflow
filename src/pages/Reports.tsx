@@ -64,6 +64,7 @@ import {
   type CategoryData,
 } from '@/utils/reportPdfExport';
 import { useBankAccounts } from '@/hooks/useBankAccounts';
+import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 
 // Berechnet Netto aus Brutto
@@ -210,11 +211,23 @@ export default function Reports() {
   const { data: combinedPayments, isLoading: isLoadingCombined } = useCombinedPayments();
   
   // Central MRG allocation for Offene Posten - uses same logic as PaymentList
-  const { allocations: mrgAllocations, totals: mrgTotals, isLoading: mrgLoading } = useMrgAllocation(
+  const { allocations: mrgAllocationsMonthly, totals: mrgTotalsMonthly, isLoading: mrgLoadingMonthly } = useMrgAllocation(
     selectedPropertyId,
     selectedYear,
     selectedMonth
   );
+  
+  // Yearly MRG allocation für jährliche Reports
+  const { allocations: mrgAllocationsYearly, totals: mrgTotalsYearly, isLoading: mrgLoadingYearly } = useMrgAllocationYearly(
+    selectedPropertyId,
+    selectedYear,
+    12 // Alle 12 Monate
+  );
+  
+  // Verwende je nach reportPeriod die richtige Berechnung
+  const mrgAllocations = reportPeriod === 'yearly' ? mrgAllocationsYearly : mrgAllocationsMonthly;
+  const mrgTotals = reportPeriod === 'yearly' ? mrgTotalsYearly : mrgTotalsMonthly;
+  const mrgLoading = reportPeriod === 'yearly' ? mrgLoadingYearly : mrgLoadingMonthly;
 
   const isLoading = isLoadingProperties || isLoadingUnits || isLoadingTenants || isLoadingInvoices || isLoadingExpenses || isLoadingPayments || isLoadingTransactions || isLoadingCategories || isLoadingBankAccounts || isLoadingCombined || mrgLoading;
 
