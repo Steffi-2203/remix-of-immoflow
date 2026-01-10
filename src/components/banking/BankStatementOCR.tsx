@@ -59,6 +59,7 @@ interface BankStatementOCRProps {
   categories: AccountCategory[];
   bankAccountId: string | null;
   organizationId: string | null;
+  bankAccountPropertyId?: string | null;
   onImport: (transactions: MatchedBankLine[]) => Promise<void>;
 }
 
@@ -70,6 +71,7 @@ export function BankStatementOCR({
   categories,
   bankAccountId,
   organizationId,
+  bankAccountPropertyId,
   onImport
 }: BankStatementOCRProps) {
   const { processFile, isProcessing, result, reset } = useOCRBankStatement();
@@ -77,14 +79,23 @@ export function BankStatementOCR({
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
-  // Build search candidates for fuzzy matching
+  // Build search candidates for fuzzy matching - filtered by bank account property if assigned
   const searchCandidates = useMemo(() => {
-    const unitData = units.map(u => ({
+    // Filter units/tenants by property if bank account is assigned to a property
+    const filteredUnits = bankAccountPropertyId 
+      ? units.filter(u => u.property_id === bankAccountPropertyId)
+      : units;
+    
+    const filteredTenants = bankAccountPropertyId
+      ? tenants.filter(t => filteredUnits.some(u => u.id === t.unit_id))
+      : tenants;
+
+    const unitData = filteredUnits.map(u => ({
       id: u.id,
       top_nummer: u.top_nummer,
       property_id: u.property_id
     }));
-    const tenantData = tenants.map(t => ({
+    const tenantData = filteredTenants.map(t => ({
       id: t.id,
       first_name: t.first_name,
       last_name: t.last_name,
@@ -99,7 +110,14 @@ export function BankStatementOCR({
       match_count: m.match_count ?? null
     }));
     return createSearchCandidates(unitData, tenantData, patterns);
-  }, [units, tenants, learnedMatches]);
+  }, [units, tenants, learnedMatches, bankAccountPropertyId]);
+
+  // Filter tenants for IBAN matching based on bank account property
+  const tenantsForMatching = useMemo(() => {
+    if (!bankAccountPropertyId) return tenants;
+    const propertyUnits = units.filter(u => u.property_id === bankAccountPropertyId);
+    return tenants.filter(t => propertyUnits.some(u => u.id === t.unit_id));
+  }, [tenants, units, bankAccountPropertyId]);
 
   // Get income category ID
   const incomeCategory = useMemo(() => 
@@ -117,14 +135,26 @@ export function BankStatementOCR({
 
     let matchedUnitId: string | null = null;
     let matchedTenantId: string | null = null;
-    let matchedPropertyId: string | null = null;
+    let matchedPropertyId: string | null = bankAccountPropertyId || null; // Use bank account property as default
     let confidence = 0;
     let matchReason = '';
     let matchType: 'exact' | 'fuzzy' | 'learned' | 'none' = 'none';
 
+    // If bank account has property, set higher base confidence
+    if (bankAccountPropertyId) {
+      matchReason = 'Bankkonto → Liegenschaft';
+    }
+
     // Check learned patterns first (exact match)
     for (const lm of learnedMatches) {
       if (searchText.toLowerCase().includes(lm.pattern.toLowerCase())) {
+        // If bank account has property, only use patterns that match this property
+        if (bankAccountPropertyId && lm.unit_id) {
+          const patternUnit = units.find(u => u.id === lm.unit_id);
+          if (patternUnit && patternUnit.property_id !== bankAccountPropertyId) {
+            continue; // Skip patterns from other properties
+          }
+        }
         matchedUnitId = lm.unit_id;
         matchedTenantId = lm.tenant_id;
         confidence = 1;
@@ -146,9 +176,9 @@ export function BankStatementOCR({
       }
     }
 
-    // Check IBAN match with tenants
+    // Check IBAN match with tenants (filtered by property if applicable)
     if (!matchedTenantId && line.iban) {
-      const tenantByIban = tenants.find(t => 
+      const tenantByIban = tenantsForMatching.find(t => 
         t.iban && t.iban.replace(/\s/g, '').toUpperCase() === line.iban?.replace(/\s/g, '').toUpperCase()
       );
       if (tenantByIban) {
@@ -160,12 +190,15 @@ export function BankStatementOCR({
       }
     }
 
-    // Get property from unit
+    // Get property from unit (or use bank account property)
     if (matchedUnitId) {
       const unit = units.find(u => u.id === matchedUnitId);
       if (unit) {
         matchedPropertyId = unit.property_id;
       }
+    } else if (bankAccountPropertyId) {
+      // Even without unit match, use bank account property
+      matchedPropertyId = bankAccountPropertyId;
     }
 
     // Determine if this is likely rental income
@@ -187,7 +220,7 @@ export function BankStatementOCR({
       categoryId: isRentalIncome ? (incomeCategory?.id || null) : null,
       isRentalIncome
     };
-  }, [searchCandidates, learnedMatches, tenants, units, incomeCategory]);
+  }, [searchCandidates, learnedMatches, tenantsForMatching, units, incomeCategory, bankAccountPropertyId]);
 
   // Process file and match lines
   const handleFile = useCallback(async (file: File) => {

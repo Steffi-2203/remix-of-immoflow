@@ -71,6 +71,7 @@ export type Database = {
           opening_balance: number | null
           opening_balance_date: string | null
           organization_id: string | null
+          property_id: string | null
           updated_at: string | null
         }
         Insert: {
@@ -84,6 +85,7 @@ export type Database = {
           opening_balance?: number | null
           opening_balance_date?: string | null
           organization_id?: string | null
+          property_id?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -97,6 +99,7 @@ export type Database = {
           opening_balance?: number | null
           opening_balance_date?: string | null
           organization_id?: string | null
+          property_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -105,6 +108,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_accounts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
