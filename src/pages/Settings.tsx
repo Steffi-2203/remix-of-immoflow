@@ -2,11 +2,14 @@ import { Building2, User, Mail, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
+import { FAQSection } from '@/components/settings/FAQSection';
+import { HandbookSection } from '@/components/settings/HandbookSection';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -24,61 +27,81 @@ export default function Settings() {
 
   return (
     <MainLayout title="Einstellungen" subtitle="Verwalten Sie Ihr Konto">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Account Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Konto
-            </CardTitle>
-            <CardDescription>Ihre Kontoinformationen</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">E-Mail</p>
-                <p className="font-medium">{user?.email || 'Nicht verfügbar'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="max-w-6xl mx-auto">
+        <Tabs defaultValue="account" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="account">Konto</TabsTrigger>
+            <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
+            <TabsTrigger value="faq">FAQ</TabsTrigger>
+            <TabsTrigger value="handbook">Handbuch</TabsTrigger>
+          </TabsList>
 
-        {/* Organization Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Organisation
-            </CardTitle>
-            <CardDescription>Ihre Organisationsdetails</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Organisationsname</p>
-              <p className="font-medium text-lg">{organization?.name || 'Nicht verfügbar'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <Badge className="bg-green-100 text-green-800">Aktiv</Badge>
-            </div>
-            {organization?.created_at && (
-              <div className="flex items-center gap-3">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Mitglied seit</p>
-                  <p className="font-medium">
-                    {format(new Date(organization.created_at), 'dd. MMMM yyyy', { locale: de })}
-                  </p>
+          <TabsContent value="account" className="space-y-6">
+            {/* Account Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Konto
+                </CardTitle>
+                <CardDescription>Ihre Kontoinformationen</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">E-Mail</p>
+                    <p className="font-medium">{user?.email || 'Nicht verfügbar'}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* Distribution Keys Section */}
-        <DistributionKeySettings />
+            {/* Organization Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Organisation
+                </CardTitle>
+                <CardDescription>Ihre Organisationsdetails</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Organisationsname</p>
+                  <p className="font-medium text-lg">{organization?.name || 'Nicht verfügbar'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge className="bg-green-100 text-green-800">Aktiv</Badge>
+                </div>
+                {organization?.created_at && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Mitglied seit</p>
+                      <p className="font-medium">
+                        {format(new Date(organization.created_at), 'dd. MMMM yyyy', { locale: de })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="distribution">
+            <DistributionKeySettings />
+          </TabsContent>
+
+          <TabsContent value="faq">
+            <FAQSection />
+          </TabsContent>
+
+          <TabsContent value="handbook">
+            <HandbookSection />
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
   );
