@@ -77,6 +77,7 @@ const mrgScopeStyles: Record<string, string> = {
 };
 
 export default function UnitList() {
+  const [propertyFilter, setPropertyFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +115,7 @@ export default function UnitList() {
   }).length || 0;
   // Filter units
   const filteredUnits = units?.filter(unit => {
+    if (propertyFilter !== 'all' && unit.property_id !== propertyFilter) return false;
     if (typeFilter !== 'all' && unit.type !== typeFilter) return false;
     if (statusFilter !== 'all' && unit.status !== statusFilter) return false;
     if (searchQuery) {
@@ -162,6 +164,20 @@ export default function UnitList() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+            <SelectTrigger className="w-52">
+              <Building2 className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Liegenschaft" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Liegenschaften</SelectItem>
+              {properties?.map((property) => (
+                <SelectItem key={property.id} value={property.id}>
+                  {property.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-40">
               <Filter className="h-4 w-4 mr-2" />
