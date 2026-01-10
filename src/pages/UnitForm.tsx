@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, Home, BarChart3, AlertTriangle, Scale, Info } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ArrowLeft, Save, Loader2, Home, BarChart3, AlertTriangle, Scale } from 'lucide-react';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import { useCreateUnit, useUnit, useUpdateUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useDistributionKeys } from '@/hooks/useDistributionKeys';
@@ -352,7 +352,10 @@ export default function UnitForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="qm">Nutzfläche (m²) *</Label>
+                <Label htmlFor="qm" className="flex items-center">
+                  Nutzfläche (m²) *
+                  <InfoTooltip text="qm" />
+                </Label>
                 <Input
                   id="qm"
                   name="qm"
@@ -365,7 +368,10 @@ export default function UnitForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mea">MEA (‰) *</Label>
+                <Label htmlFor="mea" className="flex items-center">
+                  MEA (‰) *
+                  <InfoTooltip text="mea" />
+                </Label>
                 <Input
                   id="mea"
                   name="mea"
@@ -396,21 +402,10 @@ export default function UnitForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* MRG Anwendungsbereich */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="mrg_scope">MRG-Anwendungsbereich</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p><strong>Vollanwendung:</strong> Altbauten vor 1945/1953, strengste Mieterschutzbestimmungen</p>
-                        <p className="mt-1"><strong>Teilanwendung:</strong> Neubauten mit gewissen Schutzbestimmungen</p>
-                        <p className="mt-1"><strong>Ausgenommen:</strong> z.B. Einfamilienhäuser, befristete Untervermietung</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                <Label htmlFor="mrg_scope" className="flex items-center">
+                  MRG-Anwendungsbereich
+                  <InfoTooltip text="mrg_scope" />
+                </Label>
                 <Select
                   value={formData.mrg_scope}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, mrg_scope: value as MrgScope }))}
@@ -433,19 +428,10 @@ export default function UnitForm() {
 
               {/* Ausstattungskategorie */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="ausstattungskategorie">Ausstattungskategorie (§15a MRG)</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Die Kategorie bestimmt den maximalen Erhaltungsbeitrag (§14 MRG) und die Richtwertmiete.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                <Label htmlFor="ausstattungskategorie" className="flex items-center">
+                  Ausstattungskategorie (§15a MRG)
+                  <InfoTooltip text="ausstattungskategorie" />
+                </Label>
                 <Select
                   value={formData.ausstattungskategorie}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, ausstattungskategorie: value as Ausstattungskategorie }))}
@@ -468,20 +454,10 @@ export default function UnitForm() {
 
               {/* Nutzfläche nach §17 MRG */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="nutzflaeche_mrg">Nutzfläche nach §17 MRG (m²)</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Die Nutzfläche nach §17 MRG kann von der tatsächlichen Fläche abweichen (z.B. bei Terrassen, Balkonen).</p>
-                        <p className="mt-1">Wenn leer, wird die allgemeine Nutzfläche verwendet.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                <Label htmlFor="nutzflaeche_mrg" className="flex items-center">
+                  Nutzfläche nach §17 MRG (m²)
+                  <InfoTooltip text="nutzflaeche_mrg" />
+                </Label>
                 <Input
                   id="nutzflaeche_mrg"
                   name="nutzflaeche_mrg"
@@ -498,19 +474,10 @@ export default function UnitForm() {
 
               {/* Richtwertmiete Basis */}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="richtwertmiete_basis">Richtwert-Basis (€/m²)</Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="h-4 w-4 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Der Basisrichtwert für dieses Bundesland. Zu- und Abschläge werden bei der Mietzinsberechnung berücksichtigt.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                <Label htmlFor="richtwertmiete_basis" className="flex items-center">
+                  Richtwert-Basis (€/m²)
+                  <InfoTooltip text="richtwertmiete_basis" />
+                </Label>
                 <Input
                   id="richtwertmiete_basis"
                   name="richtwertmiete_basis"
