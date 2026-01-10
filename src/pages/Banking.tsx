@@ -110,7 +110,7 @@ export default function Banking() {
   const { data: categories = [], isLoading: categoriesLoading } = useAccountCategories();
   const linkedExpensesMap = useLinkedExpensesMap();
   
-  const { createTransactionWithSync, deleteTransactionWithSync } = usePaymentSync();
+  const { createTransactionWithSync, deleteTransactionWithSync, createPaymentWithSync } = usePaymentSync();
   const createTransactions = useCreateTransactions();
   const updateTransaction = useUpdateTransaction();
   const createLearnedMatch = useCreateLearnedMatch();
@@ -674,23 +674,45 @@ export default function Banking() {
               bankAccountId={selectedBankAccountId}
               organizationId={organization?.id || null}
               onImport={async (lines) => {
-                const toInsert = lines.map(line => ({
-                  organization_id: organization?.id || null,
-                  unit_id: line.matchedUnitId,
-                  tenant_id: line.matchedTenantId,
-                  property_id: line.matchedPropertyId,
-                  amount: line.betrag,
-                  currency: 'EUR',
-                  transaction_date: line.datum,
-                  description: line.verwendungszweck,
-                  counterpart_name: line.auftraggeber_empfaenger || null,
-                  counterpart_iban: line.iban || null,
-                  status: line.matchedUnitId ? 'matched' : 'unmatched',
-                  match_confidence: line.confidence,
-                  category_id: line.categoryId,
-                  bank_account_id: selectedBankAccountId,
-                }));
-                await createTransactions.mutateAsync(toInsert);
+                // Single Source of Truth: Mieteinnahmen via payments → transactions
+                for (const line of lines) {
+                  // Mieteinnahme: positiver Betrag MIT Mieter-Zuordnung → payments (führend)
+                  if (line.betrag > 0 && line.matchedTenantId) {
+                    await createPaymentWithSync.mutateAsync({
+                      payment: {
+                        tenant_id: line.matchedTenantId,
+                        betrag: line.betrag,
+                        eingangs_datum: line.datum,
+                        buchungs_datum: line.datum,
+                        referenz: line.verwendungszweck?.substring(0, 255) || null,
+                        zahlungsart: 'ueberweisung',
+                      },
+                      unitId: line.matchedUnitId || undefined,
+                      propertyId: line.matchedPropertyId || undefined,
+                    });
+                  } else {
+                    // Andere Buchungen (Ausgaben, sonstige Einnahmen) → transactions
+                    await createTransactionWithSync.mutateAsync({
+                      transaction: {
+                        organization_id: organization?.id || null,
+                        unit_id: line.matchedUnitId,
+                        tenant_id: line.matchedTenantId,
+                        property_id: line.matchedPropertyId,
+                        amount: line.betrag,
+                        currency: 'EUR',
+                        transaction_date: line.datum,
+                        description: line.verwendungszweck,
+                        counterpart_name: line.auftraggeber_empfaenger || null,
+                        counterpart_iban: line.iban || null,
+                        status: line.matchedUnitId ? 'matched' : 'unmatched',
+                        match_confidence: line.confidence,
+                        category_id: line.categoryId,
+                        bank_account_id: selectedBankAccountId,
+                      },
+                    });
+                  }
+                }
+                toast.success(`${lines.length} Buchungen importiert`);
               }}
             />
           </TabsContent>
