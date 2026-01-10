@@ -317,18 +317,36 @@ export default function Reports() {
   }) || [];
 
   // ====== KOMBINIERTE ZAHLUNGEN (payments + transactions mit tenant_id) ======
+  // Filtere nach Zeitraum UND Liegenschaft (über Mieter -> Unit -> Property)
   const periodCombinedPayments = useMemo(() => {
+    // Ermittle Unit-IDs der ausgewählten Liegenschaft
+    const propertyUnitIds = selectedPropertyId === 'all' 
+      ? null 
+      : allUnits?.filter(u => u.property_id === selectedPropertyId).map(u => u.id) || [];
+    
     return (combinedPayments || []).filter(p => {
       const date = new Date(p.date);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       
+      // Zeitraum-Filter
       if (reportPeriod === 'yearly') {
-        return year === selectedYear;
+        if (year !== selectedYear) return false;
+      } else {
+        if (year !== selectedYear || month !== selectedMonth) return false;
       }
-      return year === selectedYear && month === selectedMonth;
+      
+      // Property-Filter (über Mieter -> Unit -> Property)
+      if (propertyUnitIds !== null) {
+        const tenant = allTenants?.find(t => t.id === p.tenant_id);
+        if (!tenant || !propertyUnitIds.includes(tenant.unit_id)) {
+          return false;
+        }
+      }
+      
+      return true;
     });
-  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth]);
+  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth, selectedPropertyId, allUnits, allTenants]);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
