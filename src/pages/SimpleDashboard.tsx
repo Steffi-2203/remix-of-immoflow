@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
+import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home, Sparkles } from "lucide-react";
 import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { FeatureTour } from "@/components/tour/FeatureTour";
+import { useFeatureTour } from "@/hooks/useFeatureTour";
 
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
@@ -108,6 +110,7 @@ export default function SimpleDashboard() {
   const createProperty = useCreateProperty();
   const deleteProperty = useDeleteProperty();
   const { isComplete, markComplete } = useOnboardingStatus();
+  const { isOpen, steps, startTour, closeTour, completeTour, autoStartTour, hasCompletedTour } = useFeatureTour();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
@@ -115,6 +118,13 @@ export default function SimpleDashboard() {
 
   const propertiesList = properties || [];
   const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
+
+  // Auto-start tour for new users
+  useEffect(() => {
+    if (!isLoading && organization && !showOnboarding) {
+      autoStartTour();
+    }
+  }, [isLoading, organization, showOnboarding, autoStartTour]);
 
   if (isLoading) {
     return (
@@ -144,18 +154,34 @@ export default function SimpleDashboard() {
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
+      {/* Feature Tour */}
+      <FeatureTour
+        steps={steps}
+        isOpen={isOpen}
+        onClose={closeTour}
+        onComplete={completeTour}
+      />
+
       {/* Onboarding Wizard */}
       {showOnboarding && (
         <OnboardingWizard onComplete={markComplete} onSkip={markComplete} />
       )}
 
-      <div className="max-w-4xl">
+      <div className="max-w-4xl" data-tour="dashboard">
         {/* Header mit Aktionen */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl font-bold">ImmoflowMe</h1>
-          <Button variant="outline" asChild>
-            <Link to="/einstellungen">Einstellungen</Link>
-          </Button>
+          <div className="flex gap-2">
+            {hasCompletedTour && (
+              <Button variant="outline" size="sm" onClick={startTour}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Tour starten
+              </Button>
+            )}
+            <Button variant="outline" asChild>
+              <Link to="/einstellungen">Einstellungen</Link>
+            </Button>
+          </div>
         </div>
 
         {/* Organization Info */}

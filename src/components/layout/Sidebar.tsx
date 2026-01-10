@@ -21,33 +21,40 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
+// NavItem interface moved below imports
+
 interface NavItem {
   label: string;
   icon: React.ElementType;
   href: string;
   badge?: number;
+  tourId?: string;
 }
 
 const navItems: NavItem[] = [
   {
     label: 'Dashboard',
     icon: LayoutDashboard,
-    href: '/dashboard'
+    href: '/dashboard',
+    tourId: 'nav-dashboard'
   },
   {
     label: 'Liegenschaften',
     icon: Building,
-    href: '/liegenschaften'
+    href: '/liegenschaften',
+    tourId: 'nav-properties'
   },
   {
     label: 'Einheiten',
     icon: Layers,
-    href: '/einheiten'
+    href: '/einheiten',
+    tourId: 'nav-units'
   },
   {
     label: 'Mieter',
     icon: Users,
-    href: '/mieter'
+    href: '/mieter',
+    tourId: 'nav-tenants'
   },
   {
     label: 'Mieteinnahmen',
@@ -57,12 +64,14 @@ const navItems: NavItem[] = [
   {
     label: 'Kosten & Belege',
     icon: Receipt,
-    href: '/kosten'
+    href: '/kosten',
+    tourId: 'nav-expenses'
   },
   {
     label: 'Banking',
     icon: BookOpen,
-    href: '/buchhaltung'
+    href: '/buchhaltung',
+    tourId: 'nav-banking'
   },
   {
     label: 'BK-Abrechnung',
@@ -77,12 +86,14 @@ const navItems: NavItem[] = [
   {
     label: 'Reports',
     icon: TrendingUp,
-    href: '/reports'
+    href: '/reports',
+    tourId: 'nav-reports'
   },
   {
     label: 'Einstellungen',
     icon: Cog,
-    href: '/einstellungen'
+    href: '/einstellungen',
+    tourId: 'nav-settings'
   }
 ];
 
@@ -112,6 +123,7 @@ export function Sidebar() {
         
         {/* Sidebar */}
         <aside 
+          data-tour="sidebar"
           className={cn(
             'fixed left-0 top-0 z-50 h-screen bg-sidebar border-r border-sidebar-border w-64 transition-transform duration-300',
             isOpen ? 'translate-x-0' : '-translate-x-full'
@@ -146,6 +158,7 @@ export function Sidebar() {
                   key={item.href} 
                   to={item.href}
                   onClick={handleLinkClick}
+                  data-tour={item.tourId}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
                     'text-white/80 hover:text-white hover:bg-white/10',
@@ -179,6 +192,7 @@ export function Sidebar() {
   // Desktop: regular sidebar
   return (
     <aside 
+      data-tour="sidebar"
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300',
         collapsed ? 'w-16' : 'w-64'
@@ -217,7 +231,8 @@ export function Sidebar() {
             <Link 
               key={item.href} 
               to={item.href} 
-              title={collapsed ? item.label : undefined} 
+              title={collapsed ? item.label : undefined}
+              data-tour={item.tourId}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
                 'text-white/80 hover:text-white hover:bg-white/10',
