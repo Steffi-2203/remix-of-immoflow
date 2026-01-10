@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Building2, User, Mail, Calendar, Sparkles, Shield, FileText, Pencil, CreditCard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Building2, User, Mail, Calendar, Sparkles, Shield, FileText, Pencil, CreditCard, Landmark } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDialog';
 import { UserRoleManager } from '@/components/settings/UserRoleManager';
+import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useIsAdmin } from '@/hooks/useAdmin';
@@ -35,7 +37,11 @@ export default function Settings() {
   const navigate = useNavigate();
   const { data: isAdmin } = useIsAdmin();
   const { data: userRole } = useUserRole();
+  const [searchParams] = useSearchParams();
   const [showEditOrg, setShowEditOrg] = useState(false);
+  
+  // Get initial tab from URL params
+  const initialTab = searchParams.get('tab') || 'account';
   
   // Initialize session timeout
   useSessionTimeout();
@@ -60,9 +66,10 @@ export default function Settings() {
   return (
     <MainLayout title="Einstellungen" subtitle="Verwalten Sie Ihr Konto">
       <div className="max-w-6xl mx-auto">
-        <Tabs defaultValue="account" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="account">Konto</TabsTrigger>
+            {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
@@ -176,6 +183,12 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {canViewFinancials && (
+            <TabsContent value="banking">
+              <BankAccountsSection />
+            </TabsContent>
+          )}
 
           <TabsContent value="privacy">
             <PrivacySettings />

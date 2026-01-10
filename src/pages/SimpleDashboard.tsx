@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home, Sparkles } from "lucide-react";
 import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
+import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -205,6 +206,11 @@ export default function SimpleDashboard() {
 
         {/* Sync Status Widget */}
         <SyncStatusWidget />
+
+        {/* Bank Accounts Widget */}
+        <div className="mt-6">
+          <BankAccountsWidget />
+        </div>
 
         {/* Properties Section */}
         <Card className="mt-6">

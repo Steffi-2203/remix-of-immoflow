@@ -102,6 +102,7 @@ export type Database = {
         Row: {
           account_name: string
           bank_name: string | null
+          bic: string | null
           created_at: string | null
           current_balance: number | null
           iban: string | null
@@ -116,6 +117,7 @@ export type Database = {
         Insert: {
           account_name: string
           bank_name?: string | null
+          bic?: string | null
           created_at?: string | null
           current_balance?: number | null
           iban?: string | null
@@ -130,6 +132,7 @@ export type Database = {
         Update: {
           account_name?: string
           bank_name?: string | null
+          bic?: string | null
           created_at?: string | null
           current_balance?: number | null
           iban?: string | null
