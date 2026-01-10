@@ -35,6 +35,7 @@ import {
   useUpdateSepaCollectionStatus,
   SepaCollectionItem 
 } from '@/hooks/useSepaCollections';
+import { useCreateTenantFee, DEFAULT_RETURN_FEE } from '@/hooks/useTenantFees';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -71,6 +72,7 @@ export function SepaCollectionStatusDialog({
   const updateItemStatus = useUpdateSepaCollectionItemStatus();
   const markAllSuccessful = useMarkAllItemsSuccessful();
   const updateCollectionStatus = useUpdateSepaCollectionStatus();
+  const createTenantFee = useCreateTenantFee();
 
   const [itemStatuses, setItemStatuses] = useState<Record<string, {
     status: 'pending' | 'successful' | 'returned' | 'rejected';
@@ -180,6 +182,19 @@ export function SepaCollectionStatusDialog({
             returnReason: statusData.returnReason,
             returnDate: new Date().toISOString().split('T')[0],
           });
+          
+          // Create return fee for the tenant
+          if (item.tenant_id) {
+            const returnReasonLabel = RETURN_REASONS.find(r => r.value === statusData.returnReason)?.label || 'Rücklastschrift';
+            await createTenantFee.mutateAsync({
+              tenant_id: item.tenant_id,
+              fee_type: 'ruecklastschrift',
+              amount: DEFAULT_RETURN_FEE,
+              description: `Rücklastschrift-Gebühr vom ${format(new Date(collection!.collection_date), 'dd.MM.yyyy', { locale: de })} - ${returnReasonLabel}`,
+              sepa_item_id: item.id,
+            });
+            toast.info(`Rücklastschrift-Gebühr (€${DEFAULT_RETURN_FEE.toFixed(2)}) für ${item.tenant_name} erstellt`);
+          }
         }
       }
       
@@ -260,7 +275,7 @@ export function SepaCollectionStatusDialog({
               <Info className="h-4 w-4" />
               <AlertDescription>
                 <strong>Erfolgreiche Einzüge</strong> werden automatisch als Zahlung erfasst. <br />
-                <strong>Rücklastschriften</strong> bleiben als offene Posten bestehen und können gemahnt werden.
+                <strong>Rücklastschriften</strong> bleiben als offene Posten bestehen und es wird automatisch eine Gebühr von <strong>€{DEFAULT_RETURN_FEE.toFixed(2)}</strong> erstellt.
               </AlertDescription>
             </Alert>
 
