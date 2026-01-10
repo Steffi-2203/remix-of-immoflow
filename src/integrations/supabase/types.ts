@@ -1180,6 +1180,67 @@ export type Database = {
           },
         ]
       }
+      tenant_fees: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          fee_type: Database["public"]["Enums"]["fee_type"]
+          id: string
+          notes: string | null
+          paid_at: string | null
+          payment_id: string | null
+          sepa_item_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          fee_type?: Database["public"]["Enums"]["fee_type"]
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          sepa_item_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          fee_type?: Database["public"]["Enums"]["fee_type"]
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_id?: string | null
+          sepa_item_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_fees_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_fees_sepa_item_id_fkey"
+            columns: ["sepa_item_id"]
+            isOneToOne: false
+            referencedRelation: "sepa_collection_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_fees_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           betriebskosten_vorschuss: number
@@ -1703,6 +1764,7 @@ export type Database = {
         | "notar"
         | "grundbuch"
         | "finanzierung"
+      fee_type: "ruecklastschrift" | "mahnung" | "sonstiges"
       invoice_status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig"
       mrg_bk_kategorie:
         | "wasserversorgung"
@@ -1900,6 +1962,7 @@ export const Constants = {
         "grundbuch",
         "finanzierung",
       ],
+      fee_type: ["ruecklastschrift", "mahnung", "sonstiges"],
       invoice_status: ["offen", "bezahlt", "teilbezahlt", "ueberfaellig"],
       mrg_bk_kategorie: [
         "wasserversorgung",
