@@ -48,8 +48,59 @@ serve(async (req: Request): Promise<Response> => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
+    // Verify authentication - require admin role
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error("[CRON] Missing authorization header");
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized - Missing authorization header' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Create client with user's token to verify their identity
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) {
+      console.error("[CRON] Invalid token:", authError?.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized - Invalid token' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Check if user has admin role
+    const { data: roles, error: roleError } = await userClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+
+    if (roleError) {
+      console.error("[CRON] Error checking roles:", roleError.message);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Failed to verify permissions' }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const isAdmin = roles?.some(r => r.role === 'admin');
+    if (!isAdmin) {
+      console.error("[CRON] User is not admin:", user.id);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Forbidden - Admin access required' }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`[CRON] Authorized admin user: ${user.id}`);
+
+    // Use service role for actual data operations (bypasses RLS)
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Use current date for automatic generation (1st of month)

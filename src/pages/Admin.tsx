@@ -42,6 +42,7 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
+  FileText,
   UserCog
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -155,11 +156,17 @@ export default function Admin() {
     <MainLayout title="Admin Dashboard" subtitle="Übersicht aller Organisationen">
       <div className="space-y-6">
         {/* Quick Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
             <Link to="/admin/users">
               <UserCog className="h-4 w-4 mr-2" />
               Benutzerverwaltung
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link to="/admin/audit-logs">
+              <FileText className="h-4 w-4 mr-2" />
+              Audit-Logs
             </Link>
           </Button>
         </div>
