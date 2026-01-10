@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
 import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
@@ -105,12 +107,14 @@ export default function SimpleDashboard() {
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const createProperty = useCreateProperty();
   const deleteProperty = useDeleteProperty();
+  const { isComplete, markComplete } = useOnboardingStatus();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
   const propertiesList = properties || [];
+  const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   if (isLoading) {
     return (
@@ -140,9 +144,14 @@ export default function SimpleDashboard() {
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
+      {/* Onboarding Wizard */}
+      {showOnboarding && (
+        <OnboardingWizard onComplete={markComplete} onSkip={markComplete} />
+      )}
+
       <div className="max-w-4xl">
         {/* Header mit Aktionen */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl font-bold">ImmoflowMe</h1>
           <Button variant="outline" asChild>
             <Link to="/einstellungen">Einstellungen</Link>
@@ -174,7 +183,7 @@ export default function SimpleDashboard() {
         {/* Properties Section */}
         <Card className="mt-6">
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
                 Meine Liegenschaften ({propertiesList.length})
@@ -217,7 +226,7 @@ export default function SimpleDashboard() {
                       onChange={(e) => setNewProperty({ ...newProperty, city: e.target.value })}
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button
                       onClick={async () => {
                         if (!newProperty.name || !newProperty.address || !newProperty.city || !newProperty.postal_code) return;
@@ -264,13 +273,13 @@ export default function SimpleDashboard() {
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-3">
                         {selectedProperty === property.id ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
                         )}
-                        <div>
-                          <h3 className="font-semibold text-lg">{property.name}</h3>
-                          <p className="text-muted-foreground text-sm">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-lg truncate">{property.name}</h3>
+                          <p className="text-muted-foreground text-sm truncate">
                             {property.address}, {property.postal_code} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
@@ -281,6 +290,7 @@ export default function SimpleDashboard() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm('Liegenschaft wirklich löschen?')) {

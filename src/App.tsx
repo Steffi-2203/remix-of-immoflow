@@ -17,6 +17,7 @@ import UnitList from "./pages/UnitList";
 import UnitDetail from "./pages/UnitDetail";
 import UnitForm from "./pages/UnitForm";
 import TenantForm from "./pages/TenantForm";
+import TenantList from "./pages/TenantList";
 import PaymentList from "./pages/PaymentList";
 import ExpenseList from "./pages/ExpenseList";
 import Reports from "./pages/Reports";
@@ -61,6 +62,9 @@ const App = () => (
             <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedRoute><UnitDetail /></ProtectedRoute>} />
             <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
             <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
+            <Route path="/mieter" element={<ProtectedRoute><TenantList /></ProtectedRoute>} />
+            <Route path="/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
+            <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><Banking /></ProtectedRoute>} />
             <Route path="/kosten" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
