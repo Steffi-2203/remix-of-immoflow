@@ -27,7 +27,9 @@ import {
   ArrowRightLeft,
   ChevronRight,
   Calendar,
-  CalendarDays
+  CalendarDays,
+  ReceiptText,
+  Check
 } from 'lucide-react';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -39,6 +41,7 @@ import { useAssignPaymentWithSplit } from '@/hooks/usePaymentSplit';
 import { useCombinedPayments } from '@/hooks/useCombinedPayments';
 import { useMrgAllocation } from '@/hooks/useMrgAllocation';
 import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
+import { useUnpaidTenantFees, useMarkFeePaid, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -87,6 +90,10 @@ export default function PaymentList() {
   const { data: combinedPayments } = useCombinedPayments();
   const updateTransaction = useUpdateTransaction();
   const assignPaymentWithSplit = useAssignPaymentWithSplit();
+  
+  // Tenant fees
+  const { data: unpaidFees, isLoading: feesLoading } = useUnpaidTenantFees();
+  const markFeePaid = useMarkFeePaid();
 
   // Get income categories
   const mieteinnahmenCategory = useMemo(() => {
@@ -200,11 +207,31 @@ export default function PaymentList() {
   // Open items per tenant from central MRG allocation
   const openItemsPerTenant = mrgAllocations;
 
+  // Filter unpaid fees by property
+  const filteredUnpaidFees = useMemo(() => {
+    if (!unpaidFees || !tenants || !units) return [];
+    if (selectedPropertyId === 'all') return unpaidFees;
+    
+    return unpaidFees.filter(fee => {
+      const tenant = tenants.find(t => t.id === fee.tenant_id);
+      if (!tenant) return false;
+      const unit = units.find(u => u.id === tenant.unit_id);
+      return unit?.property_id === selectedPropertyId;
+    });
+  }, [unpaidFees, tenants, units, selectedPropertyId]);
+
+  // Calculate total unpaid fees
+  const totalUnpaidFees = useMemo(() => {
+    return filteredUnpaidFees.reduce((sum, fee) => sum + Number(fee.amount), 0);
+  }, [filteredUnpaidFees]);
+
   const openItemsStats = {
     totalTenants: openItemsPerTenant.filter(item => item.saldo !== 0).length,
     totalOpenAmount: mrgTotals.totalUnterzahlung,
     overdueCount: openItemsPerTenant.filter(item => item.oldestOverdueDays > 0 && item.saldo < 0).length,
     totalUeberzahlung: mrgTotals.totalUeberzahlung,
+    unpaidFeesCount: filteredUnpaidFees.length,
+    totalUnpaidFees: totalUnpaidFees,
   };
 
   // Helper to get tenant and unit info for a transaction
@@ -673,7 +700,7 @@ export default function PaymentList() {
 
         {/* Open Items Tab */}
         <TabsContent value="openitems">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -726,8 +753,99 @@ export default function PaymentList() {
                 </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                    <ReceiptText className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Offene Gebühren</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {openItemsStats.unpaidFeesCount > 0 
+                        ? `€ ${openItemsStats.totalUnpaidFees.toLocaleString('de-AT', { minimumFractionDigits: 2 })}`
+                        : '€ 0,00'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
+          {/* Unpaid Fees Section */}
+          {filteredUnpaidFees.length > 0 && (
+            <Card className="mb-6">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <ReceiptText className="h-5 w-5 text-purple-600" />
+                  <h3 className="font-semibold">Offene Gebühren (Rücklastschriften, Mahnungen)</h3>
+                  <Badge variant="secondary" className="ml-2">{filteredUnpaidFees.length}</Badge>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Datum</TableHead>
+                      <TableHead>Mieter</TableHead>
+                      <TableHead>Top</TableHead>
+                      <TableHead>Typ</TableHead>
+                      <TableHead>Beschreibung</TableHead>
+                      <TableHead className="text-right">Betrag</TableHead>
+                      <TableHead className="text-right">Aktion</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUnpaidFees.map((fee) => {
+                      const tenant = tenants?.find(t => t.id === fee.tenant_id);
+                      const unit = tenant ? units?.find(u => u.id === tenant.unit_id) : null;
+                      
+                      return (
+                        <TableRow key={fee.id} className="bg-purple-50/30 dark:bg-purple-950/10">
+                          <TableCell>
+                            {format(new Date(fee.created_at), 'dd.MM.yyyy', { locale: de })}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
+                          </TableCell>
+                          <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                              {FEE_TYPE_LABELS[fee.fee_type] || fee.fee_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-xs truncate">
+                            {fee.description || fee.notes || '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-purple-600">
+                            € {Number(fee.amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => markFeePaid.mutate({ feeId: fee.id })}
+                              disabled={markFeePaid.isPending}
+                            >
+                              {markFeePaid.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Bezahlt
+                                </>
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Open Items Table */}
           <Card>
             <CardContent className="p-0">
               {openItemsPerTenant.length === 0 ? (
