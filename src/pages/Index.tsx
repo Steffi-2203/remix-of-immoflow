@@ -4,6 +4,7 @@ import { PropertyCard } from '@/components/dashboard/PropertyCard';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { UpcomingPayments } from '@/components/dashboard/UpcomingPayments';
 import { PaymentStatusWidget } from '@/components/dashboard/PaymentStatusWidget';
+import { SyncStatusWidget } from '@/components/dashboard/SyncStatusWidget';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
@@ -276,10 +277,11 @@ const Index = () => {
       </div>
 
       {/* Bottom Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <PaymentStatusWidget />
         <UpcomingPayments />
         <RecentActivity />
+        <SyncStatusWidget />
       </div>
     </MainLayout>
   );
