@@ -42,7 +42,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { useTenants } from '@/hooks/useTenants';
 import { useInvoices } from '@/hooks/useInvoices';
-import { useExpenses } from '@/hooks/useExpenses';
+import { useExpenses, expenseTypeLabels } from '@/hooks/useExpenses';
 import { usePayments } from '@/hooks/usePayments';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useAccountCategories } from '@/hooks/useAccountCategories';
@@ -758,11 +758,25 @@ export default function Reports() {
     'finanzierung': 0,   // Zinsen sind umsatzsteuerfrei
   };
   
-  const vorsteuerFromExpenses = periodExpenses.reduce((sum, exp) => {
+  // Vorsteuer-Aufschlüsselung nach expense_type
+  const vorsteuerByExpenseType = periodExpenses.reduce((acc, exp) => {
+    const expenseType = exp.expense_type || 'sonstiges';
     const betrag = Number(exp.betrag || 0);
-    const vatRate = EXPENSE_TYPE_VAT_RATES[exp.expense_type] ?? 20;
-    return sum + calculateVatFromGross(betrag, vatRate);
-  }, 0);
+    const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
+    const vorsteuer = calculateVatFromGross(betrag, vatRate);
+    
+    if (!acc[expenseType]) {
+      acc[expenseType] = { brutto: 0, vorsteuer: 0, vatRate };
+    }
+    acc[expenseType].brutto += betrag;
+    acc[expenseType].vorsteuer += vorsteuer;
+    
+    return acc;
+  }, {} as Record<string, { brutto: number; vorsteuer: number; vatRate: number }>);
+
+  const vorsteuerFromExpenses = Object.values(vorsteuerByExpenseType).reduce(
+    (sum, data) => sum + data.vorsteuer, 0
+  );
 
   // VAT liability from invoices (alt)
   const vatLiability = totalUst - vorsteuerFromExpenses;
@@ -1727,7 +1741,32 @@ export default function Reports() {
               <p className="text-2xl font-bold text-foreground mt-2">
                 €{combinedVorsteuer.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
-              <div className="mt-2 text-xs text-muted-foreground space-y-1">
+              
+              {/* Aufschlüsselung nach Kostenart */}
+              {Object.keys(vorsteuerByExpenseType).length > 0 && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">
+                    Aufschlüsselung nach Kostenart:
+                  </p>
+                  <div className="space-y-1.5 text-xs">
+                    {Object.entries(vorsteuerByExpenseType)
+                      .filter(([, data]) => data.vorsteuer > 0)
+                      .sort((a, b) => b[1].vorsteuer - a[1].vorsteuer)
+                      .map(([type, data]) => (
+                        <div key={type} className="flex justify-between items-center">
+                          <span className="text-muted-foreground">
+                            {expenseTypeLabels[type as keyof typeof expenseTypeLabels] || type} ({data.vatRate}%)
+                          </span>
+                          <span className="font-medium">
+                            €{data.vorsteuer.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-2 text-xs text-muted-foreground space-y-1 border-t border-border pt-2">
                 <p>Banking: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })} ({expenseTransactions.length} Buchungen)</p>
                 <p>Belege: €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })} ({periodExpenses.length} Belege)</p>
               </div>
