@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,52 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState(280);
 
   const step = steps[currentStep];
   const progress = ((currentStep + 1) / steps.length) * 100;
+
+  // Measure card height after render
+  useEffect(() => {
+    if (cardRef.current && isOpen) {
+      const height = cardRef.current.offsetHeight;
+      if (height > 0) {
+        setCardHeight(height);
+      }
+    }
+  }, [currentStep, isOpen]);
+
+  // Scroll target into view
+  useEffect(() => {
+    if (!isOpen || !step?.target) return;
+    
+    const target = document.querySelector(step.target);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [isOpen, step?.target, currentStep]);
+
+  const getSmartPosition = useCallback((rect: DOMRect): 'top' | 'bottom' | 'left' | 'right' => {
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const tooltipHeight = cardHeight;
+    const tooltipWidth = 340;
+    const offset = 16;
+
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const spaceRight = viewportWidth - rect.right;
+    const spaceLeft = rect.left;
+
+    // Prefer right for sidebar items, otherwise check available space
+    if (spaceRight > tooltipWidth + offset) return 'right';
+    if (spaceBelow > tooltipHeight + offset) return 'bottom';
+    if (spaceAbove > tooltipHeight + offset) return 'top';
+    if (spaceLeft > tooltipWidth + offset) return 'left';
+
+    return spaceBelow > spaceAbove ? 'bottom' : 'top';
+  }, [cardHeight]);
 
   const updatePosition = useCallback(() => {
     if (!step) return;
@@ -38,16 +81,16 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
       const rect = target.getBoundingClientRect();
       setTargetRect(rect);
 
-      // Calculate tooltip position
-      const tooltipWidth = 360;
-      const tooltipHeight = 200;
+      const tooltipWidth = 340;
+      const tooltipHeight = cardHeight;
       const padding = 16;
       const offset = 12;
 
       let top = 0;
       let left = 0;
 
-      const position = step.position || 'bottom';
+      // Use smart positioning or fallback to step's preferred position
+      const position = step.position || getSmartPosition(rect);
 
       switch (position) {
         case 'top':
@@ -68,15 +111,16 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
           break;
       }
 
-      // Keep tooltip in viewport
+      // Keep tooltip in viewport with better bounds
       left = Math.max(padding, Math.min(left, window.innerWidth - tooltipWidth - padding));
-      top = Math.max(padding, Math.min(top, window.innerHeight - tooltipHeight - padding));
+      const maxTop = window.innerHeight - tooltipHeight - padding;
+      top = Math.max(padding, Math.min(top, maxTop));
 
       setTooltipPosition({ top, left });
     } else {
       setTargetRect(null);
     }
-  }, [step]);
+  }, [step, cardHeight, getSmartPosition]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -146,8 +190,9 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
 
       {/* Tooltip Card */}
       <Card
+        ref={cardRef}
         className={cn(
-          "absolute w-[360px] shadow-2xl transition-all duration-300 ease-out",
+          "absolute w-[340px] max-h-[80vh] overflow-y-auto shadow-2xl transition-all duration-300 ease-out",
           "border-primary/20 bg-card"
         )}
         style={{
@@ -155,33 +200,33 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
           left: tooltipPosition.left,
         }}
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-1 pt-3 px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">{step?.title}</CardTitle>
+              <Sparkles className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">{step?.title}</CardTitle>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={handleSkip}
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>Schritt {currentStep + 1} von {steps.length}</span>
           </div>
         </CardHeader>
 
-        <CardContent className="pb-4">
+        <CardContent className="pb-2 px-4">
           <p className="text-sm text-muted-foreground leading-relaxed">
             {step?.content}
           </p>
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-3 pt-0">
+        <CardFooter className="flex flex-col gap-2 pt-0 pb-3 px-4">
           <Progress value={progress} className="h-1" />
           
           <div className="flex items-center justify-between w-full">
@@ -189,9 +234,9 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
               variant="ghost"
               size="sm"
               onClick={handleSkip}
-              className="text-muted-foreground"
+              className="text-muted-foreground text-xs h-8"
             >
-              Tour überspringen
+              Überspringen
             </Button>
 
             <div className="flex gap-2">
@@ -200,13 +245,14 @@ export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourP
                 size="sm"
                 onClick={handlePrev}
                 disabled={currentStep === 0}
+                className="h-8"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Zurück
               </Button>
-              <Button size="sm" onClick={handleNext}>
+              <Button size="sm" onClick={handleNext} className="h-8">
                 {currentStep === steps.length - 1 ? (
-                  'Tour beenden'
+                  'Beenden'
                 ) : (
                   <>
                     Weiter
