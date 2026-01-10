@@ -3,33 +3,46 @@ import { usePayments } from './usePayments';
 import { useTransactions } from './useTransactions';
 
 /**
- * Interface for unified payment data from both payments and transactions tables
+ * Interface for unified payment data
+ * 
+ * SINGLE SOURCE OF TRUTH ARCHITECTURE:
+ * - `payments` table: Contains rent payments, supports invoice_id for allocation
+ * - `transactions` table: Contains ALL bank transactions (income + expenses)
+ * 
+ * For rent income, we use ONLY payments table as the source.
+ * Transactions with tenant_id are synced FROM payments, not the other way around.
+ * This prevents double-counting and maintains clear data ownership.
  */
 export interface CombinedPayment {
   id: string;
   tenant_id: string;
   amount: number;
   date: string;
-  source: 'payments' | 'transactions';
+  source: 'payments';
   description?: string;
   reference?: string;
+  invoice_id?: string | null;
 }
 
 /**
- * Hook that combines payment data from both the payments table 
- * AND transactions with tenant_id set (positive amounts only)
+ * Hook that returns rent payments from the payments table ONLY.
  * 
- * This ensures that income assigned via Banking shows up correctly
- * in all reports and payment lists.
+ * IMPORTANT: This is the Single Source of Truth for rent income.
+ * The transactions table may contain synced copies, but payments is authoritative.
+ * 
+ * Why payments over transactions for rent:
+ * 1. payments has invoice_id for proper allocation tracking
+ * 2. payments has zahlungsart (payment type) metadata
+ * 3. payments is specifically designed for tenant rent tracking
+ * 4. Avoids duplicate counting issues
  */
 export function useCombinedPayments() {
   const { data: payments, isLoading: paymentsLoading } = usePayments();
-  const { data: transactions, isLoading: transactionsLoading } = useTransactions();
 
   const combinedPayments = useMemo(() => {
     const combined: CombinedPayment[] = [];
     
-    // Add all payments from payments table
+    // Use ONLY payments table as source of truth for rent income
     (payments || []).forEach(p => {
       combined.push({
         id: p.id,
@@ -38,42 +51,16 @@ export function useCombinedPayments() {
         date: p.eingangs_datum,
         source: 'payments',
         reference: p.referenz || undefined,
+        invoice_id: p.invoice_id,
       });
     });
     
-    // Add transactions that have tenant_id and positive amount (income)
-    // These are typically rent payments assigned via Banking
-    (transactions || []).forEach(t => {
-      if (t.tenant_id && t.amount > 0) {
-        // Check if this transaction is not already represented in payments
-        // (to avoid double-counting)
-        const alreadyInPayments = combined.some(
-          p => p.source === 'payments' && 
-               p.tenant_id === t.tenant_id && 
-               Math.abs(p.amount - t.amount) < 0.01 &&
-               p.date === t.transaction_date
-        );
-        
-        if (!alreadyInPayments) {
-          combined.push({
-            id: t.id,
-            tenant_id: t.tenant_id,
-            amount: Number(t.amount),
-            date: t.transaction_date,
-            source: 'transactions',
-            description: t.description || undefined,
-            reference: t.reference || undefined,
-          });
-        }
-      }
-    });
-    
     return combined;
-  }, [payments, transactions]);
+  }, [payments]);
 
   return {
     data: combinedPayments,
-    isLoading: paymentsLoading || transactionsLoading,
+    isLoading: paymentsLoading,
   };
 }
 
@@ -142,4 +129,31 @@ export function useCombinedPaymentsForPeriod(
   }, [allPayments, year, month, propertyUnitIds, tenants]);
   
   return { data: filtered, isLoading };
+}
+
+/**
+ * Hook to get income from transactions (for Banking reports, NOT rent)
+ * Use this for non-rent income that comes directly from bank imports.
+ * 
+ * This is separate from rent payments to maintain clear data boundaries.
+ */
+export function useTransactionIncome(propertyId?: string | null) {
+  const { data: transactions, isLoading } = useTransactions();
+  
+  const income = useMemo(() => {
+    return (transactions || []).filter(t => {
+      // Only positive amounts (income)
+      if (t.amount <= 0) return false;
+      
+      // Exclude transactions that have tenant_id (those are rent, handled by payments)
+      if (t.tenant_id) return false;
+      
+      // Property filter if specified
+      if (propertyId && t.property_id !== propertyId) return false;
+      
+      return true;
+    });
+  }, [transactions, propertyId]);
+  
+  return { data: income, isLoading };
 }

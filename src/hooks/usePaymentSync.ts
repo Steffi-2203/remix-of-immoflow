@@ -10,6 +10,28 @@ type TransactionInsert = TablesInsert<'transactions'>;
 type ExpenseCategory = Enums<'expense_category'>;
 type ExpenseType = Enums<'expense_type'>;
 
+/**
+ * ============================================================================
+ * SINGLE SOURCE OF TRUTH ARCHITECTURE
+ * ============================================================================
+ * 
+ * DATA OWNERSHIP:
+ * - payments table: LEADING for rent income (supports invoice_id, allocation)
+ * - transactions table: LEADING for bank transactions (all money movements)
+ * - expenses table: LEADING for operating cost settlement (BK-Abrechnung)
+ * 
+ * SYNC RULES:
+ * 1. payments → transactions: One-way sync, creates transaction copy for banking overview
+ * 2. transactions → expenses: One-way sync, creates expense for BK-Abrechnung
+ * 3. transactions → payments: DISABLED (prevents duplicates)
+ * 
+ * For reports:
+ * - Rent income: Use payments table (via useCombinedPayments)
+ * - All bank movements: Use transactions table
+ * - Operating costs: Use expenses table
+ * ============================================================================
+ */
+
 // Mapping von Buchhaltungs-Kategorien zu Expense-Kategorien für BK-Abrechnung
 const CATEGORY_TO_EXPENSE_MAPPING: Record<string, {
   category: ExpenseCategory;
@@ -40,16 +62,26 @@ export function usePaymentSync() {
     return categories?.find(c => c.name === 'Mieteinnahmen' && c.type === 'income');
   };
 
-  // Create payment and sync to transactions
+  // Helper: Get category name by ID
+  const getCategoryNameById = (categoryId: string | null | undefined) => {
+    if (!categoryId) return null;
+    return categories?.find(c => c.id === categoryId)?.name || null;
+  };
+
+  /**
+   * Create payment (LEADING) and optionally sync to transactions
+   * Use this when recording rent payments manually or from SEPA
+   */
   const createPaymentWithSync = useMutation({
     mutationFn: async (params: {
       payment: PaymentInsert;
       unitId?: string;
+      propertyId?: string;
       skipTransactionSync?: boolean;
     }) => {
-      const { payment, unitId, skipTransactionSync } = params;
+      const { payment, unitId, propertyId, skipTransactionSync } = params;
 
-      // 1. Create the payment
+      // 1. Create the payment (LEADING SOURCE)
       const { data: createdPayment, error: paymentError } = await supabase
         .from('payments')
         .insert(payment)
@@ -58,7 +90,7 @@ export function usePaymentSync() {
 
       if (paymentError) throw paymentError;
 
-      // 2. Sync to transactions (if not skipped)
+      // 2. Sync to transactions for banking overview (optional, one-way)
       if (!skipTransactionSync && organization?.id) {
         const mieteinnahmenCategory = getMieteinnahmenCategory();
         
@@ -69,6 +101,7 @@ export function usePaymentSync() {
               organization_id: organization.id,
               unit_id: unitId || null,
               tenant_id: payment.tenant_id,
+              property_id: propertyId || null,
               amount: payment.betrag,
               currency: 'EUR',
               transaction_date: payment.eingangs_datum,
@@ -76,7 +109,7 @@ export function usePaymentSync() {
               description: `Mietzahlung ${payment.referenz || ''}`.trim(),
               reference: payment.referenz || null,
               category_id: mieteinnahmenCategory.id,
-              status: unitId ? 'matched' : 'unmatched',
+              status: 'matched',
             });
 
           if (transactionError) {
@@ -100,15 +133,10 @@ export function usePaymentSync() {
     },
   });
 
-  // Helper: Get category name by ID
-  const getCategoryNameById = (categoryId: string | null | undefined) => {
-    if (!categoryId) return null;
-    return categories?.find(c => c.id === categoryId)?.name || null;
-  };
-
   // Create expense from transaction (for BK-Abrechnung sync)
   const createExpenseFromTransaction = async (
     transaction: {
+      id?: string;
       description?: string | null;
       amount: number;
       transaction_date: string;
@@ -135,6 +163,7 @@ export function usePaymentSync() {
       beleg_nummer: transaction.reference || null,
       year: date.getFullYear(),
       month: date.getMonth() + 1,
+      transaction_id: transaction.id || null, // Link back to transaction
     }).select().single();
     
     if (error) {
@@ -145,14 +174,17 @@ export function usePaymentSync() {
     return data;
   };
 
-  // Create transaction and sync to payments/expenses
+  /**
+   * Create transaction (from banking import)
+   * Does NOT sync to payments to prevent duplicates!
+   * Syncs to expenses for BK-Abrechnung if relevant category
+   */
   const createTransactionWithSync = useMutation({
     mutationFn: async (params: {
       transaction: TransactionInsert;
-      skipPaymentSync?: boolean;
       skipExpenseSync?: boolean;
     }) => {
-      const { transaction, skipPaymentSync, skipExpenseSync } = params;
+      const { transaction, skipExpenseSync } = params;
 
       // 1. Create the transaction
       const { data: createdTransaction, error: transactionError } = await supabase
@@ -166,34 +198,16 @@ export function usePaymentSync() {
       // Get category name for sync logic
       const categoryName = getCategoryNameById(transaction.category_id);
 
-      // 2. Sync to payments (if it's a Mieteinnahme with tenant)
-      if (!skipPaymentSync && transaction.tenant_id && transaction.amount && transaction.amount > 0) {
-        const mieteinnahmenCategory = getMieteinnahmenCategory();
-        
-        if (mieteinnahmenCategory && transaction.category_id === mieteinnahmenCategory.id) {
-          const { error: paymentError } = await supabase
-            .from('payments')
-            .insert({
-              tenant_id: transaction.tenant_id,
-              invoice_id: null,
-              betrag: transaction.amount,
-              zahlungsart: 'ueberweisung',
-              referenz: transaction.reference || transaction.description || null,
-              eingangs_datum: transaction.transaction_date,
-              buchungs_datum: transaction.booking_date || transaction.transaction_date,
-            });
-
-          if (paymentError) {
-            console.error('Failed to sync transaction to payments:', paymentError);
-          }
-        }
-      }
+      // 2. DO NOT sync to payments - payments is the leading source for rent!
+      // If this is a rent payment from banking, the user should record it via
+      // the payment form which will then sync TO transactions.
 
       // 3. Sync to expenses (if it's a BK-relevant expense with property)
       if (!skipExpenseSync && transaction.amount && transaction.amount < 0 && categoryName) {
         if (CATEGORY_TO_EXPENSE_MAPPING[categoryName] && transaction.property_id) {
           await createExpenseFromTransaction(
             {
+              id: createdTransaction.id,
               description: transaction.description,
               amount: transaction.amount,
               transaction_date: transaction.transaction_date,
@@ -209,7 +223,6 @@ export function usePaymentSync() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Buchung erfolgreich erfasst');
     },
@@ -219,7 +232,10 @@ export function usePaymentSync() {
     },
   });
 
-  // Sync existing transactions to expenses (for migration of historical data)
+  /**
+   * Sync existing transactions to expenses (for migration of historical data)
+   * Only syncs expense transactions (negative amounts) with BK-relevant categories
+   */
   const syncExistingTransactionsToExpenses = useMutation({
     mutationFn: async () => {
       if (!categories) throw new Error('Categories not loaded');
@@ -246,10 +262,10 @@ export function usePaymentSync() {
         return { synced: 0, skipped: 0 };
       }
 
-      // Get existing expenses to check for duplicates
+      // Get existing expenses to check for duplicates (check by transaction_id first)
       const { data: existingExpenses } = await supabase
         .from('expenses')
-        .select('datum, betrag, property_id');
+        .select('datum, betrag, property_id, transaction_id');
 
       let syncedCount = 0;
       let skippedCount = 0;
@@ -261,7 +277,14 @@ export function usePaymentSync() {
           continue;
         }
 
-        // Check for duplicate (same date, amount, property)
+        // Check for duplicate by transaction_id (most reliable)
+        const isLinked = existingExpenses?.some(e => e.transaction_id === transaction.id);
+        if (isLinked) {
+          skippedCount++;
+          continue;
+        }
+
+        // Check for duplicate by data match (fallback)
         const isDuplicate = existingExpenses?.some(e =>
           e.datum === transaction.transaction_date &&
           Math.abs(Number(e.betrag) - Math.abs(transaction.amount)) < 0.01 &&
@@ -275,6 +298,7 @@ export function usePaymentSync() {
 
         const result = await createExpenseFromTransaction(
           {
+            id: transaction.id,
             description: transaction.description,
             amount: transaction.amount,
             transaction_date: transaction.transaction_date,
@@ -307,7 +331,11 @@ export function usePaymentSync() {
     },
   });
 
-  // Sync existing payments to transactions (for migration of historical data)
+  /**
+   * Sync existing payments to transactions (for migration)
+   * One-way: payments → transactions
+   * Use this to populate banking overview with historical rent payments
+   */
   const syncExistingPaymentsToTransactions = useMutation({
     mutationFn: async () => {
       if (!categories || !organization?.id) throw new Error('Categories or organization not loaded');
@@ -318,7 +346,7 @@ export function usePaymentSync() {
       // Get all payments with tenant info
       const { data: payments, error: paymentsError } = await supabase
         .from('payments')
-        .select('*, tenants(unit_id)');
+        .select('*, tenants(unit_id, units(property_id))');
 
       if (paymentsError) throw paymentsError;
       if (!payments || payments.length === 0) {
@@ -348,7 +376,7 @@ export function usePaymentSync() {
           continue;
         }
 
-        const tenantData = payment.tenants as { unit_id: string } | null;
+        const tenantData = payment.tenants as { unit_id: string; units?: { property_id: string } } | null;
         
         const { error: transactionError } = await supabase
           .from('transactions')
@@ -356,6 +384,7 @@ export function usePaymentSync() {
             organization_id: organization.id,
             unit_id: tenantData?.unit_id || null,
             tenant_id: payment.tenant_id,
+            property_id: tenantData?.units?.property_id || null,
             amount: Number(payment.betrag),
             currency: 'EUR',
             transaction_date: payment.eingangs_datum,
@@ -363,7 +392,7 @@ export function usePaymentSync() {
             description: `Mietzahlung ${payment.referenz || ''}`.trim(),
             reference: payment.referenz || null,
             category_id: mieteinnahmenCategory.id,
-            status: tenantData?.unit_id ? 'matched' : 'unmatched',
+            status: 'matched',
           });
 
         if (transactionError) {
@@ -379,7 +408,7 @@ export function usePaymentSync() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       if (result.synced > 0) {
-        toast.success(`${result.synced} Mieteinnahme(n) erfolgreich synchronisiert`);
+        toast.success(`${result.synced} Mieteinnahme(n) erfolgreich zur Banking-Übersicht synchronisiert`);
       } else {
         toast.info('Alle Mieteinnahmen bereits synchronisiert');
       }
@@ -390,90 +419,11 @@ export function usePaymentSync() {
     },
   });
 
-  // Sync existing transactions to payments (for migration - transactions → payments)
-  const syncExistingTransactionsToPayments = useMutation({
-    mutationFn: async () => {
-      if (!categories) throw new Error('Categories not loaded');
-
-      const mieteinnahmenCategory = getMieteinnahmenCategory();
-      if (!mieteinnahmenCategory) throw new Error('Mieteinnahmen category not found');
-
-      // Get all income transactions with Mieteinnahmen category that have a tenant_id
-      const { data: incomeTransactions, error: fetchError } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('category_id', mieteinnahmenCategory.id)
-        .gt('amount', 0)
-        .not('tenant_id', 'is', null);
-
-      if (fetchError) throw fetchError;
-      if (!incomeTransactions || incomeTransactions.length === 0) {
-        return { synced: 0, skipped: 0 };
-      }
-
-      // Get existing payments to check for duplicates
-      const { data: existingPayments } = await supabase
-        .from('payments')
-        .select('eingangs_datum, betrag, tenant_id');
-
-      let syncedCount = 0;
-      let skippedCount = 0;
-
-      for (const transaction of incomeTransactions) {
-        if (!transaction.tenant_id) {
-          skippedCount++;
-          continue;
-        }
-
-        // Check for duplicate (same date, amount, tenant)
-        const isDuplicate = existingPayments?.some(p =>
-          p.eingangs_datum === transaction.transaction_date &&
-          Math.abs(Number(p.betrag) - Number(transaction.amount)) < 0.01 &&
-          p.tenant_id === transaction.tenant_id
-        );
-
-        if (isDuplicate) {
-          skippedCount++;
-          continue;
-        }
-
-        const { error: paymentError } = await supabase
-          .from('payments')
-          .insert({
-            tenant_id: transaction.tenant_id,
-            invoice_id: null,
-            betrag: Number(transaction.amount),
-            zahlungsart: 'ueberweisung',
-            referenz: transaction.reference || transaction.description || null,
-            eingangs_datum: transaction.transaction_date,
-            buchungs_datum: transaction.booking_date || transaction.transaction_date,
-          });
-
-        if (paymentError) {
-          console.error('Failed to sync transaction to payment:', paymentError);
-          skippedCount++;
-        } else {
-          syncedCount++;
-        }
-      }
-
-      return { synced: syncedCount, skipped: skippedCount };
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      if (result.synced > 0) {
-        toast.success(`${result.synced} Transaktion(en) erfolgreich in Zahlungen synchronisiert`);
-      } else {
-        toast.info('Keine neuen Transaktionen zum Synchronisieren gefunden (evtl. fehlt tenant_id)');
-      }
-    },
-    onError: (error) => {
-      toast.error('Fehler beim Synchronisieren der Transaktionen');
-      console.error('Sync transactions to payments error:', error);
-    },
-  });
-
-  // Delete transaction with cascade sync (also deletes linked expenses/payments/splits)
+  /**
+   * Delete transaction with cascade sync
+   * Deletes linked expenses and transaction splits
+   * Does NOT delete payments (payments is leading for rent)
+   */
   const deleteTransactionWithSync = useMutation({
     mutationFn: async (transactionId: string) => {
       // 1. Get the transaction first
@@ -496,35 +446,19 @@ export function usePaymentSync() {
         console.error('Failed to delete transaction splits:', splitsError);
       }
 
-      // 3. Delete related expense (if it's an expense transaction with property)
-      if (transaction.property_id && transaction.amount < 0) {
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .delete()
-          .eq('property_id', transaction.property_id)
-          .eq('datum', transaction.transaction_date)
-          .gte('betrag', Math.abs(transaction.amount) - 0.01)
-          .lte('betrag', Math.abs(transaction.amount) + 0.01);
+      // 3. Delete related expense (linked by transaction_id)
+      const { error: expenseError } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('transaction_id', transactionId);
 
-        if (expenseError) {
-          console.error('Failed to delete related expense:', expenseError);
-        }
+      if (expenseError) {
+        console.error('Failed to delete related expense:', expenseError);
       }
 
-      // 4. Delete related payment (if it's an income transaction with tenant)
-      if (transaction.tenant_id && transaction.amount > 0) {
-        const { error: paymentError } = await supabase
-          .from('payments')
-          .delete()
-          .eq('tenant_id', transaction.tenant_id)
-          .eq('eingangs_datum', transaction.transaction_date)
-          .gte('betrag', transaction.amount - 0.01)
-          .lte('betrag', transaction.amount + 0.01);
-
-        if (paymentError) {
-          console.error('Failed to delete related payment:', paymentError);
-        }
-      }
+      // 4. DO NOT delete related payment - payments is leading!
+      // If user wants to delete a rent payment, they should delete from payments,
+      // which will then need its own cleanup of the synced transaction.
 
       // 5. Delete the transaction itself
       const { error: deleteError } = await supabase
@@ -538,7 +472,6 @@ export function usePaymentSync() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
       toast.success('Buchung und verknüpfte Daten gelöscht');
@@ -549,13 +482,72 @@ export function usePaymentSync() {
     },
   });
 
+  /**
+   * Delete payment with cascade sync
+   * Deletes the payment and also removes the synced transaction copy
+   */
+  const deletePaymentWithSync = useMutation({
+    mutationFn: async (paymentId: string) => {
+      // 1. Get the payment first
+      const { data: payment, error: fetchError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', paymentId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!payment) throw new Error('Payment not found');
+
+      // 2. Delete the synced transaction (if exists)
+      const mieteinnahmenCategory = getMieteinnahmenCategory();
+      if (mieteinnahmenCategory) {
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('tenant_id', payment.tenant_id)
+          .eq('transaction_date', payment.eingangs_datum)
+          .gte('amount', Number(payment.betrag) - 0.01)
+          .lte('amount', Number(payment.betrag) + 0.01)
+          .eq('category_id', mieteinnahmenCategory.id);
+
+        if (transactionError) {
+          console.error('Failed to delete synced transaction:', transactionError);
+        }
+      }
+
+      // 3. Delete the payment itself
+      const { error: deleteError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('id', paymentId);
+
+      if (deleteError) throw deleteError;
+
+      return { paymentId };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Zahlung gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen der Zahlung');
+      console.error('Delete payment with sync error:', error);
+    },
+  });
+
   return {
+    // Create operations
     createPaymentWithSync,
     createTransactionWithSync,
+    // Delete operations  
     deleteTransactionWithSync,
+    deletePaymentWithSync,
+    // Migration operations
     syncExistingTransactionsToExpenses,
     syncExistingPaymentsToTransactions,
-    syncExistingTransactionsToPayments,
+    // Helpers
     getMieteinnahmenCategory,
     getCategoryNameById,
     CATEGORY_TO_EXPENSE_MAPPING,
