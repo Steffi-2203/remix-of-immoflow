@@ -199,14 +199,15 @@ export default function OperatingCostSettlement() {
 
   // Calculate totals for distribution
   const totals = useMemo(() => {
-    if (!units) return { qm: 0, mea: 0, personen: 0 };
+    if (!units) return { qm: 0, qmBeheizt: 0, mea: 0, personen: 0 };
     return units.reduce(
       (acc, unit) => ({
         qm: acc.qm + Number(unit.qm),
+        qmBeheizt: acc.qmBeheizt + (unit.type !== 'garage' ? Number(unit.qm) : 0),
         mea: acc.mea + Number(unit.mea),
-        personen: acc.personen + (unit.vs_personen || 1),
+        personen: acc.personen + (unit.vs_personen ?? 0),
       }),
-      { qm: 0, mea: 0, personen: 0 }
+      { qm: 0, qmBeheizt: 0, mea: 0, personen: 0 }
     );
   }, [units]);
 
@@ -267,7 +268,7 @@ export default function OperatingCostSettlement() {
             totalValue = totals.qm;
             break;
           case 'personen':
-            unitValue = unit.vs_personen || 1;
+            unitValue = unit.vs_personen ?? 0;
             totalValue = totals.personen;
             break;
         }
@@ -280,10 +281,10 @@ export default function OperatingCostSettlement() {
         totalBkCost += unitShare;
       });
 
-      // Calculate HK costs (distributed by qm)
+      // Calculate HK costs (distributed by qm - only for heated units, excluding garages)
       let hkCost = 0;
-      if (totals.qm > 0) {
-        hkCost = (Number(unit.qm) / totals.qm) * totalHeizkosten;
+      if (unit.type !== 'garage' && totals.qmBeheizt > 0) {
+        hkCost = (Number(unit.qm) / totals.qmBeheizt) * totalHeizkosten;
       }
 
       // Determine who pays what:
