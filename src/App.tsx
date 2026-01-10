@@ -22,6 +22,7 @@ import TenantList from "./pages/TenantList";
 import PaymentList from "./pages/PaymentList";
 import ExpenseList from "./pages/ExpenseList";
 import InvoiceList from "./pages/InvoiceList";
+import AdminAuditLogs from "./pages/AdminAuditLogs";
 import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
 import Documents from "./pages/Documents";
@@ -79,7 +80,8 @@ const App = () => (
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
-            <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+              <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+              <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
             <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
             <Route path="*" element={<NotFound />} />

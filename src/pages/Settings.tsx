@@ -1,4 +1,4 @@
-import { Building2, User, Mail, Calendar, Sparkles, Shield, Users } from 'lucide-react';
+import { Building2, User, Mail, Calendar, Sparkles, Shield, Users, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -158,7 +158,7 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <Button variant="outline" asChild className="justify-start h-auto py-4">
                       <Link to="/admin">
                         <Building2 className="h-5 w-5 mr-3" />
@@ -178,6 +178,18 @@ export default function Settings() {
                           <div className="font-medium">Benutzerverwaltung</div>
                           <div className="text-sm text-muted-foreground">
                             Rollen und Berechtigungen zuweisen
+                          </div>
+                        </div>
+                      </Link>
+                    </Button>
+
+                    <Button variant="outline" asChild className="justify-start h-auto py-4">
+                      <Link to="/admin/audit-logs">
+                        <FileText className="h-5 w-5 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">Audit-Logs</div>
+                          <div className="text-sm text-muted-foreground">
+                            Protokollierung aller Datenänderungen (DSGVO)
                           </div>
                         </div>
                       </Link>
