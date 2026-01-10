@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home } from "lucide-react";
-import { BankingWidget } from "@/components/dashboard/BankingWidget";
+
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
   const { data: units, isLoading } = useUnits(propertyId);
@@ -166,11 +166,6 @@ export default function SimpleDashboard() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Banking Widget */}
-        <div className="mt-6">
-          <BankingWidget />
-        </div>
 
         {/* Properties Section */}
         <Card className="mt-6">
