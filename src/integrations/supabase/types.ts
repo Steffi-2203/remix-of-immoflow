@@ -1841,65 +1841,6 @@ export type Database = {
       }
     }
     Views: {
-      property_owners_safe: {
-        Row: {
-          address: string | null
-          bic: string | null
-          city: string | null
-          created_at: string | null
-          email: string | null
-          iban: string | null
-          id: string | null
-          is_primary: boolean | null
-          name: string | null
-          ownership_share: number | null
-          phone: string | null
-          postal_code: string | null
-          property_id: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          address?: string | null
-          bic?: never
-          city?: string | null
-          created_at?: string | null
-          email?: string | null
-          iban?: never
-          id?: string | null
-          is_primary?: boolean | null
-          name?: string | null
-          ownership_share?: number | null
-          phone?: string | null
-          postal_code?: string | null
-          property_id?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          address?: string | null
-          bic?: never
-          city?: string | null
-          created_at?: string | null
-          email?: string | null
-          iban?: never
-          id?: string | null
-          is_primary?: boolean | null
-          name?: string | null
-          ownership_share?: number | null
-          phone?: string | null
-          postal_code?: string | null
-          property_id?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "property_owners_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tenants_safe: {
         Row: {
           betriebskosten_vorschuss: number | null

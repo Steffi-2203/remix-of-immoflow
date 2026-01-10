@@ -289,11 +289,14 @@ serve(async (req: Request): Promise<Response> => {
     );
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    console.error("Error generating invoices:", errorMessage);
+    // Log detailed error internally, return generic message to client
+    console.error("Error generating invoices:", error instanceof Error ? error.message : "Unknown error");
     
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
+      JSON.stringify({ 
+        success: false, 
+        error: "Ein Fehler ist aufgetreten. Bitte kontaktieren Sie den Support." 
+      }),
       { 
         status: 500, 
         headers: { "Content-Type": "application/json", ...corsHeaders } 

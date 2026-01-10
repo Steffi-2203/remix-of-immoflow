@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { extractFilePath } from '@/utils/storageUtils';
 
 export type PropertyDocument = {
   id: string;
@@ -70,19 +71,24 @@ export function useUploadPropertyDocument() {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
+      // Get signed URL (more secure than public URL)
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('expense-receipts')
-        .getPublicUrl(`property-docs/${fileName}`);
+        .createSignedUrl(`property-docs/${fileName}`, 31536000); // 1 year expiry for storage reference
 
-      // Insert document record
+      if (signedError) throw signedError;
+
+      // Store the file path reference, not the full URL
+      const filePathReference = `property-docs/${fileName}`;
+
+      // Insert document record with file path
       const { data, error } = await supabase
         .from('property_documents')
         .insert({
           property_id: propertyId,
           name: documentName,
           type: documentType,
-          file_url: urlData.publicUrl,
+          file_url: filePathReference,
         })
         .select()
         .single();
@@ -114,10 +120,12 @@ export function useDeletePropertyDocument() {
 
   return useMutation({
     mutationFn: async ({ id, propertyId, fileUrl }: { id: string; propertyId: string; fileUrl: string }) => {
-      // Extract the file path from the URL
-      const urlParts = fileUrl.split('/property-docs/');
-      if (urlParts.length > 1) {
-        const filePath = `property-docs/${urlParts[1]}`;
+      // Extract the file path - handle both old URL format and new path format
+      let filePath = fileUrl;
+      if (fileUrl.includes('/property-docs/')) {
+        filePath = extractFilePath(fileUrl, 'property-docs/') || fileUrl;
+      }
+      if (filePath.startsWith('property-docs/')) {
         await supabase.storage.from('expense-receipts').remove([filePath]);
       }
 

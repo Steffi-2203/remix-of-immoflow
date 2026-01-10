@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { extractFilePath } from '@/utils/storageUtils';
 
 export type UnitDocument = {
   id: string;
@@ -70,19 +71,24 @@ export function useUploadUnitDocument() {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
+      // Get signed URL (more secure than public URL)
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('expense-receipts')
-        .getPublicUrl(`unit-docs/${fileName}`);
+        .createSignedUrl(`unit-docs/${fileName}`, 31536000); // 1 year expiry for storage reference
 
-      // Insert document record
+      if (signedError) throw signedError;
+
+      // Store the file path reference, not the full URL
+      const filePathReference = `unit-docs/${fileName}`;
+
+      // Insert document record with file path
       const { data, error } = await supabase
         .from('unit_documents')
         .insert({
           unit_id: unitId,
           name: documentName,
           type: documentType,
-          file_url: urlData.publicUrl,
+          file_url: filePathReference,
         })
         .select()
         .single();
@@ -114,10 +120,12 @@ export function useDeleteUnitDocument() {
 
   return useMutation({
     mutationFn: async ({ id, unitId, fileUrl }: { id: string; unitId: string; fileUrl: string }) => {
-      // Extract the file path from the URL
-      const urlParts = fileUrl.split('/unit-docs/');
-      if (urlParts.length > 1) {
-        const filePath = `unit-docs/${urlParts[1]}`;
+      // Extract the file path - handle both old URL format and new path format
+      let filePath = fileUrl;
+      if (fileUrl.includes('/unit-docs/')) {
+        filePath = extractFilePath(fileUrl, 'unit-docs/') || fileUrl;
+      }
+      if (filePath.startsWith('unit-docs/')) {
         await supabase.storage.from('expense-receipts').remove([filePath]);
       }
 
