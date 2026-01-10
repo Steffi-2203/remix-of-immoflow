@@ -1702,3 +1702,263 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
   // Save
   doc.save(`Plausibilitaetsreport_${selectedYear}.pdf`);
 };
+
+// ====== DETAILBERICHT ======
+interface DetailReportParams {
+  properties: PropertyData[];
+  units: UnitData[];
+  tenants: TenantData[];
+  transactions: TransactionData[];
+  categories: CategoryData[];
+  selectedPropertyId: string;
+  selectedYear: number;
+  reportPeriod: 'monthly' | 'yearly';
+  selectedMonth?: number;
+}
+
+export const generateDetailReport = ({
+  properties,
+  units,
+  tenants,
+  transactions,
+  categories,
+  selectedPropertyId,
+  selectedYear,
+  reportPeriod,
+  selectedMonth,
+}: DetailReportParams) => {
+  const doc = new jsPDF();
+  const periodLabel = reportPeriod === 'yearly' 
+    ? `Jahr ${selectedYear}` 
+    : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
+  
+  const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+  
+  addHeader(
+    doc, 
+    'Detailbericht', 
+    periodLabel,
+    selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
+  );
+
+  // Filter transactions by period
+  const periodTransactions = transactions.filter(t => {
+    const date = new Date(t.transaction_date);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    
+    if (reportPeriod === 'yearly') {
+      return year === selectedYear;
+    }
+    return year === selectedYear && month === selectedMonth;
+  });
+
+  // Filter units by property
+  const filteredUnits = selectedPropertyId === 'all' 
+    ? units 
+    : units.filter(u => u.property_id === selectedPropertyId);
+
+  // Group transactions by unit
+  const unitTransactions = new Map<string, { income: number; expenses: number; transactions: TransactionData[] }>();
+  
+  filteredUnits.forEach(unit => {
+    unitTransactions.set(unit.id, { income: 0, expenses: 0, transactions: [] });
+  });
+
+  periodTransactions.forEach(t => {
+    if (t.unit_id && unitTransactions.has(t.unit_id)) {
+      const data = unitTransactions.get(t.unit_id)!;
+      if (t.amount > 0) {
+        data.income += Number(t.amount);
+      } else {
+        data.expenses += Math.abs(Number(t.amount));
+      }
+      data.transactions.push(t);
+    }
+  });
+
+  // Unassigned transactions
+  const unassignedTransactions = periodTransactions.filter(t => 
+    !t.unit_id || !unitTransactions.has(t.unit_id)
+  );
+  const unassignedIncome = unassignedTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + Number(t.amount), 0);
+  const unassignedExpenses = unassignedTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+  // Group by property
+  const propertiesData = new Map<string, { 
+    property: PropertyData; 
+    units: Array<{ unit: UnitData; income: number; expenses: number; tenant: TenantData | null }>; 
+    totalIncome: number; 
+    totalExpenses: number 
+  }>();
+
+  const targetProperties = selectedPropertyId === 'all' 
+    ? properties 
+    : properties.filter(p => p.id === selectedPropertyId);
+
+  targetProperties.forEach(prop => {
+    propertiesData.set(prop.id, {
+      property: prop,
+      units: [],
+      totalIncome: 0,
+      totalExpenses: 0,
+    });
+  });
+
+  filteredUnits.forEach(unit => {
+    const data = unitTransactions.get(unit.id);
+    if (data && propertiesData.has(unit.property_id)) {
+      const propData = propertiesData.get(unit.property_id)!;
+      const activeTenant = tenants.find(t => t.unit_id === unit.id && t.status === 'aktiv') || null;
+      propData.units.push({
+        unit,
+        income: data.income,
+        expenses: data.expenses,
+        tenant: activeTenant,
+      });
+      propData.totalIncome += data.income;
+      propData.totalExpenses += data.expenses;
+    }
+  });
+
+  let currentY = 50;
+
+  // Generate tables for each property
+  Array.from(propertiesData.values()).forEach((propData, index) => {
+    if (index > 0) {
+      // Check if we need a new page
+      if (currentY > 230) {
+        doc.addPage();
+        currentY = 20;
+      }
+    }
+
+    // Property header
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(propData.property.name, 14, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`${propData.property.address}, ${propData.property.postal_code} ${propData.property.city}`, 14, currentY + 5);
+    doc.setTextColor(0);
+
+    // Summary
+    doc.setFontSize(10);
+    doc.text(`Einnahmen: ${formatCurrency(propData.totalIncome)} | Ausgaben: ${formatCurrency(propData.totalExpenses)} | Saldo: ${formatCurrency(propData.totalIncome - propData.totalExpenses)}`, 14, currentY + 12);
+
+    currentY += 18;
+
+    // Units table
+    const tableBody = propData.units
+      .sort((a, b) => a.unit.top_nummer.localeCompare(b.unit.top_nummer))
+      .map(unitData => {
+        const saldo = unitData.income - unitData.expenses;
+        return [
+          `Top ${unitData.unit.top_nummer}`,
+          unitData.tenant ? `${unitData.tenant.first_name} ${unitData.tenant.last_name}` : 'Leerstand',
+          formatCurrency(unitData.income),
+          formatCurrency(unitData.expenses),
+          formatCurrency(saldo),
+        ];
+      });
+
+    if (tableBody.length > 0) {
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Einheit', 'Mieter', 'Einnahmen', 'Ausgaben', 'Saldo']],
+        body: tableBody,
+        theme: 'plain',
+        headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+        columnStyles: {
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+        },
+      });
+      currentY = (doc as any).lastAutoTable?.finalY + 15 || currentY + 50;
+    } else {
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text('Keine Einheiten mit Transaktionen', 14, currentY);
+      doc.setTextColor(0);
+      currentY += 15;
+    }
+  });
+
+  // Unassigned transactions section
+  if (unassignedTransactions.length > 0) {
+    if (currentY > 230) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Nicht zugeordnete Buchungen', 14, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`${unassignedTransactions.length} Transaktionen ohne Einheitszuordnung`, 14, currentY + 5);
+    doc.setTextColor(0);
+    currentY += 12;
+
+    doc.setFontSize(10);
+    doc.text(`Einnahmen: ${formatCurrency(unassignedIncome)} | Ausgaben: ${formatCurrency(unassignedExpenses)} | Saldo: ${formatCurrency(unassignedIncome - unassignedExpenses)}`, 14, currentY);
+    currentY += 10;
+
+    // Show first 20 unassigned transactions
+    const unassignedBody = unassignedTransactions.slice(0, 20).map(t => {
+      const category = categories.find(c => c.id === t.category_id);
+      return [
+        new Date(t.transaction_date).toLocaleDateString('de-AT'),
+        t.description || '-',
+        category?.name || '-',
+        formatCurrency(t.amount),
+      ];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Datum', 'Beschreibung', 'Kategorie', 'Betrag']],
+      body: unassignedBody,
+      theme: 'plain',
+      headStyles: { fillColor: [254, 226, 226], textColor: [0, 0, 0], fontStyle: 'bold' },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        3: { halign: 'right' },
+      },
+    });
+
+    if (unassignedTransactions.length > 20) {
+      currentY = (doc as any).lastAutoTable?.finalY + 5 || currentY + 50;
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`... und ${unassignedTransactions.length - 20} weitere nicht zugeordnete Buchungen`, 14, currentY);
+      doc.setTextColor(0);
+    }
+  }
+
+  // Grand total
+  const grandTotalIncome = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.totalIncome, 0) + unassignedIncome;
+  const grandTotalExpenses = Array.from(propertiesData.values()).reduce((sum, p) => sum + p.totalExpenses, 0) + unassignedExpenses;
+  
+  currentY = (doc as any).lastAutoTable?.finalY + 15 || currentY + 15;
+  
+  if (currentY > 260) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  doc.setFillColor(219, 234, 254);
+  doc.roundedRect(14, currentY, 180, 25, 3, 3, 'F');
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Gesamtübersicht', 20, currentY + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Einnahmen: ${formatCurrency(grandTotalIncome)} | Ausgaben: ${formatCurrency(grandTotalExpenses)} | Saldo: ${formatCurrency(grandTotalIncome - grandTotalExpenses)}`, 20, currentY + 18);
+
+  doc.save(`Detailbericht_${periodLabel.replace(' ', '_')}.pdf`);
+};
