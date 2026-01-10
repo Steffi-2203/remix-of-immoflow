@@ -25,6 +25,10 @@ export interface OCRResult {
   beschreibung: string | null;
   leistungszeitraum_von: string | null;
   leistungszeitraum_bis: string | null;
+  // Leistungsort für Property-Matching
+  leistungsort_strasse: string | null;
+  leistungsort_plz: string | null;
+  leistungsort_stadt: string | null;
   validierung: ValidationReport;
 }
 
