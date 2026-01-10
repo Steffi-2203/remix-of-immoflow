@@ -232,10 +232,13 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({ success: true, emailId: emailResponse.data?.id }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    // Log detailed error internally, return generic message to client
     console.error("Error in send-settlement-email function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: "Ein Fehler ist aufgetreten. Bitte kontaktieren Sie den Support." 
+      }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }

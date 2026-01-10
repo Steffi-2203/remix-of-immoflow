@@ -214,9 +214,12 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    // Log detailed error internally, return generic message to client
     console.error("Error in send-dunning:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ 
+        error: "Ein Fehler ist aufgetreten. Bitte kontaktieren Sie den Support." 
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
