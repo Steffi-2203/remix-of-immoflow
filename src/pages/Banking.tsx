@@ -57,6 +57,7 @@ interface NewBankAccount {
   bankName: string;
   openingBalance: string;
   openingDate: string;
+  propertyId: string;
 }
 
 export default function Banking() {
@@ -73,7 +74,7 @@ export default function Banking() {
   const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
-  const [newAccount, setNewAccount] = useState<NewBankAccount>({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '' });
+  const [newAccount, setNewAccount] = useState<NewBankAccount>({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '', propertyId: '' });
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryType, setNewCategoryType] = useState<'income' | 'expense'>('expense');
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string | null>(null);
@@ -452,9 +453,10 @@ export default function Banking() {
         bank_name: newAccount.bankName.trim() || null,
         opening_balance: newAccount.openingBalance ? parseFloat(newAccount.openingBalance.replace(',', '.')) : 0,
         opening_balance_date: newAccount.openingDate || null,
+        property_id: newAccount.propertyId || null,
       });
       setShowAddAccount(false);
-      setNewAccount({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '' });
+      setNewAccount({ name: '', iban: '', bankName: '', openingBalance: '', openingDate: '', propertyId: '' });
     } catch (error) {
       console.error('Error creating account:', error);
     }
@@ -673,6 +675,7 @@ export default function Banking() {
               categories={categories}
               bankAccountId={selectedBankAccountId}
               organizationId={organization?.id || null}
+              bankAccountPropertyId={bankAccounts.find(a => a.id === selectedBankAccountId)?.property_id || null}
               onImport={async (lines) => {
                 // Single Source of Truth: Mieteinnahmen via payments → transactions
                 for (const line of lines) {
@@ -2253,6 +2256,28 @@ export default function Banking() {
                 value={newAccount.bankName}
                 onChange={(e) => setNewAccount({...newAccount, bankName: e.target.value})}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-account-property">Zugeordnete Liegenschaft (optional)</Label>
+              <Select 
+                value={newAccount.propertyId || 'none'} 
+                onValueChange={(val) => setNewAccount({...newAccount, propertyId: val === 'none' ? '' : val})}
+              >
+                <SelectTrigger id="new-account-property">
+                  <SelectValue placeholder="Keine Liegenschaft" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-- Keine Liegenschaft --</SelectItem>
+                  {properties.map(property => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Wenn zugeordnet, werden alle Buchungen dieses Kontos automatisch dieser Liegenschaft zugewiesen
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
