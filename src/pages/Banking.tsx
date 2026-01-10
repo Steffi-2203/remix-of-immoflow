@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { 
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, 
   Building, User, Euro, Brain, Sparkles, Trash2, Plus, Wallet, TrendingUp, TrendingDown,
-  PiggyBank, Calculator, FileText, Edit2, BarChart3, Pencil
+  PiggyBank, Calculator, FileText, Edit2, BarChart3, Pencil, CreditCard
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subYears } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -35,6 +35,7 @@ import { useLinkedExpensesMap } from '@/hooks/useLinkedExpenses';
 import { ExpenseLinkBadge } from '@/components/banking/ExpenseLinkBadge';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 import { BankStatementOCR } from '@/components/banking/BankStatementOCR';
+import { SepaExportDialog } from '@/components/banking/SepaExportDialog';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 
 interface ImportTransaction extends ParsedTransaction {
@@ -84,7 +85,7 @@ export default function Banking() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [editingTransaction, setEditingTransaction] = useState<typeof transactions[0] | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  
+  const [showSepaExport, setShowSepaExport] = useState(false);
   // Manual entry form state
   const [manualEntry, setManualEntry] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -2369,6 +2370,9 @@ export default function Banking() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* SEPA Export Dialog */}
+      <SepaExportDialog open={showSepaExport} onOpenChange={setShowSepaExport} />
     </MainLayout>
   );
 }
