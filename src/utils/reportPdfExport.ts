@@ -101,6 +101,9 @@ export interface CategoryData {
 // Kategorien für Instandhaltung (mindern Rendite)
 const INSTANDHALTUNG_CATEGORIES = ['Instandhaltung', 'Reparaturen'];
 
+// Kategorien für Sonstige Kosten (weder umlagefähig noch renditemindernd)
+const SONSTIGE_KOSTEN_CATEGORIES = ['Sonstige Kosten', 'Makler', 'Notar', 'Grundbuch', 'Finanzierung'];
+
 // USt-Sätze pro Ausgabenkategorie (österreichische Regelung)
 const CATEGORY_VAT_RATES: Record<string, number> = {
   // 20% Normalsteuersatz
@@ -590,7 +593,11 @@ export const generateUmsatzReport = (
       'ruecklage': 'Rücklage',
       'reparatur': 'Reparatur',
       'sanierung': 'Sanierung',
-      'sonstiges': 'Sonstiges'
+      'sonstiges': 'Sonstiges',
+      'makler': 'Makler',
+      'notar': 'Notar',
+      'grundbuch': 'Grundbuchkosten',
+      'finanzierung': 'Finanzierung'
     };
     
     allRows.push({
@@ -824,6 +831,11 @@ export const generateUstVoranmeldung = (
     'versicherung': 0, // Versicherungen sind umsatzsteuerfrei
     'grundsteuer': 0,  // Grundsteuer ist keine USt-pflichtige Leistung
     'ruecklage': 0,    // Rücklagen sind keine Ausgaben mit USt
+    // Sonstige Kosten - meist 20%
+    'makler': 20,
+    'notar': 20,
+    'grundbuch': 0,    // Gebühren, keine USt
+    'finanzierung': 0, // Zinsen sind umsatzsteuerfrei
   };
 
   const periodExpenses = expenses.filter(exp => {

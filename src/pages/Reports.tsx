@@ -96,6 +96,9 @@ const BETRIEBSKOSTEN_CATEGORIES = [
   'Gartenpflege', 'Schneeräumung', 'Grundsteuer', 'Verwaltungskosten'
 ];
 
+// Kategorien für Sonstige Kosten (weder umlagefähig noch renditemin.)
+const SONSTIGE_KOSTEN_CATEGORIES = ['Sonstige Kosten', 'Makler', 'Notar', 'Grundbuch', 'Finanzierung'];
+
 // USt-Sätze pro Ausgabenkategorie (österreichische Regelung)
 const CATEGORY_VAT_RATES: Record<string, number> = {
   // 20% Normalsteuersatz
@@ -465,6 +468,7 @@ export default function Reports() {
     'schneeraeumung', 'verwaltung', 'ruecklage', 'heizung'
   ];
   const expenseTypeToInstandhaltung = ['reparatur', 'sanierung'];
+  const expenseTypeToSonstigeKosten = ['makler', 'notar', 'grundbuch', 'finanzierung'];
   
   const betriebskostenFromExpenses = periodExpenses
     .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
@@ -473,6 +477,11 @@ export default function Reports() {
   const instandhaltungFromExpenses = periodExpenses
     .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
+    
+  // Sonstige Kosten aus expenses (nicht umlagefähig, nicht renditemin.)
+  const sonstigeKostenFromExpenses = periodExpenses
+    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
   
   const totalExpensesFromCosts = periodExpenses
     .reduce((sum, e) => sum + Number(e.betrag), 0);
@@ -480,6 +489,7 @@ export default function Reports() {
   // ====== KOMBINIERTE AUSGABEN (Transaktionen + Kosten & Belege) ======
   const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpenses;
   const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpenses;
+  const combinedSonstigeKosten = sonstigeKostenFromExpenses; // Nur aus expenses, keine Transaktionen-Kategorie
   const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCosts;
 
   // ====== RENDITE-BERECHNUNG (IST-Basis) ======
@@ -1327,6 +1337,19 @@ export default function Reports() {
                     €{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
+                {combinedSonstigeKosten > 0 && (
+                  <div className="flex justify-between items-center p-3 rounded-lg border border-purple-500/20 bg-purple-500/5">
+                    <div>
+                      <span className="text-sm">Sonstige Kosten</span>
+                      <p className="text-xs text-muted-foreground">
+                        Nicht umlagefähig, nicht renditemin.
+                      </p>
+                    </div>
+                    <span className="font-semibold text-purple-600">
+                      €{combinedSonstigeKosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center p-3 rounded-lg border-2 border-destructive bg-destructive/10">
                   <div>
                     <span className="font-semibold">Gesamt Ausgaben</span>
@@ -1342,7 +1365,7 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* Nettoertrag */}
+          {/* Nettoertrag - Sonstige Kosten sind NICHT enthalten */}
           <div className="mt-6 p-4 rounded-lg border-2 border-primary bg-primary/5">
             <div className="flex justify-between items-center">
               <div>
@@ -1350,6 +1373,9 @@ export default function Reports() {
                 <p className="text-sm text-muted-foreground">
                   IST-Mieteinnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
                   - Instandhaltung (€{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
+                  {combinedSonstigeKosten > 0 && (
+                    <span className="text-purple-600"> • Sonstige Kosten (€{combinedSonstigeKosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) nicht in Rendite</span>
+                  )}
                 </p>
               </div>
               <span className="font-bold text-primary text-2xl">

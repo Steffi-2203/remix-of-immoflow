@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-export type ExpenseCategory = 'betriebskosten_umlagefaehig' | 'instandhaltung';
+export type ExpenseCategory = 'betriebskosten_umlagefaehig' | 'instandhaltung' | 'sonstige_kosten';
 export type ExpenseType = 
   | 'versicherung'
   | 'grundsteuer'
@@ -18,7 +18,11 @@ export type ExpenseType =
   | 'ruecklage'
   | 'reparatur'
   | 'sanierung'
-  | 'sonstiges';
+  | 'sonstiges'
+  | 'makler'
+  | 'notar'
+  | 'grundbuch'
+  | 'finanzierung';
 
 export interface Expense {
   id: string;
@@ -196,6 +200,7 @@ export function useDeleteExpense() {
 export const expenseCategoryLabels: Record<ExpenseCategory, string> = {
   betriebskosten_umlagefaehig: 'Betriebskosten (umlagefähig)',
   instandhaltung: 'Instandhaltung',
+  sonstige_kosten: 'Sonstige Kosten',
 };
 
 export const expenseTypeLabels: Record<ExpenseType, string> = {
@@ -214,6 +219,10 @@ export const expenseTypeLabels: Record<ExpenseType, string> = {
   reparatur: 'Reparatur',
   sanierung: 'Sanierung',
   sonstiges: 'Sonstiges',
+  makler: 'Makler',
+  notar: 'Notar',
+  grundbuch: 'Grundbuchkosten',
+  finanzierung: 'Finanzierung',
 };
 
 // Group expense types by category
@@ -236,6 +245,13 @@ export const expenseTypesByCategory: Record<ExpenseCategory, ExpenseType[]> = {
   instandhaltung: [
     'reparatur',
     'sanierung',
+    'sonstiges',
+  ],
+  sonstige_kosten: [
+    'makler',
+    'notar',
+    'grundbuch',
+    'finanzierung',
     'sonstiges',
   ],
 };

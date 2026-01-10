@@ -1551,6 +1551,10 @@ export type Database = {
         | "reparatur"
         | "sanierung"
         | "sonstiges"
+        | "makler"
+        | "notar"
+        | "grundbuch"
+        | "finanzierung"
       invoice_status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig"
       mrg_bk_kategorie:
         | "wasserversorgung"
@@ -1737,6 +1741,10 @@ export const Constants = {
         "reparatur",
         "sanierung",
         "sonstiges",
+        "makler",
+        "notar",
+        "grundbuch",
+        "finanzierung",
       ],
       invoice_status: ["offen", "bezahlt", "teilbezahlt", "ueberfaellig"],
       mrg_bk_kategorie: [
