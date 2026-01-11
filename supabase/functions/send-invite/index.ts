@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -17,10 +15,10 @@ interface InviteEmailRequest {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'Administrator',
-  property_manager: 'Hausverwalter',
-  finance: 'Buchhalter',
-  viewer: 'Betrachter',
+  admin: "Administrator",
+  property_manager: "Hausverwalter",
+  finance: "Buchhalter",
+  viewer: "Betrachter",
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -30,11 +28,14 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    if (!RESEND_API_KEY) {
+    // Read key at request-time so updated secrets work without a redeploy/cold start
+    const resendApiKey = Deno.env.get("RESEND_API_KEY")?.trim();
+    if (!resendApiKey) {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
-    const { email, inviteToken, organizationName, role, baseUrl }: InviteEmailRequest = await req.json();
+    const { email, inviteToken, organizationName, role, baseUrl }: InviteEmailRequest =
+      await req.json();
 
     const registrationUrl = `${baseUrl}/register?invite=${inviteToken}`;
     const roleLabel = ROLE_LABELS[role] || role;
@@ -43,7 +44,7 @@ const handler = async (req: Request): Promise<Response> => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
         from: "ImmoflowMe <onboarding@resend.dev>",
