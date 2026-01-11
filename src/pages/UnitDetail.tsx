@@ -54,7 +54,7 @@ import { useProperty } from '@/hooks/useProperties';
 import { useTenantsByUnit, useDeleteTenant, Tenant } from '@/hooks/useTenants';
 import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice, useDeleteInvoice, Invoice } from '@/hooks/useInvoices';
 import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DOCUMENT_TYPES } from '@/hooks/useUnitDocuments';
-import { useTenantDocuments, useDeleteTenantDocument, TENANT_DOCUMENT_TYPES } from '@/hooks/useTenantDocuments';
+import { useTenantDocuments, useUploadTenantDocument, useDeleteTenantDocument, TENANT_DOCUMENT_TYPES } from '@/hooks/useTenantDocuments';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { UnitTransactions } from '@/components/units/UnitTransactions';
@@ -140,6 +140,7 @@ export default function UnitDetail() {
   
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [tenantDocumentDialogOpen, setTenantDocumentDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [invoiceForm, setInvoiceForm] = useState({
     month: (new Date().getMonth() + 1).toString(),
@@ -167,6 +168,7 @@ export default function UnitDetail() {
   const deleteDocument = useDeleteUnitDocument();
   const deleteTenant = useDeleteTenant();
   const deleteTenantDocument = useDeleteTenantDocument();
+  const uploadTenantDocument = useUploadTenantDocument();
 
   // Filter invoices for this unit
   const unitInvoices = allInvoices?.filter(inv => inv.unit_id === unitId) || [];
@@ -191,6 +193,16 @@ export default function UnitDetail() {
       file,
       documentType: type,
       documentName: name,
+    });
+  };
+
+  const handleUploadTenantDocument = async (file: File, type: string, name: string) => {
+    if (!activeTenant?.id) return;
+    await uploadTenantDocument.mutateAsync({
+      tenantId: activeTenant.id,
+      file,
+      type,
+      name,
     });
   };
 
@@ -752,11 +764,15 @@ export default function UnitDetail() {
           {/* Tenant Documents Section */}
           {activeTenant && (
             <Card className="mt-6">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <FileText className="h-5 w-5" />
                   Mieter-Dokumente ({tenantDocuments?.length || 0})
                 </CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setTenantDocumentDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Dokument hochladen
+                </Button>
               </CardHeader>
               <CardContent>
                 {tenantDocuments && tenantDocuments.length > 0 ? (
@@ -1351,6 +1367,15 @@ export default function UnitDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Tenant Document Upload Dialog */}
+      <DocumentUploadDialog
+        open={tenantDocumentDialogOpen}
+        onOpenChange={setTenantDocumentDialogOpen}
+        documentTypes={TENANT_DOCUMENT_TYPES}
+        onUpload={handleUploadTenantDocument}
+        isUploading={uploadTenantDocument.isPending}
+      />
     </MainLayout>
   );
 }

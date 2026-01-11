@@ -41,7 +41,10 @@ export function usePermissions(): Permissions {
     enabled: !!user?.id,
   });
 
-  // Fetch permissions for the user's role
+  // Check if user is admin before the conditional hook
+  const isUserAdmin = userRole === 'admin';
+
+  // Fetch permissions for the user's role (for non-admin users)
   const { data: permissions, isLoading: permissionsLoading } = useQuery({
     queryKey: ['role-permissions', userRole],
     queryFn: async () => {
@@ -58,10 +61,29 @@ export function usePermissions(): Permissions {
       }
       return data;
     },
-    enabled: !!userRole,
+    enabled: !!userRole && !isUserAdmin,
   });
 
-  const isLoading = roleLoading || permissionsLoading;
+  const isLoading = roleLoading || (isUserAdmin ? false : permissionsLoading);
+
+  // If user is admin, grant all permissions
+  if (isUserAdmin) {
+    return {
+      canViewFinances: true,
+      canEditFinances: true,
+      canViewFullTenantData: true,
+      canManageMaintenance: true,
+      canApproveInvoices: true,
+      canSendMessages: true,
+      canManageUsers: true,
+      role: 'admin',
+      isAdmin: true,
+      isPropertyManager: false,
+      isFinance: false,
+      isViewer: false,
+      isLoading: roleLoading,
+    };
+  }
 
   return {
     canViewFinances: permissions?.can_view_finances ?? false,
@@ -72,7 +94,7 @@ export function usePermissions(): Permissions {
     canSendMessages: permissions?.can_send_messages ?? false,
     canManageUsers: permissions?.can_manage_users ?? false,
     role: userRole,
-    isAdmin: userRole === 'admin',
+    isAdmin: false,
     isPropertyManager: userRole === 'property_manager',
     isFinance: userRole === 'finance',
     isViewer: userRole === 'viewer',
