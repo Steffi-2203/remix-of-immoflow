@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useBudgets, useBudgetExpensesFromAll } from '@/hooks/useBudgets';
 import { cn } from '@/lib/utils';
 
@@ -29,24 +29,25 @@ export function BudgetPositionSelect({
   onChange,
   disabled = false,
 }: BudgetPositionSelectProps) {
-  // Get approved budget for this property/year
+  // Get approved or draft budget for this property/year
   const { data: budgets = [], isLoading: budgetsLoading } = useBudgets(propertyId, year);
-  const approvedBudget = budgets.find(b => b.status === 'genehmigt');
+  const activeBudget = budgets.find(b => b.status === 'genehmigt' || b.status === 'entwurf');
+  const isDraft = activeBudget?.status === 'entwurf';
   
   // Get combined expenses from both expenses and transactions tables
   const { data: usedAmounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, isLoading: expensesLoading } = 
     useBudgetExpensesFromAll(propertyId, year);
 
   const positions: BudgetPosition[] = useMemo(() => {
-    if (!approvedBudget) return [];
+    if (!activeBudget) return [];
 
     const result: BudgetPosition[] = [];
     
     for (let i = 1; i <= 5; i++) {
-      const nameKey = `position_${i}_name` as keyof typeof approvedBudget;
-      const amountKey = `position_${i}_amount` as keyof typeof approvedBudget;
-      const name = approvedBudget[nameKey] as string | null;
-      const planned = (approvedBudget[amountKey] as number) || 0;
+      const nameKey = `position_${i}_name` as keyof typeof activeBudget;
+      const amountKey = `position_${i}_amount` as keyof typeof activeBudget;
+      const name = activeBudget[nameKey] as string | null;
+      const planned = (activeBudget[amountKey] as number) || 0;
       
       if (name && planned > 0) {
         const used = usedAmounts[i] || 0;
@@ -61,12 +62,12 @@ export function BudgetPositionSelect({
     }
 
     return result;
-  }, [approvedBudget, usedAmounts]);
+  }, [activeBudget, usedAmounts]);
 
   const isLoading = budgetsLoading || expensesLoading;
 
-  // No approved budget available
-  if (!isLoading && !approvedBudget) {
+  // No active budget available
+  if (!isLoading && !activeBudget) {
     return null;
   }
 
@@ -83,6 +84,15 @@ export function BudgetPositionSelect({
   return (
     <div className="space-y-2">
       <Label htmlFor="budget-position">Budgetposition</Label>
+      
+      {/* Warning for draft budgets */}
+      {isDraft && (
+        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          <span>Budgetplan noch nicht genehmigt (Entwurf)</span>
+        </div>
+      )}
+      
       <Select
         value={value?.toString() || 'none'}
         onValueChange={(v) => onChange(v === 'none' ? null : parseInt(v, 10))}
