@@ -303,6 +303,7 @@ export type Database = {
           beleg_url: string | null
           betrag: number
           bezeichnung: string
+          budget_position: number | null
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           datum: string
@@ -323,6 +324,7 @@ export type Database = {
           beleg_url?: string | null
           betrag?: number
           bezeichnung: string
+          budget_position?: number | null
           category: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           datum: string
@@ -343,6 +345,7 @@ export type Database = {
           beleg_url?: string | null
           betrag?: number
           bezeichnung?: string
+          budget_position?: number | null
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           datum?: string
@@ -1321,6 +1324,90 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      property_budgets: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          organization_id: string | null
+          position_1_amount: number | null
+          position_1_name: string | null
+          position_2_amount: number | null
+          position_2_name: string | null
+          position_3_amount: number | null
+          position_3_name: string | null
+          position_4_amount: number | null
+          position_4_name: string | null
+          position_5_amount: number | null
+          position_5_name: string | null
+          property_id: string
+          status: string | null
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          position_1_amount?: number | null
+          position_1_name?: string | null
+          position_2_amount?: number | null
+          position_2_name?: string | null
+          position_3_amount?: number | null
+          position_3_name?: string | null
+          position_4_amount?: number | null
+          position_4_name?: string | null
+          position_5_amount?: number | null
+          position_5_name?: string | null
+          property_id: string
+          status?: string | null
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          position_1_amount?: number | null
+          position_1_name?: string | null
+          position_2_amount?: number | null
+          position_2_name?: string | null
+          position_3_amount?: number | null
+          position_3_name?: string | null
+          position_4_amount?: number | null
+          position_4_name?: string | null
+          position_5_amount?: number | null
+          position_5_name?: string | null
+          property_id?: string
+          status?: string | null
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_budgets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "property_budgets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       property_documents: {
         Row: {
