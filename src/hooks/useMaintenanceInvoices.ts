@@ -62,7 +62,8 @@ export function useApproveInvoice() {
 
   return useMutation({
     mutationFn: async (invoiceId: string) => {
-      const { data, error } = await supabase
+      // 1. Rechnung mit Task-Daten laden und freigeben
+      const { data: invoice, error } = await supabase
         .from('maintenance_invoices')
         .update({
           status: 'approved',
@@ -70,17 +71,43 @@ export function useApproveInvoice() {
           approved_at: new Date().toISOString(),
         })
         .eq('id', invoiceId)
-        .select()
+        .select(`
+          *,
+          maintenance_tasks(property_id, title, properties(name))
+        `)
         .single();
 
       if (error) throw error;
-      return data;
+
+      // 2. Automatische Buchung in transactions erstellen
+      const propertyId = invoice.maintenance_tasks?.property_id;
+      if (propertyId) {
+        const { error: txError } = await supabase
+          .from('transactions')
+          .insert({
+            organization_id: invoice.organization_id,
+            property_id: propertyId,
+            transaction_date: invoice.invoice_date,
+            amount: -Math.abs(invoice.amount), // Negativ = Ausgabe
+            description: `Wartungsrechnung: ${invoice.invoice_number || 'Ohne Nr.'} - ${invoice.contractor_name}`,
+            counterpart_name: invoice.contractor_name,
+            status: 'pending',
+            notes: `Wartungsauftrag: ${invoice.maintenance_tasks?.title || 'Unbekannt'}`,
+          });
+
+        if (txError) {
+          console.error('Buchung konnte nicht erstellt werden:', txError);
+        }
+      }
+
+      return invoice;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
       toast({
         title: 'Rechnung freigegeben',
-        description: 'Die Rechnung wurde zur Zahlung freigegeben.',
+        description: 'Die Rechnung wurde zur Zahlung freigegeben und verbucht.',
       });
     },
     onError: (error) => {
