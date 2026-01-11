@@ -46,6 +46,7 @@ import {
   FileText,
   Landmark,
   Scale,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnit, useDeleteUnit } from '@/hooks/useUnits';
@@ -53,6 +54,7 @@ import { useProperty } from '@/hooks/useProperties';
 import { useTenantsByUnit, useDeleteTenant, Tenant } from '@/hooks/useTenants';
 import { useInvoices, useUpdateInvoiceStatus, useCreateInvoice, useUpdateInvoice, useDeleteInvoice, Invoice } from '@/hooks/useInvoices';
 import { useUnitDocuments, useUploadUnitDocument, useDeleteUnitDocument, UNIT_DOCUMENT_TYPES } from '@/hooks/useUnitDocuments';
+import { useTenantDocuments, useDeleteTenantDocument, TENANT_DOCUMENT_TYPES } from '@/hooks/useTenantDocuments';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { UnitTransactions } from '@/components/units/UnitTransactions';
@@ -164,11 +166,13 @@ export default function UnitDetail() {
   const uploadDocument = useUploadUnitDocument();
   const deleteDocument = useDeleteUnitDocument();
   const deleteTenant = useDeleteTenant();
+  const deleteTenantDocument = useDeleteTenantDocument();
 
   // Filter invoices for this unit
   const unitInvoices = allInvoices?.filter(inv => inv.unit_id === unitId) || [];
 
   const activeTenant = tenants?.find(t => t.status === 'aktiv');
+  const { data: tenantDocuments } = useTenantDocuments(activeTenant?.id);
   const totalRent = activeTenant
     ? Number(activeTenant.grundmiete) + Number(activeTenant.betriebskosten_vorschuss) + Number(activeTenant.heizungskosten_vorschuss)
     : 0;
@@ -741,6 +745,86 @@ export default function UnitDetail() {
                     Mieter hinzufügen
                   </Button>
                 </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tenant Documents Section */}
+          {activeTenant && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FileText className="h-5 w-5" />
+                  Mieter-Dokumente ({tenantDocuments?.length || 0})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tenantDocuments && tenantDocuments.length > 0 ? (
+                  <div className="space-y-2">
+                    {tenantDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between py-3 px-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{doc.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline">
+                                {TENANT_DOCUMENT_TYPES.find((t) => t.value === doc.type)?.label || doc.type}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {doc.uploaded_at && format(new Date(doc.uploaded_at), 'dd.MM.yyyy', { locale: de })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Möchten Sie das Dokument "{doc.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    deleteTenantDocument.mutate({
+                                      id: doc.id,
+                                      tenantId: activeTenant.id,
+                                      fileUrl: doc.file_url,
+                                    })
+                                  }
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Löschen
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm text-center py-4">
+                    Keine Dokumente vorhanden
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
