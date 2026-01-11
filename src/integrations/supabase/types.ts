@@ -2169,6 +2169,7 @@ export type Database = {
           amount: number
           bank_account_id: string | null
           booking_date: string | null
+          budget_position: number | null
           category_id: string | null
           counterpart_iban: string | null
           counterpart_name: string | null
@@ -2195,6 +2196,7 @@ export type Database = {
           amount: number
           bank_account_id?: string | null
           booking_date?: string | null
+          budget_position?: number | null
           category_id?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null
@@ -2221,6 +2223,7 @@ export type Database = {
           amount?: number
           bank_account_id?: string | null
           booking_date?: string | null
+          budget_position?: number | null
           category_id?: string | null
           counterpart_iban?: string | null
           counterpart_name?: string | null

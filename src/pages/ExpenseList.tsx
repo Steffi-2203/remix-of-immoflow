@@ -48,6 +48,7 @@ import {
   Camera,
   Sparkles
 } from 'lucide-react';
+import { BudgetPositionSelect } from '@/components/budgets/BudgetPositionSelect';
 import { 
   useExpenses, 
   useExpensesByCategory,
@@ -107,6 +108,7 @@ export default function ExpenseList() {
     datum: format(new Date(), 'yyyy-MM-dd'),
     beleg_nummer: '',
     notizen: '',
+    budget_position: null as number | null,
   };
   
   const [newExpense, setNewExpense] = useState(initialExpenseState);
@@ -349,6 +351,7 @@ export default function ExpenseList() {
         year: bookingYear,
         month: bookingMonth,
         beleg_url,
+        budget_position: newExpense.category === 'instandhaltung' ? newExpense.budget_position : undefined,
       } as any);
 
       setDialogOpen(false);
@@ -1003,6 +1006,16 @@ export default function ExpenseList() {
                   </Select>
                 </div>
               </div>
+
+              {/* Budget Position Select - only for Instandhaltung with property */}
+              {newExpense.category === 'instandhaltung' && newExpense.property_id && (
+                <BudgetPositionSelect
+                  propertyId={newExpense.property_id}
+                  year={new Date().getFullYear()}
+                  value={newExpense.budget_position}
+                  onChange={(pos) => setNewExpense(prev => ({ ...prev, budget_position: pos }))}
+                />
+              )}
 
               <div className="space-y-2">
                 <Label>Bezeichnung</Label>

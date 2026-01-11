@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { PropertyBudget, useBudgetExpenses } from '@/hooks/useBudgets';
+import { PropertyBudget, useBudgetExpensesFromAll } from '@/hooks/useBudgets';
 import { TrendingUp, TrendingDown, Minus, Building2 } from 'lucide-react';
 
 interface BudgetComparisonCardProps {
@@ -62,7 +62,7 @@ function PositionRow({ name, planned, actual, index }: PositionRowProps) {
 }
 
 export function BudgetComparisonCard({ budget }: BudgetComparisonCardProps) {
-  const { data: expenses, isLoading } = useBudgetExpenses(budget.property_id, budget.year);
+  const { data: expenses, isLoading } = useBudgetExpensesFromAll(budget.property_id, budget.year);
 
   const positions = [
     { name: budget.position_1_name, planned: budget.position_1_amount, actual: expenses?.[1] || 0 },

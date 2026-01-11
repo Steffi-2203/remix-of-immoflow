@@ -38,6 +38,7 @@ import { BankStatementOCR } from '@/components/banking/BankStatementOCR';
 import { SepaExportDialog } from '@/components/banking/SepaExportDialog';
 import { SepaCollectionHistory } from '@/components/banking/SepaCollectionHistory';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
+import { BudgetPositionSelect } from '@/components/budgets/BudgetPositionSelect';
 
 interface ImportTransaction extends ParsedTransaction {
   id: string;
@@ -101,6 +102,7 @@ export default function Banking() {
     counterpartyName: '',
     counterpartyIban: '',
     notes: '',
+    budgetPosition: null as number | null, // For budget tracking
   });
   
   const { data: transactions = [], isLoading: transactionsLoading } = useTransactions();
@@ -177,6 +179,7 @@ export default function Banking() {
           category_id: manualEntry.categoryId || null,
           status: manualEntry.unitId ? 'matched' : 'unmatched',
           notes: manualEntry.notes || null,
+          budget_position: manualEntry.budgetPosition,
         },
       });
       
@@ -196,6 +199,7 @@ export default function Banking() {
         counterpartyName: '',
         counterpartyIban: '',
         notes: '',
+        budgetPosition: null,
       });
     } catch (error) {
       console.error('Error creating transaction:', error);
@@ -217,6 +221,7 @@ export default function Banking() {
       counterpartyName: '',
       counterpartyIban: '',
       notes: '',
+      budgetPosition: null,
     });
   };
 
@@ -1006,7 +1011,16 @@ export default function Banking() {
                     </div>
                   )}
 
-                  {/* Expandable: Advanced fields */}
+                  {/* Budget Position Select - only for expenses with property */}
+                  {manualEntry.type === 'expense' && manualEntry.propertyId && (
+                    <BudgetPositionSelect
+                      propertyId={manualEntry.propertyId}
+                      year={new Date().getFullYear()}
+                      value={manualEntry.budgetPosition}
+                      onChange={(pos) => setManualEntry({...manualEntry, budgetPosition: pos})}
+                    />
+                  )}
+
                   <details className="border rounded-lg p-4 bg-muted/30">
                     <summary className="cursor-pointer font-medium text-sm">
                       Erweiterte Angaben (optional)

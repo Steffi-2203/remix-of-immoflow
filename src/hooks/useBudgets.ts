@@ -262,7 +262,7 @@ export function useDeleteBudget() {
   });
 }
 
-// Hook to get budget expenses (actual costs per position)
+// Hook to get budget expenses (actual costs per position) - from expenses table only
 export function useBudgetExpenses(propertyId: string, year: number) {
   return useQuery({
     queryKey: ['budget-expenses', propertyId, year],
@@ -288,6 +288,66 @@ export function useBudgetExpenses(propertyId: string, year: number) {
       data?.forEach((expense) => {
         if (expense.budget_position) {
           totals[expense.budget_position] += expense.betrag;
+        }
+      });
+
+      return totals;
+    },
+    enabled: !!propertyId && !!year,
+  });
+}
+
+// Hook to get combined budget expenses from both expenses AND transactions tables
+export function useBudgetExpensesFromAll(propertyId: string, year: number) {
+  return useQuery({
+    queryKey: ['budget-expenses-all', propertyId, year],
+    queryFn: async () => {
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+
+      // Fetch from expenses table
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select('budget_position, betrag')
+        .eq('property_id', propertyId)
+        .gte('datum', startDate)
+        .lte('datum', endDate)
+        .not('budget_position', 'is', null);
+
+      if (expensesError) {
+        console.error('Error fetching budget expenses:', expensesError);
+        throw expensesError;
+      }
+
+      // Fetch from transactions table (only negative amounts = expenses)
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('transactions')
+        .select('budget_position, amount')
+        .eq('property_id', propertyId)
+        .gte('transaction_date', startDate)
+        .lte('transaction_date', endDate)
+        .lt('amount', 0) // Only expenses (negative amounts)
+        .not('budget_position', 'is', null);
+
+      if (transactionsError) {
+        console.error('Error fetching budget transactions:', transactionsError);
+        throw transactionsError;
+      }
+
+      // Aggregate by position from both sources
+      const totals: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      
+      // Add expenses (betrag is positive)
+      expensesData?.forEach((expense) => {
+        if (expense.budget_position) {
+          totals[expense.budget_position] += expense.betrag;
+        }
+      });
+
+      // Add transactions (amount is negative, so use absolute value)
+      transactionsData?.forEach((tx) => {
+        if (tx.budget_position) {
+          totals[tx.budget_position] += Math.abs(tx.amount);
         }
       });
 
