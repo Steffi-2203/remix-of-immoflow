@@ -1424,6 +1424,7 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
   doc.text('1. Kontenübersicht', 14, currentY);
   currentY += 8;
 
+  // Account summaries for known bank accounts
   const accountSummaries = bankAccounts.map(account => {
     const accountTx = periodTransactions.filter(t => (t as any).bank_account_id === account.id);
     const income = accountTx.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
@@ -1438,41 +1439,74 @@ export const generatePlausibilityReport = (data: PlausibilityReportData) => {
       income,
       expenses,
       closingBalance,
-      isValid: true, // Can be validated against actual bank statement
+      isValid: true,
     };
   });
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Konto', 'IBAN', 'Anfangsbestand', '+ Einnahmen', '- Ausgaben', '= Endbestand']],
-    body: accountSummaries.map(a => [
-      a.name,
-      a.iban,
-      fmt(a.openingBalance),
-      fmt(a.income),
-      fmt(a.expenses),
-      fmt(a.closingBalance),
-    ]),
-    foot: [[
-      'Gesamt',
-      '',
-      fmt(accountSummaries.reduce((s, a) => s + a.openingBalance, 0)),
-      fmt(accountSummaries.reduce((s, a) => s + a.income, 0)),
-      fmt(accountSummaries.reduce((s, a) => s + a.expenses, 0)),
-      fmt(accountSummaries.reduce((s, a) => s + a.closingBalance, 0)),
-    ]],
-    theme: 'striped',
-    headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-    footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
-    columnStyles: {
-      2: { halign: 'right' },
-      3: { halign: 'right', textColor: [34, 197, 94] },
-      4: { halign: 'right', textColor: [239, 68, 68] },
-      5: { halign: 'right', fontStyle: 'bold' },
-    },
-    styles: { fontSize: 9 },
-    margin: { left: 14, right: 14 },
-  });
+  // Add unassigned transactions (no bank_account_id) as separate row
+  const unassignedTx = periodTransactions.filter(t => !(t as any).bank_account_id);
+  const unassignedIncomeTx = unassignedTx.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const unassignedExpensesTx = unassignedTx.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  
+  if (unassignedTx.length > 0) {
+    accountSummaries.push({
+      name: 'Nicht zugeordnet',
+      iban: '-',
+      openingBalance: 0,
+      income: unassignedIncomeTx,
+      expenses: unassignedExpensesTx,
+      closingBalance: unassignedIncomeTx - unassignedExpensesTx,
+      isValid: false,
+    });
+  }
+
+  // Show message if no data at all
+  if (accountSummaries.length === 0) {
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text('Keine Bankkonten konfiguriert und keine Transaktionen im Zeitraum vorhanden.', 14, currentY);
+    doc.setTextColor(0);
+    currentY += 10;
+  } else {
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Konto', 'IBAN', 'Anfangsbestand', '+ Einnahmen', '- Ausgaben', '= Endbestand']],
+      body: accountSummaries.map(a => [
+        a.name,
+        a.iban,
+        fmt(a.openingBalance),
+        fmt(a.income),
+        fmt(a.expenses),
+        fmt(a.closingBalance),
+      ]),
+      foot: [[
+        'Gesamt',
+        '',
+        fmt(accountSummaries.reduce((s, a) => s + a.openingBalance, 0)),
+        fmt(accountSummaries.reduce((s, a) => s + a.income, 0)),
+        fmt(accountSummaries.reduce((s, a) => s + a.expenses, 0)),
+        fmt(accountSummaries.reduce((s, a) => s + a.closingBalance, 0)),
+      ]],
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+      footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
+      columnStyles: {
+        2: { halign: 'right' },
+        3: { halign: 'right', textColor: [34, 197, 94] },
+        4: { halign: 'right', textColor: [239, 68, 68] },
+        5: { halign: 'right', fontStyle: 'bold' },
+      },
+      styles: { fontSize: 9 },
+      margin: { left: 14, right: 14 },
+      didParseCell: (data) => {
+        // Highlight unassigned row in orange
+        if (data.section === 'body' && data.row.raw && (data.row.raw as string[])[0] === 'Nicht zugeordnet') {
+          data.cell.styles.fillColor = [255, 243, 224];
+          data.cell.styles.textColor = [194, 65, 12];
+        }
+      },
+    });
+  }
 
   currentY = (doc as any).lastAutoTable.finalY + 15;
 

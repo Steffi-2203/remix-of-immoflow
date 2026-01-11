@@ -1605,6 +1605,19 @@ export default function Reports() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Warning for Plausibility report when no bank accounts */}
+              {report.id === 'plausibilitaet' && (!bankAccounts || bankAccounts.length === 0) && (
+                <div className="mb-3 p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs text-orange-700 dark:text-orange-300">
+                      <span className="font-medium">Hinweis:</span> Keine Bankkonten konfiguriert. 
+                      Transaktionen ohne Bankkonto-Zuordnung werden als "Nicht zugeordnet" angezeigt. 
+                      Für eine vollständige Kontenübersicht legen Sie Bankkonten in den Einstellungen an.
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2 mt-2">
                 {/* PDF-fähige Berichte */}
                 {['rendite', 'leerstand', 'umsatz', 'ust', 'offeneposten', 'plausibilitaet', 'detailbericht'].includes(report.id) && (
