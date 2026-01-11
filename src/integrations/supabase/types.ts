@@ -161,6 +161,80 @@ export type Database = {
           },
         ]
       }
+      contractors: {
+        Row: {
+          address: string | null
+          bic: string | null
+          city: string | null
+          company_name: string
+          contact_person: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          iban: string | null
+          id: string
+          is_active: boolean | null
+          mobile: string | null
+          notes: string | null
+          organization_id: string | null
+          phone: string | null
+          postal_code: string | null
+          rating: number | null
+          specializations: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          bic?: string | null
+          city?: string | null
+          company_name: string
+          contact_person?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          iban?: string | null
+          id?: string
+          is_active?: boolean | null
+          mobile?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          rating?: number | null
+          specializations?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          bic?: string | null
+          city?: string | null
+          company_name?: string
+          contact_person?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          iban?: string | null
+          id?: string
+          is_active?: boolean | null
+          mobile?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          phone?: string | null
+          postal_code?: string | null
+          rating?: number | null
+          specializations?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contractors_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       distribution_keys: {
         Row: {
           created_at: string
