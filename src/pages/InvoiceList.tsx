@@ -75,6 +75,7 @@ export default function InvoiceList() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(selectedYear, selectedMonth);
@@ -88,6 +89,13 @@ export default function InvoiceList() {
   const getTenant = (tenantId: string) => tenants?.find(t => t.id === tenantId);
   const getUnit = (unitId: string) => units?.find(u => u.id === unitId);
   const getProperty = (propertyId: string) => properties?.find(p => p.id === propertyId);
+
+  // Filter invoices by selected property
+  const filteredInvoices = invoices?.filter(invoice => {
+    if (selectedPropertyId === 'all') return true;
+    const unit = getUnit(invoice.unit_id);
+    return unit?.property_id === selectedPropertyId;
+  });
 
   const handleGenerateInvoices = async () => {
     try {
@@ -191,14 +199,14 @@ export default function InvoiceList() {
     });
   };
 
-  // Calculate statistics
+  // Calculate statistics based on filtered invoices
   const stats = {
-    total: invoices?.length || 0,
-    open: invoices?.filter(i => i.status === 'offen').length || 0,
-    paid: invoices?.filter(i => i.status === 'bezahlt').length || 0,
-    overdue: invoices?.filter(i => i.status === 'ueberfaellig').length || 0,
-    totalAmount: invoices?.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
-    openAmount: invoices?.filter(i => i.status !== 'bezahlt').reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
+    total: filteredInvoices?.length || 0,
+    open: filteredInvoices?.filter(i => i.status === 'offen').length || 0,
+    paid: filteredInvoices?.filter(i => i.status === 'bezahlt').length || 0,
+    overdue: filteredInvoices?.filter(i => i.status === 'ueberfaellig').length || 0,
+    totalAmount: filteredInvoices?.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
+    openAmount: filteredInvoices?.filter(i => i.status !== 'bezahlt').reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
   };
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
@@ -239,6 +247,23 @@ export default function InvoiceList() {
               {months.map((month) => (
                 <SelectItem key={month.value} value={month.value}>
                   {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedPropertyId}
+            onValueChange={setSelectedPropertyId}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Alle Liegenschaften" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Liegenschaften</SelectItem>
+              {properties?.map((property) => (
+                <SelectItem key={property.id} value={property.id}>
+                  {property.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -338,12 +363,14 @@ export default function InvoiceList() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : !invoices || invoices.length === 0 ? (
+          ) : !filteredInvoices || filteredInvoices.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">Keine Vorschreibungen gefunden</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Klicken Sie auf "Vorschreibungen generieren" um neue zu erstellen.
+                {selectedPropertyId !== 'all' 
+                  ? 'Keine Vorschreibungen für diese Liegenschaft vorhanden.'
+                  : 'Klicken Sie auf "Vorschreibungen generieren" um neue zu erstellen.'}
               </p>
             </div>
           ) : (
@@ -364,7 +391,7 @@ export default function InvoiceList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((invoice) => {
+                {filteredInvoices.map((invoice) => {
                   const tenant = getTenant(invoice.tenant_id);
                   const unit = getUnit(invoice.unit_id);
                   const property = unit ? getProperty(unit.property_id) : null;

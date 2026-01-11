@@ -1338,6 +1338,48 @@ export type Database = {
           },
         ]
       }
+      tenant_documents: {
+        Row: {
+          file_url: string
+          id: string
+          name: string
+          tenant_id: string
+          type: string
+          uploaded_at: string | null
+        }
+        Insert: {
+          file_url: string
+          id?: string
+          name: string
+          tenant_id: string
+          type: string
+          uploaded_at?: string | null
+        }
+        Update: {
+          file_url?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          type?: string
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_documents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_fees: {
         Row: {
           amount: number
@@ -1428,6 +1470,7 @@ export type Database = {
           status: Database["public"]["Enums"]["tenant_status"]
           unit_id: string
           updated_at: string
+          vorschuss_gueltig_ab: string | null
         }
         Insert: {
           betriebskosten_vorschuss?: number
@@ -1450,6 +1493,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["tenant_status"]
           unit_id: string
           updated_at?: string
+          vorschuss_gueltig_ab?: string | null
         }
         Update: {
           betriebskosten_vorschuss?: number
@@ -1472,6 +1516,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["tenant_status"]
           unit_id?: string
           updated_at?: string
+          vorschuss_gueltig_ab?: string | null
         }
         Relationships: [
           {

@@ -34,6 +34,7 @@ import { useUpdateNewAdvances } from '@/hooks/useNewAdvances';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
+import { NewAdvanceDialog } from '@/components/settlements/NewAdvanceDialog';
 
 // Distribution key mapping for expense types (without heating - handled separately)
 const expenseDistributionKeys: Record<string, 'mea' | 'qm' | 'personen'> = {
@@ -103,6 +104,7 @@ export default function OperatingCostSettlement() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear - 1); // Default: Vorjahr für Abrechnung
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = ganzes Jahr (Standard für Jahresabrechnung)
   const [sendEmails, setSendEmails] = useState<boolean>(true);
+  const [isAdvanceDialogOpen, setIsAdvanceDialogOpen] = useState(false);
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: expenses, isLoading: isLoadingExpenses } = useExpenses(
@@ -952,34 +954,9 @@ export default function OperatingCostSettlement() {
                         <Button
                           variant="outline"
                           className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => {
-                            if (!units) return;
-                            
-                            const unitsForUpdate = units.map(u => ({
-                              id: u.id,
-                              qm: u.qm,
-                              mea: u.mea,
-                              currentTenantId: u.current_tenant?.id || null,
-                            }));
-
-                            updateNewAdvances.mutate({
-                              propertyId: selectedPropertyId,
-                              totalBkKosten: totalBkKosten,
-                              totalHkKosten: totalHeizkosten,
-                              units: unitsForUpdate,
-                              totals: {
-                                qm: totals.qm,
-                                mea: totals.mea,
-                              },
-                            });
-                          }}
-                          disabled={updateNewAdvances.isPending}
+                          onClick={() => setIsAdvanceDialogOpen(true)}
                         >
-                          {updateNewAdvances.isPending ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RefreshCcw className="h-4 w-4 mr-2" />
-                          )}
+                          <RefreshCcw className="h-4 w-4 mr-2" />
                           Neue Vorschreibung ab {selectedYear + 1}
                         </Button>
                       )}
@@ -1217,6 +1194,62 @@ export default function OperatingCostSettlement() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* New Advance Dialog */}
+      {selectedProperty && units && (
+        <NewAdvanceDialog
+          open={isAdvanceDialogOpen}
+          onOpenChange={setIsAdvanceDialogOpen}
+          propertyId={selectedPropertyId}
+          propertyName={selectedProperty.name}
+          propertyAddress={`${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}`}
+          settlementYear={selectedYear}
+          tenantChanges={unitDistribution
+            .filter(u => u.current_tenant && !u.isLeerstandBK)
+            .map(u => {
+              // Calculate new advances based on actual costs
+              const newBk = totals.mea > 0 
+                ? Math.round((u.mea / totals.mea * totalBkKosten / 12) * 100) / 100 
+                : 0;
+              const newHk = totals.qm > 0 
+                ? Math.round((u.qm / totals.qm * totalHeizkosten / 12) * 100) / 100 
+                : 0;
+              
+              return {
+                tenantId: u.current_tenant?.id || '',
+                tenantName: u.bkMieter || '',
+                unitNumber: u.top_nummer,
+                oldBk: u.bkVorschuss / 12, // Current monthly advance
+                newBk,
+                oldHk: u.hkVorschuss / 12, // Current monthly advance
+                newHk,
+                grundmiete: 0, // We don't have access to grundmiete here, will be fetched in dialog
+              };
+            })}
+          onConfirm={async (effectiveMonth, effectiveYear) => {
+            if (!units) return;
+            
+            const unitsForUpdate = units.map(u => ({
+              id: u.id,
+              qm: u.qm,
+              mea: u.mea,
+              currentTenantId: u.current_tenant?.id || null,
+            }));
+
+            await updateNewAdvances.mutateAsync({
+              propertyId: selectedPropertyId,
+              totalBkKosten: totalBkKosten,
+              totalHkKosten: totalHeizkosten,
+              units: unitsForUpdate,
+              totals: {
+                qm: totals.qm,
+                mea: totals.mea,
+              },
+            });
+          }}
+          isPending={updateNewAdvances.isPending}
+        />
       )}
     </MainLayout>
   );
