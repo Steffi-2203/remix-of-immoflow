@@ -174,12 +174,12 @@ export function Sidebar() {
         <aside 
           data-tour="sidebar"
           className={cn(
-            'fixed left-0 top-0 z-50 h-screen bg-sidebar border-r border-sidebar-border w-64 transition-transform duration-300',
+            'fixed left-0 top-0 z-50 h-screen bg-sidebar border-r border-sidebar-border w-64 transition-transform duration-300 flex flex-col',
             isOpen ? 'translate-x-0' : '-translate-x-full'
           )}
         >
           {/* Header with close button */}
-          <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border">
+          <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
             <div className="flex items-center gap-3">
               <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
               <div className="flex flex-col">
@@ -197,8 +197,8 @@ export function Sidebar() {
             </Button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex flex-col gap-1 p-2 mt-2">
+          {/* Navigation - scrollable */}
+          <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
             {allNavItems.map(item => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -240,8 +240,8 @@ export function Sidebar() {
             )}
           </nav>
 
-          {/* Footer */}
-          <div className="absolute bottom-4 left-4 right-4">
+          {/* Footer - fixed at bottom */}
+          <div className="shrink-0 p-4 border-t border-sidebar-border">
             <div className="rounded-lg bg-sidebar-accent p-3">
               <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
             </div>
@@ -256,12 +256,12 @@ export function Sidebar() {
     <aside 
       data-tour="sidebar"
       className={cn(
-        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300',
+        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Logo */}
-      <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border">
+      <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3">
             <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
@@ -284,8 +284,8 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex flex-col gap-1 p-2 mt-2">
+      {/* Navigation - scrollable */}
+      <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
         {allNavItems.map(item => {
           const isActive = location.pathname === item.href || 
             (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -331,9 +331,9 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Footer */}
+      {/* Footer - fixed at bottom */}
       {!collapsed && (
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="shrink-0 p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent p-3">
             <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
           </div>
