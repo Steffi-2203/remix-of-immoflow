@@ -3,6 +3,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -20,11 +21,14 @@ import {
   XCircle,
   ExternalLink,
   Calendar,
-  Euro,
   Building2,
+  Clock,
+  CreditCard,
+  Ban,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
+  useMaintenanceInvoices,
   usePendingInvoices,
   useApproveInvoice,
   useRejectInvoice,
@@ -32,9 +36,35 @@ import {
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
+const STATUS_CONFIG = {
+  pending: {
+    label: 'Ausstehend',
+    badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    icon: Clock,
+  },
+  approved: {
+    label: 'Freigegeben',
+    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    icon: CheckCircle2,
+  },
+  paid: {
+    label: 'Bezahlt',
+    badge: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    icon: CreditCard,
+  },
+  rejected: {
+    label: 'Abgelehnt',
+    badge: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+    icon: Ban,
+  },
+};
+
 export default function InvoiceApprovalPage() {
   const permissions = usePermissions();
-  const { data: invoices, isLoading } = usePendingInvoices();
+  const [activeTab, setActiveTab] = useState('pending');
+  
+  const { data: allInvoices, isLoading: loadingAll } = useMaintenanceInvoices();
+  const { data: pendingInvoices, isLoading: loadingPending } = usePendingInvoices();
   const approveInvoice = useApproveInvoice();
   const rejectInvoice = useRejectInvoice();
 
@@ -77,34 +107,38 @@ export default function InvoiceApprovalPage() {
     setRejectionReason('');
   };
 
-  return (
-    <MainLayout
-      title="Rechnungsfreigabe"
-      subtitle="Wartungsrechnungen prüfen und freigeben"
-    >
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : !invoices || invoices.length === 0 ? (
+  // Gruppiere Rechnungen nach Status
+  const invoicesByStatus = {
+    pending: allInvoices?.filter((i) => i.status === 'pending') || [],
+    approved: allInvoices?.filter((i) => i.status === 'approved') || [],
+    paid: allInvoices?.filter((i) => i.status === 'paid') || [],
+    rejected: allInvoices?.filter((i) => i.status === 'rejected') || [],
+  };
+
+  const isLoading = loadingAll || loadingPending;
+
+  const renderInvoiceList = (invoices: typeof allInvoices, showActions: boolean = false) => {
+    if (!invoices || invoices.length === 0) {
+      return (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileCheck className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium">Keine Rechnungen zur Freigabe</p>
+            <p className="text-lg font-medium">Keine Rechnungen</p>
             <p className="text-muted-foreground text-sm mt-1">
-              Alle Rechnungen wurden bearbeitet.
+              In dieser Kategorie gibt es keine Rechnungen.
             </p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground">
-              {invoices.length} Rechnung{invoices.length !== 1 ? 'en' : ''} zur Freigabe
-            </p>
-          </div>
+      );
+    }
 
-          {invoices.map((invoice) => (
+    return (
+      <div className="space-y-4">
+        {invoices.map((invoice) => {
+          const statusConfig = STATUS_CONFIG[invoice.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending;
+          const StatusIcon = statusConfig.icon;
+
+          return (
             <Card key={invoice.id}>
               <CardContent className="p-6">
                 <div className="flex flex-col lg:flex-row lg:items-start gap-6">
@@ -118,8 +152,9 @@ export default function InvoiceApprovalPage() {
                               ? `Rechnung ${invoice.invoice_number}`
                               : 'Rechnung (ohne Nummer)'}
                           </h3>
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                            Ausstehend
+                          <Badge variant="outline" className={statusConfig.badge}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {statusConfig.label}
                           </Badge>
                         </div>
                         {invoice.maintenance_tasks && (
@@ -158,6 +193,13 @@ export default function InvoiceApprovalPage() {
                       )}
                     </div>
 
+                    {invoice.rejection_reason && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <p className="text-sm font-medium text-red-800 dark:text-red-400">Ablehnungsgrund:</p>
+                        <p className="text-sm text-red-700 dark:text-red-300">{invoice.rejection_reason}</p>
+                      </div>
+                    )}
+
                     {invoice.document_url && (
                       <a
                         href={invoice.document_url}
@@ -171,36 +213,108 @@ export default function InvoiceApprovalPage() {
                     )}
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex lg:flex-col gap-3">
-                    <Button
-                      className="flex-1 lg:flex-none"
-                      onClick={() => handleApprove(invoice.id)}
-                      disabled={approveInvoice.isPending}
-                    >
-                      {approveInvoice.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                      )}
-                      Freigeben
-                    </Button>
+                  {/* Actions - nur für ausstehende Rechnungen */}
+                  {showActions && invoice.status === 'pending' && (
+                    <div className="flex lg:flex-col gap-3">
+                      <Button
+                        className="flex-1 lg:flex-none"
+                        onClick={() => handleApprove(invoice.id)}
+                        disabled={approveInvoice.isPending}
+                      >
+                        {approveInvoice.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                        )}
+                        Freigeben
+                      </Button>
 
-                    <Button
-                      variant="destructive"
-                      className="flex-1 lg:flex-none"
-                      onClick={() => handleRejectClick(invoice.id)}
-                      disabled={rejectInvoice.isPending}
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Ablehnen
-                    </Button>
-                  </div>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 lg:flex-none"
+                        onClick={() => handleRejectClick(invoice.id)}
+                        disabled={rejectInvoice.isPending}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Ablehnen
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          ))}
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <MainLayout
+      title="Rechnungsfreigabe"
+      subtitle="Wartungsrechnungen prüfen und verwalten"
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="pending" className="gap-2">
+              <Clock className="h-4 w-4" />
+              Ausstehend
+              {invoicesByStatus.pending.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {invoicesByStatus.pending.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              Freigegeben
+              {invoicesByStatus.approved.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {invoicesByStatus.approved.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="paid" className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Bezahlt
+              {invoicesByStatus.paid.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {invoicesByStatus.paid.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="gap-2">
+              <Ban className="h-4 w-4" />
+              Abgelehnt
+              {invoicesByStatus.rejected.length > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {invoicesByStatus.rejected.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending">
+            {renderInvoiceList(invoicesByStatus.pending, true)}
+          </TabsContent>
+
+          <TabsContent value="approved">
+            {renderInvoiceList(invoicesByStatus.approved)}
+          </TabsContent>
+
+          <TabsContent value="paid">
+            {renderInvoiceList(invoicesByStatus.paid)}
+          </TabsContent>
+
+          <TabsContent value="rejected">
+            {renderInvoiceList(invoicesByStatus.rejected)}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Reject Dialog */}

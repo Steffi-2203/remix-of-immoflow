@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   Clock,
   User,
+  Receipt,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProperties } from '@/hooks/useProperties';
@@ -43,6 +44,8 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '@/hooks/useMaintenanceTasks';
+import { useTaskInvoices } from '@/hooks/useTaskInvoices';
+import { AddInvoiceDialog } from '@/components/maintenance/AddInvoiceDialog';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -51,6 +54,12 @@ export default function MaintenancePage() {
   const { data: properties } = useProperties();
   const { data: units } = useUnits();
   const [showNewTask, setShowNewTask] = useState(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [selectedTaskForInvoice, setSelectedTaskForInvoice] = useState<{
+    id: string;
+    title: string;
+    contractorName?: string;
+  } | null>(null);
   const [filters, setFilters] = useState({
     status: 'all',
     priority: 'all',
@@ -61,6 +70,19 @@ export default function MaintenancePage() {
   const { data: tasks, isLoading } = useMaintenanceTasks(filters);
   const createTask = useCreateMaintenanceTask();
   const updateTask = useUpdateMaintenanceTask();
+
+  // Task IDs für Rechnungsabfrage
+  const taskIds = useMemo(() => tasks?.map((t) => t.id) || [], [tasks]);
+  const { data: taskInvoices } = useTaskInvoices(taskIds);
+
+  const handleAddInvoice = (task: { id: string; title: string; contractor_name?: string | null }) => {
+    setSelectedTaskForInvoice({
+      id: task.id,
+      title: task.title,
+      contractorName: task.contractor_name || undefined,
+    });
+    setShowInvoiceDialog(true);
+  };
 
   const [newTask, setNewTask] = useState({
     property_id: '',
@@ -392,7 +414,49 @@ export default function MaintenancePage() {
                       </div>
                     </div>
 
+                    {/* Rechnungs-Badge */}
+                    {taskInvoices?.[task.id] && (
+                      <div className="w-full md:w-auto border-t md:border-t-0 md:border-l pt-3 md:pt-0 md:pl-4 mt-3 md:mt-0">
+                        <div className="text-sm">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Receipt className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">
+                              {taskInvoices[task.id].count} Rechnung{taskInvoices[task.id].count !== 1 ? 'en' : ''}
+                            </span>
+                          </div>
+                          <p className="text-lg font-semibold">
+                            € {taskInvoices[task.id].totalAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {taskInvoices[task.id].pendingCount > 0 && (
+                              <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+                                {taskInvoices[task.id].pendingCount} ausstehend
+                              </Badge>
+                            )}
+                            {taskInvoices[task.id].approvedCount > 0 && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                                {taskInvoices[task.id].approvedCount} freigegeben
+                              </Badge>
+                            )}
+                            {taskInvoices[task.id].paidCount > 0 && (
+                              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                                {taskInvoices[task.id].paidCount} bezahlt
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex gap-2 md:flex-col">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAddInvoice(task)}
+                      >
+                        <Receipt className="h-4 w-4 mr-1" />
+                        Rechnung
+                      </Button>
                       {task.status === 'open' && (
                         <Button
                           size="sm"
@@ -596,6 +660,17 @@ export default function MaintenancePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add Invoice Dialog */}
+      {selectedTaskForInvoice && (
+        <AddInvoiceDialog
+          open={showInvoiceDialog}
+          onOpenChange={setShowInvoiceDialog}
+          taskId={selectedTaskForInvoice.id}
+          taskTitle={selectedTaskForInvoice.title}
+          contractorName={selectedTaskForInvoice.contractorName}
+        />
+      )}
     </MainLayout>
   );
 }
