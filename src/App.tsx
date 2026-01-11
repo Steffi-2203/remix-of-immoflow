@@ -31,6 +31,9 @@ import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import SystemTest from "./pages/SystemTest";
 import Banking from "./pages/Banking";
+import Maintenance from "./pages/Maintenance";
+import InvoiceApproval from "./pages/InvoiceApproval";
+import MessagesPage from "./pages/Messages";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -76,6 +79,9 @@ const App = () => (
             <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+            <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
+            <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
+            <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             
             {/* Admin routes */}

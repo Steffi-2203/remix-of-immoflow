@@ -16,12 +16,16 @@ import {
   Users,
   X,
   Shield,
-  FileText
+  FileText,
+  Wrench,
+  CheckSquare,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
+import { usePermissions } from '@/hooks/usePermissions';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -110,6 +114,36 @@ export function Sidebar() {
   const isMobile = useIsMobile();
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
   const { data: isAdmin } = useIsAdmin();
+  const permissions = usePermissions();
+
+  // Role-based navigation items
+  const roleBasedItems: NavItem[] = [
+    ...(permissions.canManageMaintenance || permissions.isAdmin ? [{
+      label: 'Wartungen & Aufträge',
+      icon: Wrench,
+      href: '/wartungen',
+      tourId: 'nav-maintenance'
+    }] : []),
+    ...(permissions.canApproveInvoices || permissions.isAdmin ? [{
+      label: 'Rechnungsfreigabe',
+      icon: CheckSquare,
+      href: '/rechnungsfreigabe',
+      tourId: 'nav-invoice-approval'
+    }] : []),
+    ...(permissions.canSendMessages || permissions.isAdmin ? [{
+      label: 'Nachrichten',
+      icon: MessageSquare,
+      href: '/nachrichten',
+      tourId: 'nav-messages'
+    }] : []),
+  ];
+
+  // Combine base nav items with role-based items (insert before Einstellungen)
+  const allNavItems = [
+    ...navItems.slice(0, -1), // All items except Einstellungen
+    ...roleBasedItems,
+    navItems[navItems.length - 1] // Einstellungen at the end
+  ];
 
   const handleLinkClick = () => {
     // Close sidebar on mobile after clicking a link
@@ -159,7 +193,7 @@ export function Sidebar() {
 
           {/* Navigation */}
           <nav className="flex flex-col gap-1 p-2 mt-2">
-            {navItems.map(item => {
+            {allNavItems.map(item => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
               return (
@@ -246,7 +280,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 p-2 mt-2">
-        {navItems.map(item => {
+        {allNavItems.map(item => {
           const isActive = location.pathname === item.href || 
             (item.href !== '/' && location.pathname.startsWith(item.href));
           return (
