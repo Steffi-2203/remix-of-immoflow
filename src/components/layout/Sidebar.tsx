@@ -190,10 +190,10 @@ export function Sidebar() {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+              className="h-8 w-8 bg-sidebar-accent/50 text-white hover:bg-sidebar-accent"
               onClick={closeSidebar}
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </Button>
           </div>
 
@@ -277,10 +277,10 @@ export function Sidebar() {
         <Button 
           variant="ghost" 
           size="icon" 
-          className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" 
+          className="h-8 w-8 bg-sidebar-accent/50 text-white hover:bg-sidebar-accent" 
           onClick={toggleCollapsed}
         >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
         </Button>
       </div>
 
