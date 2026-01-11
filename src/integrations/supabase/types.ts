@@ -370,6 +370,256 @@ export type Database = {
           },
         ]
       }
+      maintenance_invoices: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          contractor_name: string
+          created_at: string | null
+          created_by: string | null
+          document_url: string | null
+          id: string
+          invoice_date: string
+          invoice_number: string | null
+          maintenance_task_id: string | null
+          notes: string | null
+          organization_id: string | null
+          rejection_reason: string | null
+          status: string | null
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          contractor_name: string
+          created_at?: string | null
+          created_by?: string | null
+          document_url?: string | null
+          id?: string
+          invoice_date: string
+          invoice_number?: string | null
+          maintenance_task_id?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          contractor_name?: string
+          created_at?: string | null
+          created_by?: string | null
+          document_url?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_number?: string | null
+          maintenance_task_id?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          rejection_reason?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_invoices_maintenance_task_id_fkey"
+            columns: ["maintenance_task_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_invoices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_tasks: {
+        Row: {
+          actual_cost: number | null
+          assigned_to: string | null
+          category: string | null
+          completed_at: string | null
+          contractor_contact: string | null
+          contractor_name: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          estimated_cost: number | null
+          id: string
+          organization_id: string | null
+          priority: string | null
+          property_id: string | null
+          status: string | null
+          title: string
+          unit_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_cost?: number | null
+          assigned_to?: string | null
+          category?: string | null
+          completed_at?: string | null
+          contractor_contact?: string | null
+          contractor_name?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          estimated_cost?: number | null
+          id?: string
+          organization_id?: string | null
+          priority?: string | null
+          property_id?: string | null
+          status?: string | null
+          title: string
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_cost?: number | null
+          assigned_to?: string | null
+          category?: string | null
+          completed_at?: string | null
+          contractor_contact?: string | null
+          contractor_name?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          estimated_cost?: number | null
+          id?: string
+          organization_id?: string | null
+          priority?: string | null
+          property_id?: string | null
+          status?: string | null
+          title?: string
+          unit_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_tasks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_tasks_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_tasks_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          maintenance_task_id: string | null
+          message_body: string
+          message_type: string | null
+          organization_id: string | null
+          recipient_email: string | null
+          recipient_name: string | null
+          recipient_phone: string | null
+          recipient_type: string | null
+          sent_at: string | null
+          status: string | null
+          subject: string | null
+          tenant_id: string | null
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          maintenance_task_id?: string | null
+          message_body: string
+          message_type?: string | null
+          organization_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          recipient_type?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          tenant_id?: string | null
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          maintenance_task_id?: string | null
+          message_body?: string
+          message_type?: string | null
+          organization_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          recipient_type?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          tenant_id?: string | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_maintenance_task_id_fkey"
+            columns: ["maintenance_task_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_invoices: {
         Row: {
           betriebskosten: number
@@ -1070,6 +1320,45 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          can_approve_invoices: boolean | null
+          can_edit_finances: boolean | null
+          can_manage_maintenance: boolean | null
+          can_manage_users: boolean | null
+          can_send_messages: boolean | null
+          can_view_finances: boolean | null
+          can_view_full_tenant_data: boolean | null
+          created_at: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+        }
+        Insert: {
+          can_approve_invoices?: boolean | null
+          can_edit_finances?: boolean | null
+          can_manage_maintenance?: boolean | null
+          can_manage_users?: boolean | null
+          can_send_messages?: boolean | null
+          can_view_finances?: boolean | null
+          can_view_full_tenant_data?: boolean | null
+          created_at?: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Update: {
+          can_approve_invoices?: boolean | null
+          can_edit_finances?: boolean | null
+          can_manage_maintenance?: boolean | null
+          can_manage_users?: boolean | null
+          can_send_messages?: boolean | null
+          can_view_finances?: boolean | null
+          can_view_full_tenant_data?: boolean | null
+          created_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sensitive_data_access_log: {
         Row: {
           access_type: string
@@ -1334,6 +1623,41 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_comments: {
+        Row: {
+          comment: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_internal: boolean | null
+          maintenance_task_id: string | null
+        }
+        Insert: {
+          comment: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_internal?: boolean | null
+          maintenance_task_id?: string | null
+        }
+        Update: {
+          comment?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_internal?: boolean | null
+          maintenance_task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_maintenance_task_id_fkey"
+            columns: ["maintenance_task_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_tasks"
             referencedColumns: ["id"]
           },
         ]
