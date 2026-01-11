@@ -136,6 +136,12 @@ export function Sidebar() {
       href: '/nachrichten',
       tourId: 'nav-messages'
     }] : []),
+    ...(permissions.canManageUsers || permissions.isAdmin ? [{
+      label: 'Team-Verwaltung',
+      icon: Users,
+      href: '/team',
+      tourId: 'nav-team'
+    }] : []),
   ];
 
   // Combine base nav items with role-based items (insert before Einstellungen)
