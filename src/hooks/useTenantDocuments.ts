@@ -11,6 +11,12 @@ export type TenantDocument = {
   uploaded_at: string;
 };
 
+export type TenantDocumentWithTenant = TenantDocument & {
+  tenant_name: string;
+  unit_id: string;
+  property_id: string;
+};
+
 export const TENANT_DOCUMENT_TYPES = [
   { value: 'vorschreibung', label: 'Monatliche Vorschreibung' },
   { value: 'vorschuss_aenderung', label: 'Vorschuss-Änderungsschreiben' },
@@ -37,6 +43,57 @@ export function useTenantDocuments(tenantId: string | undefined) {
       return data as TenantDocument[];
     },
     enabled: !!tenantId,
+  });
+}
+
+export function useAllTenantDocuments() {
+  return useQuery({
+    queryKey: ['all-tenant-documents'],
+    queryFn: async () => {
+      // Fetch all tenant documents with tenant info
+      const { data: documents, error: docError } = await supabase
+        .from('tenant_documents')
+        .select('*')
+        .order('uploaded_at', { ascending: false });
+
+      if (docError) throw docError;
+      if (!documents || documents.length === 0) return [];
+
+      // Get unique tenant IDs
+      const tenantIds = [...new Set(documents.map(d => d.tenant_id))];
+      
+      // Fetch tenant info
+      const { data: tenants, error: tenantError } = await supabase
+        .from('tenants')
+        .select('id, first_name, last_name, unit_id')
+        .in('id', tenantIds);
+
+      if (tenantError) throw tenantError;
+
+      // Get unit info for property_id
+      const unitIds = [...new Set(tenants?.map(t => t.unit_id) || [])];
+      const { data: units, error: unitError } = await supabase
+        .from('units')
+        .select('id, property_id')
+        .in('id', unitIds);
+
+      if (unitError) throw unitError;
+
+      // Map documents with tenant info
+      const tenantMap = new Map(tenants?.map(t => [t.id, t]));
+      const unitMap = new Map(units?.map(u => [u.id, u]));
+
+      return documents.map(doc => {
+        const tenant = tenantMap.get(doc.tenant_id);
+        const unit = tenant ? unitMap.get(tenant.unit_id) : null;
+        return {
+          ...doc,
+          tenant_name: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt',
+          unit_id: tenant?.unit_id || '',
+          property_id: unit?.property_id || '',
+        } as TenantDocumentWithTenant;
+      });
+    },
   });
 }
 
