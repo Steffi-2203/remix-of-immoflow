@@ -11,10 +11,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTeamMembers, useTeamStats, useUpdateTeamMemberRole, useRemoveTeamMemberRole, TeamMember } from '@/hooks/useTeamMembers';
 import { useAuth } from '@/hooks/useAuth';
-import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle } from 'lucide-react';
+import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { Database } from '@/integrations/supabase/types';
+import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
+import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
 type AppRole = Database['public']['Enums']['app_role'];
 
@@ -52,12 +54,15 @@ export default function TeamManagement() {
   const stats = useTeamStats();
   const updateRole = useUpdateTeamMemberRole();
   const removeRole = useRemoveTeamMemberRole();
+  const { data: pendingInvites } = usePendingInvites();
+  const deleteInvite = useDeleteInvite();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [selectedRole, setSelectedRole] = useState<AppRole | ''>('');
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
 
   // Permission check
   if (!permissions.canManageUsers && !permissions.isAdmin) {
@@ -112,6 +117,13 @@ export default function TeamManagement() {
   return (
     <MainLayout title="Team-Verwaltung" subtitle="Verwalten Sie die Rollen und Berechtigungen Ihres Teams">
       <div className="space-y-6">
+        {/* Header with Invite Button */}
+        <div className="flex justify-end">
+          <Button onClick={() => setShowInviteDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Benutzer einladen
+          </Button>
+        </div>
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-5">
           <Card>
@@ -157,6 +169,15 @@ export default function TeamManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.viewers}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ausstehend</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingInvites?.length || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -266,6 +287,59 @@ export default function TeamManagement() {
           </CardContent>
         </Card>
 
+        {/* Pending Invitations */}
+        {pendingInvites && pendingInvites.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Ausstehende Einladungen
+              </CardTitle>
+              <CardDescription>
+                Einladungen, die noch nicht angenommen wurden
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>E-Mail</TableHead>
+                      <TableHead>Rolle</TableHead>
+                      <TableHead>Gültig bis</TableHead>
+                      <TableHead className="text-right">Aktionen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingInvites.map((invite) => (
+                      <TableRow key={invite.id}>
+                        <TableCell className="font-medium">{invite.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{ROLE_LABELS[invite.role]}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(invite.expires_at), 'dd.MM.yyyy', { locale: de })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteInvite.mutate(invite.id)}
+                            disabled={deleteInvite.isPending}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Widerrufen
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Edit Role Dialog */}
         <Dialog open={!!editingMember} onOpenChange={() => setEditingMember(null)}>
           <DialogContent>
@@ -327,6 +401,12 @@ export default function TeamManagement() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Invite User Dialog */}
+        <InviteUserDialog 
+          open={showInviteDialog} 
+          onOpenChange={setShowInviteDialog} 
+        />
       </div>
     </MainLayout>
   );
