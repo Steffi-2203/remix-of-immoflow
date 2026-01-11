@@ -11,11 +11,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTeamMembers, useTeamStats, useUpdateTeamMemberRole, useRemoveTeamMemberRole, TeamMember } from '@/hooks/useTeamMembers';
 import { useAuth } from '@/hooks/useAuth';
-import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X } from 'lucide-react';
+import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { Database } from '@/integrations/supabase/types';
 import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
+import { PropertyAssignmentDialog } from '@/components/settings/PropertyAssignmentDialog';
 import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -63,6 +64,7 @@ export default function TeamManagement() {
   const [selectedRole, setSelectedRole] = useState<AppRole | ''>('');
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [propertyAssignmentMember, setPropertyAssignmentMember] = useState<TeamMember | null>(null);
 
   // Permission check
   if (!permissions.canManageUsers && !permissions.isAdmin) {
@@ -234,6 +236,7 @@ export default function TeamManagement() {
                       <TableHead>Name</TableHead>
                       <TableHead>E-Mail</TableHead>
                       <TableHead>Rolle</TableHead>
+                      <TableHead>Zugewiesene Objekte</TableHead>
                       <TableHead>Berechtigungen</TableHead>
                       <TableHead>Mitglied seit</TableHead>
                       <TableHead className="text-right">Aktionen</TableHead>
@@ -253,6 +256,25 @@ export default function TeamManagement() {
                           <Badge variant={getRoleBadgeVariant(member.role)}>
                             {getRoleLabel(member.role)}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {member.role === 'property_manager' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto py-1 px-2"
+                              onClick={() => setPropertyAssignmentMember(member)}
+                            >
+                              <Building2 className="h-4 w-4 mr-1" />
+                              {member.assignedPropertiesCount > 0 ? (
+                                <Badge variant="secondary">{member.assignedPropertiesCount}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">Keine</span>
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <span className={
@@ -418,6 +440,16 @@ export default function TeamManagement() {
           open={showInviteDialog} 
           onOpenChange={setShowInviteDialog} 
         />
+
+        {/* Property Assignment Dialog */}
+        {propertyAssignmentMember && (
+          <PropertyAssignmentDialog
+            open={!!propertyAssignmentMember}
+            onOpenChange={(open) => !open && setPropertyAssignmentMember(null)}
+            userId={propertyAssignmentMember.id}
+            userName={propertyAssignmentMember.full_name || propertyAssignmentMember.email || 'Benutzer'}
+          />
+        )}
 
         {/* Role Explanation */}
         <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">

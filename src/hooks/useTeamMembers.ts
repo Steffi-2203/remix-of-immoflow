@@ -13,6 +13,7 @@ export interface TeamMember {
   full_name: string | null;
   role: AppRole | null;
   created_at: string;
+  assignedPropertiesCount: number;
 }
 
 export function useTeamMembers() {
@@ -49,7 +50,25 @@ export function useTeamMembers() {
         throw rolesError;
       }
 
-      // Combine profiles with roles
+      // Fetch property assignments count for each user
+      const { data: propertyAssignments, error: assignmentsError } = await supabase
+        .from('property_managers')
+        .select('user_id')
+        .in('user_id', userIds);
+
+      if (assignmentsError) {
+        console.error('Error fetching property assignments:', assignmentsError);
+        // Continue without assignments count
+      }
+
+      // Count assignments per user
+      const assignmentCountMap = new Map<string, number>();
+      (propertyAssignments || []).forEach(assignment => {
+        const count = assignmentCountMap.get(assignment.user_id) || 0;
+        assignmentCountMap.set(assignment.user_id, count + 1);
+      });
+
+      // Combine profiles with roles and assignments
       const roleMap = new Map(roles?.map(r => [r.user_id, r.role]) || []);
       
       const teamMembers: TeamMember[] = (profiles || []).map(profile => ({
@@ -58,6 +77,7 @@ export function useTeamMembers() {
         full_name: profile.full_name,
         role: roleMap.get(profile.id) || null,
         created_at: profile.created_at,
+        assignedPropertiesCount: assignmentCountMap.get(profile.id) || 0,
       }));
 
       return teamMembers;
