@@ -11,7 +11,7 @@ export interface MaintenanceInvoice {
   invoice_date: string;
   amount: number;
   contractor_name: string;
-  status: 'pending' | 'approved' | 'rejected' | 'paid';
+  status: 'pending' | 'pre_approved' | 'approved' | 'rejected' | 'paid';
   approved_by: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
@@ -19,6 +19,11 @@ export interface MaintenanceInvoice {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  // Vier-Augen-Prinzip Felder
+  pre_approved_by: string | null;
+  pre_approved_at: string | null;
+  final_approved_by: string | null;
+  final_approved_at: string | null;
   maintenance_tasks?: {
     title: string;
     properties?: { name: string } | null;
@@ -55,6 +60,52 @@ export function usePendingInvoices() {
   return useMaintenanceInvoices('pending');
 }
 
+export function usePreApprovedInvoices() {
+  return useMaintenanceInvoices('pre_approved');
+}
+
+// Vorfreigabe (1. Auge) - erstellt KEINE Buchung
+export function usePreApproveInvoice() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { data, error } = await supabase
+        .from('maintenance_invoices')
+        .update({
+          status: 'pre_approved',
+          pre_approved_by: user?.id,
+          pre_approved_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId)
+        .eq('status', 'pending')
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
+      toast({
+        title: 'Vorfreigabe erteilt',
+        description: 'Die Rechnung wartet jetzt auf die finale Freigabe (Vier-Augen-Prinzip).',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Fehler',
+        description: 'Die Vorfreigabe konnte nicht erteilt werden.',
+        variant: 'destructive',
+      });
+      console.error('Error pre-approving invoice:', error);
+    },
+  });
+}
+
+// Finale Freigabe (2. Auge) - erstellt die Buchung
 export function useApproveInvoice() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -62,15 +113,33 @@ export function useApproveInvoice() {
 
   return useMutation({
     mutationFn: async (invoiceId: string) => {
-      // 1. Rechnung mit Task-Daten laden und freigeben
+      // 1. Rechnung laden um pre_approved_by zu prüfen
+      const { data: existingInvoice, error: fetchError } = await supabase
+        .from('maintenance_invoices')
+        .select('*, maintenance_tasks(property_id, title, properties(name))')
+        .eq('id', invoiceId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // 2. Vier-Augen-Prinzip: Prüfen ob andere Person
+      if (existingInvoice.pre_approved_by === user?.id) {
+        throw new Error('Vier-Augen-Prinzip: Sie können nicht beide Freigaben erteilen.');
+      }
+
+      // 3. Finale Freigabe
       const { data: invoice, error } = await supabase
         .from('maintenance_invoices')
         .update({
           status: 'approved',
+          final_approved_by: user?.id,
+          final_approved_at: new Date().toISOString(),
+          // Auch die alten Felder für Abwärtskompatibilität
           approved_by: user?.id,
           approved_at: new Date().toISOString(),
         })
         .eq('id', invoiceId)
+        .eq('status', 'pre_approved')
         .select(`
           *,
           maintenance_tasks(property_id, title, properties(name))
@@ -79,7 +148,7 @@ export function useApproveInvoice() {
 
       if (error) throw error;
 
-      // 2. Automatische Buchung in transactions erstellen
+      // 4. Jetzt Buchung erstellen (nur bei finaler Freigabe!)
       const propertyId = invoice.maintenance_tasks?.property_id;
       if (propertyId) {
         const { error: txError } = await supabase
@@ -88,7 +157,7 @@ export function useApproveInvoice() {
             organization_id: invoice.organization_id,
             property_id: propertyId,
             transaction_date: invoice.invoice_date,
-            amount: -Math.abs(invoice.amount), // Negativ = Ausgabe
+            amount: -Math.abs(invoice.amount),
             description: `Wartungsrechnung: ${invoice.invoice_number || 'Ohne Nr.'} - ${invoice.contractor_name}`,
             counterpart_name: invoice.contractor_name,
             status: 'pending',
@@ -106,14 +175,15 @@ export function useApproveInvoice() {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       toast({
-        title: 'Rechnung freigegeben',
-        description: 'Die Rechnung wurde zur Zahlung freigegeben und verbucht.',
+        title: 'Rechnung final freigegeben',
+        description: 'Die Rechnung wurde zur Zahlung freigegeben und verbucht (Vier-Augen-Prinzip erfüllt).',
       });
     },
     onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Die Rechnung konnte nicht freigegeben werden.';
       toast({
         title: 'Fehler',
-        description: 'Die Rechnung konnte nicht freigegeben werden.',
+        description: message,
         variant: 'destructive',
       });
       console.error('Error approving invoice:', error);

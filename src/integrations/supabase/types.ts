@@ -379,12 +379,16 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           document_url: string | null
+          final_approved_at: string | null
+          final_approved_by: string | null
           id: string
           invoice_date: string
           invoice_number: string | null
           maintenance_task_id: string | null
           notes: string | null
           organization_id: string | null
+          pre_approved_at: string | null
+          pre_approved_by: string | null
           rejection_reason: string | null
           status: string | null
         }
@@ -396,12 +400,16 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           document_url?: string | null
+          final_approved_at?: string | null
+          final_approved_by?: string | null
           id?: string
           invoice_date: string
           invoice_number?: string | null
           maintenance_task_id?: string | null
           notes?: string | null
           organization_id?: string | null
+          pre_approved_at?: string | null
+          pre_approved_by?: string | null
           rejection_reason?: string | null
           status?: string | null
         }
@@ -413,12 +421,16 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           document_url?: string | null
+          final_approved_at?: string | null
+          final_approved_by?: string | null
           id?: string
           invoice_date?: string
           invoice_number?: string | null
           maintenance_task_id?: string | null
           notes?: string | null
           organization_id?: string | null
+          pre_approved_at?: string | null
+          pre_approved_by?: string | null
           rejection_reason?: string | null
           status?: string | null
         }

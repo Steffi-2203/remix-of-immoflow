@@ -25,13 +25,20 @@ import {
   Clock,
   CreditCard,
   Ban,
+  UserCheck,
+  Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/hooks/useAuth';
 import {
   useMaintenanceInvoices,
   usePendingInvoices,
+  usePreApprovedInvoices,
+  usePreApproveInvoice,
   useApproveInvoice,
   useRejectInvoice,
+  MaintenanceInvoice,
 } from '@/hooks/useMaintenanceInvoices';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -41,6 +48,11 @@ const STATUS_CONFIG = {
     label: 'Ausstehend',
     badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     icon: Clock,
+  },
+  pre_approved: {
+    label: 'Zur Prüfung',
+    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+    icon: UserCheck,
   },
   approved: {
     label: 'Freigegeben',
@@ -61,10 +73,14 @@ const STATUS_CONFIG = {
 
 export default function InvoiceApprovalPage() {
   const permissions = usePermissions();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('pending');
   
   const { data: allInvoices, isLoading: loadingAll } = useMaintenanceInvoices();
   const { data: pendingInvoices, isLoading: loadingPending } = usePendingInvoices();
+  const { data: preApprovedInvoices, isLoading: loadingPreApproved } = usePreApprovedInvoices();
+  
+  const preApproveInvoice = usePreApproveInvoice();
   const approveInvoice = useApproveInvoice();
   const rejectInvoice = useRejectInvoice();
 
@@ -84,6 +100,12 @@ export default function InvoiceApprovalPage() {
     );
   }
 
+  // Vorfreigabe (1. Auge)
+  const handlePreApprove = async (invoiceId: string) => {
+    await preApproveInvoice.mutateAsync(invoiceId);
+  };
+
+  // Finale Freigabe (2. Auge)
   const handleApprove = async (invoiceId: string) => {
     await approveInvoice.mutateAsync(invoiceId);
   };
@@ -110,14 +132,48 @@ export default function InvoiceApprovalPage() {
   // Gruppiere Rechnungen nach Status
   const invoicesByStatus = {
     pending: allInvoices?.filter((i) => i.status === 'pending') || [],
+    pre_approved: allInvoices?.filter((i) => i.status === 'pre_approved') || [],
     approved: allInvoices?.filter((i) => i.status === 'approved') || [],
     paid: allInvoices?.filter((i) => i.status === 'paid') || [],
     rejected: allInvoices?.filter((i) => i.status === 'rejected') || [],
   };
 
-  const isLoading = loadingAll || loadingPending;
+  const isLoading = loadingAll || loadingPending || loadingPreApproved;
 
-  const renderInvoiceList = (invoices: typeof allInvoices, showActions: boolean = false) => {
+  // Prüfen ob der aktuelle Benutzer die Vorfreigabe erteilt hat
+  const canFinalApprove = (invoice: MaintenanceInvoice) => {
+    return invoice.pre_approved_by !== user?.id;
+  };
+
+  const renderApprovalHistory = (invoice: MaintenanceInvoice) => {
+    if (!invoice.pre_approved_at && !invoice.final_approved_at) return null;
+
+    return (
+      <div className="mt-4 p-3 bg-muted/50 rounded-lg space-y-2">
+        <p className="text-sm font-medium flex items-center gap-2">
+          <Eye className="h-4 w-4" />
+          Freigabe-Historie (Vier-Augen-Prinzip)
+        </p>
+        {invoice.pre_approved_at && (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="h-4 w-4 text-orange-500" />
+            <span>Vorfreigabe: {format(new Date(invoice.pre_approved_at), 'dd.MM.yyyy HH:mm', { locale: de })}</span>
+          </div>
+        )}
+        {invoice.final_approved_at && (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <span>Finale Freigabe: {format(new Date(invoice.final_approved_at), 'dd.MM.yyyy HH:mm', { locale: de })}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderInvoiceList = (
+    invoices: MaintenanceInvoice[] | undefined,
+    actionType: 'pre_approve' | 'final_approve' | 'none' = 'none'
+  ) => {
     if (!invoices || invoices.length === 0) {
       return (
         <Card>
@@ -137,6 +193,7 @@ export default function InvoiceApprovalPage() {
         {invoices.map((invoice) => {
           const statusConfig = STATUS_CONFIG[invoice.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending;
           const StatusIcon = statusConfig.icon;
+          const canApprove = canFinalApprove(invoice);
 
           return (
             <Card key={invoice.id}>
@@ -211,23 +268,65 @@ export default function InvoiceApprovalPage() {
                         Rechnung ansehen
                       </a>
                     )}
+
+                    {/* Freigabe-Historie */}
+                    {renderApprovalHistory(invoice)}
                   </div>
 
-                  {/* Actions - nur für ausstehende Rechnungen */}
-                  {showActions && invoice.status === 'pending' && (
+                  {/* Actions */}
+                  {actionType === 'pre_approve' && invoice.status === 'pending' && (
                     <div className="flex lg:flex-col gap-3">
                       <Button
                         className="flex-1 lg:flex-none"
-                        onClick={() => handleApprove(invoice.id)}
-                        disabled={approveInvoice.isPending}
+                        onClick={() => handlePreApprove(invoice.id)}
+                        disabled={preApproveInvoice.isPending}
                       >
-                        {approveInvoice.isPending ? (
+                        {preApproveInvoice.isPending ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          <UserCheck className="h-4 w-4 mr-2" />
                         )}
-                        Freigeben
+                        Vorfreigeben
                       </Button>
+
+                      <Button
+                        variant="destructive"
+                        className="flex-1 lg:flex-none"
+                        onClick={() => handleRejectClick(invoice.id)}
+                        disabled={rejectInvoice.isPending}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Ablehnen
+                      </Button>
+                    </div>
+                  )}
+
+                  {actionType === 'final_approve' && invoice.status === 'pre_approved' && (
+                    <div className="flex lg:flex-col gap-3">
+                      {canApprove ? (
+                        <Button
+                          className="flex-1 lg:flex-none"
+                          onClick={() => handleApprove(invoice.id)}
+                          disabled={approveInvoice.isPending}
+                        >
+                          {approveInvoice.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                          )}
+                          Final Freigeben
+                        </Button>
+                      ) : (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm">
+                          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-400 font-medium">
+                            <AlertTriangle className="h-4 w-4" />
+                            Vier-Augen-Prinzip
+                          </div>
+                          <p className="text-amber-700 dark:text-amber-300 mt-1">
+                            Sie haben diese Rechnung bereits vorfreigegeben. Eine andere Person muss die finale Freigabe erteilen.
+                          </p>
+                        </div>
+                      )}
 
                       <Button
                         variant="destructive"
@@ -252,7 +351,7 @@ export default function InvoiceApprovalPage() {
   return (
     <MainLayout
       title="Rechnungsfreigabe"
-      subtitle="Wartungsrechnungen prüfen und verwalten"
+      subtitle="Wartungsrechnungen mit Vier-Augen-Prinzip prüfen und verwalten"
     >
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -267,6 +366,15 @@ export default function InvoiceApprovalPage() {
               {invoicesByStatus.pending.length > 0 && (
                 <Badge variant="secondary" className="ml-1">
                   {invoicesByStatus.pending.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="pre_approved" className="gap-2">
+              <UserCheck className="h-4 w-4" />
+              Zur Prüfung
+              {invoicesByStatus.pre_approved.length > 0 && (
+                <Badge variant="destructive" className="ml-1">
+                  {invoicesByStatus.pre_approved.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -300,19 +408,33 @@ export default function InvoiceApprovalPage() {
           </TabsList>
 
           <TabsContent value="pending">
-            {renderInvoiceList(invoicesByStatus.pending, true)}
+            <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Schritt 1:</strong> Prüfen Sie die Rechnung und erteilen Sie die Vorfreigabe. Eine zweite Person muss dann die finale Freigabe erteilen.
+              </p>
+            </div>
+            {renderInvoiceList(invoicesByStatus.pending, 'pre_approve')}
+          </TabsContent>
+
+          <TabsContent value="pre_approved">
+            <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Schritt 2:</strong> Diese Rechnungen wurden bereits vorgeprüft. Erteilen Sie die finale Freigabe (Buchung wird erstellt).
+              </p>
+            </div>
+            {renderInvoiceList(invoicesByStatus.pre_approved, 'final_approve')}
           </TabsContent>
 
           <TabsContent value="approved">
-            {renderInvoiceList(invoicesByStatus.approved)}
+            {renderInvoiceList(invoicesByStatus.approved, 'none')}
           </TabsContent>
 
           <TabsContent value="paid">
-            {renderInvoiceList(invoicesByStatus.paid)}
+            {renderInvoiceList(invoicesByStatus.paid, 'none')}
           </TabsContent>
 
           <TabsContent value="rejected">
-            {renderInvoiceList(invoicesByStatus.rejected)}
+            {renderInvoiceList(invoicesByStatus.rejected, 'none')}
           </TabsContent>
         </Tabs>
       )}
