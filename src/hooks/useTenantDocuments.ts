@@ -12,6 +12,7 @@ export type TenantDocument = {
 };
 
 export const TENANT_DOCUMENT_TYPES = [
+  { value: 'vorschreibung', label: 'Monatliche Vorschreibung' },
   { value: 'vorschuss_aenderung', label: 'Vorschuss-Änderungsschreiben' },
   { value: 'bk_abrechnung', label: 'Betriebskostenabrechnung' },
   { value: 'mietvertrag', label: 'Mietvertrag' },

@@ -31,15 +31,18 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { Receipt, Plus, Loader2, Euro, CheckCircle2, Clock, MoreHorizontal, Mail, AlertTriangle } from 'lucide-react';
+import { Receipt, Plus, Loader2, Euro, CheckCircle2, Clock, MoreHorizontal, Mail, AlertTriangle, FileDown } from 'lucide-react';
 import { useInvoices, useGenerateInvoices, useUpdateInvoiceStatus } from '@/hooks/useInvoices';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useSendDunning, getDunningStatusLabel, getNextDunningAction } from '@/hooks/useDunning';
+import { useUploadTenantDocument } from '@/hooks/useTenantDocuments';
+import { useOrganization } from '@/hooks/useOrganization';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { generateVorschreibungPdf } from '@/utils/vorschreibungPdfExport';
 
 const statusLabels: Record<string, string> = {
   offen: 'Offen',
@@ -77,14 +80,17 @@ export default function InvoiceList() {
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [isGeneratingPdfs, setIsGeneratingPdfs] = useState(false);
 
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(selectedYear, selectedMonth);
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: properties } = useProperties();
+  const { data: organization } = useOrganization();
   const generateInvoices = useGenerateInvoices();
   const updateStatus = useUpdateInvoiceStatus();
   const sendDunning = useSendDunning();
+  const uploadDocument = useUploadTenantDocument();
 
   const getTenant = (tenantId: string) => tenants?.find(t => t.id === tenantId);
   const getUnit = (unitId: string) => units?.find(u => u.id === unitId);
@@ -199,6 +205,79 @@ export default function InvoiceList() {
     });
   };
 
+  // Generate and upload PDFs for all filtered invoices
+  const handleGenerateAndUploadPdfs = async () => {
+    if (!filteredInvoices || filteredInvoices.length === 0) {
+      toast({
+        title: 'Keine Vorschreibungen',
+        description: 'Es sind keine Vorschreibungen zum Generieren vorhanden.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingPdfs(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const invoice of filteredInvoices) {
+      try {
+        const tenant = getTenant(invoice.tenant_id);
+        const unit = getUnit(invoice.unit_id);
+        const property = unit ? getProperty(unit.property_id) : null;
+
+        if (!tenant || !unit || !property) {
+          errorCount++;
+          continue;
+        }
+
+        const monthName = months[invoice.month - 1]?.label || '';
+
+        // Generate PDF
+        const pdfBlob = generateVorschreibungPdf({
+          tenantName: `${tenant.first_name} ${tenant.last_name}`,
+          propertyName: property.name,
+          propertyAddress: property.address,
+          propertyCity: `${property.postal_code} ${property.city}`,
+          unitNumber: unit.top_nummer || '',
+          month: invoice.month,
+          year: invoice.year,
+          grundmiete: Number(invoice.grundmiete),
+          betriebskosten: Number(invoice.betriebskosten),
+          heizungskosten: Number(invoice.heizungskosten),
+          ustSatzMiete: Number(invoice.ust_satz_miete || 0),
+          ustSatzBk: Number(invoice.ust_satz_bk || 0),
+          ustSatzHeizung: Number(invoice.ust_satz_heizung || 0),
+          ust: Number(invoice.ust || 0),
+          gesamtbetrag: Number(invoice.gesamtbetrag),
+          faelligAm: invoice.faellig_am,
+          iban: organization?.iban || undefined,
+          bic: organization?.bic || undefined,
+        });
+
+        // Upload to tenant documents
+        await uploadDocument.mutateAsync({
+          tenantId: invoice.tenant_id,
+          file: pdfBlob,
+          name: `Vorschreibung ${monthName} ${invoice.year}`,
+          type: 'vorschreibung',
+        });
+
+        successCount++;
+      } catch (error) {
+        console.error('Error generating PDF for invoice:', invoice.id, error);
+        errorCount++;
+      }
+    }
+
+    setIsGeneratingPdfs(false);
+
+    toast({
+      title: 'PDFs generiert',
+      description: `${successCount} Vorschreibungen als PDF beim Mieter abgelegt.${errorCount > 0 ? ` ${errorCount} Fehler.` : ''}`,
+    });
+  };
+
   // Calculate statistics based on filtered invoices
   const stats = {
     total: filteredInvoices?.length || 0,
@@ -272,7 +351,20 @@ export default function InvoiceList() {
 
         <div className="flex-1" />
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline"
+            onClick={handleGenerateAndUploadPdfs}
+            disabled={isGeneratingPdfs || !filteredInvoices || filteredInvoices.length === 0}
+          >
+            {isGeneratingPdfs ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4 mr-2" />
+            )}
+            PDFs generieren & ablegen
+          </Button>
+
           <Button 
             variant="outline"
             onClick={handleGenerateAllMonths} 
