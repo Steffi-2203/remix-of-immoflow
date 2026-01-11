@@ -20,11 +20,11 @@ import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrga
 
 type AppRole = Database['public']['Enums']['app_role'];
 
-const ROLE_OPTIONS: { value: AppRole; label: string; description: string }[] = [
-  { value: 'admin', label: 'Admin', description: 'Voller Zugriff auf alle Funktionen' },
-  { value: 'property_manager', label: 'Hausverwalter', description: 'Wartungen, Nachrichten, Rechnungsfreigabe' },
-  { value: 'finance', label: 'Buchhaltung', description: 'Finanzen, Banking, Rechnungsfreigabe' },
-  { value: 'viewer', label: 'Betrachter', description: 'Nur Lesezugriff' },
+const ROLE_OPTIONS: { value: AppRole; label: string; description: string; permissions: string }[] = [
+  { value: 'admin', label: 'Admin', description: 'Voller Zugriff auf alle Funktionen', permissions: 'Voller Zugriff' },
+  { value: 'property_manager', label: 'Hausverwalter', description: 'Wartungen, Nachrichten, Rechnungsfreigabe', permissions: 'Wartungen, Nachrichten, Rechnungsfreigabe' },
+  { value: 'finance', label: 'Buchhaltung', description: 'Finanzen, Banking, Rechnungsfreigabe', permissions: 'Finanzen, Banking, Rechnungsfreigabe' },
+  { value: 'viewer', label: 'Betrachter', description: 'Nur Lesezugriff', permissions: 'Nur Ansicht' },
 ];
 
 const getRoleBadgeVariant = (role: AppRole | null): "default" | "secondary" | "outline" | "destructive" => {
@@ -234,6 +234,7 @@ export default function TeamManagement() {
                       <TableHead>Name</TableHead>
                       <TableHead>E-Mail</TableHead>
                       <TableHead>Rolle</TableHead>
+                      <TableHead>Berechtigungen</TableHead>
                       <TableHead>Mitglied seit</TableHead>
                       <TableHead className="text-right">Aktionen</TableHead>
                     </TableRow>
@@ -252,6 +253,16 @@ export default function TeamManagement() {
                           <Badge variant={getRoleBadgeVariant(member.role)}>
                             {getRoleLabel(member.role)}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={
+                            member.role === 'admin' ? 'text-green-600' :
+                            member.role === 'property_manager' ? 'text-blue-600' :
+                            member.role === 'finance' ? 'text-purple-600' :
+                            'text-muted-foreground'
+                          }>
+                            {ROLE_OPTIONS.find(r => r.value === member.role)?.permissions || 'Keine Berechtigungen'}
+                          </span>
                         </TableCell>
                         <TableCell>
                           {format(new Date(member.created_at), 'dd.MM.yyyy', { locale: de })}
@@ -407,6 +418,24 @@ export default function TeamManagement() {
           open={showInviteDialog} 
           onOpenChange={setShowInviteDialog} 
         />
+
+        {/* Role Explanation */}
+        <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Rollen-Erklärung
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              <li><strong>Admin:</strong> Voller Zugriff auf alles (Buchhaltung, Finanzen, Team-Verwaltung, Einstellungen)</li>
+              <li><strong>Hausverwalter:</strong> Wartungen, Aufträge, Nachrichten, Rechnungsfreigabe – KEINE Buchhaltung</li>
+              <li><strong>Buchhaltung:</strong> Finanzen, Banking, Rechnungsfreigabe – KEINE Wartungen</li>
+              <li><strong>Betrachter:</strong> Kann nur Daten ansehen, nichts bearbeiten oder genehmigen</li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
     </MainLayout>
   );
