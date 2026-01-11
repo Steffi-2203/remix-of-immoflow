@@ -37,6 +37,7 @@ import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
 import Contractors from "./pages/Contractors";
 import Dunning from "./pages/Dunning";
+import Budgets from "./pages/Budgets";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -85,6 +86,7 @@ const App = () => (
             <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
             <Route path="/handwerker" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
             <Route path="/mahnwesen" element={<ProtectedRoute><Dunning /></ProtectedRoute>} />
+            <Route path="/budgets" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
             <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />

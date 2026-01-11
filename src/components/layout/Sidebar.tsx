@@ -21,7 +21,8 @@ import {
   CheckSquare,
   MessageSquare,
   HardHat,
-  AlertTriangle
+  AlertTriangle,
+  PiggyBank
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -134,6 +135,10 @@ export function Sidebar() {
       label: 'Mahnwesen',
       icon: AlertTriangle,
       href: '/mahnwesen',
+    }, {
+      label: 'Budgetplanung',
+      icon: PiggyBank,
+      href: '/budgets',
     }] : []),
     ...(permissions.canApproveInvoices || permissions.isAdmin ? [{
       label: 'Rechnungsfreigabe',
