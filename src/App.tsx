@@ -34,6 +34,7 @@ import Banking from "./pages/Banking";
 import Maintenance from "./pages/Maintenance";
 import InvoiceApproval from "./pages/InvoiceApproval";
 import MessagesPage from "./pages/Messages";
+import TeamManagement from "./pages/TeamManagement";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
             <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             
             {/* Admin routes */}
