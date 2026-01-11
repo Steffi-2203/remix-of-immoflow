@@ -370,6 +370,96 @@ export type Database = {
           },
         ]
       }
+      maintenance_contracts: {
+        Row: {
+          contract_fee: number | null
+          contract_type: string
+          contractor_contact: string | null
+          contractor_email: string | null
+          contractor_name: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          document_url: string | null
+          estimated_cost: number | null
+          id: string
+          interval_months: number
+          is_active: boolean
+          last_maintenance_date: string | null
+          next_due_date: string
+          notes: string | null
+          organization_id: string | null
+          property_id: string
+          reminder_days: number
+          reminder_sent_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          contract_fee?: number | null
+          contract_type?: string
+          contractor_contact?: string | null
+          contractor_email?: string | null
+          contractor_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_url?: string | null
+          estimated_cost?: number | null
+          id?: string
+          interval_months?: number
+          is_active?: boolean
+          last_maintenance_date?: string | null
+          next_due_date: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id: string
+          reminder_days?: number
+          reminder_sent_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          contract_fee?: number | null
+          contract_type?: string
+          contractor_contact?: string | null
+          contractor_email?: string | null
+          contractor_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_url?: string | null
+          estimated_cost?: number | null
+          id?: string
+          interval_months?: number
+          is_active?: boolean
+          last_maintenance_date?: string | null
+          next_due_date?: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string
+          reminder_days?: number
+          reminder_sent_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_contracts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_contracts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       maintenance_invoices: {
         Row: {
           amount: number

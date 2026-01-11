@@ -14,6 +14,7 @@ import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home, Sparkles } fr
 import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
 import { DataQualityWidget } from "@/components/dashboard/DataQualityWidget";
 import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
+import { UpcomingMaintenanceWidget } from "@/components/dashboard/UpcomingMaintenanceWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -216,6 +217,11 @@ export default function SimpleDashboard() {
         {/* Bank Accounts Widget */}
         <div className="mt-6">
           <BankAccountsWidget />
+        </div>
+
+        {/* Upcoming Maintenance Widget */}
+        <div className="mt-6">
+          <UpcomingMaintenanceWidget />
         </div>
 
         {/* Properties Section */}

@@ -27,10 +27,12 @@ import {
   Upload,
   Users,
   AlertTriangle,
+  Wrench,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
 import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
+import { MaintenanceContractsTab } from '@/components/property/MaintenanceContractsTab';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
@@ -327,6 +329,10 @@ export default function PropertyDetail() {
             )}
           </TabsTrigger>
           <TabsTrigger value="costs">Betriebskosten</TabsTrigger>
+          <TabsTrigger value="maintenance">
+            <Wrench className="h-4 w-4 mr-1" />
+            Wartungsverträge
+          </TabsTrigger>
           <TabsTrigger value="documents">Dokumente</TabsTrigger>
         </TabsList>
 
@@ -651,6 +657,10 @@ export default function PropertyDetail() {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-4">
+          {id && <MaintenanceContractsTab propertyId={id} />}
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
