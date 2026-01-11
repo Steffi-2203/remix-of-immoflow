@@ -35,6 +35,8 @@ import Maintenance from "./pages/Maintenance";
 import InvoiceApproval from "./pages/InvoiceApproval";
 import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
+import Contractors from "./pages/Contractors";
+import Dunning from "./pages/Dunning";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -81,6 +83,8 @@ const App = () => (
             <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
+            <Route path="/handwerker" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
+            <Route path="/mahnwesen" element={<ProtectedRoute><Dunning /></ProtectedRoute>} />
             <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />

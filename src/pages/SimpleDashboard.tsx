@@ -15,6 +15,7 @@ import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
 import { DataQualityWidget } from "@/components/dashboard/DataQualityWidget";
 import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
 import { UpcomingMaintenanceWidget } from "@/components/dashboard/UpcomingMaintenanceWidget";
+import { CalendarWidget } from "@/components/dashboard/CalendarWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -222,6 +223,11 @@ export default function SimpleDashboard() {
         {/* Upcoming Maintenance Widget */}
         <div className="mt-6">
           <UpcomingMaintenanceWidget />
+        </div>
+
+        {/* Calendar Widget */}
+        <div className="mt-6">
+          <CalendarWidget />
         </div>
 
         {/* Properties Section */}

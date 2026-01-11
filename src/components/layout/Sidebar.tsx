@@ -19,7 +19,9 @@ import {
   FileText,
   Wrench,
   CheckSquare,
-  MessageSquare
+  MessageSquare,
+  HardHat,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -123,6 +125,15 @@ export function Sidebar() {
       icon: Wrench,
       href: '/wartungen',
       tourId: 'nav-maintenance'
+    }, {
+      label: 'Handwerker',
+      icon: HardHat,
+      href: '/handwerker',
+    }] : []),
+    ...(permissions.canEditFinances || permissions.isAdmin ? [{
+      label: 'Mahnwesen',
+      icon: AlertTriangle,
+      href: '/mahnwesen',
     }] : []),
     ...(permissions.canApproveInvoices || permissions.isAdmin ? [{
       label: 'Rechnungsfreigabe',
