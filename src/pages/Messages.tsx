@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,12 +35,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  Building2,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useMessages, useSentMessages, useCreateMessage } from '@/hooks/useMessages';
+import { useMaintenanceTasks } from '@/hooks/useMaintenanceTasks';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -51,14 +53,17 @@ export default function MessagesPage() {
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
   const { data: properties } = useProperties();
+  const { data: maintenanceTasks } = useMaintenanceTasks();
   const createMessage = useCreateMessage();
 
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
 
   const [newMessage, setNewMessage] = useState({
+    property_id: '',
     recipient_type: 'tenant' as 'tenant' | 'contractor' | 'internal',
     tenant_id: '',
+    contractor_id: '',
     recipient_name: '',
     recipient_email: '',
     recipient_phone: '',
@@ -80,6 +85,58 @@ export default function MessagesPage() {
   }
 
   const activeTenants = tenants?.filter((t) => t.status === 'aktiv') || [];
+
+  // Filter tenants based on selected property
+  const filteredTenants = useMemo(() => {
+    if (!newMessage.property_id) return [];
+    const propertyUnits = units?.filter(u => u.property_id === newMessage.property_id) || [];
+    const unitIds = propertyUnits.map(u => u.id);
+    return activeTenants.filter(t => unitIds.includes(t.unit_id));
+  }, [newMessage.property_id, units, activeTenants]);
+
+  // Extract unique contractors from maintenance tasks for selected property
+  const filteredContractors = useMemo(() => {
+    if (!newMessage.property_id) return [];
+    const contractorMap = new Map<string, { name: string; contact: string | null }>();
+    
+    maintenanceTasks
+      ?.filter(t => t.property_id === newMessage.property_id && t.contractor_name)
+      .forEach(task => {
+        if (task.contractor_name && !contractorMap.has(task.contractor_name)) {
+          contractorMap.set(task.contractor_name, {
+            name: task.contractor_name,
+            contact: task.contractor_contact
+          });
+        }
+      });
+    
+    return Array.from(contractorMap.values());
+  }, [newMessage.property_id, maintenanceTasks]);
+
+  const handlePropertyChange = (propertyId: string) => {
+    setNewMessage(m => ({
+      ...m,
+      property_id: propertyId,
+      tenant_id: '',
+      contractor_id: '',
+      recipient_name: '',
+      recipient_email: '',
+      recipient_phone: ''
+    }));
+  };
+
+  const handleContractorSelect = (contractorName: string) => {
+    const contractor = filteredContractors.find(c => c.name === contractorName);
+    if (contractor) {
+      setNewMessage(m => ({
+        ...m,
+        contractor_id: contractorName,
+        recipient_name: contractor.name,
+        recipient_email: contractor.contact?.includes('@') ? contractor.contact : '',
+        recipient_phone: contractor.contact && !contractor.contact.includes('@') ? contractor.contact : ''
+      }));
+    }
+  };
 
   const handleTenantSelect = (tenantId: string) => {
     const tenant = tenants?.find((t) => t.id === tenantId);
@@ -119,8 +176,10 @@ export default function MessagesPage() {
 
   const resetNewMessage = () => {
     setNewMessage({
+      property_id: '',
       recipient_type: 'tenant',
       tenant_id: '',
+      contractor_id: '',
       recipient_name: '',
       recipient_email: '',
       recipient_phone: '',
@@ -390,27 +449,56 @@ export default function MessagesPage() {
               </RadioGroup>
             </div>
 
+            {/* Property dropdown - shown for tenant and contractor */}
+            {(newMessage.recipient_type === 'tenant' || newMessage.recipient_type === 'contractor') && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Liegenschaft auswählen
+                </Label>
+                <Select
+                  value={newMessage.property_id}
+                  onValueChange={handlePropertyChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Liegenschaft auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    {properties?.map(property => (
+                      <SelectItem key={property.id} value={property.id}>
+                        {property.name} – {property.address}, {property.postal_code} {property.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Tenant dropdown - filtered by property */}
             {newMessage.recipient_type === 'tenant' && (
               <div className="space-y-2">
                 <Label>Mieter auswählen</Label>
                 <Select
                   value={newMessage.tenant_id}
                   onValueChange={handleTenantSelect}
+                  disabled={!newMessage.property_id}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Mieter auswählen..." />
+                    <SelectValue placeholder={
+                      !newMessage.property_id 
+                        ? "Erst Liegenschaft auswählen..." 
+                        : filteredTenants.length === 0 
+                          ? "Keine aktiven Mieter" 
+                          : "Mieter auswählen..."
+                    } />
                   </SelectTrigger>
-                  <SelectContent>
-                    {activeTenants.map((tenant) => {
+                  <SelectContent className="bg-background z-50">
+                    {filteredTenants.map((tenant) => {
                       const unit = units?.find((u) => u.id === tenant.unit_id);
-                      const property = unit
-                        ? properties?.find((p) => p.id === unit.property_id)
-                        : null;
                       return (
                         <SelectItem key={tenant.id} value={tenant.id}>
                           {tenant.first_name} {tenant.last_name}
                           {unit && ` – Top ${unit.top_nummer}`}
-                          {property && ` (${property.name})`}
                         </SelectItem>
                       );
                     })}
@@ -419,7 +507,69 @@ export default function MessagesPage() {
               </div>
             )}
 
-            {newMessage.recipient_type !== 'tenant' && (
+            {/* Contractor dropdown - filtered by property */}
+            {newMessage.recipient_type === 'contractor' && (
+              <div className="space-y-2">
+                <Label>Handwerker auswählen</Label>
+                <Select
+                  value={newMessage.contractor_id}
+                  onValueChange={handleContractorSelect}
+                  disabled={!newMessage.property_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                      !newMessage.property_id 
+                        ? "Erst Liegenschaft auswählen..." 
+                        : filteredContractors.length === 0 
+                          ? "Keine Handwerker gefunden – manuell eingeben" 
+                          : "Handwerker auswählen..."
+                    } />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background z-50">
+                    {filteredContractors.map((contractor) => (
+                      <SelectItem key={contractor.name} value={contractor.name}>
+                        {contractor.name}
+                        {contractor.contact && ` (${contractor.contact})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Manual input if no contractors found or for new contractors */}
+                {newMessage.property_id && (
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Oder manuell eingeben:</Label>
+                      <Input
+                        value={newMessage.recipient_name}
+                        onChange={(e) =>
+                          setNewMessage((m) => ({ ...m, recipient_name: e.target.value, contractor_id: '' }))
+                        }
+                        placeholder="Name des Handwerkers..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">E-Mail/Telefon:</Label>
+                      <Input
+                        value={newMessage.recipient_email || newMessage.recipient_phone}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.includes('@')) {
+                            setNewMessage((m) => ({ ...m, recipient_email: val, recipient_phone: '' }));
+                          } else {
+                            setNewMessage((m) => ({ ...m, recipient_phone: val, recipient_email: '' }));
+                          }
+                        }}
+                        placeholder="E-Mail oder Telefon..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Internal recipient - manual input */}
+            {newMessage.recipient_type === 'internal' && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Name</Label>
