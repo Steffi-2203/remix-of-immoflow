@@ -2,7 +2,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { PropertyCard } from '@/components/dashboard/PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Filter, Download, Loader2, Building2 } from 'lucide-react';
+import { Plus, Search, Filter, Download, Loader2, Building2, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Select,
@@ -14,11 +14,15 @@ import {
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { useState } from 'react';
+import { PropertyImportDialog } from '@/components/properties/PropertyImportDialog';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function PropertyList() {
   const { data: properties, isLoading } = useProperties();
   const { data: allUnits } = useUnits();
   const [searchQuery, setSearchQuery] = useState('');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const filteredProperties = properties?.filter(
     (p) =>
@@ -79,6 +83,10 @@ export default function PropertyList() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importieren
+          </Button>
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export
@@ -91,6 +99,12 @@ export default function PropertyList() {
           </Link>
         </div>
       </div>
+
+      <PropertyImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['properties'] })}
+      />
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
