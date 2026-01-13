@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,39 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
     // Read key at request-time so updated secrets work without a redeploy/cold start
     const resendApiKey = Deno.env.get("RESEND_API_KEY")?.trim();
     if (!resendApiKey) {
