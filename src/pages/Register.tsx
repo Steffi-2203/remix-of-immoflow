@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Mail, Lock, User, Building, Users } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Users } from 'lucide-react';
 import { z } from 'zod';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 import { useInviteByToken, useAcceptInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
@@ -33,7 +33,6 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [companyName, setCompanyName] = useState('');
 
   // Email aus Einladung vorbelegen
   useEffect(() => {
@@ -48,16 +47,11 @@ export default function Register() {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  const isInviteMode = !!invite;
-
   const validateForm = () => {
     setError(null);
     
-    // Firmenname nur bei normaler Registrierung prüfen
-    if (!isInviteMode && !companyName.trim()) {
-      setError('Bitte geben Sie einen Firmennamen ein');
-      return false;
-    }
+    // Bei Einladung kein Firmenname erforderlich
+    // (Normale Registrierung ist nicht mehr möglich)
     
     try {
       emailSchema.parse(email);
@@ -93,36 +87,29 @@ export default function Register() {
     setError(null);
     setSuccess(null);
 
-    // Bei Einladung: KEIN Firmenname übergeben (keine neue Org erstellen) + invite_token setzen
-    const orgName = isInviteMode ? undefined : companyName;
-    const tokenForSignup = isInviteMode ? inviteToken : undefined;
+    // Bei Einladung: invite_token setzen (keine neue Org erstellen)
+    const { error: signUpError, data } = await signUp(email, password, fullName, undefined, inviteToken ?? undefined);
     
-    const { error, data } = await signUp(email, password, fullName, orgName, tokenForSignup ?? undefined);
-    
-    if (error) {
-      if (error.message.includes('User already registered')) {
+    if (signUpError) {
+      if (signUpError.message.includes('User already registered')) {
         setError('Diese E-Mail-Adresse ist bereits registriert. Bitte melden Sie sich an.');
       } else {
-        setError(error.message);
+        setError(signUpError.message);
       }
       setIsLoading(false);
       return;
     }
     
     if (data?.user) {
-      // Bei Einladung: Einladung annehmen (Organisation + Rolle zuweisen)
-      if (inviteToken) {
-        try {
-          await acceptInvite.mutateAsync(inviteToken);
-          setSuccess('Konto erstellt und Organisation beigetreten! Sie werden angemeldet...');
-        } catch (acceptError: any) {
-          console.error('Fehler beim Annehmen der Einladung:', acceptError);
-          setError('Konto erstellt, aber Einladung konnte nicht angenommen werden. Bitte kontaktieren Sie den Administrator.');
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        setSuccess('Konto erfolgreich erstellt! Sie werden angemeldet...');
+      // Einladung annehmen (Organisation + Rolle zuweisen)
+      try {
+        await acceptInvite.mutateAsync(inviteToken!);
+        setSuccess('Konto erstellt und Organisation beigetreten! Sie werden angemeldet...');
+      } catch (acceptError: any) {
+        console.error('Fehler beim Annehmen der Einladung:', acceptError);
+        setError('Konto erstellt, aber Einladung konnte nicht angenommen werden. Bitte kontaktieren Sie den Administrator.');
+        setIsLoading(false);
+        return;
       }
     }
     
@@ -133,6 +120,36 @@ export default function Register() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Keine Einladung vorhanden - Zugang verweigern
+  if (!inviteToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Link to="/" className="flex flex-col items-center mb-4 hover:opacity-80 transition-opacity">
+              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-16 w-auto mb-2" />
+              <span className="font-bold text-xl">ImmoflowMe</span>
+            </Link>
+            <CardTitle className="text-2xl">Zugang beschränkt</CardTitle>
+            <CardDescription>
+              Der Zugang ist auf autorisierte Benutzer beschränkt.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <Alert className="bg-muted/50 border-muted">
+              <AlertDescription>
+                Konten werden nur per Einladung erstellt. Bitte kontaktieren Sie einen Administrator, um eine Einladung zu erhalten.
+              </AlertDescription>
+            </Alert>
+            <Button variant="outline" asChild className="w-full">
+              <Link to="/login">Zur Anmeldung</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -156,14 +173,9 @@ export default function Register() {
             <p className="text-muted-foreground">
               Bitte kontaktieren Sie den Administrator, der Sie eingeladen hat, um eine neue Einladung zu erhalten.
             </p>
-            <div className="flex flex-col gap-2">
-              <Button asChild>
-                <Link to="/register">Normale Registrierung</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link to="/login">Zur Anmeldung</Link>
-              </Button>
-            </div>
+            <Button variant="outline" asChild className="w-full">
+              <Link to="/login">Zur Anmeldung</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -180,31 +192,27 @@ export default function Register() {
             <span className="text-xs text-muted-foreground">by ImmoPepper</span>
           </Link>
           <CardTitle className="text-2xl">
-            {isInviteMode ? 'Konto erstellen und beitreten' : 'Konto erstellen'}
+            Konto erstellen und beitreten
           </CardTitle>
           <CardDescription>
-            {isInviteMode 
-              ? 'Erstellen Sie Ihr Konto, um der Organisation beizutreten'
-              : 'Starten Sie jetzt mit Ihrer Immobilienverwaltung'}
+            Erstellen Sie Ihr Konto, um der Organisation beizutreten
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Einladungs-Banner */}
-            {isInviteMode && (
-              <Alert className="border-primary/50 bg-primary/5">
-                <Users className="h-4 w-4" />
-                <AlertDescription className="flex flex-col gap-1">
-                  <span>Sie wurden eingeladen zu:</span>
-                  <span className="font-semibold">{invite.organization?.name}</span>
-                  <div className="mt-1">
-                    <Badge variant="secondary">
-                      {ROLE_LABELS[invite.role as keyof typeof ROLE_LABELS] || invite.role}
-                    </Badge>
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
+            <Alert className="border-primary/50 bg-primary/5">
+              <Users className="h-4 w-4" />
+              <AlertDescription className="flex flex-col gap-1">
+                <span>Sie wurden eingeladen zu:</span>
+                <span className="font-semibold">{invite?.organization?.name}</span>
+                <div className="mt-1">
+                  <Badge variant="secondary">
+                    {ROLE_LABELS[invite?.role as keyof typeof ROLE_LABELS] || invite?.role}
+                  </Badge>
+                </div>
+              </AlertDescription>
+            </Alert>
 
             {error && (
               <Alert variant="destructive">
@@ -216,25 +224,6 @@ export default function Register() {
               <Alert>
                 <AlertDescription>{success}</AlertDescription>
               </Alert>
-            )}
-            
-            {/* Firmenname nur bei normaler Registrierung */}
-            {!isInviteMode && (
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Firmenname / Hausverwaltung *</Label>
-                <div className="relative">
-                  <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="companyName"
-                    type="text"
-                    placeholder="Name Ihrer Hausverwaltung"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
-              </div>
             )}
             
             <div className="space-y-2">
@@ -264,14 +253,12 @@ export default function Register() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
                   required
-                  disabled={isInviteMode}
+                  disabled
                 />
               </div>
-              {isInviteMode && (
-                <p className="text-xs text-muted-foreground">
-                  E-Mail-Adresse aus Einladung (nicht änderbar)
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                E-Mail-Adresse aus Einladung (nicht änderbar)
+              </p>
             </div>
             
             <div className="space-y-2">
@@ -310,19 +297,19 @@ export default function Register() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isInviteMode ? 'Beitreten...' : 'Registrieren...'}
+                  Beitreten...
                 </>
               ) : (
-                isInviteMode ? 'Konto erstellen & beitreten' : 'Konto erstellen'
+                'Konto erstellen & beitreten'
               )}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <div className="text-center text-sm text-muted-foreground">
-            Bereits registriert?{' '}
+            Bereits ein Konto?{' '}
             <Link to="/login" className="text-primary hover:underline font-medium">
-              Jetzt anmelden
+              Anmelden
             </Link>
           </div>
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

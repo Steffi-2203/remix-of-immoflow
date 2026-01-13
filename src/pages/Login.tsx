@@ -151,12 +151,12 @@ export default function Login() {
           </form>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <div className="text-center text-sm text-muted-foreground">
-            Noch kein Konto?{' '}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Jetzt registrieren
-            </Link>
-          </div>
+          <Alert className="bg-muted/50 border-muted">
+            <AlertDescription className="text-center text-sm">
+              Der Zugang ist auf autorisierte Benutzer beschränkt. 
+              Konten werden nur per Einladung erstellt.
+            </AlertDescription>
+          </Alert>
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             ← Zurück zur Startseite
           </Link>
