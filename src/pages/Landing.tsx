@@ -142,10 +142,10 @@ export default function Landing() {
               <div className="text-4xl font-bold text-primary mb-4">Professionell</div>
               <div className="text-lg text-muted-foreground mb-4">Hausverwaltung leicht gemacht</div>
               <p className="text-sm text-muted-foreground mb-6">
-                Alle Funktionen inklusive. Sofort einsatzbereit.
+                Zugang nur per Einladung.
               </p>
               <Button asChild className="w-full">
-                <Link to="/login">Jetzt anmelden</Link>
+                <Link to="/login">Anmelden</Link>
               </Button>
             </div>
           </div>
@@ -156,14 +156,14 @@ export default function Landing() {
       <section className="bg-primary text-primary-foreground py-20">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Bereit für effizientere Hausverwaltung?
+            Zugang nur für autorisierte Benutzer
           </h2>
           <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Schließen Sie sich Hunderten von Hausverwaltern an, die ImmoflowMe bereits nutzen.
+            ImmoflowMe ist eine geschlossene Plattform. Der Zugang erfolgt ausschließlich per Einladung durch einen Administrator.
           </p>
           <Button size="lg" variant="secondary" asChild className="text-lg px-8">
             <Link to="/login">
-              Jetzt anmelden
+              Anmelden
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
