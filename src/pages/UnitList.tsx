@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Search, Filter, Home, Building2, Car, Loader2, Users, AlertTriangle, Clock, Scale } from 'lucide-react';
+import { Search, Filter, Home, Building2, Car, Loader2, Users, AlertTriangle, Clock, Scale, Upload } from 'lucide-react';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { useTenants } from '@/hooks/useTenants';
@@ -33,6 +33,8 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useState } from 'react';
 import { differenceInDays, format, addMonths } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useQueryClient } from '@tanstack/react-query';
+import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 
 const unitTypeLabels: Record<string, string> = {
   wohnung: 'Wohnung',
@@ -81,6 +83,9 @@ export default function UnitList() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [selectedPropertyForImport, setSelectedPropertyForImport] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: units, isLoading: isLoadingUnits } = useUnits();
   const { data: properties } = useProperties();
@@ -201,7 +206,46 @@ export default function UnitList() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex gap-2">
+          <Select 
+            value={selectedPropertyForImport || ''} 
+            onValueChange={(value) => {
+              setSelectedPropertyForImport(value);
+              setImportDialogOpen(true);
+            }}
+          >
+            <SelectTrigger className="w-auto">
+              <Upload className="h-4 w-4 mr-2" />
+              <span>CSV Import</span>
+            </SelectTrigger>
+            <SelectContent>
+              {properties?.map((property) => (
+                <SelectItem key={property.id} value={property.id}>
+                  {property.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {/* Unit Import Dialog */}
+      {selectedPropertyForImport && (
+        <UnitImportDialog
+          open={importDialogOpen}
+          onOpenChange={(open) => {
+            setImportDialogOpen(open);
+            if (!open) setSelectedPropertyForImport(null);
+          }}
+          propertyId={selectedPropertyForImport}
+          existingUnits={units?.filter(u => u.property_id === selectedPropertyForImport) || []}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['units'] });
+            setImportDialogOpen(false);
+            setSelectedPropertyForImport(null);
+          }}
+        />
+      )}
 
       {/* Contract Expiration Warning */}
       {expiringContracts > 0 && (
