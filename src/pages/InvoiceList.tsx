@@ -233,7 +233,7 @@ export default function InvoiceList() {
 
         const monthName = months[invoice.month - 1]?.label || '';
 
-        // Generate PDF
+        // Generate PDF with Vortrag data
         const pdfBlob = generateVorschreibungPdf({
           tenantName: `${tenant.first_name} ${tenant.last_name}`,
           propertyName: property.name,
@@ -253,6 +253,10 @@ export default function InvoiceList() {
           faelligAm: invoice.faellig_am,
           iban: organization?.iban || undefined,
           bic: organization?.bic || undefined,
+          vortragMiete: Number((invoice as any).vortrag_miete || 0),
+          vortragBk: Number((invoice as any).vortrag_bk || 0),
+          vortragHk: Number((invoice as any).vortrag_hk || 0),
+          vortragSonstige: Number((invoice as any).vortrag_sonstige || 0),
         });
 
         // Upload to tenant documents
@@ -475,6 +479,7 @@ export default function InvoiceList() {
                   <TableHead className="text-right">Grundmiete</TableHead>
                   <TableHead className="text-right">BK</TableHead>
                   <TableHead className="text-right">Heizung</TableHead>
+                  <TableHead className="text-right">Vortrag</TableHead>
                   <TableHead className="text-right">Gesamt</TableHead>
                   <TableHead>Fällig am</TableHead>
                   <TableHead>Status</TableHead>
@@ -490,6 +495,13 @@ export default function InvoiceList() {
                   const mahnstufe = (invoice as any).mahnstufe || 0;
                   const nextAction = getNextDunningAction(mahnstufe);
                   const isOpenOrOverdue = invoice.status === 'offen' || invoice.status === 'ueberfaellig';
+                  
+                  // Calculate Vortrag
+                  const vortragMiete = (invoice as any).vortrag_miete || 0;
+                  const vortragBk = (invoice as any).vortrag_bk || 0;
+                  const vortragHk = (invoice as any).vortrag_hk || 0;
+                  const vortragSonstige = (invoice as any).vortrag_sonstige || 0;
+                  const vortragGesamt = vortragMiete + vortragBk + vortragHk + vortragSonstige;
 
                   return (
                     <TableRow key={invoice.id}>
@@ -515,6 +527,29 @@ export default function InvoiceList() {
                       </TableCell>
                       <TableCell className="text-right">
                         € {Number(invoice.heizungskosten).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {vortragGesamt !== 0 ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <span className={vortragGesamt > 0 ? 'text-destructive' : 'text-green-600'}>
+                                  € {vortragGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="text-xs space-y-1">
+                                  {vortragMiete !== 0 && <p>Miete: € {vortragMiete.toFixed(2)}</p>}
+                                  {vortragBk !== 0 && <p>BK: € {vortragBk.toFixed(2)}</p>}
+                                  {vortragHk !== 0 && <p>HK: € {vortragHk.toFixed(2)}</p>}
+                                  {vortragSonstige !== 0 && <p>Sonstige: € {vortragSonstige.toFixed(2)}</p>}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         € {Number(invoice.gesamtbetrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
