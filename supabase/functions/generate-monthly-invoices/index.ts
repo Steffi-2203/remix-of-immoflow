@@ -26,6 +26,13 @@ interface GenerateInvoicesRequest {
   month?: number;
 }
 
+interface CarryForward {
+  vortrag_miete: number;
+  vortrag_bk: number;
+  vortrag_hk: number;
+  vortrag_sonstige: number;
+}
+
 // USt-Sätze basierend auf Einheitstyp (Österreich):
 // Wohnung: Miete 10%, BK 10%, Heizung 20%
 // Geschäft/Garage/Stellplatz/Lager: Miete 20%, BK 20%, Heizung 20%
@@ -60,6 +67,92 @@ const verifyAuth = async (req: Request, supabase: SupabaseClient) => {
 
   return { user, error: null };
 };
+
+/**
+ * Calculate carry-forward amounts for a tenant from the previous year
+ * Uses MRG-compliant allocation: BK → HK → Miete
+ */
+async function calculateTenantCarryForward(
+  supabase: SupabaseClient,
+  tenantId: string,
+  year: number
+): Promise<CarryForward> {
+  const previousYear = year - 1;
+  
+  console.log(`Calculating carry-forward for tenant ${tenantId} from year ${previousYear}`);
+
+  // Get all invoices from the previous year
+  const { data: prevYearInvoices, error: invoicesError } = await supabase
+    .from('monthly_invoices')
+    .select('grundmiete, betriebskosten, heizungskosten, gesamtbetrag')
+    .eq('tenant_id', tenantId)
+    .eq('year', previousYear);
+
+  if (invoicesError) {
+    console.error(`Error fetching previous year invoices:`, invoicesError.message);
+    return { vortrag_miete: 0, vortrag_bk: 0, vortrag_hk: 0, vortrag_sonstige: 0 };
+  }
+
+  // Get all payments from the previous year
+  const { data: prevYearPayments, error: paymentsError } = await supabase
+    .from('payments')
+    .select('betrag, buchungs_datum')
+    .eq('tenant_id', tenantId)
+    .gte('buchungs_datum', `${previousYear}-01-01`)
+    .lte('buchungs_datum', `${previousYear}-12-31`);
+
+  if (paymentsError) {
+    console.error(`Error fetching previous year payments:`, paymentsError.message);
+    return { vortrag_miete: 0, vortrag_bk: 0, vortrag_hk: 0, vortrag_sonstige: 0 };
+  }
+
+  // Calculate SOLL (expected) amounts
+  const sollMiete = prevYearInvoices?.reduce((sum: number, inv: any) => sum + Number(inv.grundmiete || 0), 0) || 0;
+  const sollBk = prevYearInvoices?.reduce((sum: number, inv: any) => sum + Number(inv.betriebskosten || 0), 0) || 0;
+  const sollHk = prevYearInvoices?.reduce((sum: number, inv: any) => sum + Number(inv.heizungskosten || 0), 0) || 0;
+  const sollGesamt = sollMiete + sollBk + sollHk;
+
+  // Calculate IST (actual) total payments
+  const istGesamt = prevYearPayments?.reduce((sum: number, p: any) => sum + Number(p.betrag || 0), 0) || 0;
+
+  // Calculate difference
+  const differenz = sollGesamt - istGesamt;
+
+  console.log(`Tenant ${tenantId}: SOLL=${sollGesamt.toFixed(2)}, IST=${istGesamt.toFixed(2)}, Differenz=${differenz.toFixed(2)}`);
+
+  // If no difference or overpayment, no carry-forward needed
+  if (differenz <= 0) {
+    // Overpayment becomes negative carry-forward (credit)
+    if (differenz < 0) {
+      return { vortrag_miete: differenz, vortrag_bk: 0, vortrag_hk: 0, vortrag_sonstige: 0 };
+    }
+    return { vortrag_miete: 0, vortrag_bk: 0, vortrag_hk: 0, vortrag_sonstige: 0 };
+  }
+
+  // MRG-compliant allocation: BK → HK → Miete
+  let remaining = istGesamt;
+  
+  const paidBk = Math.min(remaining, sollBk);
+  remaining -= paidBk;
+  
+  const paidHk = Math.min(remaining, sollHk);
+  remaining -= paidHk;
+  
+  const paidMiete = Math.min(remaining, sollMiete);
+
+  const vortragBk = Math.max(0, sollBk - paidBk);
+  const vortragHk = Math.max(0, sollHk - paidHk);
+  const vortragMiete = Math.max(0, sollMiete - paidMiete);
+
+  console.log(`Tenant ${tenantId} carry-forward: Miete=${vortragMiete.toFixed(2)}, BK=${vortragBk.toFixed(2)}, HK=${vortragHk.toFixed(2)}`);
+
+  return {
+    vortrag_miete: Math.round(vortragMiete * 100) / 100,
+    vortrag_bk: Math.round(vortragBk * 100) / 100,
+    vortrag_hk: Math.round(vortragHk * 100) / 100,
+    vortrag_sonstige: 0,
+  };
+}
 
 serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
@@ -104,6 +197,12 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     console.log(`Generating invoices for ${month}/${year}`);
+
+    // Check if this is January - we need to calculate carry-forwards
+    const isJanuary = month === 1;
+    if (isJanuary) {
+      console.log(`January detected - will calculate carry-forwards from ${year - 1}`);
+    }
 
     // Get user's managed property IDs
     const { data: managedProperties, error: propError } = await supabase
@@ -225,6 +324,16 @@ serve(async (req: Request): Promise<Response> => {
     const dueDate = new Date(year, month - 1, 5);
     const dueDateStr = dueDate.toISOString().split('T')[0];
 
+    // Calculate carry-forwards for January invoices
+    const carryForwardMap = new Map<string, CarryForward>();
+    if (isJanuary) {
+      console.log(`Calculating carry-forwards for ${tenantsToInvoice.length} tenants...`);
+      for (const tenant of tenantsToInvoice) {
+        const carryForward = await calculateTenantCarryForward(supabase, tenant.id, year);
+        carryForwardMap.set(tenant.id, carryForward);
+      }
+    }
+
     // Create invoices for all active tenants
     const invoices = tenantsToInvoice.map((tenant: Tenant) => {
       const unitType = unitTypeMap.get(tenant.unit_id) || 'wohnung';
@@ -239,10 +348,21 @@ serve(async (req: Request): Promise<Response> => {
       const ustBk = calculateVatFromGross(betriebskosten, vatRates.ust_satz_bk);
       const ustHeizung = calculateVatFromGross(heizungskosten, vatRates.ust_satz_heizung);
       const ust = ustMiete + ustBk + ustHeizung;
-      
-      const gesamtbetrag = grundmiete + betriebskosten + heizungskosten;
 
-      console.log(`Creating invoice for tenant ${tenant.id}: unit type=${unitType}, ust_satz_miete=${vatRates.ust_satz_miete}%, ust_satz_bk=${vatRates.ust_satz_bk}%, ust=${ust.toFixed(2)}`);
+      // Get carry-forward amounts (only for January)
+      const carryForward = carryForwardMap.get(tenant.id) || {
+        vortrag_miete: 0,
+        vortrag_bk: 0,
+        vortrag_hk: 0,
+        vortrag_sonstige: 0,
+      };
+      const vortragGesamt = carryForward.vortrag_miete + carryForward.vortrag_bk + 
+                           carryForward.vortrag_hk + carryForward.vortrag_sonstige;
+      
+      // Gesamtbetrag includes carry-forward
+      const gesamtbetrag = grundmiete + betriebskosten + heizungskosten + vortragGesamt;
+
+      console.log(`Creating invoice for tenant ${tenant.id}: unit type=${unitType}, ust_satz_miete=${vatRates.ust_satz_miete}%, ust=${ust.toFixed(2)}, vortrag=${vortragGesamt.toFixed(2)}`);
 
       return {
         tenant_id: tenant.id,
@@ -259,6 +379,11 @@ serve(async (req: Request): Promise<Response> => {
         ust_satz_heizung: vatRates.ust_satz_heizung,
         status: "offen",
         faellig_am: dueDateStr,
+        // Vortrag fields
+        vortrag_miete: carryForward.vortrag_miete,
+        vortrag_bk: carryForward.vortrag_bk,
+        vortrag_hk: carryForward.vortrag_hk,
+        vortrag_sonstige: carryForward.vortrag_sonstige,
       };
     });
 
@@ -280,6 +405,7 @@ serve(async (req: Request): Promise<Response> => {
         message: `Successfully created ${createdInvoices?.length || 0} invoices for ${month}/${year}`,
         created: createdInvoices?.length || 0,
         skipped: existingTenantIds.size,
+        carryForwardsCalculated: isJanuary ? carryForwardMap.size : 0,
         invoices: createdInvoices
       }),
       { 

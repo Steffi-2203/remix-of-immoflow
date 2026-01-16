@@ -20,6 +20,11 @@ interface VorschreibungParams {
   faelligAm: string;
   iban?: string;
   bic?: string;
+  // Vortrag fields
+  vortragMiete?: number;
+  vortragBk?: number;
+  vortragHk?: number;
+  vortragSonstige?: number;
 }
 
 const monthNames = [
@@ -60,6 +65,10 @@ export function generateVorschreibungPdf(params: VorschreibungParams): Blob {
     faelligAm,
     iban,
     bic,
+    vortragMiete = 0,
+    vortragBk = 0,
+    vortragHk = 0,
+    vortragSonstige = 0,
   } = params;
 
   const doc = new jsPDF();
@@ -68,6 +77,8 @@ export function generateVorschreibungPdf(params: VorschreibungParams): Blob {
   let yPos = 20;
 
   const monthName = monthNames[month - 1];
+  const vortragGesamt = vortragMiete + vortragBk + vortragHk + vortragSonstige;
+  const hasVortrag = vortragGesamt !== 0;
 
   // Calculate USt amounts for each position
   const ustMiete = (grundmiete * ustSatzMiete) / 100;
@@ -78,6 +89,7 @@ export function generateVorschreibungPdf(params: VorschreibungParams): Blob {
   const grundmieteBrutto = grundmiete + ustMiete;
   const betriebskostenBrutto = betriebskosten + ustBk;
   const heizkostenBrutto = heizungskosten + ustHeizung;
+  const laufendeKosten = grundmieteBrutto + betriebskostenBrutto + heizkostenBrutto;
 
   // Header - Sender
   doc.setFontSize(10);
@@ -127,30 +139,100 @@ export function generateVorschreibungPdf(params: VorschreibungParams): Blob {
   doc.text(splitIntro, margin, yPos);
   yPos += splitIntro.length * 5 + 10;
 
+  // Build table body
+  const tableBody: any[][] = [
+    [
+      'Grundmiete',
+      formatCurrency(grundmiete),
+      ustSatzMiete > 0 ? `${ustSatzMiete}% (${formatCurrency(ustMiete)})` : '-',
+      formatCurrency(grundmieteBrutto),
+    ],
+    [
+      'Betriebskostenvorschuss',
+      formatCurrency(betriebskosten),
+      ustSatzBk > 0 ? `${ustSatzBk}% (${formatCurrency(ustBk)})` : '-',
+      formatCurrency(betriebskostenBrutto),
+    ],
+    [
+      'Heizungskostenvorschuss',
+      formatCurrency(heizungskosten),
+      ustSatzHeizung > 0 ? `${ustSatzHeizung}% (${formatCurrency(ustHeizung)})` : '-',
+      formatCurrency(heizkostenBrutto),
+    ],
+  ];
+
+  // Add Vortrag rows if applicable
+  if (hasVortrag) {
+    // Add subtotal row for running costs
+    tableBody.push([
+      { content: 'Zwischensumme laufende Kosten', styles: { fontStyle: 'bold' } },
+      '',
+      '',
+      { content: formatCurrency(laufendeKosten), styles: { fontStyle: 'bold' } },
+    ]);
+
+    // Add Vortrag header
+    tableBody.push([
+      { 
+        content: `Vortrag aus ${year - 1}`, 
+        colSpan: 4, 
+        styles: { 
+          fontStyle: 'bold', 
+          fillColor: [255, 243, 205],
+          textColor: [120, 80, 0]
+        } 
+      },
+    ]);
+
+    if (vortragMiete !== 0) {
+      tableBody.push([
+        '  Offene Miete',
+        '',
+        '',
+        formatCurrency(vortragMiete),
+      ]);
+    }
+
+    if (vortragBk !== 0) {
+      tableBody.push([
+        '  Offene Betriebskosten',
+        '',
+        '',
+        formatCurrency(vortragBk),
+      ]);
+    }
+
+    if (vortragHk !== 0) {
+      tableBody.push([
+        '  Offene Heizungskosten',
+        '',
+        '',
+        formatCurrency(vortragHk),
+      ]);
+    }
+
+    if (vortragSonstige !== 0) {
+      tableBody.push([
+        '  Sonstige (BK-Abrechnung o.ä.)',
+        '',
+        '',
+        formatCurrency(vortragSonstige),
+      ]);
+    }
+
+    tableBody.push([
+      { content: 'Vortrag gesamt', styles: { fontStyle: 'bold' } },
+      '',
+      '',
+      { content: formatCurrency(vortragGesamt), styles: { fontStyle: 'bold' } },
+    ]);
+  }
+
   // Invoice table
   autoTable(doc, {
     startY: yPos,
     head: [['Position', 'Netto', 'USt.', 'Brutto']],
-    body: [
-      [
-        'Grundmiete',
-        formatCurrency(grundmiete),
-        ustSatzMiete > 0 ? `${ustSatzMiete}% (${formatCurrency(ustMiete)})` : '-',
-        formatCurrency(grundmieteBrutto),
-      ],
-      [
-        'Betriebskostenvorschuss',
-        formatCurrency(betriebskosten),
-        ustSatzBk > 0 ? `${ustSatzBk}% (${formatCurrency(ustBk)})` : '-',
-        formatCurrency(betriebskostenBrutto),
-      ],
-      [
-        'Heizungskostenvorschuss',
-        formatCurrency(heizungskosten),
-        ustSatzHeizung > 0 ? `${ustSatzHeizung}% (${formatCurrency(ustHeizung)})` : '-',
-        formatCurrency(heizkostenBrutto),
-      ],
-    ],
+    body: tableBody,
     foot: [[
       { content: 'Gesamtbetrag', styles: { fontStyle: 'bold' } },
       { content: formatCurrency(grundmiete + betriebskosten + heizungskosten), styles: { fontStyle: 'bold' } },

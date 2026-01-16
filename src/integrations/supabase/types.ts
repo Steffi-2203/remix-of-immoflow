@@ -819,6 +819,11 @@ export type Database = {
           ust_satz_bk: number
           ust_satz_heizung: number
           ust_satz_miete: number
+          vortrag_bk: number
+          vortrag_gesamt: number | null
+          vortrag_hk: number
+          vortrag_miete: number
+          vortrag_sonstige: number
           year: number
           zahlungserinnerung_am: string | null
         }
@@ -841,6 +846,11 @@ export type Database = {
           ust_satz_bk?: number
           ust_satz_heizung?: number
           ust_satz_miete?: number
+          vortrag_bk?: number
+          vortrag_gesamt?: number | null
+          vortrag_hk?: number
+          vortrag_miete?: number
+          vortrag_sonstige?: number
           year: number
           zahlungserinnerung_am?: string | null
         }
@@ -863,6 +873,11 @@ export type Database = {
           ust_satz_bk?: number
           ust_satz_heizung?: number
           ust_satz_miete?: number
+          vortrag_bk?: number
+          vortrag_gesamt?: number | null
+          vortrag_hk?: number
+          vortrag_miete?: number
+          vortrag_sonstige?: number
           year?: number
           zahlungserinnerung_am?: string | null
         }
