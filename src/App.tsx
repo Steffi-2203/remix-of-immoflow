@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CookieConsent } from "@/components/CookieConsent";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Register from "./pages/Register";
 import SimpleDashboard from "./pages/SimpleDashboard";
 import PropertyList from "./pages/PropertyList";
@@ -56,6 +57,7 @@ const App = () => (
             {/* Public routes */}
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {/* Register route only accessible via invite token */}
             <Route path="/register" element={<Register />} />
             <Route path="/impressum" element={<Impressum />} />
