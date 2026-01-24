@@ -1,83 +1,82 @@
-import { useState, useEffect, useCallback } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+interface ReplitUser {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+async function fetchUser(): Promise<ReplitUser | null> {
+  const response = await fetch("/api/auth/user", {
+    credentials: "include",
+  });
+
+  if (response.status === 401) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function logoutFn(): Promise<void> {
+  window.location.href = "/api/logout";
+}
 
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  
+  const { data: user, isLoading: loading } = useQuery<ReplitUser | null>({
+    queryKey: ["/api/auth/user"],
+    queryFn: fetchUser,
+    retry: false,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  useEffect(() => {
-    if (!supabase || !isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
+  const logoutMutation = useMutation({
+    mutationFn: logoutFn,
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/auth/user"], null);
+    },
+  });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+  const signIn = async (_email: string, _password: string) => {
+    window.location.href = "/api/login";
+    return { data: null, error: null };
+  };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+  const signUp = async (_email: string, _password: string, _fullName?: string, _companyName?: string, _inviteToken?: string) => {
+    window.location.href = "/api/login";
+    return { data: null, error: null };
+  };
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) {
-      return { data: null, error: new Error('Supabase not configured') };
-    }
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
-  }, []);
-
-  const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string, inviteToken?: string) => {
-    if (!supabase) {
-      return { data: null, error: new Error('Supabase not configured') };
-    }
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          company_name: companyName,
-          invite_token: inviteToken,
-        },
-      },
-    });
-    return { data, error };
-  }, []);
-
-  const signOut = useCallback(async () => {
-    if (!supabase) {
-      return { error: new Error('Supabase not configured') };
-    }
-    const { error } = await supabase.auth.signOut();
-    return { error };
-  }, []);
+  const signOut = async () => {
+    logoutMutation.mutate();
+    return { error: null };
+  };
 
   return {
-    user,
-    session,
+    user: user ? {
+      id: user.id,
+      email: user.email,
+      user_metadata: {
+        full_name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName || user.lastName || user.email,
+        avatar_url: user.profileImageUrl,
+      }
+    } : null,
+    session: user ? { user } : null,
     loading,
     signIn,
     signUp,
     signOut,
-    isAuthenticated: !!session,
-    isSupabaseConfigured,
+    isAuthenticated: !!user,
+    isSupabaseConfigured: true,
   };
 };
