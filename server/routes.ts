@@ -52,6 +52,219 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/properties", isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user?.claims?.email;
+      const profile = await storage.getProfileByEmail(userEmail);
+      
+      if (!profile) {
+        return res.status(403).json({ error: "Profile not found" });
+      }
+      
+      const propertyId = req.body.id || crypto.randomUUID();
+      const property = await storage.createProperty({
+        id: propertyId,
+        ...req.body,
+        organizationId: profile.organizationId,
+      });
+      
+      await storage.createPropertyManager({
+        userId: profile.id,
+        propertyId: property.id,
+      });
+      
+      res.json(property);
+    } catch (error) {
+      console.error("Create property error:", error);
+      res.status(500).json({ error: "Failed to create property" });
+    }
+  });
+
+  app.patch("/api/properties/:id", isAuthenticated, async (req, res) => {
+    try {
+      const property = await storage.updateProperty(req.params.id, req.body);
+      if (!property) {
+        return res.status(404).json({ error: "Property not found" });
+      }
+      res.json(property);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update property" });
+    }
+  });
+
+  app.delete("/api/properties/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteProperty(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete property" });
+    }
+  });
+
+  app.post("/api/property-managers", isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user?.claims?.email;
+      const profile = await storage.getProfileByEmail(userEmail);
+      
+      if (!profile) {
+        return res.status(403).json({ error: "Profile not found" });
+      }
+      
+      const result = await storage.createPropertyManager({
+        userId: profile.id,
+        propertyId: req.body.propertyId,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to assign property" });
+    }
+  });
+
+  app.delete("/api/property-managers/:propertyId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user?.claims?.email;
+      const profile = await storage.getProfileByEmail(userEmail);
+      
+      if (!profile) {
+        return res.status(403).json({ error: "Profile not found" });
+      }
+      
+      await storage.deletePropertyManager(profile.id, req.params.propertyId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unassign property" });
+    }
+  });
+
+  app.get("/api/payments", async (_req, res) => {
+    try {
+      const allPayments = await storage.getPaymentsByTenant('');
+      res.json(allPayments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/payments", isAuthenticated, async (req, res) => {
+    try {
+      const payment = await storage.createPayment(req.body);
+      res.json(payment);
+    } catch (error) {
+      console.error("Create payment error:", error);
+      res.status(500).json({ error: "Failed to create payment" });
+    }
+  });
+
+  app.delete("/api/payments/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deletePayment(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete payment" });
+    }
+  });
+
+  app.get("/api/payments/:id", async (req, res) => {
+    try {
+      const payment = await storage.getPayment(req.params.id);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payment" });
+    }
+  });
+
+  app.get("/api/transactions", async (_req, res) => {
+    try {
+      const transactions = await storage.getTransactions();
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  app.post("/api/transactions", isAuthenticated, async (req, res) => {
+    try {
+      const transaction = await storage.createTransaction(req.body);
+      res.json(transaction);
+    } catch (error) {
+      console.error("Create transaction error:", error);
+      res.status(500).json({ error: "Failed to create transaction" });
+    }
+  });
+
+  app.get("/api/transactions/:id", async (req, res) => {
+    try {
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      res.json(transaction);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch transaction" });
+    }
+  });
+
+  app.delete("/api/transactions/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteTransactionSplits(req.params.id);
+      await storage.deleteExpensesByTransactionId(req.params.id);
+      await storage.deleteTransaction(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete transaction" });
+    }
+  });
+
+  app.post("/api/expenses", isAuthenticated, async (req, res) => {
+    try {
+      const expense = await storage.createExpense(req.body);
+      res.json(expense);
+    } catch (error) {
+      console.error("Create expense error:", error);
+      res.status(500).json({ error: "Failed to create expense" });
+    }
+  });
+
+  app.get("/api/account-categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user?.claims?.email;
+      const profile = await storage.getProfileByEmail(userEmail);
+      
+      if (!profile?.organizationId) {
+        return res.json([]);
+      }
+      
+      const categories = await storage.getAccountCategories(profile.organizationId);
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch account categories" });
+    }
+  });
+
+  app.get("/api/units", async (_req, res) => {
+    try {
+      const units = await storage.getUnits();
+      res.json(units);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch units" });
+    }
+  });
+
+  app.get("/api/units/:id", async (req, res) => {
+    try {
+      const unit = await storage.getUnit(req.params.id);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      res.json(unit);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unit" });
+    }
+  });
+
   app.get("/api/units/:unitId/tenants", async (req, res) => {
     try {
       const tenants = await storage.getTenantsByUnit(req.params.unitId);

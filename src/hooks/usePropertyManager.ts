@@ -1,28 +1,21 @@
 import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { apiRequest } from '@/lib/queryClient';
 
 export const usePropertyManager = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Assign a property to the current user
   const assignProperty = useMutation({
     mutationFn: async (propertyId: string) => {
       if (!user) throw new Error('Not authenticated');
       
-      const { data, error } = await supabase
-        .from('property_managers')
-        .insert({
-          user_id: user.id,
-          property_id: propertyId,
-        })
-        .select()
-        .single();
+      const response = await apiRequest('POST', '/api/property-managers', {
+        propertyId,
+      });
 
-      if (error) throw error;
-      return data;
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -30,18 +23,11 @@ export const usePropertyManager = () => {
     },
   });
 
-  // Unassign a property from the current user
   const unassignProperty = useMutation({
     mutationFn: async (propertyId: string) => {
       if (!user) throw new Error('Not authenticated');
       
-      const { error } = await supabase
-        .from('property_managers')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('property_id', propertyId);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/property-managers/${propertyId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -49,7 +35,6 @@ export const usePropertyManager = () => {
     },
   });
 
-  // Helper to create property and auto-assign to current user
   const createPropertyWithOwnership = useCallback(async (propertyData: {
     name: string;
     address: string;
@@ -62,31 +47,12 @@ export const usePropertyManager = () => {
 
     const propertyId = crypto.randomUUID();
 
-    const { error: propertyError } = await supabase
-      .from('properties')
-      .insert({ id: propertyId, ...propertyData });
-
-    if (propertyError) throw propertyError;
-
-    const { error: assignError } = await supabase.from('property_managers').insert({
-      user_id: user.id,
-      property_id: propertyId,
+    const response = await apiRequest('POST', '/api/properties', {
+      id: propertyId,
+      ...propertyData,
     });
 
-    if (assignError) {
-      // Best-effort cleanup (may fail depending on RLS)
-      await supabase.from('properties').delete().eq('id', propertyId);
-      throw assignError;
-    }
-
-    const { data: property, error: fetchError } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('id', propertyId)
-      .single();
-
-    if (fetchError) throw fetchError;
-    return property;
+    return response.json();
   }, [user]);
 
   return {

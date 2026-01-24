@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from './useAuth';
+import { apiRequest } from '@/lib/queryClient';
 
 export interface PropertyInsert {
   name: string;
@@ -25,13 +25,9 @@ export function useProperties() {
   return useQuery({
     queryKey: ['properties'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data;
+      const response = await fetch('/api/properties', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch properties');
+      return response.json();
     },
   });
 }
@@ -41,14 +37,9 @@ export function useProperty(id: string | undefined) {
     queryKey: ['property', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data;
+      const response = await fetch(`/api/properties/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch property');
+      return response.json();
     },
     enabled: !!id,
   });
@@ -62,34 +53,14 @@ export function useCreateProperty() {
     mutationFn: async (property: PropertyInsert) => {
       if (!user) throw new Error('Not authenticated');
 
-      // Create deterministically so we can assign ownership even if INSERT can't RETURN the row
       const propertyId = crypto.randomUUID();
 
-      const { error: createError } = await supabase
-        .from('properties')
-        .insert({ id: propertyId, ...property });
-
-      if (createError) throw createError;
-
-      const { error: assignError } = await supabase.from('property_managers').insert({
-        user_id: user.id,
-        property_id: propertyId,
+      const response = await apiRequest('POST', '/api/properties', {
+        id: propertyId,
+        ...property,
       });
 
-      if (assignError) {
-        // Best-effort cleanup (may fail depending on RLS)
-        await supabase.from('properties').delete().eq('id', propertyId);
-        throw assignError;
-      }
-
-      const { data, error: fetchError } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('id', propertyId)
-        .single();
-
-      if (fetchError) throw fetchError;
-      return data;
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -110,15 +81,8 @@ export function useUpdateProperty() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: PropertyInsert & { id: string }) => {
-      const { data, error } = await supabase
-        .from('properties')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/properties/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
@@ -137,12 +101,7 @@ export function useDeleteProperty() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('properties')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/properties/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['properties'] });
