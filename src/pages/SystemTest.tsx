@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CheckCircle2, XCircle, Loader2, Play } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 
 interface TestResult {
   test: string;
@@ -21,203 +21,153 @@ export default function SystemTest() {
     setTestResults([]);
     const results: TestResult[] = [];
 
-    // Test 1: Supabase Connection
     try {
-      const { data, error } = await supabase.from('organizations').select('id', { count: 'exact', head: true });
+      const response = await fetch('/api/health', { credentials: 'include' });
+      const data = await response.json();
       results.push({
-        test: 'Supabase Connection',
-        status: error ? 'FAIL' : 'PASS',
-        message: error ? error.message : 'Verbindung erfolgreich'
+        test: 'API-Verbindung',
+        status: response.ok ? 'PASS' : 'FAIL',
+        message: response.ok ? 'Backend erreichbar' : 'Backend nicht erreichbar'
       });
     } catch (e: any) {
-      results.push({ test: 'Supabase Connection', status: 'FAIL', message: e.message });
+      results.push({ test: 'API-Verbindung', status: 'FAIL', message: e.message });
     }
 
-    // Test 2: User Authentication
-    let currentUser: any = null;
+    let profile: any = null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      currentUser = user;
-      results.push({
-        test: 'User Authentication',
-        status: user ? 'PASS' : 'FAIL',
-        message: user ? `User: ${user.email}` : 'Nicht eingeloggt'
-      });
-    } catch (e: any) {
-      results.push({ test: 'User Authentication', status: 'FAIL', message: e.message });
-    }
-
-    // Test 3: User Profile & Organization
-    let organizationId: string | null = null;
-    if (currentUser) {
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('organization_id')
-          .eq('id', currentUser.id)
-          .single();
-        
-        if (profileError) {
-          results.push({
-            test: 'User Profile',
-            status: 'FAIL',
-            message: profileError.message
-          });
-        } else {
-          organizationId = profile?.organization_id;
-          results.push({
-            test: 'User Profile',
-            status: profile?.organization_id ? 'PASS' : 'FAIL',
-            message: profile?.organization_id ? 'Organization ID gefunden' : 'Keine Organization'
-          });
-        }
-
-        if (organizationId) {
-          const { data: org, error: orgError } = await supabase
-            .from('organizations')
-            .select('*')
-            .eq('id', organizationId)
-            .single();
-          
-          results.push({
-            test: 'Organization Data',
-            status: org ? 'PASS' : 'FAIL',
-            message: org ? `Tier: ${org.subscription_tier}, Status: ${org.subscription_status}` : (orgError?.message || 'Keine Daten')
-          });
-        }
-      } catch (e: any) {
-        results.push({ test: 'Organization Check', status: 'FAIL', message: e.message });
-      }
-    }
-
-    // Test 4: Properties Query
-    try {
-      const { data: properties, error, count } = await supabase
-        .from('properties')
-        .select('id', { count: 'exact', head: true });
-      
-      results.push({
-        test: 'Properties Query',
-        status: error ? 'FAIL' : 'PASS',
-        message: error ? error.message : `${count || 0} Liegenschaften`
-      });
-    } catch (e: any) {
-      results.push({ test: 'Properties Query', status: 'FAIL', message: e.message });
-    }
-
-    // Test 5: Units Query
-    try {
-      const { data: units, error, count } = await supabase
-        .from('units')
-        .select('id', { count: 'exact', head: true });
-      
-      results.push({
-        test: 'Units Query',
-        status: error ? 'FAIL' : 'PASS',
-        message: error ? error.message : `${count || 0} Einheiten`
-      });
-    } catch (e: any) {
-      results.push({ test: 'Units Query', status: 'FAIL', message: e.message });
-    }
-
-    // Test 6: Tenants Query
-    try {
-      const { data: tenants, error, count } = await supabase
-        .from('tenants')
-        .select('id', { count: 'exact', head: true });
-      
-      results.push({
-        test: 'Tenants Query',
-        status: error ? 'FAIL' : 'PASS',
-        message: error ? error.message : `${count || 0} Mieter`
-      });
-    } catch (e: any) {
-      results.push({ test: 'Tenants Query', status: 'FAIL', message: e.message });
-    }
-
-    // Test 7: Stripe Configuration
-    const stripeConfigured = !!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-    results.push({
-      test: 'Stripe Configuration',
-      status: stripeConfigured ? 'PASS' : 'FAIL',
-      message: stripeConfigured ? 'Stripe Key vorhanden' : 'Stripe Key fehlt'
-    });
-
-    // Test 8: RLS Insert/Delete Permission
-    try {
-      // Try to create a test property
-      const testProperty = {
-        name: '[TEST] Automatischer Systemtest',
-        address: 'Test Straße 1',
-        city: 'Wien',
-        postal_code: '1010',
-      };
-
-      const { data: created, error: insertError } = await supabase
-        .from('properties')
-        .insert(testProperty)
-        .select()
-        .single();
-
-      if (created) {
-        // Create property_manager entry for the user
-        if (currentUser) {
-          await supabase
-            .from('property_managers')
-            .insert({ property_id: created.id, user_id: currentUser.id });
-        }
-        
-        // Delete test data
-        await supabase.from('property_managers').delete().eq('property_id', created.id);
-        await supabase.from('properties').delete().eq('id', created.id);
-        
+      const response = await fetch('/api/profile', { credentials: 'include' });
+      if (response.ok) {
+        profile = await response.json();
         results.push({
-          test: 'RLS Insert Permission',
+          test: 'Benutzer-Authentifizierung',
           status: 'PASS',
-          message: 'Insert & Delete erfolgreich'
+          message: `Benutzer: ${profile.email}`
         });
       } else {
         results.push({
-          test: 'RLS Insert Permission',
+          test: 'Benutzer-Authentifizierung',
           status: 'FAIL',
-          message: insertError?.message || 'Insert fehlgeschlagen'
+          message: 'Nicht eingeloggt'
         });
       }
     } catch (e: any) {
-      results.push({ test: 'RLS Insert Permission', status: 'FAIL', message: e.message });
+      results.push({ test: 'Benutzer-Authentifizierung', status: 'FAIL', message: e.message });
     }
 
-    // Test 9: Edge Functions
+    if (profile?.organizationId) {
+      try {
+        const response = await fetch('/api/profile/organization', { credentials: 'include' });
+        if (response.ok) {
+          const org = await response.json();
+          results.push({
+            test: 'Organisation',
+            status: org ? 'PASS' : 'FAIL',
+            message: org ? `${org.name} (${org.subscriptionTier || 'standard'})` : 'Keine Organisation'
+          });
+        } else {
+          results.push({
+            test: 'Organisation',
+            status: 'FAIL',
+            message: 'Organisation nicht gefunden'
+          });
+        }
+      } catch (e: any) {
+        results.push({ test: 'Organisation', status: 'FAIL', message: e.message });
+      }
+    }
+
     try {
-      const { data, error } = await supabase.functions.invoke('check-trial-expiration', {
-        body: { dryRun: true }
+      const response = await fetch('/api/properties', { credentials: 'include' });
+      const properties = await response.json();
+      results.push({
+        test: 'Liegenschaften-Abfrage',
+        status: response.ok ? 'PASS' : 'FAIL',
+        message: response.ok ? `${properties.length} Liegenschaften` : 'Abfrage fehlgeschlagen'
+      });
+    } catch (e: any) {
+      results.push({ test: 'Liegenschaften-Abfrage', status: 'FAIL', message: e.message });
+    }
+
+    try {
+      const response = await fetch('/api/units', { credentials: 'include' });
+      const units = await response.json();
+      results.push({
+        test: 'Einheiten-Abfrage',
+        status: response.ok ? 'PASS' : 'FAIL',
+        message: response.ok ? `${units.length} Einheiten` : 'Abfrage fehlgeschlagen'
+      });
+    } catch (e: any) {
+      results.push({ test: 'Einheiten-Abfrage', status: 'FAIL', message: e.message });
+    }
+
+    try {
+      const response = await fetch('/api/tenants', { credentials: 'include' });
+      const tenants = await response.json();
+      results.push({
+        test: 'Mieter-Abfrage',
+        status: response.ok ? 'PASS' : 'FAIL',
+        message: response.ok ? `${tenants.length} Mieter` : 'Abfrage fehlgeschlagen'
+      });
+    } catch (e: any) {
+      results.push({ test: 'Mieter-Abfrage', status: 'FAIL', message: e.message });
+    }
+
+    if (profile) {
+      try {
+        const testProperty = {
+          name: '[TEST] Automatischer Systemtest',
+          address: 'Test Straße 1',
+          city: 'Wien',
+          postal_code: '1010',
+        };
+
+        const createResponse = await apiRequest('POST', '/api/properties', testProperty);
+        const created = await createResponse.json();
+
+        if (created?.id) {
+          await apiRequest('DELETE', `/api/properties/${created.id}`);
+          
+          results.push({
+            test: 'Erstellen/Löschen-Berechtigung',
+            status: 'PASS',
+            message: 'Insert & Delete erfolgreich'
+          });
+        } else {
+          results.push({
+            test: 'Erstellen/Löschen-Berechtigung',
+            status: 'FAIL',
+            message: 'Insert fehlgeschlagen'
+          });
+        }
+      } catch (e: any) {
+        results.push({ test: 'Erstellen/Löschen-Berechtigung', status: 'FAIL', message: e.message });
+      }
+    }
+
+    try {
+      const response = await fetch('/api/functions/validate-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true }),
+        credentials: 'include'
       });
       
       results.push({
-        test: 'Edge Functions',
-        status: error ? 'FAIL' : 'PASS',
-        message: error ? error.message : 'Edge Function erreichbar'
+        test: 'API-Funktionen',
+        status: response.ok ? 'PASS' : 'FAIL',
+        message: response.ok ? 'API-Funktionen erreichbar' : 'API-Funktionen nicht erreichbar'
       });
     } catch (e: any) {
-      results.push({ test: 'Edge Functions', status: 'FAIL', message: e.message });
+      results.push({ test: 'API-Funktionen', status: 'FAIL', message: e.message });
     }
 
-    // Test 10: Admin Role Check
-    try {
-      const { data: adminRole, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', currentUser?.id || '')
-        .eq('role', 'admin')
-        .maybeSingle();
-      
+    if (profile?.roles) {
+      const isAdmin = profile.roles.includes('admin');
       results.push({
-        test: 'Admin Role',
-        status: adminRole ? 'PASS' : 'FAIL',
-        message: adminRole ? 'Admin-Rolle vorhanden' : 'Keine Admin-Rolle'
+        test: 'Admin-Rolle',
+        status: isAdmin ? 'PASS' : 'FAIL',
+        message: isAdmin ? 'Admin-Rolle vorhanden' : `Rollen: ${profile.roles.join(', ') || 'keine'}`
       });
-    } catch (e: any) {
-      results.push({ test: 'Admin Role', status: 'FAIL', message: e.message });
     }
 
     setTestResults(results);
@@ -231,12 +181,12 @@ export default function SystemTest() {
   return (
     <MainLayout title="System Test" subtitle="Admin-Bereich">
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold">System Test</h1>
             <p className="text-muted-foreground">Überprüfen Sie die Systemkonfiguration und Verbindungen</p>
           </div>
-          <Button onClick={runTests} disabled={isRunning} size="lg">
+          <Button onClick={runTests} disabled={isRunning} size="lg" data-testid="button-run-tests">
             {isRunning ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -266,7 +216,7 @@ export default function SystemTest() {
                   </h2>
                   <p className="text-muted-foreground">
                     {passedTests} / {testResults.length} Tests erfolgreich
-                    {failedTests > 0 && ` • ${failedTests} fehlgeschlagen`}
+                    {failedTests > 0 && ` - ${failedTests} fehlgeschlagen`}
                   </p>
                 </div>
               </div>
@@ -278,7 +228,7 @@ export default function SystemTest() {
           {testResults.map((result, idx) => (
             <Card key={idx} className={result.status === 'PASS' ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-red-500'}>
               <CardContent className="py-4">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-3">
                     {result.status === 'PASS' ? (
                       <CheckCircle2 className="h-5 w-5 text-green-600" />

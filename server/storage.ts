@@ -224,6 +224,112 @@ class DatabaseStorage implements IStorage {
     const result = await db.insert(schema.organizations).values(data).returning();
     return result[0];
   }
+
+  async createProperty(data: schema.InsertProperty): Promise<schema.Property> {
+    const result = await db.insert(schema.properties).values(data).returning();
+    return result[0];
+  }
+
+  async updateProperty(id: string, data: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
+    const result = await db.update(schema.properties)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.properties.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteProperty(id: string): Promise<void> {
+    await db.delete(schema.properties).where(eq(schema.properties.id, id));
+  }
+
+  async createPropertyManager(data: { userId: string; propertyId: string }): Promise<schema.PropertyManager> {
+    const result = await db.insert(schema.propertyManagers).values(data).returning();
+    return result[0];
+  }
+
+  async deletePropertyManager(userId: string, propertyId: string): Promise<void> {
+    await db.delete(schema.propertyManagers)
+      .where(and(
+        eq(schema.propertyManagers.userId, userId),
+        eq(schema.propertyManagers.propertyId, propertyId)
+      ));
+  }
+
+  async getPropertyManagersByUser(userId: string): Promise<schema.PropertyManager[]> {
+    return db.select().from(schema.propertyManagers)
+      .where(eq(schema.propertyManagers.userId, userId));
+  }
+
+  async createPayment(data: schema.InsertPayment): Promise<schema.Payment> {
+    const result = await db.insert(schema.payments).values(data).returning();
+    return result[0];
+  }
+
+  async deletePayment(id: string): Promise<void> {
+    await db.delete(schema.payments).where(eq(schema.payments.id, id));
+  }
+
+  async getPayment(id: string): Promise<schema.Payment | undefined> {
+    const result = await db.select().from(schema.payments)
+      .where(eq(schema.payments.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createTransaction(data: schema.InsertTransaction): Promise<schema.Transaction> {
+    const result = await db.insert(schema.transactions).values(data).returning();
+    return result[0];
+  }
+
+  async getTransaction(id: string): Promise<schema.Transaction | undefined> {
+    const result = await db.select().from(schema.transactions)
+      .where(eq(schema.transactions.id, id)).limit(1);
+    return result[0];
+  }
+
+  async deleteTransaction(id: string): Promise<void> {
+    await db.delete(schema.transactions).where(eq(schema.transactions.id, id));
+  }
+
+  async getTransactions(): Promise<schema.Transaction[]> {
+    return db.select().from(schema.transactions)
+      .orderBy(desc(schema.transactions.transactionDate));
+  }
+
+  async createExpense(data: schema.InsertExpense): Promise<schema.Expense> {
+    const result = await db.insert(schema.expenses).values(data).returning();
+    return result[0];
+  }
+
+  async deleteExpense(id: string): Promise<void> {
+    await db.delete(schema.expenses).where(eq(schema.expenses.id, id));
+  }
+
+  async deleteExpensesByTransactionId(transactionId: string): Promise<void> {
+    await db.delete(schema.expenses)
+      .where(eq(schema.expenses.transactionId, transactionId));
+  }
+
+  async deleteTransactionSplits(transactionId: string): Promise<void> {
+    await db.delete(schema.transactionSplits)
+      .where(eq(schema.transactionSplits.transactionId, transactionId));
+  }
+
+  async getAccountCategories(organizationId: string): Promise<schema.AccountCategory[]> {
+    return db.select().from(schema.accountCategories)
+      .where(eq(schema.accountCategories.organizationId, organizationId))
+      .orderBy(asc(schema.accountCategories.name));
+  }
+
+  async getUnit(id: string): Promise<schema.Unit | undefined> {
+    const result = await db.select().from(schema.units)
+      .where(eq(schema.units.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUnits(): Promise<schema.Unit[]> {
+    return db.select().from(schema.units)
+      .orderBy(asc(schema.units.topNummer));
+  }
 }
 
 export const storage = new DatabaseStorage();
