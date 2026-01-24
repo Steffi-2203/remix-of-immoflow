@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerFunctionRoutes } from "./functions";
 import crypto from "crypto";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -418,6 +419,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to update roles" });
     }
   });
+
+  registerFunctionRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
