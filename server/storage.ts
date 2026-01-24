@@ -1,0 +1,141 @@
+import { db } from "./db";
+import { eq, and, desc, asc } from "drizzle-orm";
+import * as schema from "@shared/schema";
+
+export interface IStorage {
+  getOrganizations(): Promise<schema.Organization[]>;
+  getProperties(): Promise<schema.Property[]>;
+  getProperty(id: string): Promise<schema.Property | undefined>;
+  getUnitsByProperty(propertyId: string): Promise<schema.Unit[]>;
+  getTenants(): Promise<schema.Tenant[]>;
+  getTenant(id: string): Promise<schema.Tenant | undefined>;
+  getTenantsByUnit(unitId: string): Promise<schema.Tenant[]>;
+  getMonthlyInvoices(year?: number, month?: number): Promise<schema.MonthlyInvoice[]>;
+  getInvoicesByTenant(tenantId: string): Promise<schema.MonthlyInvoice[]>;
+  getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]>;
+  getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]>;
+  getBankAccounts(): Promise<schema.BankAccount[]>;
+  getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]>;
+  getSettlementsByProperty(propertyId: string): Promise<schema.Settlement[]>;
+  getMaintenanceContractsByProperty(propertyId: string): Promise<schema.MaintenanceContract[]>;
+  getMaintenanceTasks(status?: string): Promise<schema.MaintenanceTask[]>;
+  getContractors(): Promise<schema.Contractor[]>;
+  getDistributionKeys(): Promise<schema.DistributionKey[]>;
+}
+
+class DatabaseStorage implements IStorage {
+  async getOrganizations(): Promise<schema.Organization[]> {
+    return db.select().from(schema.organizations).orderBy(asc(schema.organizations.name));
+  }
+
+  async getProperties(): Promise<schema.Property[]> {
+    return db.select().from(schema.properties).orderBy(asc(schema.properties.name));
+  }
+
+  async getProperty(id: string): Promise<schema.Property | undefined> {
+    const result = await db.select().from(schema.properties).where(eq(schema.properties.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getUnitsByProperty(propertyId: string): Promise<schema.Unit[]> {
+    return db.select().from(schema.units)
+      .where(eq(schema.units.propertyId, propertyId))
+      .orderBy(asc(schema.units.topNummer));
+  }
+
+  async getTenants(): Promise<schema.Tenant[]> {
+    return db.select().from(schema.tenants).orderBy(asc(schema.tenants.lastName));
+  }
+
+  async getTenant(id: string): Promise<schema.Tenant | undefined> {
+    const result = await db.select().from(schema.tenants).where(eq(schema.tenants.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTenantsByUnit(unitId: string): Promise<schema.Tenant[]> {
+    return db.select().from(schema.tenants)
+      .where(eq(schema.tenants.unitId, unitId))
+      .orderBy(desc(schema.tenants.createdAt));
+  }
+
+  async getMonthlyInvoices(year?: number, month?: number): Promise<schema.MonthlyInvoice[]> {
+    let query = db.select().from(schema.monthlyInvoices);
+    if (year && month) {
+      return query.where(and(
+        eq(schema.monthlyInvoices.year, year),
+        eq(schema.monthlyInvoices.month, month)
+      )).orderBy(desc(schema.monthlyInvoices.createdAt));
+    } else if (year) {
+      return query.where(eq(schema.monthlyInvoices.year, year)).orderBy(desc(schema.monthlyInvoices.createdAt));
+    }
+    return query.orderBy(desc(schema.monthlyInvoices.createdAt));
+  }
+
+  async getInvoicesByTenant(tenantId: string): Promise<schema.MonthlyInvoice[]> {
+    return db.select().from(schema.monthlyInvoices)
+      .where(eq(schema.monthlyInvoices.tenantId, tenantId))
+      .orderBy(desc(schema.monthlyInvoices.year), desc(schema.monthlyInvoices.month));
+  }
+
+  async getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]> {
+    return db.select().from(schema.payments)
+      .where(eq(schema.payments.tenantId, tenantId))
+      .orderBy(desc(schema.payments.buchungsDatum));
+  }
+
+  async getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]> {
+    if (year) {
+      return db.select().from(schema.expenses)
+        .where(and(eq(schema.expenses.propertyId, propertyId), eq(schema.expenses.year, year)))
+        .orderBy(desc(schema.expenses.datum));
+    }
+    return db.select().from(schema.expenses)
+      .where(eq(schema.expenses.propertyId, propertyId))
+      .orderBy(desc(schema.expenses.datum));
+  }
+
+  async getBankAccounts(): Promise<schema.BankAccount[]> {
+    return db.select().from(schema.bankAccounts).orderBy(asc(schema.bankAccounts.accountName));
+  }
+
+  async getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]> {
+    return db.select().from(schema.transactions)
+      .where(eq(schema.transactions.bankAccountId, bankAccountId))
+      .orderBy(desc(schema.transactions.transactionDate));
+  }
+
+  async getSettlementsByProperty(propertyId: string): Promise<schema.Settlement[]> {
+    return db.select().from(schema.settlements)
+      .where(eq(schema.settlements.propertyId, propertyId))
+      .orderBy(desc(schema.settlements.year));
+  }
+
+  async getMaintenanceContractsByProperty(propertyId: string): Promise<schema.MaintenanceContract[]> {
+    return db.select().from(schema.maintenanceContracts)
+      .where(eq(schema.maintenanceContracts.propertyId, propertyId))
+      .orderBy(asc(schema.maintenanceContracts.nextDueDate));
+  }
+
+  async getMaintenanceTasks(status?: string): Promise<schema.MaintenanceTask[]> {
+    if (status) {
+      return db.select().from(schema.maintenanceTasks)
+        .where(eq(schema.maintenanceTasks.status, status))
+        .orderBy(asc(schema.maintenanceTasks.dueDate));
+    }
+    return db.select().from(schema.maintenanceTasks).orderBy(asc(schema.maintenanceTasks.dueDate));
+  }
+
+  async getContractors(): Promise<schema.Contractor[]> {
+    return db.select().from(schema.contractors)
+      .where(eq(schema.contractors.isActive, true))
+      .orderBy(asc(schema.contractors.companyName));
+  }
+
+  async getDistributionKeys(): Promise<schema.DistributionKey[]> {
+    return db.select().from(schema.distributionKeys)
+      .where(eq(schema.distributionKeys.isActive, true))
+      .orderBy(asc(schema.distributionKeys.sortOrder));
+  }
+}
+
+export const storage = new DatabaseStorage();
