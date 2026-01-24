@@ -66,7 +66,17 @@ Five roles with different permissions:
 - **property_manager**: Property and tenant management
 - **finance**: Financial operations, invoicing
 - **viewer**: Read-only access
-- **tester**: Limited access, personal data hidden
+- **tester**: Limited access, personal data masked (names, emails, phone numbers, IBAN, addresses replaced with placeholders)
+
+## Tester Mode Data Masking
+When a user has the "tester" role, personal data (Personenbezogene Daten) is automatically masked in API responses:
+- Names → "Max Mustermann"
+- Email → "mieter@beispiel.at"
+- Phone → "+43 XXX XXXXXX"
+- IBAN → "AT** **** **** **** ****"
+- Address → "Musterstraße 1, 1010 Wien"
+
+Masking is applied to: tenants, payments, invoices, bank accounts, transactions, organization members
 
 ## Migrated Edge Functions (server/functions.ts)
 1. generate-monthly-invoices - MRG-compliant invoice generation
