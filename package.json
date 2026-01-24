@@ -100,6 +100,8 @@
     "resend": "^4.0.0",
     "sepa": "^2.1.0",
     "sonner": "^1.7.4",
+    "stripe": "^20.0.0",
+    "stripe-replit-sync": "^1.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.21.0",
