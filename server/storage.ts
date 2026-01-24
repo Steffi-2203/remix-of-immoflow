@@ -136,6 +136,94 @@ class DatabaseStorage implements IStorage {
       .where(eq(schema.distributionKeys.isActive, true))
       .orderBy(asc(schema.distributionKeys.sortOrder));
   }
+
+  async getProfileByEmail(email: string): Promise<schema.Profile | undefined> {
+    const result = await db.select().from(schema.profiles)
+      .where(eq(schema.profiles.email, email)).limit(1);
+    return result[0];
+  }
+
+  async getProfileById(id: string): Promise<schema.Profile | undefined> {
+    const result = await db.select().from(schema.profiles)
+      .where(eq(schema.profiles.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createProfile(data: schema.InsertProfile): Promise<schema.Profile> {
+    const result = await db.insert(schema.profiles).values(data).returning();
+    return result[0];
+  }
+
+  async updateProfile(id: string, data: Partial<schema.InsertProfile>): Promise<schema.Profile | undefined> {
+    const result = await db.update(schema.profiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.profiles.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getProfilesByOrganization(organizationId: string): Promise<schema.Profile[]> {
+    return db.select().from(schema.profiles)
+      .where(eq(schema.profiles.organizationId, organizationId))
+      .orderBy(asc(schema.profiles.fullName));
+  }
+
+  async getUserRoles(userId: string): Promise<schema.UserRole[]> {
+    return db.select().from(schema.userRoles)
+      .where(eq(schema.userRoles.userId, userId));
+  }
+
+  async addUserRole(userId: string, role: string): Promise<schema.UserRole> {
+    const result = await db.insert(schema.userRoles).values({
+      userId,
+      role: role as any,
+    }).returning();
+    return result[0];
+  }
+
+  async removeUserRole(userId: string, role: string): Promise<void> {
+    await db.delete(schema.userRoles)
+      .where(and(
+        eq(schema.userRoles.userId, userId),
+        eq(schema.userRoles.role, role as any)
+      ));
+  }
+
+  async createInvite(data: schema.InsertOrganizationInvite): Promise<schema.OrganizationInvite> {
+    const result = await db.insert(schema.organizationInvites).values(data).returning();
+    return result[0];
+  }
+
+  async getInviteByToken(token: string): Promise<schema.OrganizationInvite | undefined> {
+    const result = await db.select().from(schema.organizationInvites)
+      .where(eq(schema.organizationInvites.token, token)).limit(1);
+    return result[0];
+  }
+
+  async getInvitesByOrganization(organizationId: string): Promise<schema.OrganizationInvite[]> {
+    return db.select().from(schema.organizationInvites)
+      .where(eq(schema.organizationInvites.organizationId, organizationId))
+      .orderBy(desc(schema.organizationInvites.createdAt));
+  }
+
+  async updateInvite(id: string, data: Partial<schema.InsertOrganizationInvite>): Promise<schema.OrganizationInvite | undefined> {
+    const result = await db.update(schema.organizationInvites)
+      .set(data)
+      .where(eq(schema.organizationInvites.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getOrganization(id: string): Promise<schema.Organization | undefined> {
+    const result = await db.select().from(schema.organizations)
+      .where(eq(schema.organizations.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createOrganization(data: schema.InsertOrganization): Promise<schema.Organization> {
+    const result = await db.insert(schema.organizations).values(data).returning();
+    return result[0];
+  }
 }
 
 export const storage = new DatabaseStorage();

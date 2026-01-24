@@ -5,7 +5,7 @@ import { relations } from "drizzle-orm";
 
 export * from "./models/auth";
 
-export const appRoleEnum = pgEnum('app_role', ['admin', 'property_manager', 'finance', 'viewer']);
+export const appRoleEnum = pgEnum('app_role', ['admin', 'property_manager', 'finance', 'viewer', 'tester']);
 export const expenseCategoryEnum = pgEnum('expense_category', ['betriebskosten_umlagefaehig', 'instandhaltung']);
 export const expenseTypeEnum = pgEnum('expense_type', [
   'versicherung', 'grundsteuer', 'muellabfuhr', 'wasser_abwasser', 'heizung',
@@ -61,6 +61,25 @@ export const userRoles = pgTable("user_roles", {
   role: appRoleEnum("role").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+export const inviteStatusEnum = pgEnum('invite_status', ['pending', 'accepted', 'expired', 'cancelled']);
+
+export const organizationInvites = pgTable("organization_invites", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  email: text("email").notNull(),
+  role: appRoleEnum("role").notNull(),
+  token: text("token").notNull().unique(),
+  status: inviteStatusEnum("status").default('pending'),
+  invitedBy: uuid("invited_by").references(() => profiles.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertOrganizationInviteSchema = createInsertSchema(organizationInvites).omit({ id: true, createdAt: true });
+export type OrganizationInvite = typeof organizationInvites.$inferSelect;
+export type InsertOrganizationInvite = typeof organizationInvites.$inferInsert;
 
 export const properties = pgTable("properties", {
   id: uuid("id").defaultRandom().primaryKey(),
