@@ -3,6 +3,8 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
+export * from "./models/auth";
+
 export const appRoleEnum = pgEnum('app_role', ['admin', 'property_manager', 'finance', 'viewer']);
 export const expenseCategoryEnum = pgEnum('expense_category', ['betriebskosten_umlagefaehig', 'instandhaltung']);
 export const expenseTypeEnum = pgEnum('expense_type', [
