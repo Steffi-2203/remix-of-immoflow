@@ -42,6 +42,7 @@ import OwnerList from "./pages/OwnerList";
 import Dunning from "./pages/Dunning";
 import Budgets from "./pages/Budgets";
 import MeterReadings from "./pages/MeterReadings";
+import KeyManagement from "./pages/KeyManagement";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -97,6 +98,7 @@ const App = () => (
             <Route path="/mahnwesen" element={<ProtectedRoute><Dunning /></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
             <Route path="/zaehlerstaende" element={<ProtectedRoute><MeterReadings /></ProtectedRoute>} />
+            <Route path="/schluessel" element={<ProtectedRoute><KeyManagement /></ProtectedRoute>} />
             <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />
