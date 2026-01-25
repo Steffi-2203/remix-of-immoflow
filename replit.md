@@ -18,7 +18,8 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **Backend**: Express.js with Vite middleware, TypeScript.
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui.
 - **Database**: PostgreSQL (Neon), Drizzle ORM.
-- **Authentication**: Replit Auth, replacing previous Supabase Auth.
+- **Authentication**: Replit Auth.
+- **Data Access**: All frontend components use REST API endpoints (`/api/*`) - complete migration from Supabase SDK (January 2026).
 - **Email**: Resend integration for notifications and invitations.
 - **Routing**: `react-router-dom` for frontend, Express for backend API.
 - **State Management**: TanStack Query (React Query) for data fetching and caching.
