@@ -29,7 +29,7 @@ import { Loader2, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateVorschussAenderungPdf } from '@/utils/vorschussAenderungPdfExport';
 import { useUploadTenantDocument } from '@/hooks/useTenantDocuments';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 
 interface TenantAdvanceChange {
   tenantId: string;
@@ -103,10 +103,9 @@ export function NewAdvanceDialog({
       // First, save the effective date to all tenants
       for (const tenant of tenantChanges) {
         const effectiveDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
-        await supabase
-          .from('tenants')
-          .update({ vorschuss_gueltig_ab: effectiveDate })
-          .eq('id', tenant.tenantId);
+        await apiRequest('PATCH', `/api/tenants/${tenant.tenantId}`, { 
+          vorschuss_gueltig_ab: effectiveDate 
+        });
       }
 
       // Generate and save PDFs if requested

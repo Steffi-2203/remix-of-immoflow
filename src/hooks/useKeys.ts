@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface KeyInventoryItem {
@@ -90,21 +90,10 @@ export function useKeyInventory(propertyId?: string) {
   return useQuery({
     queryKey: ['key-inventory', propertyId],
     queryFn: async () => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      let query = (supabase as any)
-        .from('key_inventory')
-        .select('*, properties(id, name), units(id, top_nummer)')
-        .order('created_at', { ascending: false });
-      
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return data as KeyInventoryItem[];
+      const url = propertyId ? `/api/key-inventory?property_id=${propertyId}` : '/api/key-inventory';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch key inventory');
+      return response.json() as Promise<KeyInventoryItem[]>;
     },
   });
 }
@@ -113,16 +102,10 @@ export function useKeyInventoryItem(id: string | undefined) {
   return useQuery({
     queryKey: ['key-inventory', 'item', id],
     queryFn: async () => {
-      if (!id || !supabase) return null;
-      
-      const { data, error } = await (supabase as any)
-        .from('key_inventory')
-        .select('*, properties(id, name), units(id, top_nummer)')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as KeyInventoryItem | null;
+      if (!id) return null;
+      const response = await fetch(`/api/key-inventory/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch key inventory item');
+      return response.json() as Promise<KeyInventoryItem | null>;
     },
     enabled: !!id,
   });
@@ -133,16 +116,8 @@ export function useCreateKeyInventory() {
   
   return useMutation({
     mutationFn: async (key: KeyInventoryInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('key_inventory')
-        .insert(key)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as KeyInventoryItem;
+      const response = await apiRequest('POST', '/api/key-inventory', key);
+      return response.json() as Promise<KeyInventoryItem>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['key-inventory'] });
@@ -160,17 +135,8 @@ export function useUpdateKeyInventory() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: KeyInventoryUpdate) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('key_inventory')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as KeyInventoryItem;
+      const response = await apiRequest('PATCH', `/api/key-inventory/${id}`, updates);
+      return response.json() as Promise<KeyInventoryItem>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['key-inventory'] });
@@ -189,14 +155,7 @@ export function useDeleteKeyInventory() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { error } = await (supabase as any)
-        .from('key_inventory')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/key-inventory/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['key-inventory'] });
@@ -213,16 +172,10 @@ export function useKeyHandovers(keyInventoryId: string | undefined) {
   return useQuery({
     queryKey: ['key-handovers', keyInventoryId],
     queryFn: async () => {
-      if (!keyInventoryId || !supabase) return [];
-      
-      const { data, error } = await (supabase as any)
-        .from('key_handovers')
-        .select('*, tenants(id, first_name, last_name)')
-        .eq('key_inventory_id', keyInventoryId)
-        .order('handover_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as KeyHandover[];
+      if (!keyInventoryId) return [];
+      const response = await fetch(`/api/key-inventory/${keyInventoryId}/handovers`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch key handovers');
+      return response.json() as Promise<KeyHandover[]>;
     },
     enabled: !!keyInventoryId,
   });
@@ -233,16 +186,8 @@ export function useCreateKeyHandover() {
   
   return useMutation({
     mutationFn: async (handover: KeyHandoverInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('key_handovers')
-        .insert(handover)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as KeyHandover;
+      const response = await apiRequest('POST', `/api/key-inventory/${handover.key_inventory_id}/handovers`, handover);
+      return response.json() as Promise<KeyHandover>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['key-handovers', data.key_inventory_id] });

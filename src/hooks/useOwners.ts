@@ -1,31 +1,39 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type Owner = Tables<'property_owners'> & {
+export interface Owner {
+  id: string;
+  property_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  iban: string | null;
+  bic: string | null;
+  ownership_share: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
   properties?: {
     id: string;
     name: string;
     address: string | null;
   };
-};
-export type OwnerInsert = TablesInsert<'property_owners'>;
-export type OwnerUpdate = TablesUpdate<'property_owners'>;
+}
+
+export type OwnerInsert = Omit<Owner, 'id' | 'created_at' | 'updated_at' | 'properties'>;
+export type OwnerUpdate = Partial<OwnerInsert>;
 
 export function useOwners() {
   return useQuery({
     queryKey: ['owners'],
     queryFn: async () => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .select('*, properties(id, name, address)')
-        .order('name');
-      
-      if (error) throw error;
-      return data as Owner[];
+      const response = await fetch('/api/property-owners', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch owners');
+      return response.json() as Promise<Owner[]>;
     },
   });
 }
@@ -34,16 +42,10 @@ export function useOwner(id: string | undefined) {
   return useQuery({
     queryKey: ['owners', id],
     queryFn: async () => {
-      if (!id || !supabase) return null;
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .select('*, properties(id, name, address)')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as Owner | null;
+      if (!id) return null;
+      const response = await fetch(`/api/property-owners/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch owner');
+      return response.json() as Promise<Owner | null>;
     },
     enabled: !!id,
   });
@@ -54,16 +56,8 @@ export function useCreateOwner() {
   
   return useMutation({
     mutationFn: async (owner: OwnerInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .insert(owner)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/property-owners', owner);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['owners'] });
@@ -82,17 +76,8 @@ export function useUpdateOwner() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: OwnerUpdate & { id: string }) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/property-owners/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['owners'] });
@@ -112,14 +97,7 @@ export function useDeleteOwner() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { error } = await supabase
-        .from('property_owners')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/property-owners/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['owners'] });
@@ -137,17 +115,10 @@ export function usePropertyOwnersForProperty(propertyId: string | undefined) {
   return useQuery({
     queryKey: ['owners', 'property', propertyId],
     queryFn: async () => {
-      if (!propertyId || !supabase) return [];
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .select('*, properties(id, name, address)')
-        .eq('property_id', propertyId)
-        .order('is_primary', { ascending: false })
-        .order('ownership_share', { ascending: false });
-      
-      if (error) throw error;
-      return data as Owner[];
+      if (!propertyId) return [];
+      const response = await fetch(`/api/properties/${propertyId}/owners`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch property owners');
+      return response.json() as Promise<Owner[]>;
     },
     enabled: !!propertyId,
   });

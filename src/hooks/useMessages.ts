@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 
@@ -30,22 +30,12 @@ export function useMessages(status?: string) {
   return useQuery({
     queryKey: ['messages', user?.id, status],
     queryFn: async () => {
-      let query = supabase
-        .from('messages')
-        .select(`
-          *,
-          tenants(first_name, last_name),
-          units(top_nummer)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (status && status !== 'all') {
-        query = query.eq('status', status);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Message[];
+      const url = status && status !== 'all' 
+        ? `/api/messages?status=${status}` 
+        : '/api/messages';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch messages');
+      return response.json() as Promise<Message[]>;
     },
     enabled: !!user?.id,
   });
@@ -57,7 +47,6 @@ export function useSentMessages() {
 
 export function useCreateMessage() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
@@ -74,18 +63,8 @@ export function useCreateMessage() {
       maintenance_task_id?: string;
       status?: 'draft' | 'sent';
     }) => {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          ...message,
-          created_by: user?.id,
-          sent_at: message.status === 'sent' ? new Date().toISOString() : null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/messages', message);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -113,18 +92,8 @@ export function useUpdateMessage() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Message> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('messages')
-        .update({
-          ...updates,
-          sent_at: updates.status === 'sent' ? new Date().toISOString() : undefined,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/messages/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -152,12 +121,7 @@ export function useDeleteMessage() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/messages/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });

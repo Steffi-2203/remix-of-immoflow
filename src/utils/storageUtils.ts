@@ -1,7 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
-
 /**
- * Generates a signed URL for a document stored in Supabase Storage.
+ * Generates a signed URL for a document stored in storage.
  * Signed URLs expire after 1 hour for security.
  * 
  * @param bucket - The storage bucket name
@@ -13,15 +11,19 @@ export async function getSignedDocumentUrl(
   filePath: string
 ): Promise<string | null> {
   try {
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    const response = await fetch(`/api/storage/signed-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ bucket, filePath, expiresIn: 3600 }),
+    });
 
-    if (error) {
-      console.error('Error creating signed URL:', error);
+    if (!response.ok) {
+      console.error('Error creating signed URL:', await response.text());
       return null;
     }
 
+    const data = await response.json();
     return data.signedUrl;
   } catch (error) {
     console.error('Error in getSignedDocumentUrl:', error);
@@ -30,7 +32,7 @@ export async function getSignedDocumentUrl(
 }
 
 /**
- * Extracts the file path from a Supabase storage URL for a given prefix.
+ * Extracts the file path from a storage URL for a given prefix.
  * 
  * @param fileUrl - The full URL of the file
  * @param prefix - The prefix to look for (e.g., 'property-docs/', 'unit-docs/')

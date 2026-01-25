@@ -34,9 +34,11 @@ import {
   useUpdateBankAccount, 
   BankAccount 
 } from '@/hooks/useBankAccounts';
-import { Tables } from '@/integrations/supabase/types';
 
-type Property = Tables<'properties'>;
+interface Property {
+  id: string;
+  name: string;
+}
 
 const bankAccountSchema = z.object({
   property_id: z.string().min(1, 'Bitte wählen Sie eine Liegenschaft'),

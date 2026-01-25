@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface Meter {
@@ -71,21 +71,10 @@ export function useMeters(unitId?: string) {
   return useQuery({
     queryKey: ['meters', unitId],
     queryFn: async () => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      let query = (supabase as any)
-        .from('meters')
-        .select('*, units(id, top_nummer, property_id, properties(id, name, address))')
-        .order('meter_number');
-      
-      if (unitId) {
-        query = query.eq('unit_id', unitId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return data as Meter[];
+      const url = unitId ? `/api/meters?unit_id=${unitId}` : '/api/meters';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch meters');
+      return response.json() as Promise<Meter[]>;
     },
   });
 }
@@ -94,16 +83,10 @@ export function useMeter(id: string | undefined) {
   return useQuery({
     queryKey: ['meters', 'detail', id],
     queryFn: async () => {
-      if (!id || !supabase) return null;
-      
-      const { data, error } = await (supabase as any)
-        .from('meters')
-        .select('*, units(id, top_nummer, property_id, properties(id, name, address))')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as Meter | null;
+      if (!id) return null;
+      const response = await fetch(`/api/meters/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch meter');
+      return response.json() as Promise<Meter | null>;
     },
     enabled: !!id,
   });
@@ -114,16 +97,8 @@ export function useCreateMeter() {
   
   return useMutation({
     mutationFn: async (meter: MeterInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('meters')
-        .insert(meter)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Meter;
+      const response = await apiRequest('POST', '/api/meters', meter);
+      return response.json() as Promise<Meter>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meters'] });
@@ -141,17 +116,8 @@ export function useUpdateMeter() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: MeterUpdate) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('meters')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Meter;
+      const response = await apiRequest('PATCH', `/api/meters/${id}`, updates);
+      return response.json() as Promise<Meter>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['meters'] });
@@ -170,14 +136,7 @@ export function useDeleteMeter() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { error } = await (supabase as any)
-        .from('meters')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/meters/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meters'] });
@@ -194,16 +153,10 @@ export function useMeterReadings(meterId: string | undefined) {
   return useQuery({
     queryKey: ['meter-readings', meterId],
     queryFn: async () => {
-      if (!meterId || !supabase) return [];
-      
-      const { data, error } = await (supabase as any)
-        .from('meter_readings')
-        .select('*')
-        .eq('meter_id', meterId)
-        .order('reading_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as MeterReading[];
+      if (!meterId) return [];
+      const response = await fetch(`/api/meters/${meterId}/readings`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch meter readings');
+      return response.json() as Promise<MeterReading[]>;
     },
     enabled: !!meterId,
   });
@@ -213,20 +166,14 @@ export function useLatestMeterReadings(meterIds: string[]) {
   return useQuery({
     queryKey: ['meter-readings', 'latest', meterIds],
     queryFn: async () => {
-      if (!supabase || meterIds.length === 0) return {};
+      if (meterIds.length === 0) return {};
       
       const results: Record<string, MeterReading[]> = {};
       
       for (const meterId of meterIds) {
-        const { data, error } = await (supabase as any)
-          .from('meter_readings')
-          .select('*')
-          .eq('meter_id', meterId)
-          .order('reading_date', { ascending: false })
-          .limit(2);
-        
-        if (error) throw error;
-        results[meterId] = data as MeterReading[];
+        const response = await fetch(`/api/meters/${meterId}/readings?limit=2`, { credentials: 'include' });
+        if (!response.ok) throw new Error('Failed to fetch meter readings');
+        results[meterId] = await response.json();
       }
       
       return results;
@@ -240,16 +187,8 @@ export function useCreateMeterReading() {
   
   return useMutation({
     mutationFn: async (reading: MeterReadingInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('meter_readings')
-        .insert(reading)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as MeterReading;
+      const response = await apiRequest('POST', `/api/meters/${reading.meter_id}/readings`, reading);
+      return response.json() as Promise<MeterReading>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meter-readings'] });

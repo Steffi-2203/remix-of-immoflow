@@ -47,8 +47,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { apiRequest } from '@/lib/queryClient';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -94,15 +94,10 @@ export default function Admin() {
     
     setIsUpdating(true);
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({ 
-          subscription_tier: editTier as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedOrg.id);
-
-      if (error) throw error;
+      await apiRequest('PATCH', `/api/admin/organizations/${selectedOrg.id}`, { 
+        subscription_tier: editTier,
+        updated_at: new Date().toISOString()
+      });
       
       toast.success('Plan wurde aktualisiert');
       setShowEditDialog(false);
@@ -119,15 +114,10 @@ export default function Admin() {
     if (!confirm(`Abo für "${org.name}" wirklich kündigen?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({ 
-          subscription_status: 'cancelled' as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', org.id);
-
-      if (error) throw error;
+      await apiRequest('PATCH', `/api/admin/organizations/${org.id}`, { 
+        subscription_status: 'cancelled',
+        updated_at: new Date().toISOString()
+      });
       
       toast.success('Abo wurde gekündigt');
       refetch();

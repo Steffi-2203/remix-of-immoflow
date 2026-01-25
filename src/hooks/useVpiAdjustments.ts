@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export type VpiAdjustmentStatus = 'pending' | 'applied' | 'rejected';
@@ -81,15 +81,9 @@ export function useVpiAdjustments() {
   return useQuery({
     queryKey: ['vpi-adjustments'],
     queryFn: async () => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .select('*, tenants(id, first_name, last_name, grundmiete, units(id, top_nummer, properties(id, name)))')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as VpiAdjustment[];
+      const response = await fetch('/api/vpi-adjustments', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch VPI adjustments');
+      return response.json() as Promise<VpiAdjustment[]>;
     },
   });
 }
@@ -98,16 +92,10 @@ export function useVpiAdjustment(id: string | undefined) {
   return useQuery({
     queryKey: ['vpi-adjustments', id],
     queryFn: async () => {
-      if (!id || !supabase) return null;
-      
-      const { data, error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .select('*, tenants(id, first_name, last_name, grundmiete, units(id, top_nummer, properties(id, name)))')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data as VpiAdjustment | null;
+      if (!id) return null;
+      const response = await fetch(`/api/vpi-adjustments/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch VPI adjustment');
+      return response.json() as Promise<VpiAdjustment | null>;
     },
     enabled: !!id,
   });
@@ -118,16 +106,8 @@ export function useCreateVpiAdjustment() {
   
   return useMutation({
     mutationFn: async (adjustment: VpiAdjustmentInsert) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .insert(adjustment)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/vpi-adjustments', adjustment);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -145,17 +125,8 @@ export function useUpdateVpiAdjustment() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: VpiAdjustmentUpdate) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/vpi-adjustments/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -174,37 +145,8 @@ export function useApplyVpiAdjustment() {
   
   return useMutation({
     mutationFn: async ({ id, sendNotification }: { id: string; sendNotification: boolean }) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data: adjustment, error: fetchError } = await (supabase as any)
-        .from('vpi_adjustments')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (fetchError) throw fetchError;
-      
-      const { error: updateTenantError } = await supabase
-        .from('tenants')
-        .update({ grundmiete: adjustment.new_rent })
-        .eq('id', adjustment.tenant_id);
-      
-      if (updateTenantError) throw updateTenantError;
-      
-      const today = new Date().toISOString().split('T')[0];
-      const { data, error: updateAdjError } = await (supabase as any)
-        .from('vpi_adjustments')
-        .update({
-          notification_sent: sendNotification,
-          notification_date: sendNotification ? today : null,
-          effective_date: today,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (updateAdjError) throw updateAdjError;
-      return data;
+      const response = await apiRequest('POST', `/api/vpi-adjustments/${id}/apply`, { sendNotification });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -223,20 +165,8 @@ export function useRejectVpiAdjustment() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { data, error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .update({
-          notification_sent: false,
-          effective_date: null,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', `/api/vpi-adjustments/${id}/reject`, {});
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -254,14 +184,7 @@ export function useDeleteVpiAdjustment() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      if (!supabase) throw new Error('Supabase not configured');
-      
-      const { error } = await (supabase as any)
-        .from('vpi_adjustments')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/vpi-adjustments/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });

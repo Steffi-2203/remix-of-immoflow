@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 
 interface UnitImportDialogProps {
   open: boolean;
@@ -206,13 +206,12 @@ export function UnitImportDialog({ open, onOpenChange, propertyId, existingUnits
         status: 'leerstand' as const,
       };
 
-      const { error } = await supabase.from('units').insert(unitData);
-
-      if (error) {
+      try {
+        await apiRequest('POST', '/api/units', unitData);
+        successCount++;
+      } catch (error: any) {
         importErrors.push(`${topNummer}: ${error.message}`);
         failedCount++;
-      } else {
-        successCount++;
       }
     }
 

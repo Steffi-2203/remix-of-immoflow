@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Download, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -183,17 +183,20 @@ export function PropertyImportDialog({ open, onOpenChange, onSuccess }: Property
       }
 
       // Check for duplicates
-      const { data: existing } = await supabase
-        .from('properties')
-        .select('id')
-        .ilike('name', name)
-        .ilike('address', address)
-        .limit(1);
-
-      if (existing && existing.length > 0) {
-        importErrors.push(`"${name}" existiert bereits - übersprungen`);
-        skippedCount++;
-        continue;
+      try {
+        const checkResponse = await fetch(`/api/properties?name=${encodeURIComponent(name)}&address=${encodeURIComponent(address)}&limit=1`, {
+          credentials: 'include',
+        });
+        if (checkResponse.ok) {
+          const existing = await checkResponse.json();
+          if (existing && existing.length > 0) {
+            importErrors.push(`"${name}" existiert bereits - übersprungen`);
+            skippedCount++;
+            continue;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not check for existing property:', err);
       }
 
       const propertyId = crypto.randomUUID();
@@ -209,21 +212,21 @@ export function PropertyImportDialog({ open, onOpenChange, onSuccess }: Property
         total_mea: mapping.totalMea ? parseNumber(row[mapping.totalMea]) || 0 : 0,
       };
 
-      const { error: createError } = await supabase.from('properties').insert(propertyData);
-
-      if (createError) {
+      try {
+        await apiRequest('POST', '/api/properties', propertyData);
+      } catch (createError: any) {
         importErrors.push(`${name}: ${createError.message}`);
         failedCount++;
         continue;
       }
 
       // Assign current user as manager
-      const { error: assignError } = await supabase.from('property_managers').insert({
-        user_id: user.id,
-        property_id: propertyId,
-      });
-
-      if (assignError) {
+      try {
+        await apiRequest('POST', '/api/property-managers', {
+          user_id: user.id,
+          property_id: propertyId,
+        });
+      } catch (assignError) {
         console.warn(`Could not assign manager for ${name}:`, assignError);
       }
 

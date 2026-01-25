@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 
 export interface PropertyOwner {
   id: string;
@@ -21,41 +21,26 @@ export interface PropertyOwner {
 export type PropertyOwnerInsert = Omit<PropertyOwner, 'id' | 'created_at' | 'updated_at'>;
 export type PropertyOwnerUpdate = Partial<PropertyOwnerInsert> & { id: string };
 
-// Fetch all owners for a property
 export function usePropertyOwners(propertyId: string | undefined) {
   return useQuery({
     queryKey: ['property-owners', propertyId],
     queryFn: async () => {
       if (!propertyId) return [];
-      
-      const { data, error } = await supabase
-        .from('property_owners')
-        .select('*')
-        .eq('property_id', propertyId)
-        .order('is_primary', { ascending: false })
-        .order('ownership_share', { ascending: false });
-      
-      if (error) throw error;
-      return data as PropertyOwner[];
+      const response = await fetch(`/api/properties/${propertyId}/owners`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch property owners');
+      return response.json() as Promise<PropertyOwner[]>;
     },
     enabled: !!propertyId,
   });
 }
 
-// Create a new owner
 export function useCreatePropertyOwner() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (owner: PropertyOwnerInsert) => {
-      const { data, error } = await supabase
-        .from('property_owners')
-        .insert(owner)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as PropertyOwner;
+      const response = await apiRequest('POST', `/api/properties/${owner.property_id}/owners`, owner);
+      return response.json() as Promise<PropertyOwner>;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['property-owners', variables.property_id] });
@@ -63,21 +48,13 @@ export function useCreatePropertyOwner() {
   });
 }
 
-// Update an owner
 export function useUpdatePropertyOwner() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: PropertyOwnerUpdate) => {
-      const { data, error } = await supabase
-        .from('property_owners')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as PropertyOwner;
+      const response = await apiRequest('PATCH', `/api/property-owners/${id}`, updates);
+      return response.json() as Promise<PropertyOwner>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['property-owners', data.property_id] });
@@ -85,18 +62,12 @@ export function useUpdatePropertyOwner() {
   });
 }
 
-// Delete an owner
 export function useDeletePropertyOwner() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ id, propertyId }: { id: string; propertyId: string }) => {
-      const { error } = await supabase
-        .from('property_owners')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/property-owners/${id}`);
       return { id, propertyId };
     },
     onSuccess: (_, variables) => {
@@ -105,7 +76,6 @@ export function useDeletePropertyOwner() {
   });
 }
 
-// Get total ownership percentage for validation
 export function useTotalOwnershipShare(propertyId: string | undefined) {
   const { data: owners } = usePropertyOwners(propertyId);
   
@@ -114,7 +84,6 @@ export function useTotalOwnershipShare(propertyId: string | undefined) {
   return owners.reduce((sum, owner) => sum + owner.ownership_share, 0);
 }
 
-// Get primary owner for a property
 export function usePrimaryOwner(propertyId: string | undefined) {
   const { data: owners } = usePropertyOwners(propertyId);
   

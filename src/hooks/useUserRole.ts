@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
 
@@ -7,20 +6,12 @@ export function useUserRole() {
   return useQuery({
     queryKey: ['user-role'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error fetching user role:', error);
+      const response = await fetch('/api/user/role', { credentials: 'include' });
+      if (!response.ok) {
+        console.error('Error fetching user role');
         return 'viewer' as AppRole;
       }
-      
+      const data = await response.json();
       return (data?.role as AppRole) ?? 'viewer';
     },
   });

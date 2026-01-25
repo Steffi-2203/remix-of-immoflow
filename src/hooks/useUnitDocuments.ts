@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { extractFilePath } from '@/utils/storageUtils';
 
 export type UnitDocument = {
   id: string;
@@ -31,15 +30,9 @@ export function useUnitDocuments(unitId: string | undefined) {
     queryKey: ['unit-documents', unitId],
     queryFn: async () => {
       if (!unitId) return [];
-      
-      const { data, error } = await supabase
-        .from('unit_documents')
-        .select('*')
-        .eq('unit_id', unitId)
-        .order('uploaded_at', { ascending: false });
-
-      if (error) throw error;
-      return data as UnitDocument[];
+      const response = await fetch(`/api/units/${unitId}/documents`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch unit documents');
+      return response.json() as Promise<UnitDocument[]>;
     },
     enabled: !!unitId,
   });
@@ -61,40 +54,19 @@ export function useUploadUnitDocument() {
       documentType: string;
       documentName: string;
     }) => {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${unitId}/${Date.now()}.${fileExt}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', documentType);
+      formData.append('name', documentName);
 
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('expense-receipts')
-        .upload(`unit-docs/${fileName}`, file);
+      const response = await fetch(`/api/units/${unitId}/documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
 
-      if (uploadError) throw uploadError;
-
-      // Get signed URL (more secure than public URL)
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('expense-receipts')
-        .createSignedUrl(`unit-docs/${fileName}`, 31536000); // 1 year expiry for storage reference
-
-      if (signedError) throw signedError;
-
-      // Store the file path reference, not the full URL
-      const filePathReference = `unit-docs/${fileName}`;
-
-      // Insert document record with file path
-      const { data, error } = await supabase
-        .from('unit_documents')
-        .insert({
-          unit_id: unitId,
-          name: documentName,
-          type: documentType,
-          file_url: filePathReference,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      if (!response.ok) throw new Error('Failed to upload document');
+      return response.json();
     },
     onSuccess: (_, { unitId }) => {
       queryClient.invalidateQueries({ queryKey: ['unit-documents', unitId] });
@@ -119,22 +91,8 @@ export function useDeleteUnitDocument() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, unitId, fileUrl }: { id: string; unitId: string; fileUrl: string }) => {
-      // Extract the file path - handle both old URL format and new path format
-      let filePath = fileUrl;
-      if (fileUrl.includes('/unit-docs/')) {
-        filePath = extractFilePath(fileUrl, 'unit-docs/') || fileUrl;
-      }
-      if (filePath.startsWith('unit-docs/')) {
-        await supabase.storage.from('expense-receipts').remove([filePath]);
-      }
-
-      const { error } = await supabase
-        .from('unit_documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+    mutationFn: async ({ id, unitId }: { id: string; unitId: string; fileUrl: string }) => {
+      await apiRequest('DELETE', `/api/unit-documents/${id}`);
     },
     onSuccess: (_, { unitId }) => {
       queryClient.invalidateQueries({ queryKey: ['unit-documents', unitId] });

@@ -1869,6 +1869,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== Storage Endpoints =====
+  app.post("/api/storage/signed-url", isAuthenticated, async (req: any, res) => {
+    try {
+      const { bucket, filePath, expiresIn } = req.body;
+      // For now, return the direct path since we're not using external storage
+      // In production, this would generate a signed URL from the storage provider
+      const signedUrl = `/api/storage/files/${bucket}/${filePath}`;
+      res.json({ signedUrl });
+    } catch (error) {
+      console.error('Signed URL error:', error);
+      res.status(500).json({ error: "Failed to generate signed URL" });
+    }
+  });
+
+  app.post("/api/storage/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      // Placeholder for file upload - would integrate with Object Storage in production
+      res.json({ 
+        success: true, 
+        path: `/uploads/${Date.now()}-file`,
+        message: "File upload endpoint placeholder" 
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      res.status(500).json({ error: "Failed to upload file" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 

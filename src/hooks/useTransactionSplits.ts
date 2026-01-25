@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface TransactionSplit {
@@ -19,14 +19,9 @@ export function useTransactionSplits(transactionId?: string) {
     queryKey: ['transaction_splits', transactionId],
     queryFn: async () => {
       if (!transactionId) return [];
-      const { data, error } = await supabase
-        .from('transaction_splits')
-        .select('*')
-        .eq('transaction_id', transactionId)
-        .order('created_at', { ascending: true });
-      
-      if (error) throw error;
-      return data as TransactionSplit[];
+      const response = await fetch(`/api/transactions/${transactionId}/splits`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transaction splits');
+      return response.json() as Promise<TransactionSplit[]>;
     },
     enabled: !!transactionId,
   });
@@ -37,14 +32,8 @@ export function useCreateTransactionSplit() {
   
   return useMutation({
     mutationFn: async (split: TransactionSplitInsert) => {
-      const { data, error } = await supabase
-        .from('transaction_splits')
-        .insert(split)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as TransactionSplit;
+      const response = await apiRequest('POST', `/api/transactions/${split.transaction_id}/splits`, split);
+      return response.json() as Promise<TransactionSplit>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['transaction_splits', data.transaction_id] });
@@ -62,13 +51,10 @@ export function useCreateTransactionSplits() {
   
   return useMutation({
     mutationFn: async (splits: TransactionSplitInsert[]) => {
-      const { data, error } = await supabase
-        .from('transaction_splits')
-        .insert(splits)
-        .select();
-      
-      if (error) throw error;
-      return data as TransactionSplit[];
+      if (splits.length === 0) return [];
+      const transactionId = splits[0].transaction_id;
+      const response = await apiRequest('POST', `/api/transactions/${transactionId}/splits/batch`, { splits });
+      return response.json() as Promise<TransactionSplit[]>;
     },
     onSuccess: (data) => {
       if (data.length > 0) {
@@ -88,14 +74,8 @@ export function useUpdateTransactionSplit() {
   
   return useMutation({
     mutationFn: async ({ id, transactionId, ...updates }: TransactionSplitUpdate & { id: string; transactionId: string }) => {
-      const { data, error } = await supabase
-        .from('transaction_splits')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
+      const response = await apiRequest('PATCH', `/api/transaction-splits/${id}`, updates);
+      const data = await response.json();
       return { ...data, transactionId } as TransactionSplit & { transactionId: string };
     },
     onSuccess: (data) => {
@@ -114,12 +94,7 @@ export function useDeleteTransactionSplit() {
   
   return useMutation({
     mutationFn: async ({ id, transactionId }: { id: string; transactionId: string }) => {
-      const { error } = await supabase
-        .from('transaction_splits')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/transaction-splits/${id}`);
       return { transactionId };
     },
     onSuccess: (data) => {
@@ -138,12 +113,7 @@ export function useDeleteTransactionSplits() {
   
   return useMutation({
     mutationFn: async (transactionId: string) => {
-      const { error } = await supabase
-        .from('transaction_splits')
-        .delete()
-        .eq('transaction_id', transactionId);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/transactions/${transactionId}/splits`);
       return { transactionId };
     },
     onSuccess: (data) => {

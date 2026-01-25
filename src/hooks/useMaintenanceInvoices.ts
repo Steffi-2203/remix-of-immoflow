@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 
@@ -19,7 +19,6 @@ export interface MaintenanceInvoice {
   notes: string | null;
   created_by: string | null;
   created_at: string;
-  // Vier-Augen-Prinzip Felder
   pre_approved_by: string | null;
   pre_approved_at: string | null;
   final_approved_by: string | null;
@@ -36,21 +35,12 @@ export function useMaintenanceInvoices(status?: string) {
   return useQuery({
     queryKey: ['maintenance-invoices', user?.id, status],
     queryFn: async () => {
-      let query = supabase
-        .from('maintenance_invoices')
-        .select(`
-          *,
-          maintenance_tasks(title, properties(name))
-        `)
-        .order('created_at', { ascending: false });
-
-      if (status && status !== 'all') {
-        query = query.eq('status', status);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as MaintenanceInvoice[];
+      const url = status && status !== 'all' 
+        ? `/api/maintenance-invoices?status=${status}` 
+        : '/api/maintenance-invoices';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch maintenance invoices');
+      return response.json() as Promise<MaintenanceInvoice[]>;
     },
     enabled: !!user?.id,
   });
@@ -64,28 +54,14 @@ export function usePreApprovedInvoices() {
   return useMaintenanceInvoices('pre_approved');
 }
 
-// Vorfreigabe (1. Auge) - erstellt KEINE Buchung
 export function usePreApproveInvoice() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (invoiceId: string) => {
-      const { data, error } = await supabase
-        .from('maintenance_invoices')
-        .update({
-          status: 'pre_approved',
-          pre_approved_by: user?.id,
-          pre_approved_at: new Date().toISOString(),
-        })
-        .eq('id', invoiceId)
-        .eq('status', 'pending')
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/pre-approve`, {});
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -105,71 +81,14 @@ export function usePreApproveInvoice() {
   });
 }
 
-// Finale Freigabe (2. Auge) - erstellt die Buchung
 export function useApproveInvoice() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (invoiceId: string) => {
-      // 1. Rechnung laden um pre_approved_by zu prüfen
-      const { data: existingInvoice, error: fetchError } = await supabase
-        .from('maintenance_invoices')
-        .select('*, maintenance_tasks(property_id, title, properties(name))')
-        .eq('id', invoiceId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // 2. Vier-Augen-Prinzip: Prüfen ob andere Person
-      if (existingInvoice.pre_approved_by === user?.id) {
-        throw new Error('Vier-Augen-Prinzip: Sie können nicht beide Freigaben erteilen.');
-      }
-
-      // 3. Finale Freigabe
-      const { data: invoice, error } = await supabase
-        .from('maintenance_invoices')
-        .update({
-          status: 'approved',
-          final_approved_by: user?.id,
-          final_approved_at: new Date().toISOString(),
-          // Auch die alten Felder für Abwärtskompatibilität
-          approved_by: user?.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', invoiceId)
-        .eq('status', 'pre_approved')
-        .select(`
-          *,
-          maintenance_tasks(property_id, title, properties(name))
-        `)
-        .single();
-
-      if (error) throw error;
-
-      // 4. Jetzt Buchung erstellen (nur bei finaler Freigabe!)
-      const propertyId = invoice.maintenance_tasks?.property_id;
-      if (propertyId) {
-        const { error: txError } = await supabase
-          .from('transactions')
-          .insert({
-            organization_id: invoice.organization_id,
-            property_id: propertyId,
-            transaction_date: invoice.invoice_date,
-            amount: -Math.abs(invoice.amount),
-            description: `Wartungsrechnung: ${invoice.invoice_number || 'Ohne Nr.'} - ${invoice.contractor_name}`,
-            counterpart_name: invoice.contractor_name,
-            status: 'pending',
-            notes: `Wartungsauftrag: ${invoice.maintenance_tasks?.title || 'Unbekannt'}`,
-          });
-
-        if (txError) {
-          console.error('Buchung konnte nicht erstellt werden:', txError);
-        }
-      }
-
-      return invoice;
+      const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/approve`, {});
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -193,25 +112,12 @@ export function useApproveInvoice() {
 
 export function useRejectInvoice() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ invoiceId, reason }: { invoiceId: string; reason: string }) => {
-      const { data, error } = await supabase
-        .from('maintenance_invoices')
-        .update({
-          status: 'rejected',
-          approved_by: user?.id,
-          approved_at: new Date().toISOString(),
-          rejection_reason: reason,
-        })
-        .eq('id', invoiceId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/reject`, { reason });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -233,7 +139,6 @@ export function useRejectInvoice() {
 
 export function useCreateMaintenanceInvoice() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
@@ -246,17 +151,8 @@ export function useCreateMaintenanceInvoice() {
       document_url?: string;
       notes?: string;
     }) => {
-      const { data, error } = await supabase
-        .from('maintenance_invoices')
-        .insert({
-          ...invoice,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/maintenance-invoices', invoice);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
