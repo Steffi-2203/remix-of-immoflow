@@ -231,10 +231,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
-      const allPayments = await storage.getPaymentsByTenant('');
+      const allPayments = await storage.getAllPayments();
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(allPayments) : allPayments);
     } catch (error) {
+      console.error("Payments error:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
     }
   });

@@ -3,8 +3,9 @@ import { useSubscriptionLimits, type UserSubscriptionTier } from '@/hooks/useSub
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock, Crown, Sparkles } from 'lucide-react';
+import { Lock, Crown, Sparkles, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { usePaymentPhase, type PaymentPhase } from '@/components/layout/PaymentStatusBanner';
 
 export type FeatureKey = 
   | 'canExport'
@@ -146,21 +147,98 @@ export function UpgradePrompt({ feature, tier, mode = 'inline' }: UpgradePromptP
   );
 }
 
+interface PaymentBlockedPromptProps {
+  phase: PaymentPhase;
+  isWriteAction?: boolean;
+}
+
+export function PaymentBlockedPrompt({ phase, isWriteAction = true }: PaymentBlockedPromptProps) {
+  const navigate = useNavigate();
+
+  const handleManageSubscription = async () => {
+    try {
+      const response = await fetch('/api/stripe/create-portal-session', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error) {
+      console.error('Failed to open billing portal:', error);
+    }
+  };
+
+  if (phase === 'soft_lock' && isWriteAction) {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+        <Lock className="h-5 w-5 text-red-600 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-red-900 dark:text-red-100">
+            Schreibzugriff gesperrt
+          </p>
+          <p className="text-xs text-red-700 dark:text-red-300">
+            Zahlung überfällig - nur Lesezugriff verfügbar
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={handleManageSubscription}
+          data-testid="button-pay-now-softlock"
+        >
+          Jetzt bezahlen
+        </Button>
+      </div>
+    );
+  }
+
+  if (phase === 'hard_lock' || phase === 'canceled') {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+        <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-red-900 dark:text-red-100">
+            Account gesperrt
+          </p>
+          <p className="text-xs text-red-700 dark:text-red-300">
+            Bitte reaktivieren Sie Ihr Abonnement
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={() => navigate('/pricing')}
+          data-testid="button-reactivate"
+        >
+          Reaktivieren
+        </Button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 interface FeatureGuardProps {
   feature: FeatureKey;
   children: ReactNode;
   fallback?: ReactNode;
   mode?: 'inline' | 'card' | 'minimal' | 'hide';
+  isWriteAction?: boolean;
 }
 
 export function FeatureGuard({ 
   feature, 
   children, 
   fallback,
-  mode = 'inline' 
+  mode = 'inline',
+  isWriteAction = true
 }: FeatureGuardProps) {
   const { limits, effectiveTier, isLoading } = useSubscriptionLimits();
   const { data: isAdmin } = useIsAdmin();
+  const { phase, canWrite, canRead } = usePaymentPhase();
 
   if (isLoading) {
     return null;
@@ -168,6 +246,18 @@ export function FeatureGuard({
 
   if (isAdmin) {
     return <>{children}</>;
+  }
+
+  if (phase === 'hard_lock' || phase === 'canceled') {
+    if (fallback) return <>{fallback}</>;
+    if (mode === 'hide') return null;
+    return <PaymentBlockedPrompt phase={phase} isWriteAction={isWriteAction} />;
+  }
+
+  if (phase === 'soft_lock' && isWriteAction && !canWrite) {
+    if (fallback) return <>{fallback}</>;
+    if (mode === 'hide') return null;
+    return <PaymentBlockedPrompt phase={phase} isWriteAction={isWriteAction} />;
   }
 
   const hasAccess = limits[feature as keyof typeof limits];

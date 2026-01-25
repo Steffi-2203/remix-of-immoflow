@@ -12,6 +12,7 @@ export interface IStorage {
   getTenantsByUnit(unitId: string): Promise<schema.Tenant[]>;
   getMonthlyInvoices(year?: number, month?: number): Promise<schema.MonthlyInvoice[]>;
   getInvoicesByTenant(tenantId: string): Promise<schema.MonthlyInvoice[]>;
+  getAllPayments(): Promise<schema.Payment[]>;
   getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]>;
   getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]>;
   getBankAccounts(): Promise<schema.BankAccount[]>;
@@ -75,6 +76,11 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.monthlyInvoices)
       .where(eq(schema.monthlyInvoices.tenantId, tenantId))
       .orderBy(desc(schema.monthlyInvoices.year), desc(schema.monthlyInvoices.month));
+  }
+
+  async getAllPayments(): Promise<schema.Payment[]> {
+    return db.select().from(schema.payments)
+      .orderBy(desc(schema.payments.buchungsDatum));
   }
 
   async getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]> {
