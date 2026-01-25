@@ -14,6 +14,7 @@ import {
   BookOpen, 
   Receipt,
   Users,
+  User,
   X,
   Shield,
   FileText,
@@ -68,6 +69,12 @@ const navItems: NavItem[] = [
     icon: Users,
     href: '/mieter',
     tourId: 'nav-tenants'
+  },
+  {
+    label: 'Eigentümer',
+    icon: User,
+    href: '/eigentuemer',
+    tourId: 'nav-owners'
   },
   {
     label: 'Mieteinnahmen',
