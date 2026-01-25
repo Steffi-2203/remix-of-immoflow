@@ -28,6 +28,17 @@ interface ProfileWithRoles {
 export function usePermissions(): Permissions {
   const { data: profile, isLoading } = useQuery<ProfileWithRoles>({
     queryKey: ['/api/profile'],
+    queryFn: async () => {
+      const res = await fetch('/api/profile', { credentials: 'include' });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          return null;
+        }
+        throw new Error('Failed to fetch profile');
+      }
+      return res.json();
+    },
+    retry: false,
   });
 
   const roles = profile?.roles || [];

@@ -9,8 +9,19 @@ interface ProfileWithRoles {
 }
 
 export function useIsAdmin() {
-  const { data: profile, isLoading } = useQuery<ProfileWithRoles>({
+  const { data: profile, isLoading } = useQuery<ProfileWithRoles | null>({
     queryKey: ['/api/profile'],
+    queryFn: async () => {
+      const res = await fetch('/api/profile', { credentials: 'include' });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          return null;
+        }
+        throw new Error('Failed to fetch profile');
+      }
+      return res.json();
+    },
+    retry: false,
   });
 
   return {
@@ -38,6 +49,11 @@ export function useAdminOrganizations() {
 
   return useQuery<AdminOrganization[]>({
     queryKey: ['/api/admin/organizations'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/organizations', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch organizations');
+      return res.json();
+    },
     enabled: isAdmin === true,
   });
 }
