@@ -1,5 +1,6 @@
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { PaymentStatusBanner } from './PaymentStatusBanner';
 import { TrialBanner } from '@/components/subscription/SubscriptionTeaser';
 import { UserUpgradeBanner } from '@/components/subscription/UserUpgradeBanner';
 import { SidebarProvider, useSidebarContext } from '@/contexts/SidebarContext';
@@ -26,6 +27,7 @@ function MainLayoutContent({ children, title, subtitle }: MainLayoutProps) {
         )}
       >
         <UserUpgradeBanner />
+        <PaymentStatusBanner />
         <TrialBanner />
         <Header title={title} subtitle={subtitle} />
         <main className="p-4 md:p-6">{children}</main>

@@ -265,6 +265,10 @@ export function setupAuth(app: Express) {
         fullName: profile.fullName,
         organizationId: profile.organizationId,
         roles: roles.map(r => r.role),
+        subscriptionTier: (profile as any).subscriptionTier,
+        paymentStatus: (profile as any).paymentStatus,
+        paymentFailedAt: (profile as any).paymentFailedAt,
+        canceledAt: (profile as any).canceledAt,
       });
     } catch (error) {
       console.error("Get user error:", error);

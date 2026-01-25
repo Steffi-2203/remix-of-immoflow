@@ -328,8 +328,12 @@ export async function handleSubscriptionWebhook(event: any) {
         console.log(`User subscription activated for user ${userId} with plan ${planId}`);
       }
     } else {
+      // Org-based subscription
       const organizationId = session.metadata?.organizationId;
+      const userId = session.metadata?.userId;
       const tier = session.metadata?.tier || 'starter';
+      const customerId = session.customer;
+      const subscriptionId = session.subscription;
 
       if (organizationId) {
         await db.update(schema.organizations)
@@ -340,7 +344,18 @@ export async function handleSubscriptionWebhook(event: any) {
           })
           .where(eq(schema.organizations.id, organizationId));
         
-        console.log(`Subscription activated for organization ${organizationId}`);
+        // Also store stripeCustomerId and subscriptionId in the user's profile for webhook lookups
+        if (userId && customerId) {
+          await db.update(schema.profiles)
+            .set({ 
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              paymentStatus: 'active',
+            } as any)
+            .where(eq(schema.profiles.id, userId));
+        }
+        
+        console.log(`Subscription activated for organization ${organizationId}${userId ? `, user ${userId}` : ''}`);
       }
     }
   }
@@ -354,23 +369,117 @@ export async function handleSubscriptionWebhook(event: any) {
     }
   }
 
-  if (type === 'customer.subscription.deleted') {
-    console.log('Subscription deleted');
-  }
-
-  if (type === 'invoice.paid') {
+  // Handle payment failures - set status to past_due
+  if (type === 'invoice.payment_failed') {
     const invoice = data.object;
+    const customerId = invoice.customer;
     const subscriptionId = invoice.subscription;
     
-    if (subscriptionId) {
+    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
+    let profiles = [];
+    if (customerId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
+    }
+    
+    if (!profiles[0] && subscriptionId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeSubscriptionId, subscriptionId)).limit(1);
+    }
+    
+    if (profiles[0]) {
+      await db.update(schema.profiles)
+        .set({ 
+          paymentStatus: 'past_due',
+          paymentFailedAt: new Date(),
+        } as any)
+        .where(eq(schema.profiles.id, profiles[0].id));
+      
+      console.log(`Payment failed for user ${profiles[0].id} - status set to past_due`);
+    }
+  }
+
+  // Handle subscription cancellation - lock account
+  if (type === 'customer.subscription.deleted') {
+    const subscription = data.object;
+    const customerId = subscription.customer;
+    const subscriptionId = subscription.id;
+    
+    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
+    let profiles = [];
+    if (customerId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
+    }
+    
+    if (!profiles[0] && subscriptionId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeSubscriptionId, subscriptionId)).limit(1);
+    }
+    
+    if (profiles[0]) {
+      await db.update(schema.profiles)
+        .set({ 
+          paymentStatus: 'canceled',
+          subscriptionTier: 'inactive',
+          canceledAt: new Date(),
+          stripeSubscriptionId: null,
+        } as any)
+        .where(eq(schema.profiles.id, profiles[0].id));
+      
+      // Also update organization status if user has one
+      if (profiles[0].organizationId) {
+        await db.update(schema.organizations)
+          .set({ 
+            subscriptionStatus: 'cancelled',
+          } as any)
+          .where(eq(schema.organizations.id, profiles[0].organizationId));
+      }
+      
+      console.log(`Subscription deleted for user ${profiles[0].id} - account locked`);
+    }
+  }
+
+  // Handle successful payment - reactivate if was past_due
+  if (type === 'invoice.payment_succeeded' || type === 'invoice.paid') {
+    const invoice = data.object;
+    const customerId = invoice.customer;
+    const subscriptionId = invoice.subscription;
+    
+    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
+    let profiles = [];
+    if (customerId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
+    }
+    
+    if (!profiles[0] && subscriptionId) {
+      profiles = await db.select().from(schema.profiles)
+        .where(eq((schema.profiles as any).stripeSubscriptionId, subscriptionId)).limit(1);
+    }
+    
+    if (profiles[0]) {
       const subscriptionEndsAt = new Date();
       subscriptionEndsAt.setMonth(subscriptionEndsAt.getMonth() + 1);
       
       await db.update(schema.profiles)
         .set({ 
+          paymentStatus: 'active',
+          paymentFailedAt: null,
           subscriptionEndsAt: subscriptionEndsAt,
         } as any)
-        .where(eq((schema.profiles as any).stripeSubscriptionId, subscriptionId));
+        .where(eq(schema.profiles.id, profiles[0].id));
+      
+      // Also reactivate organization if user has one
+      if (profiles[0].organizationId) {
+        await db.update(schema.organizations)
+          .set({ 
+            subscriptionStatus: 'active',
+          } as any)
+          .where(eq(schema.organizations.id, profiles[0].organizationId));
+      }
+      
+      console.log(`Payment succeeded for user ${profiles[0].id} - status reactivated`);
     }
   }
 }
