@@ -1137,54 +1137,53 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Kumulierte Einnahmen-Übersicht */}
+      {/* Kumulierte Einnahmen-Übersicht (IST aus Transaktionen) */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Euro className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Kumulierte Einnahmen (SOLL) - {periodLabel}</CardTitle>
+            <CardTitle className="text-lg">Kumulierte Einnahmen (IST) - {periodLabel}</CardTitle>
           </div>
           <CardDescription>
-            Monatliche Vorschreibungen aus Mieterdaten für {relevantTenants.length} aktive Mieter
-            {reportPeriod === 'yearly' && ' × 12 Monate'}
+            Tatsächliche Zahlungseingänge aus importierten Mieteinnahmen ({periodTransactions.filter(t => t.amount > 0).length} Transaktionen)
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="rounded-lg border border-success/30 bg-success/5 p-4">
-              <p className="text-xs text-muted-foreground font-medium">Grundmiete (Netto)</p>
+              <p className="text-xs text-muted-foreground font-medium">Miete (IST)</p>
               <p className="text-xl font-bold text-success mt-1">
-                €{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Eigentumsrelevant
+                Kategorie: Mieteinnahmen
               </p>
             </div>
             <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-              <p className="text-xs text-muted-foreground font-medium">Betriebskosten</p>
+              <p className="text-xs text-muted-foreground font-medium">Betriebskosten (IST)</p>
               <p className="text-xl font-bold text-blue-600 mt-1">
-                €{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Durchlaufposten (BK)
+                Kategorie: BK-Vorauszahlung
               </p>
             </div>
             <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
-              <p className="text-xs text-muted-foreground font-medium">Heizkosten</p>
+              <p className="text-xs text-muted-foreground font-medium">Heizkosten (IST)</p>
               <p className="text-xl font-bold text-orange-600 mt-1">
-                €{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Durchlaufposten (HK)
+                Kategorie: HK-Vorauszahlung
               </p>
             </div>
             <div className="rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
-              <p className="text-xs text-muted-foreground font-medium">Gesamt SOLL</p>
+              <p className="text-xs text-muted-foreground font-medium">Gesamt IST</p>
               <p className="text-xl font-bold text-primary mt-1">
-                €{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Alle Vorschreibungen
+                Alle Zahlungseingänge
               </p>
             </div>
           </div>
