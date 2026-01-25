@@ -34,8 +34,25 @@ export interface OCRResult {
 export function useOCRInvoice() {
   return useMutation({
     mutationFn: async (file: File): Promise<OCRResult> => {
-      // OCR feature requires OpenAI integration - show user-friendly message
-      throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
+      const imageBase64 = await fileToBase64(file);
+      
+      const response = await fetch('/api/functions/ocr-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          imageBase64, 
+          mimeType: file.type 
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+      }
+      
+      const result = await response.json();
+      return result.data as OCRResult;
     },
     onSuccess: (data) => {
       const validation = data.validierung;

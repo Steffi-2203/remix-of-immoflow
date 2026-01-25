@@ -510,8 +510,21 @@ export default function ExpenseList() {
         const base64 = imageDataUrl.split(',')[1];
         const mimeType = 'image/png';
         
-        // OCR feature requires OpenAI integration - show user-friendly message
-        throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
+        // Call the OCR function with the converted image
+        const response = await fetch('/api/functions/ocr-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ imageBase64: base64, mimeType }),
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+        }
+        
+        const ocrResponse = await response.json();
+        result = ocrResponse.data;
       } else {
         // Use the hook for regular files
         result = await ocrInvoice.mutateAsync(file);
@@ -659,8 +672,23 @@ export default function ExpenseList() {
         const context = canvas.getContext('2d');
         if (context) {
           await page.render({ canvasContext: context, viewport }).promise;
-          // OCR feature requires OpenAI integration - show user-friendly message
-          throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
+          const imageDataUrl = canvas.toDataURL('image/png');
+          const base64 = imageDataUrl.split(',')[1];
+          
+          const response = await fetch('/api/functions/ocr-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ imageBase64: base64, mimeType: 'image/png' }),
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+          }
+          
+          const ocrResponse = await response.json();
+          result = ocrResponse.data;
         }
       } else {
         result = await ocrInvoice.mutateAsync(item.file);
