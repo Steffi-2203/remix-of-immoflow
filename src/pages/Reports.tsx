@@ -189,6 +189,13 @@ const reports = [
     icon: Wallet,
     color: 'bg-teal-500/10 text-teal-600',
   },
+  {
+    id: 'vertragsablauf',
+    title: 'Vertragsablauf',
+    description: 'Mietverträge die bald auslaufen',
+    icon: Calendar,
+    color: 'bg-orange-500/10 text-orange-600',
+  },
 ];
 
 const monthNames = [
@@ -2543,6 +2550,159 @@ export default function Reports() {
                             </TableCell>
                             <TableCell className="text-right font-bold">
                               €{Number(tenant.kaution || 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Vertragsablauf Report */}
+          {selectedReportId === 'vertragsablauf' && (() => {
+            const today = new Date();
+            const oneMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+            const threeMonths = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const sixMonths = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
+
+            // Filter tenants with mietende set
+            const tenantsWithEndDate = (allTenants || []).filter(t => {
+              if (!t.mietende || t.status === 'beendet') return false;
+              
+              const endDate = new Date(t.mietende);
+              if (endDate < today) return false; // Already ended
+              if (endDate > sixMonths) return false; // More than 6 months away
+              
+              if (selectedPropertyId === 'all') return true;
+              
+              const unit = (allUnits || []).find(u => u.id === t.unit_id);
+              return unit?.property_id === selectedPropertyId;
+            });
+
+            // Sort by mietende (soonest first)
+            const sortedTenants = tenantsWithEndDate.sort((a, b) => {
+              return new Date(a.mietende!).getTime() - new Date(b.mietende!).getTime();
+            });
+
+            // Categorize by time period
+            const within1Month = sortedTenants.filter(t => new Date(t.mietende!) <= oneMonth);
+            const within3Months = sortedTenants.filter(t => {
+              const end = new Date(t.mietende!);
+              return end > oneMonth && end <= threeMonths;
+            });
+            const within6Months = sortedTenants.filter(t => {
+              const end = new Date(t.mietende!);
+              return end > threeMonths && end <= sixMonths;
+            });
+
+            const getDaysUntilEnd = (endDate: string) => {
+              const end = new Date(endDate);
+              const diff = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+              return diff;
+            };
+
+            const getBadgeVariant = (days: number) => {
+              if (days <= 30) return 'destructive';
+              if (days <= 90) return 'default';
+              return 'secondary';
+            };
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Vertragsablauf</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Mietverträge die in den nächsten 6 Monaten auslaufen
+                    </p>
+                  </div>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <Card className="border-l-4 border-l-red-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 1 Monat</p>
+                          <p className="text-2xl font-bold text-red-600">{within1Month.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-orange-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-orange-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 3 Monate</p>
+                          <p className="text-2xl font-bold text-orange-600">{within3Months.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-blue-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 6 Monate</p>
+                          <p className="text-2xl font-bold text-blue-600">{within6Months.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Table */}
+                {sortedTenants.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Keine auslaufenden Verträge</p>
+                    <p className="text-sm">In den nächsten 6 Monaten laufen keine Mietverträge aus.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Liegenschaft</TableHead>
+                        <TableHead>Einheit</TableHead>
+                        <TableHead>Mieter</TableHead>
+                        <TableHead>Mietbeginn</TableHead>
+                        <TableHead>Mietende</TableHead>
+                        <TableHead className="text-right">Verbleibend</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedTenants.map((tenant) => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
+                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        const daysLeft = getDaysUntilEnd(tenant.mietende!);
+                        
+                        return (
+                          <TableRow key={tenant.id} data-testid={`row-vertragsablauf-${tenant.id}`}>
+                            <TableCell>{property?.name || '-'}</TableCell>
+                            <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                            <TableCell className="font-medium">
+                              {tenant.first_name} {tenant.last_name}
+                            </TableCell>
+                            <TableCell>
+                              {tenant.mietbeginn 
+                                ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT')
+                                : '-'
+                              }
+                            </TableCell>
+                            <TableCell>
+                              {new Date(tenant.mietende!).toLocaleDateString('de-AT')}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={getBadgeVariant(daysLeft)}>
+                                {daysLeft} Tage
+                              </Badge>
                             </TableCell>
                           </TableRow>
                         );
