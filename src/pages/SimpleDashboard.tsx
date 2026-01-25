@@ -4,6 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useProperties, useCreateProperty, useDeleteProperty } from "@/hooks/useProperties";
 import { useUnits, useCreateUnit } from "@/hooks/useUnits";
+import { useTenants } from "@/hooks/useTenants";
+import { useInvoices } from "@/hooks/useInvoices";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,6 @@ import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
 import { useFeatureTour } from "@/hooks/useFeatureTour";
-
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
   const { data: units, isLoading } = useUnits(propertyId);
@@ -100,7 +101,7 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
                   {unit.status === 'aktiv' ? 'Vermietet' : 'Leerstand'}
                 </Badge>
               </div>
-              <span className="text-muted-foreground">{unit.qm} m²</span>
+              <span className="text-muted-foreground">{unit.qm || unit.flaeche || 0} m²</span>
             </div>
           ))}
         </div>
@@ -124,7 +125,6 @@ export default function SimpleDashboard() {
   const propertiesList = properties || [];
   const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
-  // Auto-start tour for new users
   useEffect(() => {
     if (!isLoading && organization && !showOnboarding) {
       autoStartTour();
@@ -159,7 +159,6 @@ export default function SimpleDashboard() {
 
   return (
     <MainLayout title="Dashboard" subtitle="Übersicht">
-      {/* Feature Tour */}
       <FeatureTour
         steps={steps}
         isOpen={isOpen}
@@ -167,13 +166,11 @@ export default function SimpleDashboard() {
         onComplete={completeTour}
       />
 
-      {/* Onboarding Wizard */}
       {showOnboarding && (
         <OnboardingWizard onComplete={markComplete} onSkip={markComplete} />
       )}
 
       <div className="max-w-4xl" data-tour="dashboard">
-        {/* Header mit Aktionen */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl font-bold">ImmoflowMe</h1>
           <div className="flex gap-2">
@@ -189,7 +186,6 @@ export default function SimpleDashboard() {
           </div>
         </div>
 
-        {/* Organization Info */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Organisation</CardTitle>
@@ -208,35 +204,28 @@ export default function SimpleDashboard() {
           </CardContent>
         </Card>
 
-        {/* Property KPIs Widget */}
         <PropertyKPIsWidget />
 
-        {/* Sync Status Widget */}
         <div className="mt-6">
           <SyncStatusWidget />
         </div>
 
-        {/* Data Quality Widget */}
         <div className="mt-6">
           <DataQualityWidget />
         </div>
 
-        {/* Bank Accounts Widget */}
         <div className="mt-6">
           <BankAccountsWidget />
         </div>
 
-        {/* Upcoming Maintenance Widget */}
         <div className="mt-6">
           <UpcomingMaintenanceWidget />
         </div>
 
-        {/* Calendar Widget */}
         <div className="mt-6">
           <CalendarWidget />
         </div>
 
-        {/* Properties Section */}
         <Card className="mt-6">
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -251,7 +240,6 @@ export default function SimpleDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Add Form */}
             {showAddForm && (
               <div className="mb-6 p-4 border rounded-lg bg-muted">
                 <h3 className="font-semibold mb-4">Neue Liegenschaft</h3>
@@ -308,13 +296,12 @@ export default function SimpleDashboard() {
               </div>
             )}
 
-            {/* Properties List */}
             {propertiesLoading ? (
               <div className="space-y-4">
                 <Skeleton className="h-24 w-full" />
                 <Skeleton className="h-24 w-full" />
               </div>
-            ) : propertiesList.length === 0 ? (
+            ) : propertiesList.length === 0 && !showAddForm ? (
               <p className="text-muted-foreground py-8 text-center">
                 Noch keine Liegenschaften vorhanden. Erstellen Sie Ihre erste Liegenschaft!
               </p>
@@ -336,7 +323,7 @@ export default function SimpleDashboard() {
                         <div className="min-w-0">
                           <h3 className="font-semibold text-lg truncate">{property.name}</h3>
                           <p className="text-muted-foreground text-sm truncate">
-                            {property.address}, {property.postalCode} {property.city}
+                            {property.address}, {property.postal_code} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
                             {property.total_units || 0} Einheiten • {property.rented_units || 0} vermietet • {property.total_qm || 0} m²
@@ -358,7 +345,6 @@ export default function SimpleDashboard() {
                       </Button>
                     </div>
 
-                    {/* Units Section - nur wenn Property ausgewählt */}
                     {selectedProperty === property.id && (
                       <UnitsSection propertyId={property.id} />
                     )}
