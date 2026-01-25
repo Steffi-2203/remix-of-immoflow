@@ -91,6 +91,12 @@ const navItems: NavItem[] = [
     tourId: 'nav-keys'
   },
   {
+    label: 'VPI-Anpassungen',
+    icon: TrendingUp,
+    href: '/vpi-anpassungen',
+    tourId: 'nav-vpi'
+  },
+  {
     label: 'Mieteinnahmen',
     icon: Wallet,
     href: '/zahlungen'
