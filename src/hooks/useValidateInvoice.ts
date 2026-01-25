@@ -1,5 +1,4 @@
 import { useMutation } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export interface InvoiceData {
@@ -40,23 +39,19 @@ export interface ValidationResult {
 export function useValidateInvoice() {
   return useMutation({
     mutationFn: async (invoiceData: InvoiceData): Promise<ValidationResult> => {
-      // Check if user is authenticated
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('Nicht angemeldet – bitte neu einloggen');
-      }
-      
-      const { data, error } = await supabase.functions.invoke('validate-invoice', {
-        body: { daten: invoiceData },
+      const response = await fetch('/api/functions/validate-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ daten: invoiceData }),
       });
       
-      if (error) {
-        console.error('Validate invoice error:', error);
-        throw new Error(error.message || 'Validierung fehlgeschlagen');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Validierung fehlgeschlagen');
       }
-      if (data?.error) throw new Error(data.error);
       
-      return data as ValidationResult;
+      return response.json();
     },
     onSuccess: (data) => {
       const report = data.validierungsbericht;

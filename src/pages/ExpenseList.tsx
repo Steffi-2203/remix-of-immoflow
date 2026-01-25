@@ -510,22 +510,8 @@ export default function ExpenseList() {
         const base64 = imageDataUrl.split(',')[1];
         const mimeType = 'image/png';
         
-        // Call the OCR function directly with the converted image
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error('Nicht angemeldet');
-        }
-        
-        const { data, error } = await supabase.functions.invoke('ocr-invoice', {
-          body: {
-            imageBase64: base64,
-            mimeType: mimeType,
-          },
-        });
-        
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
-        result = data.data;
+        // OCR feature requires OpenAI integration - show user-friendly message
+        throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
       } else {
         // Use the hook for regular files
         result = await ocrInvoice.mutateAsync(file);
@@ -673,19 +659,8 @@ export default function ExpenseList() {
         const context = canvas.getContext('2d');
         if (context) {
           await page.render({ canvasContext: context, viewport }).promise;
-          const imageDataUrl = canvas.toDataURL('image/png');
-          const base64 = imageDataUrl.split(',')[1];
-          
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) throw new Error('Nicht angemeldet');
-          
-          const { data, error } = await supabase.functions.invoke('ocr-invoice', {
-            body: { imageBase64: base64, mimeType: 'image/png' },
-          });
-          
-          if (error) throw new Error(error.message);
-          if (data?.error) throw new Error(data.error);
-          result = data.data;
+          // OCR feature requires OpenAI integration - show user-friendly message
+          throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
         }
       } else {
         result = await ocrInvoice.mutateAsync(item.file);

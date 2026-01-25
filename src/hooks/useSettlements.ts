@@ -154,8 +154,11 @@ export function useSaveSettlement() {
         
         for (const item of itemsWithEmail) {
           try {
-            const { error: emailError } = await supabase.functions.invoke('send-settlement-email', {
-              body: {
+            const emailResponse = await fetch('/api/functions/send-settlement-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
                 settlementItemId: item.id,
                 propertyName,
                 propertyAddress,
@@ -172,11 +175,11 @@ export function useSaveSettlement() {
                 gesamtSaldo: item.gesamt_saldo,
                 isLeerstandBK: item.is_leerstand_bk,
                 isLeerstandHK: item.is_leerstand_hk,
-              },
+              }),
             });
 
-            if (emailError) {
-              console.error('Email error:', emailError);
+            if (!emailResponse.ok) {
+              console.error('Email error:', await emailResponse.text());
             }
           } catch (err) {
             console.error('Failed to send email:', err);

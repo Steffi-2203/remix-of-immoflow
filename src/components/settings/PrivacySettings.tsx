@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Download, Trash2, Shield, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export function PrivacySettings() {
@@ -17,11 +16,16 @@ export function PrivacySettings() {
     
     setIsExporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('export-user-data', {
-        body: { userId: user.id },
+      const response = await fetch('/api/functions/export-user-data', {
+        method: 'GET',
+        credentials: 'include',
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Export fehlgeschlagen');
+      }
+
+      const data = await response.json();
 
       // Create and download JSON file
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -48,11 +52,14 @@ export function PrivacySettings() {
 
     setIsDeleting(true);
     try {
-      const { error } = await supabase.functions.invoke('delete-account', {
-        body: { userId: user.id },
+      const response = await fetch('/api/functions/delete-account', {
+        method: 'DELETE',
+        credentials: 'include',
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error('Löschen fehlgeschlagen');
+      }
 
       toast.success('Ihr Konto wurde gelöscht.');
       await signOut();
