@@ -22,6 +22,20 @@ import {
   insertMonthlyInvoiceSchema
 } from "@shared/schema";
 
+// Convert snake_case keys to camelCase for database compatibility
+function snakeToCamel(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(snakeToCamel);
+  if (typeof obj !== 'object') return obj;
+  
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = snakeToCamel(value);
+  }
+  return result;
+}
+
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
     return next();
@@ -233,7 +247,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/settlements", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const { propertyId, year, items, ...data } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { propertyId, year, items, ...data } = normalizedBody;
       
       const existing = await storage.getSettlementByPropertyAndYear(propertyId, year);
       let settlementId: string;
@@ -275,8 +290,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantId: item.tenantId,
           tenantName: item.tenantName,
           tenantEmail: item.tenantEmail,
-          isLeerstandBk: item.isLeerstandBK,
-          isLeerstandHk: item.isLeerstandHK,
+          isLeerstandBk: item.isLeerstandBk ?? item.isLeerstandBK ?? false,
+          isLeerstandHk: item.isLeerstandHk ?? item.isLeerstandHK ?? false,
           bkAnteil: item.bkAnteil,
           hkAnteil: item.hkAnteil,
           bkVorschuss: item.bkVorschuss,
@@ -315,15 +330,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Profile not found" });
       }
       
+      const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertPropertySchema.safeParse({
-        ...req.body,
+        ...normalizedBody,
         organizationId: profile.organizationId,
       });
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       
-      const propertyId = req.body.id || crypto.randomUUID();
+      const propertyId = normalizedBody.id || crypto.randomUUID();
       const property = await storage.createProperty({
         id: propertyId,
         ...validationResult.data,
@@ -351,7 +367,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingProperty.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const validationResult = insertPropertySchema.partial().safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertPropertySchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -380,9 +397,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Profile not found" });
       }
       
+      const normalizedBody = snakeToCamel(req.body);
       const result = await storage.createPropertyManager({
         userId: profile.id,
-        propertyId: req.body.propertyId,
+        propertyId: normalizedBody.propertyId,
       });
       res.json(result);
     } catch (error) {
@@ -421,7 +439,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const validationResult = insertPaymentSchema.safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertPaymentSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -464,7 +483,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const validationResult = insertPaymentSchema.partial().safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertPaymentSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -522,7 +542,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const validationResult = insertTransactionSchema.safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertTransactionSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -574,7 +595,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const validationResult = insertExpenseSchema.safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertExpenseSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -624,7 +646,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Access denied" });
         }
       }
-      const validationResult = insertExpenseSchema.partial().safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertExpenseSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -674,14 +697,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
       
-      const { name, type, parent_id, is_system } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { name, type, parentId, isSystem } = normalizedBody;
       
       const category = await storage.createAccountCategory({
         organizationId: profile.organizationId,
         name: name,
         type: type,
-        parentId: parent_id || null,
-        isSystem: is_system || false,
+        parentId: parentId || null,
+        isSystem: isSystem || false,
       });
       res.status(201).json(category);
     } catch (error) {
@@ -853,8 +877,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
+      const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertRentHistorySchema.safeParse({
-        ...req.body,
+        ...normalizedBody,
         tenantId: req.params.tenantId
       });
       if (!validationResult.success) {
@@ -908,7 +933,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const validationResult = insertMonthlyInvoiceSchema.safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertMonthlyInvoiceSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -951,7 +977,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const validationResult = insertMonthlyInvoiceSchema.partial().safeParse(req.body);
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertMonthlyInvoiceSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
@@ -1203,7 +1230,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const org = await storage.getUserOrganization(userId);
       if (!org) return res.status(403).json({ error: "No organization" });
 
-      const { keyCode, name, description, unit, inputType } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { keyCode, name, description, unit, inputType } = normalizedBody;
       if (!keyCode || !name) {
         return res.status(400).json({ error: "keyCode and name required" });
       }
@@ -1231,9 +1259,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
       const { id } = req.params;
-      const updates = req.body;
+      const normalizedBody = snakeToCamel(req.body);
 
-      const updated = await storage.updateDistributionKey(id, updates);
+      const updated = await storage.updateDistributionKey(id, normalizedBody);
       if (!updated) return res.status(404).json({ error: "Key not found" });
       res.json(updated);
     } catch (error) {
@@ -1293,7 +1321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const { keyId, value } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { keyId, value } = normalizedBody;
       if (!keyId) return res.status(400).json({ error: "keyId is required" });
       const key = await storage.getDistributionKey(keyId);
       if (!key) return res.status(400).json({ error: "Invalid distribution key" });
@@ -1419,7 +1448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can send invites" });
       }
       
-      const { email, role } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { email, role } = normalizedBody;
       
       if (!email || !role) {
         return res.status(400).json({ error: "Email and role are required" });
@@ -1623,7 +1653,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can manage roles" });
       }
       
-      const { role, action } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { role, action } = normalizedBody;
       const memberId = req.params.memberId;
       
       if (action === 'add') {
@@ -1662,7 +1693,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const { creditorName, creditorIban, creditorBic, creditorId, invoiceIds } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { creditorName, creditorIban, creditorBic, creditorId, invoiceIds } = normalizedBody;
       const xml = await sepaExportService.generateDirectDebitXml(
         profile.organizationId,
         creditorName,
@@ -1685,7 +1717,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const { debtorName, debtorIban, debtorBic, transfers } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { debtorName, debtorIban, debtorBic, transfers } = normalizedBody;
       const xml = await sepaExportService.generateCreditTransferXml(
         profile.organizationId,
         debtorName,
@@ -1736,7 +1769,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const { sendEmails } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { sendEmails } = normalizedBody;
       const result = await automatedDunningService.processAutomatedDunning(
         profile.organizationId,
         sendEmails === true
@@ -1767,7 +1801,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const { tenantId, newRent, currentVpiValue, effectiveDate } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { tenantId, newRent, currentVpiValue, effectiveDate } = normalizedBody;
       const result = await vpiAutomationService.applyVpiAdjustment(
         profile.organizationId,
         tenantId,
@@ -1801,7 +1836,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const { managerEmail } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { managerEmail } = normalizedBody;
       const result = await maintenanceReminderService.sendMaintenanceReminders(
         profile.organizationId,
         managerEmail
@@ -2000,7 +2036,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Storage Endpoints =====
   app.post("/api/storage/signed-url", isAuthenticated, async (req: any, res) => {
     try {
-      const { bucket, filePath, expiresIn } = req.body;
+      const normalizedBody = snakeToCamel(req.body);
+      const { bucket, filePath, expiresIn } = normalizedBody;
       // For now, return the direct path since we're not using external storage
       // In production, this would generate a signed URL from the storage provider
       const signedUrl = `/api/storage/files/${bucket}/${filePath}`;
