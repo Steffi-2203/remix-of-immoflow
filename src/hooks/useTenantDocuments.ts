@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type TenantDocument = {
   id: string;
@@ -27,6 +28,10 @@ export const TENANT_DOCUMENT_TYPES = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
+function normalizeTenantDocument(doc: any) {
+  return normalizeFields(doc);
+}
+
 export function useTenantDocuments(tenantId: string | undefined) {
   return useQuery({
     queryKey: ['tenant-documents', tenantId],
@@ -34,7 +39,8 @@ export function useTenantDocuments(tenantId: string | undefined) {
       if (!tenantId) return [];
       const response = await fetch(`/api/tenants/${tenantId}/documents`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenant documents');
-      return response.json() as Promise<TenantDocument[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTenantDocument) : [normalizeTenantDocument(data)] as TenantDocument[];
     },
     enabled: !!tenantId,
   });
@@ -46,7 +52,8 @@ export function useAllTenantDocuments() {
     queryFn: async () => {
       const response = await fetch('/api/tenant-documents', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch all tenant documents');
-      return response.json() as Promise<TenantDocumentWithTenant[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTenantDocument) : [normalizeTenantDocument(data)] as TenantDocumentWithTenant[];
     },
   });
 }
@@ -78,7 +85,8 @@ export function useUploadTenantDocument() {
       });
 
       if (!response.ok) throw new Error('Failed to upload document');
-      return response.json();
+      const data = await response.json();
+      return normalizeTenantDocument(data);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant-documents', variables.tenantId] });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface DistributionKey {
   id: string;
@@ -35,13 +36,18 @@ export const inputTypeOptions = [
   { value: 'verbrauch', label: 'Verbrauchsabhängig', unit: 'Einheit' },
 ];
 
+function normalizeDistributionKey(key: any) {
+  return normalizeFields(key);
+}
+
 export function useDistributionKeys() {
   return useQuery<DistributionKey[]>({
     queryKey: ['distribution-keys'],
     queryFn: async () => {
       const response = await fetch('/api/distribution-keys', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch distribution keys');
-      return response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeDistributionKey) : [normalizeDistributionKey(data)];
     },
   });
 }
@@ -52,7 +58,8 @@ export function useCreateDistributionKey() {
   return useMutation({
     mutationFn: async (data: Partial<DistributionKeyInsert>) => {
       const response = await apiRequest('POST', '/api/distribution-keys', data);
-      return response.json();
+      const result = await response.json();
+      return normalizeDistributionKey(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
@@ -71,7 +78,8 @@ export function useUpdateDistributionKey() {
   return useMutation({
     mutationFn: async ({ id, ...data }: DistributionKeyUpdate) => {
       const response = await apiRequest('PATCH', `/api/distribution-keys/${id}`, data);
-      return response.json();
+      const result = await response.json();
+      return normalizeDistributionKey(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });

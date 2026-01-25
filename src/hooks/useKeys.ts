@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface KeyInventoryItem {
   id: string;
@@ -86,6 +87,25 @@ export const KEY_STATUS_LABELS: Record<string, string> = {
   gesperrt: 'Gesperrt',
 };
 
+function normalizeKeyInventory(item: any) {
+  const normalized = normalizeFields(item);
+  if (normalized.properties) {
+    normalized.properties = normalizeFields(normalized.properties);
+  }
+  if (normalized.units) {
+    normalized.units = normalizeFields(normalized.units);
+  }
+  return normalized;
+}
+
+function normalizeKeyHandover(handover: any) {
+  const normalized = normalizeFields(handover);
+  if (normalized.tenants) {
+    normalized.tenants = normalizeFields(normalized.tenants);
+  }
+  return normalized;
+}
+
 export function useKeyInventory(propertyId?: string) {
   return useQuery({
     queryKey: ['key-inventory', propertyId],
@@ -93,7 +113,8 @@ export function useKeyInventory(propertyId?: string) {
       const url = propertyId ? `/api/key-inventory?property_id=${propertyId}` : '/api/key-inventory';
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch key inventory');
-      return response.json() as Promise<KeyInventoryItem[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeKeyInventory) : [normalizeKeyInventory(data)] as KeyInventoryItem[];
     },
   });
 }
@@ -105,7 +126,8 @@ export function useKeyInventoryItem(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/key-inventory/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch key inventory item');
-      return response.json() as Promise<KeyInventoryItem | null>;
+      const data = await response.json();
+      return data ? normalizeKeyInventory(data) as KeyInventoryItem : null;
     },
     enabled: !!id,
   });
@@ -117,7 +139,8 @@ export function useCreateKeyInventory() {
   return useMutation({
     mutationFn: async (key: KeyInventoryInsert) => {
       const response = await apiRequest('POST', '/api/key-inventory', key);
-      return response.json() as Promise<KeyInventoryItem>;
+      const data = await response.json();
+      return normalizeKeyInventory(data) as KeyInventoryItem;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['key-inventory'] });
@@ -136,7 +159,8 @@ export function useUpdateKeyInventory() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: KeyInventoryUpdate) => {
       const response = await apiRequest('PATCH', `/api/key-inventory/${id}`, updates);
-      return response.json() as Promise<KeyInventoryItem>;
+      const data = await response.json();
+      return normalizeKeyInventory(data) as KeyInventoryItem;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['key-inventory'] });
@@ -175,7 +199,8 @@ export function useKeyHandovers(keyInventoryId: string | undefined) {
       if (!keyInventoryId) return [];
       const response = await fetch(`/api/key-inventory/${keyInventoryId}/handovers`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch key handovers');
-      return response.json() as Promise<KeyHandover[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeKeyHandover) : [normalizeKeyHandover(data)] as KeyHandover[];
     },
     enabled: !!keyInventoryId,
   });
@@ -187,7 +212,8 @@ export function useCreateKeyHandover() {
   return useMutation({
     mutationFn: async (handover: KeyHandoverInsert) => {
       const response = await apiRequest('POST', `/api/key-inventory/${handover.key_inventory_id}/handovers`, handover);
-      return response.json() as Promise<KeyHandover>;
+      const data = await response.json();
+      return normalizeKeyHandover(data) as KeyHandover;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['key-handovers', data.key_inventory_id] });

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface MaintenanceTask {
   id: string;
@@ -40,6 +41,17 @@ export interface CreateMaintenanceTask {
   estimated_cost?: number;
 }
 
+function normalizeMaintenanceTask(task: any) {
+  const normalized = normalizeFields(task);
+  if (normalized.properties) {
+    normalized.properties = normalizeFields(normalized.properties);
+  }
+  if (normalized.units) {
+    normalized.units = normalizeFields(normalized.units);
+  }
+  return normalized;
+}
+
 export function useMaintenanceTasks(filters?: {
   status?: string;
   priority?: string;
@@ -60,7 +72,8 @@ export function useMaintenanceTasks(filters?: {
       const url = `/api/maintenance-tasks${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch maintenance tasks');
-      return response.json() as Promise<MaintenanceTask[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeMaintenanceTask) : [normalizeMaintenanceTask(data)] as MaintenanceTask[];
     },
     enabled: !!user?.id,
   });
@@ -73,7 +86,8 @@ export function useCreateMaintenanceTask() {
   return useMutation({
     mutationFn: async (task: CreateMaintenanceTask) => {
       const response = await apiRequest('POST', '/api/maintenance-tasks', task);
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceTask(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-tasks'] });
@@ -100,7 +114,8 @@ export function useUpdateMaintenanceTask() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<MaintenanceTask> & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/maintenance-tasks/${id}`, updates);
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceTask(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-tasks'] });

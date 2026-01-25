@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface SettlementItem {
   unitId: string;
@@ -32,6 +33,14 @@ export interface SaveSettlementData {
   sendEmails: boolean;
 }
 
+function normalizeSettlement(settlement: any) {
+  const normalized = normalizeFields(settlement);
+  if (normalized.items && Array.isArray(normalized.items)) {
+    normalized.items = normalized.items.map((item: any) => normalizeFields(item));
+  }
+  return normalized;
+}
+
 export function useExistingSettlement(propertyId: string | undefined, year: number | undefined) {
   return useQuery({
     queryKey: ['settlement', propertyId, year],
@@ -43,7 +52,8 @@ export function useExistingSettlement(propertyId: string | undefined, year: numb
         if (response.status === 404) return null;
         throw new Error('Failed to fetch settlement');
       }
-      return response.json();
+      const data = await response.json();
+      return normalizeSettlement(data);
     },
     enabled: !!propertyId && !!year,
   });
@@ -62,7 +72,8 @@ export function useSaveSettlement() {
       });
       
       if (!response.ok) throw new Error('Failed to save settlement');
-      return response.json();
+      const result = await response.json();
+      return normalizeSettlement(result);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settlement'] });
@@ -86,7 +97,8 @@ export function useFinalizeSettlement() {
       });
       
       if (!response.ok) throw new Error('Failed to finalize settlement');
-      return response.json();
+      const result = await response.json();
+      return normalizeSettlement(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settlement'] });

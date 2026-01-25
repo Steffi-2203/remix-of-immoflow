@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface MaintenanceInvoice {
   id: string;
@@ -29,6 +30,17 @@ export interface MaintenanceInvoice {
   } | null;
 }
 
+function normalizeMaintenanceInvoice(invoice: any) {
+  const normalized = normalizeFields(invoice);
+  if (normalized.maintenance_tasks) {
+    normalized.maintenance_tasks = normalizeFields(normalized.maintenance_tasks);
+    if (normalized.maintenance_tasks.properties) {
+      normalized.maintenance_tasks.properties = normalizeFields(normalized.maintenance_tasks.properties);
+    }
+  }
+  return normalized;
+}
+
 export function useMaintenanceInvoices(status?: string) {
   const { user } = useAuth();
 
@@ -40,7 +52,8 @@ export function useMaintenanceInvoices(status?: string) {
         : '/api/maintenance-invoices';
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch maintenance invoices');
-      return response.json() as Promise<MaintenanceInvoice[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeMaintenanceInvoice) : [normalizeMaintenanceInvoice(data)] as MaintenanceInvoice[];
     },
     enabled: !!user?.id,
   });
@@ -61,7 +74,8 @@ export function usePreApproveInvoice() {
   return useMutation({
     mutationFn: async (invoiceId: string) => {
       const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/pre-approve`, {});
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceInvoice(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -88,7 +102,8 @@ export function useApproveInvoice() {
   return useMutation({
     mutationFn: async (invoiceId: string) => {
       const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/approve`, {});
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceInvoice(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -117,7 +132,8 @@ export function useRejectInvoice() {
   return useMutation({
     mutationFn: async ({ invoiceId, reason }: { invoiceId: string; reason: string }) => {
       const response = await apiRequest('POST', `/api/maintenance-invoices/${invoiceId}/reject`, { reason });
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceInvoice(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });
@@ -152,7 +168,8 @@ export function useCreateMaintenanceInvoice() {
       notes?: string;
     }) => {
       const response = await apiRequest('POST', '/api/maintenance-invoices', invoice);
-      return response.json();
+      const data = await response.json();
+      return normalizeMaintenanceInvoice(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-invoices'] });

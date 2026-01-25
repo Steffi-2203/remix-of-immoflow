@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface Message {
   id: string;
@@ -24,6 +25,17 @@ export interface Message {
   units?: { top_nummer: string } | null;
 }
 
+function normalizeMessage(message: any) {
+  const normalized = normalizeFields(message);
+  if (normalized.tenants) {
+    normalized.tenants = normalizeFields(normalized.tenants);
+  }
+  if (normalized.units) {
+    normalized.units = normalizeFields(normalized.units);
+  }
+  return normalized;
+}
+
 export function useMessages(status?: string) {
   const { user } = useAuth();
 
@@ -35,7 +47,8 @@ export function useMessages(status?: string) {
         : '/api/messages';
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch messages');
-      return response.json() as Promise<Message[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeMessage) : [normalizeMessage(data)] as Message[];
     },
     enabled: !!user?.id,
   });
@@ -64,7 +77,8 @@ export function useCreateMessage() {
       status?: 'draft' | 'sent';
     }) => {
       const response = await apiRequest('POST', '/api/messages', message);
-      return response.json();
+      const data = await response.json();
+      return normalizeMessage(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });
@@ -93,7 +107,8 @@ export function useUpdateMessage() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Message> & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/messages/${id}`, updates);
-      return response.json();
+      const data = await response.json();
+      return normalizeMessage(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['messages'] });

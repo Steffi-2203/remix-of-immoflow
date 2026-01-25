@@ -3,6 +3,7 @@ import { useAuth } from './useAuth';
 import { useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/queryClient';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type SubscriptionTier = 'starter' | 'professional' | 'enterprise';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired';
@@ -39,6 +40,10 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   expired: 'Aktiv',
 };
 
+function normalizeOrganization(org: any) {
+  return normalizeFields(org);
+}
+
 export function useOrganization() {
   const { user } = useAuth();
 
@@ -51,7 +56,8 @@ export function useOrganization() {
         if (response.status === 404) return null;
         throw new Error('Failed to fetch organization');
       }
-      return response.json() as Promise<Organization>;
+      const data = await response.json();
+      return normalizeOrganization(data) as Organization;
     },
     enabled: !!user,
   });
@@ -164,7 +170,8 @@ export function useUpdateOrganization() {
       sepa_creditor_id?: string;
     }) => {
       const response = await apiRequest('PATCH', `/api/organizations/${data.id}`, data);
-      return response.json();
+      const result = await response.json();
+      return normalizeOrganization(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization'] });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface SepaCollection {
   id: string;
@@ -55,13 +56,22 @@ export interface CreateSepaCollectionInput {
   }>;
 }
 
+function normalizeSepaCollection(collection: any) {
+  return normalizeFields(collection);
+}
+
+function normalizeSepaCollectionItem(item: any) {
+  return normalizeFields(item);
+}
+
 export function useSepaCollections() {
   return useQuery({
     queryKey: ['sepa-collections'],
     queryFn: async () => {
       const response = await fetch('/api/sepa-collections', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch SEPA collections');
-      return response.json() as Promise<SepaCollection[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeSepaCollection) : [normalizeSepaCollection(data)] as SepaCollection[];
     },
   });
 }
@@ -73,10 +83,14 @@ export function useSepaCollectionById(id: string | null) {
       if (!id) return null;
       const response = await fetch(`/api/sepa-collections/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch SEPA collection');
-      return response.json() as Promise<{
+      const data = await response.json();
+      return {
+        collection: normalizeSepaCollection(data.collection),
+        items: Array.isArray(data.items) ? data.items.map(normalizeSepaCollectionItem) : [],
+      } as {
         collection: SepaCollection;
         items: SepaCollectionItem[];
-      }>;
+      };
     },
     enabled: !!id,
   });
@@ -88,7 +102,8 @@ export function useCreateSepaCollection() {
   return useMutation({
     mutationFn: async (input: CreateSepaCollectionInput) => {
       const response = await apiRequest('POST', '/api/sepa-collections', input);
-      return response.json() as Promise<SepaCollection>;
+      const data = await response.json();
+      return normalizeSepaCollection(data) as SepaCollection;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sepa-collections'] });
@@ -123,7 +138,8 @@ export function useUpdateSepaCollectionItemStatus() {
         return_date: returnDate,
         payment_id: paymentId,
       });
-      return response.json() as Promise<SepaCollectionItem>;
+      const data = await response.json();
+      return normalizeSepaCollectionItem(data) as SepaCollectionItem;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['sepa-collections'] });
@@ -148,7 +164,8 @@ export function useUpdateSepaCollectionStatus() {
       status: 'pending' | 'exported' | 'partially_completed' | 'completed';
     }) => {
       const response = await apiRequest('PATCH', `/api/sepa-collections/${collectionId}`, { status });
-      return response.json() as Promise<SepaCollection>;
+      const data = await response.json();
+      return normalizeSepaCollection(data) as SepaCollection;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sepa-collections'] });
@@ -162,7 +179,8 @@ export function useMarkAllItemsSuccessful() {
   return useMutation({
     mutationFn: async (collectionId: string) => {
       const response = await apiRequest('POST', `/api/sepa-collections/${collectionId}/mark-all-successful`, {});
-      return response.json() as Promise<SepaCollectionItem[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeSepaCollectionItem) : [normalizeSepaCollectionItem(data)] as SepaCollectionItem[];
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sepa-collections'] });

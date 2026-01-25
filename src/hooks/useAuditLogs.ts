@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface AuditLog {
   id: string;
@@ -21,6 +22,10 @@ export interface AuditLogFilters {
   endDate?: string;
 }
 
+function normalizeAuditLog(log: any) {
+  return normalizeFields(log);
+}
+
 export function useAuditLogs(filters?: AuditLogFilters) {
   return useQuery({
     queryKey: ['audit-logs', filters],
@@ -35,7 +40,8 @@ export function useAuditLogs(filters?: AuditLogFilters) {
       const url = `/api/audit-logs${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch audit logs');
-      return response.json() as Promise<AuditLog[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeAuditLog) : [normalizeAuditLog(data)] as AuditLog[];
     },
   });
 }

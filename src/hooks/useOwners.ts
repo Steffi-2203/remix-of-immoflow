@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface Owner {
   id: string;
@@ -27,13 +28,22 @@ export interface Owner {
 export type OwnerInsert = Omit<Owner, 'id' | 'created_at' | 'updated_at' | 'properties'>;
 export type OwnerUpdate = Partial<OwnerInsert>;
 
+function normalizeOwner(owner: any) {
+  const normalized = normalizeFields(owner);
+  if (normalized.properties) {
+    normalized.properties = normalizeFields(normalized.properties);
+  }
+  return normalized;
+}
+
 export function useOwners() {
   return useQuery({
     queryKey: ['owners'],
     queryFn: async () => {
       const response = await fetch('/api/property-owners', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch owners');
-      return response.json() as Promise<Owner[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeOwner) : [normalizeOwner(data)] as Owner[];
     },
   });
 }
@@ -45,7 +55,8 @@ export function useOwner(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/property-owners/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch owner');
-      return response.json() as Promise<Owner | null>;
+      const data = await response.json();
+      return data ? normalizeOwner(data) as Owner : null;
     },
     enabled: !!id,
   });
@@ -57,7 +68,8 @@ export function useCreateOwner() {
   return useMutation({
     mutationFn: async (owner: OwnerInsert) => {
       const response = await apiRequest('POST', '/api/property-owners', owner);
-      return response.json();
+      const data = await response.json();
+      return normalizeOwner(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['owners'] });
@@ -77,7 +89,8 @@ export function useUpdateOwner() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: OwnerUpdate & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/property-owners/${id}`, updates);
-      return response.json();
+      const data = await response.json();
+      return normalizeOwner(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['owners'] });
@@ -118,7 +131,8 @@ export function usePropertyOwnersForProperty(propertyId: string | undefined) {
       if (!propertyId) return [];
       const response = await fetch(`/api/properties/${propertyId}/owners`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch property owners');
-      return response.json() as Promise<Owner[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeOwner) : [normalizeOwner(data)] as Owner[];
     },
     enabled: !!propertyId,
   });

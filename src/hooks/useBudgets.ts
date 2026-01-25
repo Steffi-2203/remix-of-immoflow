@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface PropertyBudget {
   id: string;
@@ -45,6 +46,14 @@ export interface BudgetFormData {
   notes?: string;
 }
 
+function normalizeBudget(budget: any) {
+  const normalized = normalizeFields(budget);
+  if (normalized.properties) {
+    normalized.properties = normalizeFields(normalized.properties);
+  }
+  return normalized;
+}
+
 export function useBudgets(propertyId?: string, year?: number) {
   return useQuery({
     queryKey: ['budgets', propertyId, year],
@@ -56,7 +65,8 @@ export function useBudgets(propertyId?: string, year?: number) {
       const url = `/api/budgets${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch budgets');
-      return response.json() as Promise<PropertyBudget[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeBudget) : [normalizeBudget(data)] as PropertyBudget[];
     },
   });
 }
@@ -67,7 +77,8 @@ export function useBudget(budgetId: string) {
     queryFn: async () => {
       const response = await fetch(`/api/budgets/${budgetId}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch budget');
-      return response.json() as Promise<PropertyBudget>;
+      const data = await response.json();
+      return normalizeBudget(data) as PropertyBudget;
     },
     enabled: !!budgetId,
   });
@@ -79,7 +90,8 @@ export function useCreateBudget() {
   return useMutation({
     mutationFn: async (data: BudgetFormData) => {
       const response = await apiRequest('POST', '/api/budgets', data);
-      return response.json();
+      const result = await response.json();
+      return normalizeBudget(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -102,7 +114,8 @@ export function useUpdateBudget() {
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<BudgetFormData> }) => {
       const response = await apiRequest('PATCH', `/api/budgets/${id}`, data);
-      return response.json();
+      const result = await response.json();
+      return normalizeBudget(result);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -130,7 +143,8 @@ export function useUpdateBudgetStatus() {
       approved_by?: string;
     }) => {
       const response = await apiRequest('PATCH', `/api/budgets/${id}/status`, { status, approved_by });
-      return response.json();
+      const result = await response.json();
+      return normalizeBudget(result);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
