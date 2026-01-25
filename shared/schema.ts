@@ -45,6 +45,9 @@ export const organizations = pgTable("organizations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// Payment status for user subscriptions
+export const paymentStatusEnum = pgEnum('payment_status', ['active', 'past_due', 'canceled', 'unpaid']);
+
 export const profiles = pgTable("profiles", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
@@ -58,6 +61,10 @@ export const profiles = pgTable("profiles", {
   subscriptionEndsAt: timestamp("subscription_ends_at", { withTimezone: true }),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  // Payment status tracking
+  paymentStatus: paymentStatusEnum("payment_status").default('active'),
+  paymentFailedAt: timestamp("payment_failed_at", { withTimezone: true }),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
