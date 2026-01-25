@@ -4,6 +4,14 @@ import { storage } from "./storage";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { runSimulation } from "./seed-2025-simulation";
+import { sepaExportService } from "./services/sepaExportService";
+import { settlementPdfService } from "./services/settlementPdfService";
+import { automatedDunningService } from "./services/automatedDunningService";
+import { vpiAutomationService } from "./services/vpiAutomationService";
+import { maintenanceReminderService } from "./services/maintenanceReminderService";
+import { ownerReportingService } from "./services/ownerReportingService";
+import { bmdDatevExportService } from "./services/bmdDatevExportService";
+import { finanzOnlineService } from "./services/finanzOnlineService";
 import crypto from "crypto";
 import { 
   insertRentHistorySchema,
@@ -1389,6 +1397,348 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : 'Simulation fehlgeschlagen' 
       });
+    }
+  });
+
+  // ===== SEPA Export Routes =====
+  app.post("/api/sepa/direct-debit", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { creditorName, creditorIban, creditorBic, creditorId, invoiceIds } = req.body;
+      const xml = await sepaExportService.generateDirectDebitXml(
+        profile.organizationId,
+        creditorName,
+        creditorIban,
+        creditorBic,
+        creditorId,
+        invoiceIds
+      );
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', 'attachment; filename=sepa-lastschrift.xml');
+      res.send(xml);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "SEPA export failed" });
+    }
+  });
+
+  app.post("/api/sepa/credit-transfer", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { debtorName, debtorIban, debtorBic, transfers } = req.body;
+      const xml = await sepaExportService.generateCreditTransferXml(
+        profile.organizationId,
+        debtorName,
+        debtorIban,
+        debtorBic,
+        transfers
+      );
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', 'attachment; filename=sepa-ueberweisung.xml');
+      res.send(xml);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "SEPA export failed" });
+    }
+  });
+
+  // ===== Settlement PDF Routes =====
+  app.get("/api/settlements/:id/pdf", isAuthenticated, async (req: any, res) => {
+    try {
+      const data = await settlementPdfService.getSettlementData(req.params.id);
+      if (!data) {
+        return res.status(404).json({ error: "Settlement not found" });
+      }
+      const html = settlementPdfService.generateHtml(data);
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate settlement PDF" });
+    }
+  });
+
+  // ===== Automated Dunning Routes =====
+  app.get("/api/dunning/check", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const actions = await automatedDunningService.checkOverdueInvoices(profile.organizationId);
+      res.json({ actions });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check dunning" });
+    }
+  });
+
+  app.post("/api/dunning/process", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { sendEmails } = req.body;
+      const result = await automatedDunningService.processAutomatedDunning(
+        profile.organizationId,
+        sendEmails === true
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process dunning" });
+    }
+  });
+
+  // ===== VPI Automation Routes =====
+  app.get("/api/vpi/check-adjustments", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const adjustments = await vpiAutomationService.checkVpiAdjustments(profile.organizationId);
+      res.json({ adjustments });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check VPI adjustments" });
+    }
+  });
+
+  app.post("/api/vpi/apply", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { tenantId, newRent, currentVpiValue, effectiveDate } = req.body;
+      const result = await vpiAutomationService.applyVpiAdjustment(
+        profile.organizationId,
+        tenantId,
+        newRent,
+        currentVpiValue,
+        effectiveDate
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to apply VPI adjustment" });
+    }
+  });
+
+  // ===== Maintenance Reminder Routes =====
+  app.get("/api/maintenance/reminders", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const reminders = await maintenanceReminderService.checkMaintenanceReminders(profile.organizationId);
+      res.json({ reminders });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check maintenance reminders" });
+    }
+  });
+
+  app.post("/api/maintenance/send-reminders", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { managerEmail } = req.body;
+      const result = await maintenanceReminderService.sendMaintenanceReminders(
+        profile.organizationId,
+        managerEmail
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send maintenance reminders" });
+    }
+  });
+
+  // ===== Owner Reporting Routes =====
+  app.get("/api/owners/:ownerId/report", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { period, date } = req.query;
+      const report = await ownerReportingService.generateOwnerReport(
+        profile.organizationId,
+        req.params.ownerId,
+        period as any || 'month',
+        date ? new Date(date as string) : new Date()
+      );
+      if (!report) {
+        return res.status(404).json({ error: "Owner not found" });
+      }
+      res.json(report);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate owner report" });
+    }
+  });
+
+  app.get("/api/owners/:ownerId/report/html", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { period, date } = req.query;
+      const report = await ownerReportingService.generateOwnerReport(
+        profile.organizationId,
+        req.params.ownerId,
+        period as any || 'month',
+        date ? new Date(date as string) : new Date()
+      );
+      if (!report) {
+        return res.status(404).json({ error: "Owner not found" });
+      }
+      const html = ownerReportingService.generateReportHtml(report, period as string || 'Monat');
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate owner report" });
+    }
+  });
+
+  // ===== BMD/DATEV Export Routes =====
+  app.get("/api/export/datev", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { startDate, endDate } = req.query;
+      const csv = await bmdDatevExportService.generateDatevExport(
+        profile.organizationId,
+        new Date(startDate as string),
+        new Date(endDate as string)
+      );
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=datev-export.csv');
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate DATEV export" });
+    }
+  });
+
+  app.get("/api/export/bmd", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { startDate, endDate } = req.query;
+      const csv = await bmdDatevExportService.generateBmdExport(
+        profile.organizationId,
+        new Date(startDate as string),
+        new Date(endDate as string)
+      );
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=bmd-export.csv');
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate BMD export" });
+    }
+  });
+
+  // ===== FinanzOnline Routes =====
+  app.get("/api/finanzonline/ust-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { year, period } = req.query;
+      const voranmeldung = await finanzOnlineService.generateUstVoranmeldung(
+        profile.organizationId,
+        parseInt(year as string) || new Date().getFullYear(),
+        period as any || 'Q1'
+      );
+      res.json(voranmeldung);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate USt summary" });
+    }
+  });
+
+  app.get("/api/finanzonline/ust-xml", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const { year, period } = req.query;
+      const voranmeldung = await finanzOnlineService.generateUstVoranmeldung(
+        profile.organizationId,
+        parseInt(year as string) || new Date().getFullYear(),
+        period as any || 'Q1'
+      );
+      const xml = finanzOnlineService.generateXml(voranmeldung);
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', 'attachment; filename=ust-voranmeldung.xml');
+      res.send(xml);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate USt XML" });
+    }
+  });
+
+  app.get("/api/finanzonline/periods", isAuthenticated, async (req: any, res) => {
+    const { year } = req.query;
+    const periods = finanzOnlineService.getAvailablePeriods(parseInt(year as string) || new Date().getFullYear());
+    res.json({ periods });
+  });
+
+  // ===== Accountant Dashboard KPIs =====
+  app.get("/api/accountant/dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      
+      const [dunningActions, maintenanceReminders, vpiAdjustments] = await Promise.all([
+        automatedDunningService.checkOverdueInvoices(profile.organizationId),
+        maintenanceReminderService.checkMaintenanceReminders(profile.organizationId),
+        vpiAutomationService.checkVpiAdjustments(profile.organizationId),
+      ]);
+
+      const overdueAmount = dunningActions.reduce((sum, a) => sum + a.amount, 0);
+      const overdueCount = dunningActions.length;
+      const maintenanceOverdue = maintenanceReminders.filter(r => r.reminderType === 'overdue').length;
+      const maintenanceDue = maintenanceReminders.filter(r => r.reminderType === 'due').length;
+      const pendingVpiAdjustments = vpiAdjustments.length;
+
+      res.json({
+        dunning: {
+          overdueAmount,
+          overdueCount,
+          byLevel: {
+            level1: dunningActions.filter(a => a.newLevel === 1).length,
+            level2: dunningActions.filter(a => a.newLevel === 2).length,
+            level3: dunningActions.filter(a => a.newLevel === 3).length,
+          }
+        },
+        maintenance: {
+          overdueCount: maintenanceOverdue,
+          dueThisWeek: maintenanceDue,
+          upcomingCount: maintenanceReminders.filter(r => r.reminderType === 'upcoming').length,
+        },
+        vpiAdjustments: {
+          pendingCount: pendingVpiAdjustments,
+          totalIncrease: vpiAdjustments.reduce((sum, a) => sum + (a.newRent - a.currentRent), 0),
+        },
+        actions: {
+          dunning: dunningActions.slice(0, 5),
+          maintenance: maintenanceReminders.slice(0, 5),
+          vpi: vpiAdjustments.slice(0, 5),
+        }
+      });
+    } catch (error) {
+      console.error('Accountant dashboard error:', error);
+      res.status(500).json({ error: "Failed to load accountant dashboard" });
     }
   });
 

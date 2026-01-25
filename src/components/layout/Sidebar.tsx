@@ -208,6 +208,13 @@ const navItems: NavItem[] = [
     requiredFeature: 'canViewReports'
   },
   {
+    label: 'Buchhalter',
+    icon: Calculator,
+    href: '/buchhalter',
+    tourId: 'nav-accountant',
+    requiredFeature: 'canManageBanking'
+  },
+  {
     label: 'Einstellungen',
     icon: Cog,
     href: '/einstellungen',
