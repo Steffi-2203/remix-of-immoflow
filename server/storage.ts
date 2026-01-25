@@ -44,6 +44,9 @@ export interface IStorage {
   createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey>;
   updateDistributionKey(id: string, data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey | undefined>;
   deleteDistributionKey(id: string): Promise<void>;
+  getAccountCategories(organizationId: string): Promise<schema.AccountCategory[]>;
+  createAccountCategory(data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory>;
+  deleteAccountCategory(id: string): Promise<void>;
   getUnitDistributionValues(unitId: string): Promise<schema.UnitDistributionValue[]>;
   getUnitDistributionValuesByProperty(propertyId: string): Promise<schema.UnitDistributionValue[]>;
   upsertUnitDistributionValue(data: schema.InsertUnitDistributionValue): Promise<schema.UnitDistributionValue>;
@@ -706,9 +709,22 @@ class DatabaseStorage implements IStorage {
   }
 
   async getAccountCategories(organizationId: string): Promise<schema.AccountCategory[]> {
+    const { or, isNull } = await import('drizzle-orm');
     return db.select().from(schema.accountCategories)
-      .where(eq(schema.accountCategories.organizationId, organizationId))
+      .where(or(
+        eq(schema.accountCategories.organizationId, organizationId),
+        isNull(schema.accountCategories.organizationId)
+      ))
       .orderBy(asc(schema.accountCategories.name));
+  }
+
+  async createAccountCategory(data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory> {
+    const result = await db.insert(schema.accountCategories).values(data as schema.InsertAccountCategory).returning();
+    return result[0];
+  }
+
+  async deleteAccountCategory(id: string): Promise<void> {
+    await db.delete(schema.accountCategories).where(eq(schema.accountCategories.id, id));
   }
 
   async getUnit(id: string): Promise<schema.Unit | undefined> {
