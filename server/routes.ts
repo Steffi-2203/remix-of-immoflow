@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
+import { runSimulation } from "./seed-2025-simulation";
 import crypto from "crypto";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
@@ -814,6 +815,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ roles: updatedRoles.map(r => r.role) });
     } catch (error) {
       res.status(500).json({ error: "Failed to update roles" });
+    }
+  });
+
+  app.post("/api/admin/run-simulation", isAuthenticated, async (req, res) => {
+    try {
+      const result = await runSimulation();
+      res.json({ 
+        success: true, 
+        message: 'Simulation 2025 erfolgreich erstellt',
+        data: result 
+      });
+    } catch (error) {
+      console.error('Simulation error:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Simulation fehlgeschlagen' 
+      });
     }
   });
 
