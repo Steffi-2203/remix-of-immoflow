@@ -35,6 +35,8 @@ export interface IStorage {
   getContractors(): Promise<schema.Contractor[]>;
   getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]>;
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
+  softDeleteUnit(id: string): Promise<void>;
+  softDeleteTenant(id: string): Promise<void>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -472,7 +474,21 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteProperty(id: string): Promise<void> {
-    await db.delete(schema.properties).where(eq(schema.properties.id, id));
+    await db.update(schema.properties)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.properties.id, id));
+  }
+
+  async softDeleteUnit(id: string): Promise<void> {
+    await db.update(schema.units)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.units.id, id));
+  }
+
+  async softDeleteTenant(id: string): Promise<void> {
+    await db.update(schema.tenants)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.tenants.id, id));
   }
 
   async createPropertyManager(data: { userId: string; propertyId: string }): Promise<schema.PropertyManager> {
