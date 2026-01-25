@@ -496,6 +496,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
+  
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.user?.claims?.email;
@@ -503,18 +505,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No email found" });
       }
       
+      const emailLower = userEmail.toLowerCase();
       let profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile) {
+        const isAdmin = emailLower === ADMIN_EMAIL.toLowerCase();
+        const hasPendingInvite = await storage.getPendingInviteByEmail(emailLower);
+        
+        if (!isAdmin && !hasPendingInvite) {
+          return res.status(403).json({ 
+            error: "Zugriff verweigert. Nur eingeladene Benutzer können sich anmelden.",
+            code: "NOT_AUTHORIZED"
+          });
+        }
+        
         const fullName = [req.user?.claims?.first_name, req.user?.claims?.last_name]
           .filter(Boolean).join(' ') || userEmail;
         profile = await storage.createProfile({
           email: userEmail,
           fullName,
         });
+        
+        if (isAdmin) {
+          let adminOrg = await storage.getOrganizationByName("ImmoflowMe Admin");
+          if (!adminOrg) {
+            adminOrg = await storage.createOrganization({
+              name: "ImmoflowMe Admin",
+              slug: "immoflowme-admin",
+            });
+          }
+          await storage.updateProfile(profile.id, { organizationId: adminOrg.id });
+          await storage.createUserRole({
+            userId: profile.id,
+            organizationId: adminOrg.id,
+            role: 'admin'
+          });
+          profile = await storage.getProfileByEmail(userEmail);
+        }
       }
       
-      const roles = await storage.getUserRoles(profile.id);
+      const roles = await storage.getUserRoles(profile!.id);
       res.json({ ...profile, roles: roles.map(r => r.role) });
     } catch (error) {
       console.error("Profile error:", error);

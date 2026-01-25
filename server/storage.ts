@@ -214,6 +214,16 @@ class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getPendingInviteByEmail(email: string): Promise<schema.OrganizationInvite | undefined> {
+    const result = await db.select().from(schema.organizationInvites)
+      .where(and(
+        eq(schema.organizationInvites.email, email.toLowerCase()),
+        eq(schema.organizationInvites.status, 'pending')
+      ))
+      .limit(1);
+    return result[0];
+  }
+
   async getOrganization(id: string): Promise<schema.Organization | undefined> {
     const result = await db.select().from(schema.organizations)
       .where(eq(schema.organizations.id, id)).limit(1);
@@ -222,6 +232,13 @@ class DatabaseStorage implements IStorage {
 
   async createOrganization(data: schema.InsertOrganization): Promise<schema.Organization> {
     const result = await db.insert(schema.organizations).values(data).returning();
+    return result[0];
+  }
+
+  async getOrganizationByName(name: string): Promise<schema.Organization | undefined> {
+    const result = await db.select().from(schema.organizations)
+      .where(eq(schema.organizations.name, name))
+      .limit(1);
     return result[0];
   }
 
