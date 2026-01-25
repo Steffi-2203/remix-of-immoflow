@@ -1,6 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from './useAuth';
 
 interface Permissions {
   canViewFinances: boolean;
@@ -15,59 +13,33 @@ interface Permissions {
   isPropertyManager: boolean;
   isFinance: boolean;
   isViewer: boolean;
+  isTester: boolean;
   isLoading: boolean;
 }
 
+interface ProfileWithRoles {
+  id: string;
+  email: string;
+  fullName: string;
+  organizationId: string | null;
+  roles: string[];
+}
+
 export function usePermissions(): Permissions {
-  const { user } = useAuth();
-
-  // Fetch user's role from user_roles table
-  const { data: userRole, isLoading: roleLoading } = useQuery({
-    queryKey: ['user-role', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error fetching user role:', error);
-        return null;
-      }
-      return data?.role || null;
-    },
-    enabled: !!user?.id,
+  const { data: profile, isLoading } = useQuery<ProfileWithRoles>({
+    queryKey: ['/api/profile'],
   });
 
-  // Check if user is admin before the conditional hook
-  const isUserAdmin = userRole === 'admin';
+  const roles = profile?.roles || [];
+  const primaryRole = roles[0] || null;
+  
+  const isAdmin = roles.includes('admin');
+  const isPropertyManager = roles.includes('property_manager');
+  const isFinance = roles.includes('finance');
+  const isViewer = roles.includes('viewer');
+  const isTester = roles.includes('tester');
 
-  // Fetch permissions for the user's role (for non-admin users)
-  const { data: permissions, isLoading: permissionsLoading } = useQuery({
-    queryKey: ['role-permissions', userRole],
-    queryFn: async () => {
-      if (!userRole) return null;
-      const { data, error } = await supabase
-        .from('role_permissions')
-        .select('*')
-        .eq('role', userRole)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error fetching role permissions:', error);
-        return null;
-      }
-      return data;
-    },
-    enabled: !!userRole && !isUserAdmin,
-  });
-
-  const isLoading = roleLoading || (isUserAdmin ? false : permissionsLoading);
-
-  // If user is admin, grant all permissions
-  if (isUserAdmin) {
+  if (isAdmin) {
     return {
       canViewFinances: true,
       canEditFinances: true,
@@ -81,23 +53,82 @@ export function usePermissions(): Permissions {
       isPropertyManager: false,
       isFinance: false,
       isViewer: false,
-      isLoading: roleLoading,
+      isTester: false,
+      isLoading,
+    };
+  }
+
+  if (isPropertyManager) {
+    return {
+      canViewFinances: false,
+      canEditFinances: false,
+      canViewFullTenantData: true,
+      canManageMaintenance: true,
+      canApproveInvoices: true,
+      canSendMessages: true,
+      canManageUsers: false,
+      role: 'property_manager',
+      isAdmin: false,
+      isPropertyManager: true,
+      isFinance: false,
+      isViewer: false,
+      isTester: false,
+      isLoading,
+    };
+  }
+
+  if (isFinance) {
+    return {
+      canViewFinances: true,
+      canEditFinances: true,
+      canViewFullTenantData: true,
+      canManageMaintenance: false,
+      canApproveInvoices: true,
+      canSendMessages: false,
+      canManageUsers: false,
+      role: 'finance',
+      isAdmin: false,
+      isPropertyManager: false,
+      isFinance: true,
+      isViewer: false,
+      isTester: false,
+      isLoading,
+    };
+  }
+
+  if (isTester) {
+    return {
+      canViewFinances: true,
+      canEditFinances: false,
+      canViewFullTenantData: false,
+      canManageMaintenance: true,
+      canApproveInvoices: false,
+      canSendMessages: false,
+      canManageUsers: false,
+      role: 'tester',
+      isAdmin: false,
+      isPropertyManager: false,
+      isFinance: false,
+      isViewer: false,
+      isTester: true,
+      isLoading,
     };
   }
 
   return {
-    canViewFinances: permissions?.can_view_finances ?? false,
-    canEditFinances: permissions?.can_edit_finances ?? false,
-    canViewFullTenantData: permissions?.can_view_full_tenant_data ?? false,
-    canManageMaintenance: permissions?.can_manage_maintenance ?? false,
-    canApproveInvoices: permissions?.can_approve_invoices ?? false,
-    canSendMessages: permissions?.can_send_messages ?? false,
-    canManageUsers: permissions?.can_manage_users ?? false,
-    role: userRole,
+    canViewFinances: false,
+    canEditFinances: false,
+    canViewFullTenantData: false,
+    canManageMaintenance: false,
+    canApproveInvoices: false,
+    canSendMessages: false,
+    canManageUsers: false,
+    role: primaryRole,
     isAdmin: false,
-    isPropertyManager: userRole === 'property_manager',
-    isFinance: userRole === 'finance',
-    isViewer: userRole === 'viewer',
+    isPropertyManager: false,
+    isFinance: false,
+    isViewer: true,
+    isTester: false,
     isLoading,
   };
 }
