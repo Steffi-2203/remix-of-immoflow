@@ -11,15 +11,17 @@ const app = express();
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'immoflowme-secret-key-change-in-production';
 
+app.set("trust proxy", 1);
+
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: 'lax',
+    sameSite: 'none',
   },
 }));
 

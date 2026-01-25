@@ -1,8 +1,14 @@
-import type { Request, Response, Express } from "express";
+import type { Request, Response, Express, NextFunction } from "express";
 import { db } from "./db";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replit_integrations/auth";
 import { sendEmail } from "./lib/resend";
+
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.userId) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+}
 import {
   tenants,
   units,
