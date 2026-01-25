@@ -5,7 +5,14 @@ import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { runSimulation } from "./seed-2025-simulation";
 import crypto from "crypto";
-import { insertRentHistorySchema } from "@shared/schema";
+import { 
+  insertRentHistorySchema,
+  insertPropertySchema,
+  insertPaymentSchema,
+  insertTransactionSchema,
+  insertExpenseSchema,
+  insertMonthlyInvoiceSchema
+} from "@shared/schema";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
@@ -173,11 +180,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Profile not found" });
       }
       
+      const validationResult = insertPropertySchema.safeParse({
+        ...req.body,
+        organizationId: profile.organizationId,
+      });
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      
       const propertyId = req.body.id || crypto.randomUUID();
       const property = await storage.createProperty({
         id: propertyId,
-        ...req.body,
-        organizationId: profile.organizationId,
+        ...validationResult.data,
       });
       
       await storage.createPropertyManager({
@@ -192,12 +206,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/properties/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/properties/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const property = await storage.updateProperty(req.params.id, req.body);
-      if (!property) {
+      const profile = await getProfileFromSession(req);
+      const existingProperty = await storage.getProperty(req.params.id);
+      if (!existingProperty) {
         return res.status(404).json({ error: "Property not found" });
       }
+      if (existingProperty.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const validationResult = insertPropertySchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const property = await storage.updateProperty(req.params.id, validationResult.data);
       res.json(property);
     } catch (error) {
       res.status(500).json({ error: "Failed to update property" });
@@ -260,9 +283,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments", isAuthenticated, async (req, res) => {
+  app.post("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
-      const payment = await storage.createPayment(req.body);
+      const profile = await getProfileFromSession(req);
+      const validationResult = insertPaymentSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const tenant = await storage.getTenant(validationResult.data.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const payment = await storage.createPayment(validationResult.data);
       res.json(payment);
     } catch (error) {
       console.error("Create payment error:", error);
@@ -270,9 +310,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/payments/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/payments/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const payment = await storage.updatePayment(req.params.id, req.body);
+      const profile = await getProfileFromSession(req);
+      const existingPayment = await storage.getPayment(req.params.id);
+      if (!existingPayment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      const tenant = await storage.getTenant(existingPayment.tenantId);
+      if (!tenant) {
+        return res.status(403).json({ error: "Access denied - tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const validationResult = insertPaymentSchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const payment = await storage.updatePayment(req.params.id, validationResult.data);
       res.json(payment);
     } catch (error) {
       res.status(500).json({ error: "Failed to update payment" });
@@ -323,9 +384,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/transactions", isAuthenticated, async (req, res) => {
+  app.post("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
-      const transaction = await storage.createTransaction(req.body);
+      const profile = await getProfileFromSession(req);
+      const validationResult = insertTransactionSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      if (validationResult.data.bankAccountId) {
+        const bankAccount = await storage.getBankAccount(validationResult.data.bankAccountId);
+        if (!bankAccount || bankAccount.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      const transaction = await storage.createTransaction(validationResult.data);
       res.json(transaction);
     } catch (error) {
       console.error("Create transaction error:", error);
@@ -364,9 +436,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/expenses", isAuthenticated, async (req, res) => {
+  app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
-      const expense = await storage.createExpense(req.body);
+      const profile = await getProfileFromSession(req);
+      const validationResult = insertExpenseSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      if (validationResult.data.propertyId) {
+        const property = await storage.getProperty(validationResult.data.propertyId);
+        if (!property || property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      const expense = await storage.createExpense(validationResult.data);
       res.json(expense);
     } catch (error) {
       console.error("Create expense error:", error);
@@ -384,9 +467,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/expenses/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const expense = await storage.updateExpense(req.params.id, req.body);
+      const profile = await getProfileFromSession(req);
+      const existingExpense = await storage.getExpense(req.params.id);
+      if (!existingExpense) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+      if (existingExpense.propertyId) {
+        const property = await storage.getProperty(existingExpense.propertyId);
+        if (!property || property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      const validationResult = insertExpenseSchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const expense = await storage.updateExpense(req.params.id, validationResult.data);
       res.json(expense);
     } catch (error) {
       res.status(500).json({ error: "Failed to update expense" });
@@ -623,9 +721,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices", isAuthenticated, async (req, res) => {
+  app.post("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
-      const invoice = await storage.createInvoice(req.body);
+      const profile = await getProfileFromSession(req);
+      const validationResult = insertMonthlyInvoiceSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const tenant = await storage.getTenant(validationResult.data.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const invoice = await storage.createInvoice(validationResult.data);
       res.json(invoice);
     } catch (error) {
       console.error("Create invoice error:", error);
@@ -633,9 +748,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/invoices/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const invoice = await storage.updateInvoice(req.params.id, req.body);
+      const profile = await getProfileFromSession(req);
+      const existingInvoice = await storage.getInvoice(req.params.id);
+      if (!existingInvoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      const tenant = await storage.getTenant(existingInvoice.tenantId);
+      if (!tenant) {
+        return res.status(403).json({ error: "Access denied - tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const validationResult = insertMonthlyInvoiceSchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const invoice = await storage.updateInvoice(req.params.id, validationResult.data);
       res.json(invoice);
     } catch (error) {
       res.status(500).json({ error: "Failed to update invoice" });

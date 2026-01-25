@@ -23,6 +23,7 @@ export interface IStorage {
   getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]>;
   getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]>;
   getExpensesByOrganization(organizationId?: string): Promise<schema.Expense[]>;
+  getExpense(id: string): Promise<schema.Expense | undefined>;
   getBankAccounts(): Promise<schema.BankAccount[]>;
   getBankAccount(id: string): Promise<schema.BankAccount | undefined>;
   getBankAccountsByOrganization(organizationId?: string): Promise<schema.BankAccount[]>;
@@ -224,6 +225,11 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.expenses)
       .where(eq(schema.expenses.propertyId, propertyId))
       .orderBy(desc(schema.expenses.datum));
+  }
+
+  async getExpense(id: string): Promise<schema.Expense | undefined> {
+    const result = await db.select().from(schema.expenses).where(eq(schema.expenses.id, id)).limit(1);
+    return result[0];
   }
 
   async getBankAccounts(): Promise<schema.BankAccount[]> {
