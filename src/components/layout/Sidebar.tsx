@@ -34,9 +34,16 @@ import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSubscription, SubscriptionTier } from '@/hooks/useSubscription';
+import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
+
+type FeatureKey = 
+  | 'canManageOwners' | 'canManageMeters' | 'canManageKeys' | 'canManageVpi'
+  | 'canManageBanking' | 'canManageBudgets' | 'canManageDunning' 
+  | 'canManageMaintenance' | 'canManageContractors' | 'canManageInvoiceApproval'
+  | 'canManageTeam' | 'canManageDocuments' | 'canSendMessages' | 'canViewReports';
 
 interface NavItem {
   label: string;
@@ -45,6 +52,8 @@ interface NavItem {
   badge?: number;
   tourId?: string;
   requiredTier?: SubscriptionTier;
+  requiredFeature?: FeatureKey;
+  alwaysAllowed?: boolean; // For Dashboard, Units, Tenants, Invoices, Payments, Settlements, Reports, Messages
 }
 
 const navItems: NavItem[] = [
@@ -52,139 +61,158 @@ const navItems: NavItem[] = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     href: '/dashboard',
-    tourId: 'nav-dashboard'
+    tourId: 'nav-dashboard',
+    alwaysAllowed: true // Dashboard für alle sichtbar
   },
   {
     label: 'Liegenschaften',
     icon: Building,
     href: '/liegenschaften',
-    tourId: 'nav-properties'
+    tourId: 'nav-properties',
+    requiredFeature: 'canManageOwners' // Tester hat maxProperties: 0, sieht diesen Menüpunkt nicht
   },
   {
     label: 'Einheiten',
     icon: Layers,
     href: '/einheiten',
-    tourId: 'nav-units'
+    tourId: 'nav-units',
+    alwaysAllowed: true // Tester darf 1 Einheit anlegen
   },
   {
     label: 'Mieter',
     icon: Users,
     href: '/mieter',
-    tourId: 'nav-tenants'
+    tourId: 'nav-tenants',
+    alwaysAllowed: true // Tester darf 3 Mieter anlegen
   },
   {
     label: 'Eigentümer',
     icon: User,
     href: '/eigentuemer',
-    tourId: 'nav-owners'
+    tourId: 'nav-owners',
+    requiredFeature: 'canManageOwners'
   },
   {
     label: 'Zählerstände',
     icon: Gauge,
     href: '/zaehlerstaende',
-    tourId: 'nav-meter-readings'
+    tourId: 'nav-meter-readings',
+    requiredFeature: 'canManageMeters'
   },
   {
     label: 'Schlüssel',
     icon: Key,
     href: '/schluessel',
-    tourId: 'nav-keys'
+    tourId: 'nav-keys',
+    requiredFeature: 'canManageKeys'
   },
   {
     label: 'VPI-Anpassungen',
     icon: TrendingUp,
     href: '/vpi-anpassungen',
-    tourId: 'nav-vpi'
+    tourId: 'nav-vpi',
+    requiredFeature: 'canManageVpi'
   },
   {
     label: 'Mieteinnahmen',
     icon: Wallet,
-    href: '/zahlungen'
+    href: '/zahlungen',
+    requiredFeature: 'canManageBanking' // Tester darf keine Zahlungen verwalten
   },
   {
     label: 'Vorschreibungen',
     icon: FileText,
-    href: '/vorschreibungen'
+    href: '/vorschreibungen',
+    alwaysAllowed: true // Tester darf Vorschreibungen sehen (für seine Mieter)
   },
   {
     label: 'Kosten & Belege',
     icon: Receipt,
     href: '/kosten',
-    tourId: 'nav-expenses'
+    tourId: 'nav-expenses',
+    alwaysAllowed: true // Tester darf OCR-Rechnungen hochladen (1x)
   },
   {
     label: 'Banking',
     icon: BookOpen,
     href: '/buchhaltung',
-    tourId: 'nav-banking'
+    tourId: 'nav-banking',
+    requiredFeature: 'canManageBanking'
   },
   {
     label: 'BK-Abrechnung',
     icon: Calculator,
-    href: '/abrechnung'
+    href: '/abrechnung',
+    alwaysAllowed: true // Tester darf Abrechnungen ansehen (canViewSettlements: true für trial)
   },
   {
     label: 'Budgetplanung',
     icon: PiggyBank,
     href: '/budgets',
     tourId: 'nav-budgets',
-    requiredTier: 'professional' as SubscriptionTier
+    requiredFeature: 'canManageBudgets'
   },
   {
     label: 'Mahnwesen',
     icon: AlertTriangle,
     href: '/mahnwesen',
     tourId: 'nav-dunning',
-    requiredTier: 'professional' as SubscriptionTier
+    requiredFeature: 'canManageDunning'
   },
   {
     label: 'Wartungen & Aufträge',
     icon: Wrench,
     href: '/wartungen',
     tourId: 'nav-maintenance',
-    requiredTier: 'professional' as SubscriptionTier
+    requiredFeature: 'canManageMaintenance'
   },
   {
     label: 'Handwerker',
     icon: HardHat,
     href: '/handwerker',
     tourId: 'nav-contractors',
-    requiredTier: 'professional' as SubscriptionTier
+    requiredFeature: 'canManageContractors'
   },
   {
     label: 'Rechnungsfreigabe',
     icon: CheckSquare,
     href: '/rechnungsfreigabe',
-    tourId: 'nav-invoice-approval'
+    tourId: 'nav-invoice-approval',
+    requiredFeature: 'canManageInvoiceApproval'
   },
   {
     label: 'Nachrichten',
     icon: MessageSquare,
     href: '/nachrichten',
-    tourId: 'nav-messages'
+    tourId: 'nav-messages',
+    requiredFeature: 'canSendMessages'
   },
   {
     label: 'Team-Verwaltung',
     icon: Users,
     href: '/team',
-    tourId: 'nav-team'
+    tourId: 'nav-team',
+    requiredFeature: 'canManageTeam'
   },
   {
     label: 'Dokumente',
     icon: FileStack,
-    href: '/dokumente'
+    href: '/dokumente',
+    requiredFeature: 'canManageDocuments'
   },
   {
     label: 'Reports',
     icon: TrendingUp,
     href: '/reports',
-    tourId: 'nav-reports'
+    tourId: 'nav-reports',
+    requiredFeature: 'canViewReports'
   },
   {
     label: 'Einstellungen',
     icon: Cog,
     href: '/einstellungen',
-    tourId: 'nav-settings'
+    tourId: 'nav-settings',
+    alwaysAllowed: true // Jeder darf Einstellungen sehen (für Abo-Upgrade)
   }
 ];
 
@@ -195,17 +223,34 @@ export function Sidebar() {
   const { data: isAdmin } = useIsAdmin();
   const permissions = usePermissions();
   const { tier, canAccessFullFeatures } = useSubscription();
+  const { limits } = useSubscriptionLimits();
 
   const tierOrder: SubscriptionTier[] = ['starter', 'professional', 'enterprise'];
   const currentTierIndex = tierOrder.indexOf(tier);
 
   const canAccessItem = (item: NavItem): boolean => {
-    if (!item.requiredTier) return true;
     // Admins always have full access regardless of subscription
     if (isAdmin) return true;
-    if (!canAccessFullFeatures) return false;
-    const requiredTierIndex = tierOrder.indexOf(item.requiredTier);
-    return currentTierIndex >= requiredTierIndex;
+    
+    // Items marked as alwaysAllowed are accessible to everyone
+    if (item.alwaysAllowed) return true;
+    
+    // Check feature-based restrictions (for Tester/Trial users)
+    if (item.requiredFeature) {
+      const featureValue = limits[item.requiredFeature];
+      if (typeof featureValue === 'boolean' && !featureValue) {
+        return false;
+      }
+    }
+    
+    // Check tier-based restrictions (legacy)
+    if (item.requiredTier) {
+      if (!canAccessFullFeatures) return false;
+      const requiredTierIndex = tierOrder.indexOf(item.requiredTier);
+      return currentTierIndex >= requiredTierIndex;
+    }
+    
+    return true;
   };
 
   // All nav items are now in the main navItems array
