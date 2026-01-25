@@ -53,6 +53,7 @@ const ROLE_ICONS: Record<AppRole, typeof Shield> = {
   property_manager: Building2,
   finance: Calculator,
   viewer: Eye,
+  tester: Eye,
 };
 
 export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) {

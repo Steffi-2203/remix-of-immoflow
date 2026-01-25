@@ -351,7 +351,7 @@ export default function TeamManagement() {
                           <Badge variant="secondary">{ROLE_LABELS[invite.role]}</Badge>
                         </TableCell>
                         <TableCell>
-                          {format(new Date(invite.expires_at), 'dd.MM.yyyy', { locale: de })}
+                          {format(new Date(invite.expiresAt), 'dd.MM.yyyy', { locale: de })}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
