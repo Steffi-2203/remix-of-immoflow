@@ -106,29 +106,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.get("/api/organizations", async (_req, res) => {
+  app.get("/api/organizations", isAuthenticated, async (req: any, res) => {
     try {
-      const orgs = await storage.getOrganizations();
-      res.json(orgs);
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.json([]);
+      }
+      const org = await storage.getOrganization(profile.organizationId);
+      res.json(org ? [org] : []);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch organizations" });
     }
   });
 
-  app.get("/api/properties", async (_req, res) => {
+  app.get("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
-      const props = await storage.getProperties();
+      const profile = await getProfileFromSession(req);
+      const roles = await getUserRoles(req);
+      let props = await storage.getPropertiesByOrganization(profile?.organizationId);
+      if (isTester(roles)) {
+        props = maskPersonalData(props);
+      }
       res.json(props);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch properties" });
     }
   });
 
-  app.get("/api/properties/:id", async (req, res) => {
+  app.get("/api/properties/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const property = await storage.getProperty(req.params.id);
       if (!property) {
         return res.status(404).json({ error: "Property not found" });
+      }
+      if (property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
       }
       res.json(property);
     } catch (error) {
@@ -136,8 +149,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/properties/:propertyId/units", async (req, res) => {
+  app.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const units = await storage.getUnitsByProperty(req.params.propertyId);
       res.json(units);
     } catch (error) {
@@ -231,7 +249,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
-      const allPayments = await storage.getAllPayments();
+      const profile = await getProfileFromSession(req);
+      const allPayments = await storage.getPaymentsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(allPayments) : allPayments);
     } catch (error) {
@@ -270,9 +289,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/payments/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const payment = await storage.getPayment(req.params.id);
       if (!payment) {
         return res.status(404).json({ error: "Payment not found" });
+      }
+      const tenant = await storage.getTenant(payment.tenantId);
+      if (tenant) {
+        const unit = await storage.getUnit(tenant.unitId);
+        if (unit) {
+          const property = await storage.getProperty(unit.propertyId);
+          if (property && property.organizationId !== profile?.organizationId) {
+            return res.status(403).json({ error: "Access denied" });
+          }
+        }
       }
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payment) : payment);
@@ -281,10 +311,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/transactions", async (_req, res) => {
+  app.get("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
-      const transactions = await storage.getTransactions();
-      res.json(transactions);
+      const profile = await getProfileFromSession(req);
+      const transactions = await storage.getTransactionsByOrganization(profile?.organizationId);
+      const roles = await getUserRoles(req);
+      res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
@@ -300,13 +332,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/transactions/:id", async (req, res) => {
+  app.get("/api/transactions/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const transaction = await storage.getTransaction(req.params.id);
       if (!transaction) {
         return res.status(404).json({ error: "Transaction not found" });
       }
-      res.json(transaction);
+      if (transaction.bankAccountId) {
+        const bankAccount = await storage.getBankAccount(transaction.bankAccountId);
+        if (bankAccount && bankAccount.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      const roles = await getUserRoles(req);
+      res.json(isTester(roles) ? maskPersonalData(transaction) : transaction);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transaction" });
     }
@@ -333,13 +373,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/expenses", isAuthenticated, async (req, res) => {
+  app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
-      const { year, month } = req.query;
-      const expenses = await storage.getExpenses(
-        year ? parseInt(year as string) : undefined,
-        month ? parseInt(month as string) : undefined
-      );
+      const profile = await getProfileFromSession(req);
+      const expenses = await storage.getExpensesByOrganization(profile?.organizationId);
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
@@ -380,20 +417,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/units", async (_req, res) => {
+  app.get("/api/units", isAuthenticated, async (req: any, res) => {
     try {
-      const units = await storage.getUnits();
+      const profile = await getProfileFromSession(req);
+      const units = await storage.getUnitsByOrganization(profile?.organizationId);
       res.json(units);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
   });
 
-  app.get("/api/units/:id", async (req, res) => {
+  app.get("/api/units/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const unit = await storage.getUnit(req.params.id);
       if (!unit) {
         return res.status(404).json({ error: "Unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
       }
       res.json(unit);
     } catch (error) {
@@ -403,6 +446,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.unitId);
+      if (unit) {
+        const property = await storage.getProperty(unit.propertyId);
+        if (property && property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
       const tenants = await storage.getTenantsByUnit(req.params.unitId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(tenants) : tenants);
@@ -413,7 +464,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants", isAuthenticated, async (req: any, res) => {
     try {
-      const tenants = await storage.getTenants();
+      const profile = await getProfileFromSession(req);
+      const tenants = await storage.getTenantsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(tenants) : tenants);
     } catch (error) {
@@ -423,9 +475,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const tenant = await storage.getTenant(req.params.id);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (unit) {
+        const property = await storage.getProperty(unit.propertyId);
+        if (property && property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(tenant) : tenant);
@@ -436,8 +496,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const { year, month } = req.query;
-      const invoices = await storage.getMonthlyInvoices(
+      const invoices = await storage.getMonthlyInvoicesByOrganization(
+        profile?.organizationId,
         year ? parseInt(year as string) : undefined,
         month ? parseInt(month as string) : undefined
       );
@@ -450,9 +512,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) {
         return res.status(404).json({ error: "Invoice not found" });
+      }
+      const unit = await storage.getUnit(invoice.unitId);
+      if (unit) {
+        const property = await storage.getProperty(unit.propertyId);
+        if (property && property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(invoice) : invoice);
@@ -519,8 +589,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/properties/:propertyId/expenses", async (req, res) => {
+  app.get("/api/properties/:propertyId/expenses", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const { year } = req.query;
       const expenses = await storage.getExpensesByProperty(
         req.params.propertyId,
@@ -534,7 +609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
     try {
-      const accounts = await storage.getBankAccounts();
+      const profile = await getProfileFromSession(req);
+      const accounts = await storage.getBankAccountsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(accounts) : accounts);
     } catch (error) {
@@ -552,8 +628,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/properties/:propertyId/settlements", async (req, res) => {
+  app.get("/api/properties/:propertyId/settlements", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const settlements = await storage.getSettlementsByProperty(req.params.propertyId);
       res.json(settlements);
     } catch (error) {
@@ -561,8 +642,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/properties/:propertyId/maintenance-contracts", async (req, res) => {
+  app.get("/api/properties/:propertyId/maintenance-contracts", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const contracts = await storage.getMaintenanceContractsByProperty(req.params.propertyId);
       res.json(contracts);
     } catch (error) {
@@ -570,26 +656,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/maintenance-tasks", async (req, res) => {
+  app.get("/api/maintenance-tasks", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       const { status } = req.query;
-      const tasks = await storage.getMaintenanceTasks(status as string | undefined);
+      const tasks = await storage.getMaintenanceTasksByOrganization(profile?.organizationId, status as string | undefined);
       res.json(tasks);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch maintenance tasks" });
     }
   });
 
-  app.get("/api/contractors", async (_req, res) => {
+  app.get("/api/contractors", isAuthenticated, async (req: any, res) => {
     try {
-      const contractors = await storage.getContractors();
+      const profile = await getProfileFromSession(req);
+      const contractors = await storage.getContractorsByOrganization(profile?.organizationId);
       res.json(contractors);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch contractors" });
     }
   });
 
-  app.get("/api/distribution-keys", async (_req, res) => {
+  app.get("/api/distribution-keys", isAuthenticated, async (req: any, res) => {
     try {
       const keys = await storage.getDistributionKeys();
       res.json(keys);

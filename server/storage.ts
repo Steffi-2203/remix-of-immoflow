@@ -4,23 +4,36 @@ import * as schema from "@shared/schema";
 
 export interface IStorage {
   getOrganizations(): Promise<schema.Organization[]>;
+  getOrganization(id: string): Promise<schema.Organization | undefined>;
   getProperties(): Promise<schema.Property[]>;
+  getPropertiesByOrganization(organizationId?: string): Promise<schema.Property[]>;
   getProperty(id: string): Promise<schema.Property | undefined>;
   getUnitsByProperty(propertyId: string): Promise<schema.Unit[]>;
+  getUnitsByOrganization(organizationId?: string): Promise<schema.Unit[]>;
+  getUnit(id: string): Promise<schema.Unit | undefined>;
   getTenants(): Promise<schema.Tenant[]>;
+  getTenantsByOrganization(organizationId?: string): Promise<schema.Tenant[]>;
   getTenant(id: string): Promise<schema.Tenant | undefined>;
   getTenantsByUnit(unitId: string): Promise<schema.Tenant[]>;
   getMonthlyInvoices(year?: number, month?: number): Promise<schema.MonthlyInvoice[]>;
+  getMonthlyInvoicesByOrganization(organizationId?: string, year?: number, month?: number): Promise<schema.MonthlyInvoice[]>;
   getInvoicesByTenant(tenantId: string): Promise<schema.MonthlyInvoice[]>;
   getAllPayments(): Promise<schema.Payment[]>;
+  getPaymentsByOrganization(organizationId?: string): Promise<schema.Payment[]>;
   getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]>;
   getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]>;
+  getExpensesByOrganization(organizationId?: string): Promise<schema.Expense[]>;
   getBankAccounts(): Promise<schema.BankAccount[]>;
+  getBankAccount(id: string): Promise<schema.BankAccount | undefined>;
+  getBankAccountsByOrganization(organizationId?: string): Promise<schema.BankAccount[]>;
   getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]>;
+  getTransactionsByOrganization(organizationId?: string): Promise<schema.Transaction[]>;
   getSettlementsByProperty(propertyId: string): Promise<schema.Settlement[]>;
   getMaintenanceContractsByProperty(propertyId: string): Promise<schema.MaintenanceContract[]>;
   getMaintenanceTasks(status?: string): Promise<schema.MaintenanceTask[]>;
+  getMaintenanceTasksByOrganization(organizationId?: string, status?: string): Promise<schema.MaintenanceTask[]>;
   getContractors(): Promise<schema.Contractor[]>;
+  getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]>;
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
 }
 
@@ -29,8 +42,20 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.organizations).orderBy(asc(schema.organizations.name));
   }
 
+  async getOrganization(id: string): Promise<schema.Organization | undefined> {
+    const result = await db.select().from(schema.organizations).where(eq(schema.organizations.id, id)).limit(1);
+    return result[0];
+  }
+
   async getProperties(): Promise<schema.Property[]> {
     return db.select().from(schema.properties).orderBy(asc(schema.properties.name));
+  }
+
+  async getPropertiesByOrganization(organizationId?: string): Promise<schema.Property[]> {
+    if (!organizationId) return [];
+    return db.select().from(schema.properties)
+      .where(eq(schema.properties.organizationId, organizationId))
+      .orderBy(asc(schema.properties.name));
   }
 
   async getProperty(id: string): Promise<schema.Property | undefined> {
@@ -46,6 +71,20 @@ class DatabaseStorage implements IStorage {
 
   async getTenants(): Promise<schema.Tenant[]> {
     return db.select().from(schema.tenants).orderBy(asc(schema.tenants.lastName));
+  }
+
+  async getTenantsByOrganization(organizationId?: string): Promise<schema.Tenant[]> {
+    if (!organizationId) return [];
+    const units = await this.getUnitsByOrganization(organizationId);
+    if (units.length === 0) return [];
+    const allTenants: schema.Tenant[] = [];
+    for (const unit of units) {
+      const tenants = await db.select().from(schema.tenants)
+        .where(eq(schema.tenants.unitId, unit.id))
+        .orderBy(asc(schema.tenants.lastName));
+      allTenants.push(...tenants);
+    }
+    return allTenants;
   }
 
   async getTenant(id: string): Promise<schema.Tenant | undefined> {
@@ -72,6 +111,37 @@ class DatabaseStorage implements IStorage {
     return query.orderBy(desc(schema.monthlyInvoices.createdAt));
   }
 
+  async getMonthlyInvoicesByOrganization(organizationId?: string, year?: number, month?: number): Promise<schema.MonthlyInvoice[]> {
+    if (!organizationId) return [];
+    const units = await this.getUnitsByOrganization(organizationId);
+    if (units.length === 0) return [];
+    const unitIds = units.map(u => u.id);
+    const allInvoices: schema.MonthlyInvoice[] = [];
+    for (const unitId of unitIds) {
+      let invoices: schema.MonthlyInvoice[];
+      if (year && month) {
+        invoices = await db.select().from(schema.monthlyInvoices)
+          .where(and(
+            eq(schema.monthlyInvoices.unitId, unitId),
+            eq(schema.monthlyInvoices.year, year),
+            eq(schema.monthlyInvoices.month, month)
+          )).orderBy(desc(schema.monthlyInvoices.createdAt));
+      } else if (year) {
+        invoices = await db.select().from(schema.monthlyInvoices)
+          .where(and(
+            eq(schema.monthlyInvoices.unitId, unitId),
+            eq(schema.monthlyInvoices.year, year)
+          )).orderBy(desc(schema.monthlyInvoices.createdAt));
+      } else {
+        invoices = await db.select().from(schema.monthlyInvoices)
+          .where(eq(schema.monthlyInvoices.unitId, unitId))
+          .orderBy(desc(schema.monthlyInvoices.createdAt));
+      }
+      allInvoices.push(...invoices);
+    }
+    return allInvoices;
+  }
+
   async getInvoicesByTenant(tenantId: string): Promise<schema.MonthlyInvoice[]> {
     return db.select().from(schema.monthlyInvoices)
       .where(eq(schema.monthlyInvoices.tenantId, tenantId))
@@ -83,10 +153,42 @@ class DatabaseStorage implements IStorage {
       .orderBy(desc(schema.payments.buchungsDatum));
   }
 
+  async getPaymentsByOrganization(organizationId?: string): Promise<schema.Payment[]> {
+    if (!organizationId) return [];
+    const tenants = await this.getTenantsByOrganization(organizationId);
+    if (tenants.length === 0) return [];
+    const allPayments: schema.Payment[] = [];
+    for (const tenant of tenants) {
+      const payments = await db.select().from(schema.payments)
+        .where(eq(schema.payments.tenantId, tenant.id))
+        .orderBy(desc(schema.payments.buchungsDatum));
+      allPayments.push(...payments);
+    }
+    return allPayments.sort((a, b) => 
+      new Date(b.buchungsDatum).getTime() - new Date(a.buchungsDatum).getTime()
+    );
+  }
+
   async getPaymentsByTenant(tenantId: string): Promise<schema.Payment[]> {
     return db.select().from(schema.payments)
       .where(eq(schema.payments.tenantId, tenantId))
       .orderBy(desc(schema.payments.buchungsDatum));
+  }
+
+  async getExpensesByOrganization(organizationId?: string): Promise<schema.Expense[]> {
+    if (!organizationId) return [];
+    const properties = await this.getPropertiesByOrganization(organizationId);
+    if (properties.length === 0) return [];
+    const allExpenses: schema.Expense[] = [];
+    for (const prop of properties) {
+      const expenses = await db.select().from(schema.expenses)
+        .where(eq(schema.expenses.propertyId, prop.id))
+        .orderBy(desc(schema.expenses.datum));
+      allExpenses.push(...expenses);
+    }
+    return allExpenses.sort((a, b) => 
+      new Date(b.datum).getTime() - new Date(a.datum).getTime()
+    );
   }
 
   async getExpensesByProperty(propertyId: string, year?: number): Promise<schema.Expense[]> {
@@ -104,10 +206,53 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.bankAccounts).orderBy(asc(schema.bankAccounts.accountName));
   }
 
+  async getBankAccount(id: string): Promise<schema.BankAccount | undefined> {
+    const result = await db.select().from(schema.bankAccounts).where(eq(schema.bankAccounts.id, id));
+    return result[0];
+  }
+
+  async getBankAccountsByOrganization(organizationId?: string): Promise<schema.BankAccount[]> {
+    if (!organizationId) return [];
+    return db.select().from(schema.bankAccounts)
+      .where(eq(schema.bankAccounts.organizationId, organizationId))
+      .orderBy(asc(schema.bankAccounts.accountName));
+  }
+
   async getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]> {
     return db.select().from(schema.transactions)
       .where(eq(schema.transactions.bankAccountId, bankAccountId))
       .orderBy(desc(schema.transactions.transactionDate));
+  }
+
+  async getTransactionsByOrganization(organizationId?: string): Promise<schema.Transaction[]> {
+    if (!organizationId) return [];
+    const bankAccounts = await this.getBankAccountsByOrganization(organizationId);
+    if (bankAccounts.length === 0) return [];
+    const bankAccountIds = bankAccounts.map(ba => ba.id);
+    const allTransactions: schema.Transaction[] = [];
+    for (const baId of bankAccountIds) {
+      const txns = await db.select().from(schema.transactions)
+        .where(eq(schema.transactions.bankAccountId, baId))
+        .orderBy(desc(schema.transactions.transactionDate));
+      allTransactions.push(...txns);
+    }
+    return allTransactions.sort((a, b) => 
+      new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
+    );
+  }
+
+  async getUnitsByOrganization(organizationId?: string): Promise<schema.Unit[]> {
+    if (!organizationId) return [];
+    const properties = await this.getPropertiesByOrganization(organizationId);
+    if (properties.length === 0) return [];
+    const allUnits: schema.Unit[] = [];
+    for (const prop of properties) {
+      const units = await db.select().from(schema.units)
+        .where(eq(schema.units.propertyId, prop.id))
+        .orderBy(asc(schema.units.topNummer));
+      allUnits.push(...units);
+    }
+    return allUnits;
   }
 
   async getSettlementsByProperty(propertyId: string): Promise<schema.Settlement[]> {
@@ -131,9 +276,46 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.maintenanceTasks).orderBy(asc(schema.maintenanceTasks.dueDate));
   }
 
+  async getMaintenanceTasksByOrganization(organizationId?: string, status?: string): Promise<schema.MaintenanceTask[]> {
+    if (!organizationId) return [];
+    const properties = await this.getPropertiesByOrganization(organizationId);
+    if (properties.length === 0) return [];
+    const allTasks: schema.MaintenanceTask[] = [];
+    for (const prop of properties) {
+      const contracts = await this.getMaintenanceContractsByProperty(prop.id);
+      for (const contract of contracts) {
+        let tasks: schema.MaintenanceTask[];
+        if (status) {
+          tasks = await db.select().from(schema.maintenanceTasks)
+            .where(and(
+              eq(schema.maintenanceTasks.contractId, contract.id),
+              eq(schema.maintenanceTasks.status, status)
+            ))
+            .orderBy(asc(schema.maintenanceTasks.dueDate));
+        } else {
+          tasks = await db.select().from(schema.maintenanceTasks)
+            .where(eq(schema.maintenanceTasks.contractId, contract.id))
+            .orderBy(asc(schema.maintenanceTasks.dueDate));
+        }
+        allTasks.push(...tasks);
+      }
+    }
+    return allTasks;
+  }
+
   async getContractors(): Promise<schema.Contractor[]> {
     return db.select().from(schema.contractors)
       .where(eq(schema.contractors.isActive, true))
+      .orderBy(asc(schema.contractors.companyName));
+  }
+
+  async getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]> {
+    if (!organizationId) return [];
+    return db.select().from(schema.contractors)
+      .where(and(
+        eq(schema.contractors.organizationId, organizationId),
+        eq(schema.contractors.isActive, true)
+      ))
       .orderBy(asc(schema.contractors.companyName));
   }
 
