@@ -26,31 +26,31 @@ export type ExpenseType =
 
 export interface Expense {
   id: string;
-  property_id: string;
+  propertyId: string;
   category: ExpenseCategory;
-  expense_type: ExpenseType;
+  expenseType: ExpenseType;
   bezeichnung: string;
   betrag: number;
   datum: string;
-  beleg_nummer: string | null;
-  beleg_url: string | null;
+  belegNummer: string | null;
+  belegUrl: string | null;
   notizen: string | null;
   year: number;
   month: number;
-  transaction_id: string | null;
-  created_at: string;
-  updated_at: string;
+  transactionId: string | null;
+  createdAt: string;
+  updatedAt: string;
   properties?: { name: string };
 }
 
 export interface ExpenseInsert {
-  property_id: string;
+  propertyId: string;
   category: ExpenseCategory;
-  expense_type?: ExpenseType;
+  expenseType?: ExpenseType;
   bezeichnung: string;
   betrag: number;
   datum: string;
-  beleg_nummer?: string;
+  belegNummer?: string;
   notizen?: string;
   year: number;
   month: number;
@@ -79,7 +79,7 @@ export function useExpenses(propertyId?: string, year?: number, month?: number) 
         if (propsRes.ok) {
           const properties = await propsRes.json();
           return expenses.map((expense: Expense) => {
-            const property = properties.find((p: any) => p.id === expense.property_id);
+            const property = properties.find((p: any) => p.id === expense.propertyId);
             return { ...expense, properties: property ? { name: property.name } : undefined };
           });
         }

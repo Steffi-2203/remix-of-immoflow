@@ -5,29 +5,29 @@ import { allocatePayment, formatAllocationForDisplay, type InvoiceAmounts } from
 
 export interface Payment {
   id: string;
-  tenant_id: string;
-  invoice_id: string | null;
+  tenantId: string;
+  invoiceId: string | null;
   betrag: string;
-  buchungs_datum: string;
-  eingangs_datum?: string;
-  payment_type: 'sepa' | 'ueberweisung' | 'bar' | 'sonstiges';
+  buchungsDatum: string;
+  eingangsDatum?: string;
+  paymentType: 'sepa' | 'ueberweisung' | 'bar' | 'sonstiges';
   verwendungszweck: string | null;
-  transaction_id: string | null;
+  transactionId: string | null;
   notizen: string | null;
-  created_at: string;
+  createdAt: string;
   tenants?: {
-    first_name: string;
-    last_name: string;
-    unit_id: string;
+    firstName: string;
+    lastName: string;
+    unitId: string;
     units?: {
-      top_nummer: string;
-      property_id: string;
+      topNummer: string;
+      propertyId: string;
       properties?: { name: string };
     };
   };
 }
 
-export type PaymentInsert = Omit<Payment, 'id' | 'created_at' | 'tenants'>;
+export type PaymentInsert = Omit<Payment, 'id' | 'createdAt' | 'tenants'>;
 export type PaymentUpdate = Partial<PaymentInsert>;
 
 export interface PaymentWithAllocation extends Payment {
@@ -60,19 +60,19 @@ export function usePayments() {
         const properties = await propsRes.json();
         
         return payments.map((payment: Payment) => {
-          const tenant = tenants.find((t: any) => t.id === payment.tenant_id);
-          const unit = tenant ? units.find((u: any) => u.id === tenant.unit_id) : null;
-          const property = unit ? properties.find((p: any) => p.id === unit.property_id) : null;
+          const tenant = tenants.find((t: any) => t.id === payment.tenantId);
+          const unit = tenant ? units.find((u: any) => u.id === tenant.unitId) : null;
+          const property = unit ? properties.find((p: any) => p.id === unit.propertyId) : null;
           
           return {
             ...payment,
             tenants: tenant ? {
-              first_name: tenant.first_name,
-              last_name: tenant.last_name,
-              unit_id: tenant.unit_id,
+              firstName: tenant.firstName,
+              lastName: tenant.lastName,
+              unitId: tenant.unitId,
               units: unit ? {
-                top_nummer: unit.top_nummer,
-                property_id: unit.property_id,
+                topNummer: unit.topNummer,
+                propertyId: unit.propertyId,
                 properties: property ? { name: property.name } : undefined
               } : undefined
             } : undefined

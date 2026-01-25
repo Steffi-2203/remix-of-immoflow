@@ -4,31 +4,31 @@ import { toast } from 'sonner';
 
 export interface Tenant {
   id: string;
-  unit_id: string;
-  first_name: string;
-  last_name: string;
+  unitId: string;
+  firstName: string;
+  lastName: string;
   email: string | null;
   phone: string | null;
-  mobile_phone: string | null;
+  mobilePhone: string | null;
   status: 'aktiv' | 'leerstand' | 'beendet';
   mietbeginn: string | null;
   mietende: string | null;
   grundmiete: string;
-  betriebskosten_vorschuss: string;
-  heizungskosten_vorschuss: string;
+  betriebskostenVorschuss: string;
+  heizungskostenVorschuss: string;
   kaution: string | null;
-  kaution_bezahlt: boolean;
+  kautionBezahlt: boolean;
   iban: string | null;
   bic: string | null;
-  sepa_mandat: boolean;
-  sepa_mandat_datum: string | null;
+  sepaMandat: boolean;
+  sepaMandatDatum: string | null;
   notes: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   units?: {
     id: string;
-    top_nummer: string;
-    property_id: string;
+    topNummer: string;
+    propertyId: string;
     properties?: {
       id: string;
       name: string;
@@ -37,7 +37,7 @@ export interface Tenant {
   };
 }
 
-export type TenantInsert = Omit<Tenant, 'id' | 'created_at' | 'updated_at' | 'units'>;
+export type TenantInsert = Omit<Tenant, 'id' | 'createdAt' | 'updatedAt' | 'units'>;
 export type TenantUpdate = Partial<TenantInsert>;
 
 export function useTenants() {
@@ -56,8 +56,8 @@ export function useTenants() {
         const properties = await propertiesResponse.json();
         
         return tenants.map((tenant: Tenant) => {
-          const unit = units.find((u: any) => u.id === tenant.unit_id);
-          const property = unit ? properties.find((p: any) => p.id === unit.property_id) : null;
+          const unit = units.find((u: any) => u.id === tenant.unitId);
+          const property = unit ? properties.find((p: any) => p.id === unit.propertyId) : null;
           return {
             ...tenant,
             units: unit ? {
@@ -95,11 +95,11 @@ export function useTenant(id: string | undefined) {
       if (!response.ok) throw new Error('Failed to fetch tenant');
       const tenant = await response.json();
       
-      if (tenant.unit_id) {
-        const unitResponse = await fetch(`/api/units/${tenant.unit_id}`, { credentials: 'include' });
+      if (tenant.unitId) {
+        const unitResponse = await fetch(`/api/units/${tenant.unitId}`, { credentials: 'include' });
         if (unitResponse.ok) {
           const unit = await unitResponse.json();
-          const propertyResponse = await fetch(`/api/properties/${unit.property_id}`, { credentials: 'include' });
+          const propertyResponse = await fetch(`/api/properties/${unit.propertyId}`, { credentials: 'include' });
           if (propertyResponse.ok) {
             const property = await propertyResponse.json();
             tenant.units = { ...unit, properties: property };

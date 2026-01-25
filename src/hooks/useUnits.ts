@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 
 export interface Unit {
   id: string;
-  property_id: string;
-  top_nummer: string;
+  propertyId: string;
+  topNummer: string;
   type: 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
   status: 'aktiv' | 'leerstand' | 'beendet';
   flaeche: string | null;
@@ -13,27 +13,27 @@ export interface Unit {
   nutzwert: string | null;
   stockwerk: number | null;
   notes: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   tenants?: Tenant[];
 }
 
 export interface Tenant {
   id: string;
-  unit_id: string;
-  first_name: string;
-  last_name: string;
+  unitId: string;
+  firstName: string;
+  lastName: string;
   email: string | null;
   phone: string | null;
   status: 'aktiv' | 'leerstand' | 'beendet';
   mietbeginn: string | null;
   mietende: string | null;
   grundmiete: string;
-  betriebskosten_vorschuss: string;
-  heizungskosten_vorschuss: string;
+  betriebskostenVorschuss: string;
+  heizungskostenVorschuss: string;
 }
 
-export type UnitInsert = Omit<Unit, 'id' | 'created_at' | 'updated_at' | 'tenants'>;
+export type UnitInsert = Omit<Unit, 'id' | 'createdAt' | 'updatedAt' | 'tenants'>;
 export type UnitUpdate = Partial<UnitInsert>;
 
 export function useUnits(propertyId?: string) {
@@ -53,7 +53,7 @@ export function useUnits(propertyId?: string) {
           const tenants = await tenantsResponse.json();
           return units.map((unit: Unit) => ({
             ...unit,
-            tenants: tenants.filter((t: Tenant) => t.unit_id === unit.id)
+            tenants: tenants.filter((t: Tenant) => t.unitId === unit.id)
           }));
         }
       }
@@ -93,7 +93,7 @@ export function useCreateUnit() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['units'] });
-      queryClient.invalidateQueries({ queryKey: ['units', data.property_id] });
+      queryClient.invalidateQueries({ queryKey: ['units', data.propertyId] });
       toast.success('Einheit erfolgreich erstellt');
     },
     onError: (error) => {

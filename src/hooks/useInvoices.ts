@@ -4,36 +4,36 @@ import { toast } from 'sonner';
 
 export interface Invoice {
   id: string;
-  tenant_id: string;
+  tenantId: string;
   year: number;
   month: number;
   grundmiete: number;
   betriebskosten: number;
   heizungskosten: number;
-  sonstige_kosten: number;
+  sonstigeKosten: number;
   gesamtbetrag: number;
-  ust_miete: number;
-  ust_betriebskosten: number;
-  ust_heizung: number;
+  ustMiete: number;
+  ustBetriebskosten: number;
+  ustHeizung: number;
   status: 'offen' | 'bezahlt' | 'mahnung' | 'teilbezahlt';
-  bezahlt_am: string | null;
-  faellig_am: string | null;
+  bezahltAm: string | null;
+  faelligAm: string | null;
   notes: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   tenants?: {
-    first_name: string;
-    last_name: string;
-    unit_id: string;
+    firstName: string;
+    lastName: string;
+    unitId: string;
     units?: {
-      top_nummer: string;
-      property_id: string;
+      topNummer: string;
+      propertyId: string;
       properties?: { name: string };
     };
   };
 }
 
-export type InvoiceInsert = Omit<Invoice, 'id' | 'created_at' | 'updated_at' | 'tenants'>;
+export type InvoiceInsert = Omit<Invoice, 'id' | 'createdAt' | 'updatedAt' | 'tenants'>;
 export type InvoiceUpdate = Partial<InvoiceInsert>;
 
 export function useInvoices(year?: number, month?: number) {
@@ -62,19 +62,19 @@ export function useInvoices(year?: number, month?: number) {
         const properties = await propsRes.json();
         
         return invoices.map((invoice: Invoice) => {
-          const tenant = tenants.find((t: any) => t.id === invoice.tenant_id);
-          const unit = tenant ? units.find((u: any) => u.id === tenant.unit_id) : null;
-          const property = unit ? properties.find((p: any) => p.id === unit.property_id) : null;
+          const tenant = tenants.find((t: any) => t.id === invoice.tenantId);
+          const unit = tenant ? units.find((u: any) => u.id === tenant.unitId) : null;
+          const property = unit ? properties.find((p: any) => p.id === unit.propertyId) : null;
           
           return {
             ...invoice,
             tenants: tenant ? {
-              first_name: tenant.first_name,
-              last_name: tenant.last_name,
-              unit_id: tenant.unit_id,
+              firstName: tenant.firstName,
+              lastName: tenant.lastName,
+              unitId: tenant.unitId,
               units: unit ? {
-                top_nummer: unit.top_nummer,
-                property_id: unit.property_id,
+                topNummer: unit.topNummer,
+                propertyId: unit.propertyId,
                 properties: property ? { name: property.name } : undefined
               } : undefined
             } : undefined
@@ -176,7 +176,7 @@ export function useUpdateInvoiceStatus() {
     }) => {
       const updateData: InvoiceUpdate = { status };
       if (bezahltAm) {
-        updateData.bezahlt_am = bezahltAm;
+        updateData.bezahltAm = bezahltAm;
       }
 
       const response = await apiRequest('PATCH', `/api/invoices/${id}`, updateData);
