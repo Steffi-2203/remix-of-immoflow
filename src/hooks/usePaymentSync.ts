@@ -61,14 +61,14 @@ export function usePaymentSync() {
             await apiRequest('POST', '/api/transactions', {
               organizationId: organization.id,
               unitId: unitId || null,
-              tenantId: payment.tenant_id,
+              tenantId: payment.tenantId,
               propertyId: propertyId || null,
               amount: payment.betrag,
               currency: 'EUR',
-              transactionDate: payment.eingangs_datum,
-              bookingDate: payment.buchungs_datum,
-              description: `Mietzahlung ${payment.referenz || ''}`.trim(),
-              reference: payment.referenz || null,
+              transactionDate: payment.eingangsDatum || payment.buchungsDatum,
+              bookingDate: payment.buchungsDatum,
+              description: `Mietzahlung ${payment.verwendungszweck || ''}`.trim(),
+              reference: payment.verwendungszweck || null,
               categoryId: mieteinnahmenCategory.id,
               status: 'matched',
             });
@@ -192,10 +192,68 @@ export function usePaymentSync() {
 
   const syncExistingPaymentsToTransactions = useMutation({
     mutationFn: async () => {
-      return { synced: 0, skipped: 0 };
+      if (!organization?.id) {
+        throw new Error('Keine Organisation gefunden');
+      }
+
+      const mieteinnahmenCategory = getMieteinnahmenCategory();
+      if (!mieteinnahmenCategory) {
+        throw new Error('Mieteinnahmen-Kategorie nicht gefunden');
+      }
+
+      const [paymentsRes, transactionsRes] = await Promise.all([
+        fetch('/api/payments', { credentials: 'include' }),
+        fetch('/api/transactions', { credentials: 'include' }),
+      ]);
+
+      const payments = await paymentsRes.json();
+      const transactions = await transactionsRes.json();
+
+      let synced = 0;
+      let skipped = 0;
+
+      for (const payment of payments) {
+        const existingTransaction = transactions.find((t: any) =>
+          t.tenantId === payment.tenantId &&
+          t.categoryId === mieteinnahmenCategory.id &&
+          Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01 &&
+          (t.transactionDate === payment.eingangsDatum || t.transactionDate === payment.buchungsDatum)
+        );
+
+        if (existingTransaction) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          const unitId = payment.tenants?.unitId || null;
+          const propertyId = payment.tenants?.units?.propertyId || null;
+
+          await apiRequest('POST', '/api/transactions', {
+            organizationId: organization.id,
+            unitId: unitId,
+            tenantId: payment.tenantId,
+            propertyId: propertyId,
+            amount: payment.betrag,
+            currency: 'EUR',
+            transactionDate: payment.eingangsDatum || payment.buchungsDatum,
+            bookingDate: payment.buchungsDatum,
+            description: `Mietzahlung ${payment.verwendungszweck || ''}`.trim(),
+            reference: payment.verwendungszweck || null,
+            categoryId: mieteinnahmenCategory.id,
+            status: 'matched',
+          });
+          synced++;
+        } catch (error) {
+          console.error('Failed to sync payment:', payment.id, error);
+        }
+      }
+
+      return { synced, skipped };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
       if (result.synced > 0) {
         toast.success(`${result.synced} Mieteinnahme(n) erfolgreich zur Banking-Übersicht synchronisiert`);
       } else {
@@ -238,7 +296,7 @@ export function usePaymentSync() {
           
           const matchingTransaction = transactions.find((t: any) =>
             t.tenantId === payment.tenantId &&
-            t.transactionDate === payment.eingangsDatum &&
+            (t.transactionDate === payment.eingangsDatum || t.transactionDate === payment.buchungsDatum) &&
             Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01 &&
             t.categoryId === mieteinnahmenCategory.id
           );
