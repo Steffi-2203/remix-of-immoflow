@@ -1,6 +1,7 @@
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { TrialBanner } from '@/components/subscription/SubscriptionTeaser';
+import { UserUpgradeBanner } from '@/components/subscription/UserUpgradeBanner';
 import { SidebarProvider, useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ function MainLayoutContent({ children, title, subtitle }: MainLayoutProps) {
           isMobile ? 'pl-0' : (collapsed ? 'pl-16' : 'pl-64')
         )}
       >
+        <UserUpgradeBanner />
         <TrialBanner />
         <Header title={title} subtitle={subtitle} />
         <main className="p-4 md:p-6">{children}</main>

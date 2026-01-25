@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
+import { apiRequest } from '@/lib/queryClient';
 
 export type UserSubscriptionTier = 'trial' | 'inactive' | 'starter' | 'pro' | 'enterprise';
 
@@ -81,6 +82,15 @@ export function useSubscriptionLimits() {
 
   const { data: subscriptionData, isLoading } = useQuery<UserSubscriptionData>({
     queryKey: ['/api/user/subscription'],
+    queryFn: async () => {
+      const response = await fetch('/api/user/subscription', {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch subscription');
+      }
+      return response.json();
+    },
     enabled: !!user,
   });
 
