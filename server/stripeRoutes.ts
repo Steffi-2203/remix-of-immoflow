@@ -21,8 +21,8 @@ const PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
 };
 
 const USER_PRICE_IDS: Record<string, string> = {
-  starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_user_starter_monthly',
-  pro: process.env.STRIPE_USER_PRICE_PRO || 'price_user_pro_monthly',
+  starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_1StPYOGMeISjSnLCRsy43IwZ',
+  pro: process.env.STRIPE_USER_PRICE_PRO || 'price_1StPYOGMeISjSnLC67Qo1IYQ',
 };
 
 async function getProfileById(id: string) {
