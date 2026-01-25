@@ -494,6 +494,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/units/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.id);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (property && property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.softDeleteUnit(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete unit" });
+    }
+  });
+
+  app.delete("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (unit) {
+        const property = await storage.getProperty(unit.propertyId);
+        if (property && property.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      await storage.softDeleteTenant(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
   app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
