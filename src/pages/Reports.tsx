@@ -37,6 +37,7 @@ import {
   AlertCircle,
   Plus,
   Calculator,
+  Wallet,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -59,6 +60,7 @@ import {
   generateOffenePostenReport,
   generatePlausibilityReport,
   generateDetailReport,
+  generateKautionsReport,
   type PaymentData,
   type TransactionData,
   type CategoryData,
@@ -179,6 +181,13 @@ const reports = [
     description: 'Monatliche Miete, BK & HK pro Mieter',
     icon: Receipt,
     color: 'bg-purple-500/10 text-purple-600',
+  },
+  {
+    id: 'kaution',
+    title: 'Kautionsübersicht',
+    description: 'Übersicht aller bezahlten Mietkautionen',
+    icon: Wallet,
+    color: 'bg-teal-500/10 text-teal-600',
   },
 ];
 
@@ -2391,6 +2400,156 @@ export default function Reports() {
                     </Table>
                   </div>
                 ))}
+              </>
+            );
+          })()}
+
+          {/* Kautionsübersicht Report */}
+          {selectedReportId === 'kaution' && (() => {
+            // Filter tenants with kaution_bezahlt = true
+            const tenantsWithKaution = (allTenants || []).filter(t => {
+              if (!t.kaution_bezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
+              
+              if (selectedPropertyId === 'all') return true;
+              
+              const unit = (allUnits || []).find(u => u.id === t.unit_id);
+              return unit?.property_id === selectedPropertyId;
+            });
+
+            // Sort by property, then by unit
+            const sortedTenants = tenantsWithKaution.sort((a, b) => {
+              const unitA = (allUnits || []).find(u => u.id === a.unit_id);
+              const unitB = (allUnits || []).find(u => u.id === b.unit_id);
+              const propA = (properties || []).find(p => p.id === unitA?.property_id);
+              const propB = (properties || []).find(p => p.id === unitB?.property_id);
+              
+              if (propA?.name !== propB?.name) {
+                return (propA?.name || '').localeCompare(propB?.name || '');
+              }
+              return (unitA?.top_nummer || '').localeCompare(unitB?.top_nummer || '');
+            });
+
+            // Calculate total
+            const totalKaution = sortedTenants.reduce((sum, t) => sum + Number(t.kaution || 0), 0);
+
+            const handleExportPdf = () => {
+              if (!properties || !allUnits || !allTenants) return;
+              
+              generateKautionsReport(
+                allTenants.map(t => ({
+                  id: t.id,
+                  first_name: t.first_name,
+                  last_name: t.last_name,
+                  email: t.email,
+                  phone: t.phone,
+                  kaution: Number(t.kaution || 0),
+                  kaution_bezahlt: t.kaution_bezahlt || false,
+                  unit_id: t.unit_id,
+                  mietbeginn: t.mietbeginn,
+                })),
+                allUnits.map(u => ({
+                  id: u.id,
+                  top_nummer: u.top_nummer,
+                  property_id: u.property_id,
+                })),
+                properties.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  address: p.address,
+                })),
+                selectedPropertyId
+              );
+              toast.success('PDF wurde erstellt');
+            };
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Kautionsübersicht</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Alle Mieter mit bezahlter Kaution
+                    </p>
+                  </div>
+                  <Button onClick={handleExportPdf} variant="outline" data-testid="button-kaution-export-pdf">
+                    <Download className="h-4 w-4 mr-2" />
+                    PDF Export
+                  </Button>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-5 w-5 text-teal-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Anzahl Kautionen</p>
+                          <p className="text-2xl font-bold">{sortedTenants.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Euro className="h-5 w-5 text-teal-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Gesamtsumme</p>
+                          <p className="text-2xl font-bold">
+                            €{totalKaution.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Table */}
+                {sortedTenants.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Keine Mietkautionen gefunden</p>
+                    <p className="text-sm">Es wurden keine Mieter mit bezahlter Kaution gefunden.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Liegenschaft</TableHead>
+                        <TableHead>Einheit</TableHead>
+                        <TableHead>Mieter</TableHead>
+                        <TableHead>Mietbeginn</TableHead>
+                        <TableHead className="text-right">Kaution</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedTenants.map((tenant) => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
+                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        
+                        return (
+                          <TableRow key={tenant.id} data-testid={`row-kaution-${tenant.id}`}>
+                            <TableCell>{property?.name || '-'}</TableCell>
+                            <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                            <TableCell className="font-medium">
+                              {tenant.first_name} {tenant.last_name}
+                            </TableCell>
+                            <TableCell>
+                              {tenant.mietbeginn 
+                                ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT')
+                                : '-'
+                              }
+                            </TableCell>
+                            <TableCell className="text-right font-bold">
+                              €{Number(tenant.kaution || 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
               </>
             );
           })()}
