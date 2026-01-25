@@ -112,9 +112,9 @@ export function usePermissions(): Permissions {
       canViewFinances: true,
       canEditFinances: false,
       canViewFullTenantData: false,
-      canManageMaintenance: true,
+      canManageMaintenance: false, // Gesperrt für Tester
       canApproveInvoices: false,
-      canSendMessages: false,
+      canSendMessages: true, // Nachrichten erlaubt für Tester
       canManageUsers: false,
       role: 'tester',
       isAdmin: false,

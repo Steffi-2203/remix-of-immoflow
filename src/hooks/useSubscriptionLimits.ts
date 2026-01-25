@@ -6,64 +6,167 @@ export type UserSubscriptionTier = 'trial' | 'inactive' | 'starter' | 'pro' | 'e
 
 interface SubscriptionLimits {
   maxProperties: number;
+  maxUnits: number;
   maxTenants: number;
+  maxOcrInvoices: number;
+  maxOcrBankStatements: number;
   canExport: boolean;
   canUpload: boolean;
   canViewSettlements: boolean;
   canEditSettlements: boolean;
   canUseAutomation: boolean;
+  canSendMessages: boolean;
+  canViewReports: boolean;
+  canManageOwners: boolean;
+  canManageMeters: boolean;
+  canManageKeys: boolean;
+  canManageVpi: boolean;
+  canManageBanking: boolean;
+  canManageBudgets: boolean;
+  canManageDunning: boolean;
+  canManageMaintenance: boolean;
+  canManageContractors: boolean;
+  canManageInvoiceApproval: boolean;
+  canManageTeam: boolean;
+  canManageDocuments: boolean;
   hasFullAccess: boolean;
 }
 
 const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
   trial: {
-    maxProperties: 1,
+    // Tester: 1 Einheit, 3 Mieter, 1 OCR-Rechnung, 1 OCR-Kontoauszug
+    maxProperties: 0, // Keine Liegenschaften - nur Einheiten
+    maxUnits: 1,
     maxTenants: 3,
+    maxOcrInvoices: 1,
+    maxOcrBankStatements: 1,
     canExport: false,
-    canUpload: false,
-    canViewSettlements: true,
+    canUpload: true, // OCR Upload erlaubt
+    canViewSettlements: true, // Abrechnungen ansehen
     canEditSettlements: false,
     canUseAutomation: false,
+    canSendMessages: true, // Nachrichten senden erlaubt
+    canViewReports: true, // Reports ansehen erlaubt
+    canManageOwners: false,
+    canManageMeters: false,
+    canManageKeys: false,
+    canManageVpi: false,
+    canManageBanking: false,
+    canManageBudgets: false,
+    canManageDunning: false,
+    canManageMaintenance: false,
+    canManageContractors: false,
+    canManageInvoiceApproval: false,
+    canManageTeam: false,
+    canManageDocuments: false,
     hasFullAccess: false,
   },
   inactive: {
     maxProperties: 0,
+    maxUnits: 0,
     maxTenants: 0,
+    maxOcrInvoices: 0,
+    maxOcrBankStatements: 0,
     canExport: false,
     canUpload: false,
     canViewSettlements: false,
     canEditSettlements: false,
     canUseAutomation: false,
+    canSendMessages: false,
+    canViewReports: false,
+    canManageOwners: false,
+    canManageMeters: false,
+    canManageKeys: false,
+    canManageVpi: false,
+    canManageBanking: false,
+    canManageBudgets: false,
+    canManageDunning: false,
+    canManageMaintenance: false,
+    canManageContractors: false,
+    canManageInvoiceApproval: false,
+    canManageTeam: false,
+    canManageDocuments: false,
     hasFullAccess: false,
   },
   starter: {
     maxProperties: 50,
+    maxUnits: Infinity,
     maxTenants: Infinity,
+    maxOcrInvoices: Infinity,
+    maxOcrBankStatements: Infinity,
     canExport: true,
     canUpload: true,
     canViewSettlements: true,
     canEditSettlements: true,
     canUseAutomation: false,
+    canSendMessages: true,
+    canViewReports: true,
+    canManageOwners: true,
+    canManageMeters: true,
+    canManageKeys: true,
+    canManageVpi: true,
+    canManageBanking: true,
+    canManageBudgets: true,
+    canManageDunning: true,
+    canManageMaintenance: true,
+    canManageContractors: true,
+    canManageInvoiceApproval: true,
+    canManageTeam: true,
+    canManageDocuments: true,
     hasFullAccess: false,
   },
   pro: {
     maxProperties: Infinity,
+    maxUnits: Infinity,
     maxTenants: Infinity,
+    maxOcrInvoices: Infinity,
+    maxOcrBankStatements: Infinity,
     canExport: true,
     canUpload: true,
     canViewSettlements: true,
     canEditSettlements: true,
     canUseAutomation: true,
+    canSendMessages: true,
+    canViewReports: true,
+    canManageOwners: true,
+    canManageMeters: true,
+    canManageKeys: true,
+    canManageVpi: true,
+    canManageBanking: true,
+    canManageBudgets: true,
+    canManageDunning: true,
+    canManageMaintenance: true,
+    canManageContractors: true,
+    canManageInvoiceApproval: true,
+    canManageTeam: true,
+    canManageDocuments: true,
     hasFullAccess: true,
   },
   enterprise: {
     maxProperties: Infinity,
+    maxUnits: Infinity,
     maxTenants: Infinity,
+    maxOcrInvoices: Infinity,
+    maxOcrBankStatements: Infinity,
     canExport: true,
     canUpload: true,
     canViewSettlements: true,
     canEditSettlements: true,
     canUseAutomation: true,
+    canSendMessages: true,
+    canViewReports: true,
+    canManageOwners: true,
+    canManageMeters: true,
+    canManageKeys: true,
+    canManageVpi: true,
+    canManageBanking: true,
+    canManageBudgets: true,
+    canManageDunning: true,
+    canManageMaintenance: true,
+    canManageContractors: true,
+    canManageInvoiceApproval: true,
+    canManageTeam: true,
+    canManageDocuments: true,
     hasFullAccess: true,
   },
 };
@@ -131,7 +234,10 @@ export function useSubscriptionLimits() {
     isPro,
     isLoading,
     canCreateProperty: (currentCount: number) => currentCount < effectiveLimits.maxProperties,
+    canCreateUnit: (currentCount: number) => currentCount < effectiveLimits.maxUnits,
     canCreateTenant: (currentCount: number) => currentCount < effectiveLimits.maxTenants,
+    canUploadOcrInvoice: (currentCount: number) => currentCount < effectiveLimits.maxOcrInvoices,
+    canUploadOcrBankStatement: (currentCount: number) => currentCount < effectiveLimits.maxOcrBankStatements,
   };
 }
 

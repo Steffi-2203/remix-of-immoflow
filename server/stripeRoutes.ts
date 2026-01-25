@@ -254,6 +254,68 @@ export async function handleSubscriptionWebhook(event: any) {
         const subscriptionEndsAt = new Date();
         subscriptionEndsAt.setMonth(subscriptionEndsAt.getMonth() + 1);
         
+        // Get the user's profile and current role to check if they're a tester/trial user
+        const profile = await db.select().from(schema.profiles)
+          .where(eq(schema.profiles.id, userId)).limit(1);
+        
+        // Check if user is a tester (trial user who should become admin after purchase)
+        const existingRole = await db.select().from(schema.userRoles)
+          .where(eq(schema.userRoles.userId, userId)).limit(1);
+        
+        const currentRole = existingRole[0]?.role || 'viewer';
+        const isTesterOrTrial = currentRole === 'tester' || currentRole === 'viewer';
+        
+        if (profile[0] && profile[0].organizationId && isTesterOrTrial) {
+          const orgId = profile[0].organizationId;
+          
+          // Find and demote the current admin(s) ONLY in this specific organization
+          const currentAdmins = await db.select().from(schema.userRoles)
+            .where(eq(schema.userRoles.role, 'admin'));
+          
+          for (const adminRole of currentAdmins) {
+            // Get the profile of this admin
+            const adminProfile = await db.select().from(schema.profiles)
+              .where(eq(schema.profiles.id, adminRole.userId)).limit(1);
+            
+            // Only demote if they are in the SAME organization AND not the purchasing user
+            if (adminProfile[0]?.organizationId === orgId && adminRole.userId !== userId) {
+              // Demote to property_manager instead of removing
+              await db.update(schema.userRoles)
+                .set({ role: 'property_manager' })
+                .where(eq(schema.userRoles.userId, adminRole.userId));
+              
+              console.log(`Demoted previous admin ${adminRole.userId} to property_manager in org ${orgId}`);
+            }
+          }
+          
+          // Promote the tester to admin
+          if (existingRole[0]) {
+            await db.update(schema.userRoles)
+              .set({ role: 'admin' })
+              .where(eq(schema.userRoles.userId, userId));
+          } else {
+            await db.insert(schema.userRoles).values({
+              userId: userId,
+              role: 'admin',
+            });
+          }
+          
+          // Map user plan to org subscription tier correctly
+          const orgTier = planId === 'pro' ? 'professional' : 'starter';
+          
+          // Update organization subscription status
+          await db.update(schema.organizations)
+            .set({ 
+              subscriptionStatus: 'active',
+              subscriptionTier: orgTier as any,
+              trialEndsAt: null,
+            })
+            .where(eq(schema.organizations.id, orgId));
+          
+          console.log(`Tester ${userId} promoted to admin after purchasing ${planId} plan (org tier: ${orgTier})`);
+        }
+        
+        // Update user profile subscription
         await db.update(schema.profiles)
           .set({ 
             subscriptionTier: planId as any,
