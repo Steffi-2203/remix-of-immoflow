@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,8 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, Info, AlertTriangle, TrendingUp, Calendar } from "lucide-react";
+import { Calculator, Info, AlertTriangle, TrendingUp, Calendar, Building2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useProperties } from "@/hooks/useProperties";
+import { useUnits } from "@/hooks/useUnits";
+import { useTenants } from "@/hooks/useTenants";
 
 type RentType = 'kategoriemiete' | 'richtwertmiete' | 'freier_markt';
 
@@ -22,6 +25,12 @@ interface IndexationResult {
 }
 
 export function RentIndexationCalculator() {
+  const { data: properties } = useProperties();
+  const { data: units } = useUnits();
+  const { data: tenants } = useTenants();
+  
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("");
   const [currentRent, setCurrentRent] = useState<string>("850");
   const [inflationRate, setInflationRate] = useState<string>("4.5");
   const [rentType, setRentType] = useState<RentType>("richtwertmiete");
@@ -29,6 +38,24 @@ export function RentIndexationCalculator() {
   const [lastIndexationDate, setLastIndexationDate] = useState<string>("2025-04-01");
   const [isEinZweifamilienhaus, setIsEinZweifamilienhaus] = useState(false);
   const [result, setResult] = useState<IndexationResult | null>(null);
+  
+  // Filter units and tenants by selected property
+  const propertyUnits = units?.filter(u => u.propertyId === selectedPropertyId) || [];
+  const propertyTenants = tenants?.filter(t => {
+    const unit = units?.find(u => u.id === t.unitId);
+    return unit?.propertyId === selectedPropertyId && t.status === 'aktiv';
+  }) || [];
+  
+  // Auto-fill rent when tenant is selected
+  useEffect(() => {
+    if (selectedTenantId) {
+      const tenant = tenants?.find(t => t.id === selectedTenantId);
+      if (tenant) {
+        const rent = Number(tenant.grundmiete) || 0;
+        setCurrentRent(rent.toFixed(2));
+      }
+    }
+  }, [selectedTenantId, tenants]);
 
   const calculateHaelfteRegelung = (inflation: number): number => {
     const baseRate = Math.min(inflation, 3);
@@ -211,6 +238,52 @@ export function RentIndexationCalculator() {
           </Alert>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="property">Liegenschaft (optional)</Label>
+              <Select value={selectedPropertyId} onValueChange={(v) => { setSelectedPropertyId(v); setSelectedTenantId(""); }}>
+                <SelectTrigger id="property" data-testid="select-property">
+                  <SelectValue placeholder="Liegenschaft wählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Manuelle Eingabe</SelectItem>
+                  {properties?.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        {p.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tenant">Mieter (optional)</Label>
+              <Select 
+                value={selectedTenantId} 
+                onValueChange={setSelectedTenantId}
+                disabled={!selectedPropertyId}
+              >
+                <SelectTrigger id="tenant" data-testid="select-tenant">
+                  <SelectValue placeholder={selectedPropertyId ? "Mieter wählen..." : "Zuerst Liegenschaft wählen"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {propertyTenants.map((t: any) => {
+                    const unit = units?.find((u: any) => u.id === t.unitId);
+                    return (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.firstName} {t.lastName} ({unit?.topNummer || 'N/A'})
+                      </SelectItem>
+                    );
+                  })}
+                  {propertyTenants.length === 0 && (
+                    <SelectItem value="" disabled>Keine aktiven Mieter</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="currentRent">Aktuelle Nettomiete (EUR)</Label>
               <Input
