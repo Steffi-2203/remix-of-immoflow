@@ -416,14 +416,32 @@ export default function Reports() {
         return;
       }
       
-      // Erstelle die Invoice-Beträge aus Mieterdaten (camelCase from useTenants)
-      const invoiceAmounts: InvoiceAmounts = {
+      // Ermittle Jahr/Monat der Zahlung
+      const paymentDate = new Date(p.date);
+      const paymentYear = paymentDate.getFullYear();
+      const paymentMonth = paymentDate.getMonth() + 1;
+      
+      // WICHTIG: SOLL-Beträge aus Vorschreibung (monthlyInvoice) statt Mieter-Stammdaten!
+      // Die Vorschreibung enthält die tatsächlichen Soll-Beträge für den spezifischen Monat
+      const invoice = allInvoices?.find(inv => 
+        inv.tenantId === p.tenant_id && 
+        inv.year === paymentYear && 
+        inv.month === paymentMonth
+      );
+      
+      // Fallback auf Mieter-Stammdaten nur wenn keine Vorschreibung existiert
+      const invoiceAmounts: InvoiceAmounts = invoice ? {
+        grundmiete: Number(invoice.grundmiete || 0),
+        betriebskosten: Number(invoice.betriebskosten || 0),
+        heizungskosten: Number(invoice.heizungskosten || 0),
+        gesamtbetrag: Number(invoice.gesamtbetrag || 0)
+      } : {
         grundmiete: Number(tenant.grundmiete || 0),
         betriebskosten: Number(tenant.betriebskostenVorschuss || 0),
-        heizungskosten: Number(tenant.heizungskostenVorschuss || 0),
+        heizungskosten: Number(tenant.heizkostenVorschuss || 0),
         gesamtbetrag: Number(tenant.grundmiete || 0) + 
                       Number(tenant.betriebskostenVorschuss || 0) + 
-                      Number(tenant.heizungskostenVorschuss || 0)
+                      Number(tenant.heizkostenVorschuss || 0)
       };
       
       // Berechne die Zuordnung (BK → Heizung → Miete)
@@ -441,7 +459,7 @@ export default function Reports() {
       hkAnteil: totalHkAnteil,
       gesamt: totalGesamt
     };
-  }, [periodCombinedPayments, allTenants]);
+  }, [periodCombinedPayments, allTenants, allInvoices]);
   
   // IST-Einnahmen = NUR Miete-Anteil (ohne BK und Heizung)
   const totalIstEinnahmenMiete = paymentAllocationDetails.mieteAnteil;
@@ -460,8 +478,8 @@ export default function Reports() {
 
 
   // ====== AUSGABEN AUS TRANSAKTIONEN (negative Beträge) ======
-  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
-  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+  const incomeTransactions = periodTransactions.filter(t => Number(t.amount) > 0);
+  const expenseTransactions = periodTransactions.filter(t => Number(t.amount) < 0);
 
   // ====== IST-EINNAHMEN AUS TRANSAKTIONEN (kategorisiert) ======
   // Mieteinnahmen aus Transaktionen mit Kategorie "Mieteinnahmen"
@@ -639,10 +657,31 @@ export default function Reports() {
       const unit = allUnits?.find(u => u.id === tenant.unit_id);
       const property = properties?.find(p => p.id === unit?.propertyId);
       
-      // SOLL-Werte aus Mieterdaten (monatlich * multiplier) - snake_case from TenantForFilter
-      const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      // SOLL-Werte: Bevorzugt aus Vorschreibungen (monthlyInvoices) für den Zeitraum
+      // Fallback auf Mieterdaten nur wenn keine Vorschreibung existiert
+      const tenantInvoices = allInvoices?.filter(inv => 
+        inv.tenantId === tenant.id &&
+        inv.year === selectedYear &&
+        (reportPeriod === 'yearly' || inv.month === selectedMonth)
+      ) || [];
+      
+      let sollMiete = 0;
+      let sollBk = 0;
+      let sollHk = 0;
+      
+      if (tenantInvoices.length > 0) {
+        // Summiere Vorschreibungen für den Zeitraum
+        tenantInvoices.forEach(inv => {
+          sollMiete += Number(inv.grundmiete || 0);
+          sollBk += Number(inv.betriebskosten || 0);
+          sollHk += Number(inv.heizungskosten || 0);
+        });
+      } else {
+        // Fallback: Mieterdaten * monthMultiplier
+        sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+        sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+        sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      }
       const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
@@ -688,7 +727,7 @@ export default function Reports() {
         paymentCount: tenantPayments.length
       };
     });
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier]);
+  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, selectedMonth, reportPeriod]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
@@ -837,12 +876,12 @@ export default function Reports() {
       // Prepare transaction data for PDF export
       const transactionData: TransactionData[] = (allTransactions || []).map(t => ({
         id: t.id,
-        amount: t.amount,
-        transaction_date: t.transaction_date,
-        category_id: t.category_id,
-        property_id: t.property_id,
-        unit_id: t.unit_id,
-        description: t.description,
+        amount: Number(t.amount),
+        transaction_date: t.transaction_date || '',
+        category_id: t.category_id || '',
+        property_id: t.property_id || '',
+        unit_id: t.unit_id || '',
+        description: t.description || t.bookingText || '',
       }));
 
       const categoryData: CategoryData[] = (categories || []).map(c => ({
@@ -951,14 +990,14 @@ export default function Reports() {
           // Prepare transaction data with bank_account_id
           const plausibilityTransactions = (allTransactions || []).map(t => ({
             id: t.id,
-            amount: t.amount,
-            transaction_date: t.transaction_date,
-            category_id: t.category_id,
-            property_id: t.property_id,
-            unit_id: t.unit_id,
-            description: t.description,
-            tenant_id: t.tenant_id,
-            bank_account_id: t.bank_account_id,
+            amount: Number(t.amount),
+            transaction_date: t.transaction_date || '',
+            category_id: t.category_id || '',
+            property_id: t.property_id || '',
+            unit_id: t.unit_id || '',
+            description: t.description || t.bookingText || '',
+            tenant_id: t.tenant_id || '',
+            bank_account_id: t.bank_account_id || '',
           }));
           
           // Prepare combined payments data for income
@@ -1145,7 +1184,7 @@ export default function Reports() {
             <CardTitle className="text-lg">Kumulierte Einnahmen (IST) - {periodLabel}</CardTitle>
           </div>
           <CardDescription>
-            Tatsächliche Zahlungseingänge aus importierten Mieteinnahmen ({periodTransactions.filter(t => t.amount > 0).length} Transaktionen)
+            Tatsächliche Zahlungseingänge aus importierten Mieteinnahmen ({periodTransactions.filter(t => Number(t.amount) > 0).length} Transaktionen)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1924,7 +1963,7 @@ export default function Reports() {
                 <TableBody>
                   {periodTransactions.slice(0, 15).map((t) => {
                     const category = categories?.find(c => c.id === t.category_id);
-                    const isIncome = t.amount > 0;
+                    const isIncome = Number(t.amount) > 0;
                     
                     return (
                       <TableRow key={t.id}>
@@ -2131,7 +2170,7 @@ export default function Reports() {
             periodTransactions.forEach(t => {
               if (t.unit_id && unitTransactions.has(t.unit_id)) {
                 const data = unitTransactions.get(t.unit_id)!;
-                if (t.amount > 0) {
+                if (Number(t.amount) > 0) {
                   data.income += Number(t.amount);
                 } else {
                   data.expenses += Math.abs(Number(t.amount));
@@ -2142,8 +2181,8 @@ export default function Reports() {
 
             // Nicht zugeordnete Transaktionen
             const unassignedTransactions = periodTransactions.filter(t => !t.unit_id);
-            const unassignedIncome = unassignedTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + Number(t.amount), 0);
-            const unassignedExpenses = unassignedTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+            const unassignedIncome = unassignedTransactions.filter(t => Number(t.amount) > 0).reduce((sum, t) => sum + Number(t.amount), 0);
+            const unassignedExpenses = unassignedTransactions.filter(t => Number(t.amount) < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
             // Gruppiere nach Liegenschaft
             const propertiesData = new Map<string, {
