@@ -291,17 +291,21 @@ export default function Reports() {
   // Filter data by selected property
   const units = selectedPropertyId === 'all' 
     ? allUnits 
-    : allUnits?.filter(u => u.property_id === selectedPropertyId);
+    : allUnits?.filter(u => u.propertyId === selectedPropertyId);
   
   const expenses = selectedPropertyId === 'all'
     ? allExpenses
-    : allExpenses?.filter(e => e.property_id === selectedPropertyId);
+    : allExpenses?.filter(e => e.propertyId === selectedPropertyId);
 
   // Get unit IDs for filtering invoices
   const unitIds = units?.map(u => u.id) || [];
   const invoices = selectedPropertyId === 'all'
     ? allInvoices
-    : allInvoices?.filter(inv => unitIds.includes(inv.unit_id));
+    : allInvoices?.filter(inv => {
+      // Look up unit via tenant for invoice filtering
+      const tenant = allTenants?.find(t => t.id === inv.tenantId);
+      return tenant && unitIds.includes(tenant.unitId);
+    });
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
@@ -354,7 +358,7 @@ export default function Reports() {
     // Ermittle Unit-IDs der ausgewählten Liegenschaft
     const propertyUnitIds = selectedPropertyId === 'all' 
       ? null 
-      : allUnits?.filter(u => u.property_id === selectedPropertyId).map(u => u.id) || [];
+      : allUnits?.filter(u => u.propertyId === selectedPropertyId).map(u => u.id) || [];
     
     return (combinedPayments || []).filter(p => {
       const date = new Date(p.date);
@@ -369,9 +373,10 @@ export default function Reports() {
       }
       
       // Property-Filter (über Mieter -> Unit -> Property)
+      // Note: p.tenant_id is from combinedPayments (snake_case), tenant fields are camelCase
       if (propertyUnitIds !== null) {
         const tenant = allTenants?.find(t => t.id === p.tenant_id);
-        if (!tenant || !propertyUnitIds.includes(tenant.unit_id)) {
+        if (!tenant || !propertyUnitIds.includes(tenant.unitId)) {
           return false;
         }
       }
@@ -411,14 +416,14 @@ export default function Reports() {
         return;
       }
       
-      // Erstelle die Invoice-Beträge aus Mieterdaten
+      // Erstelle die Invoice-Beträge aus Mieterdaten (camelCase from useTenants)
       const invoiceAmounts: InvoiceAmounts = {
         grundmiete: Number(tenant.grundmiete || 0),
-        betriebskosten: Number(tenant.betriebskosten_vorschuss || 0),
-        heizungskosten: Number(tenant.heizungskosten_vorschuss || 0),
+        betriebskosten: Number(tenant.betriebskostenVorschuss || 0),
+        heizungskosten: Number(tenant.heizungskostenVorschuss || 0),
         gesamtbetrag: Number(tenant.grundmiete || 0) + 
-                      Number(tenant.betriebskosten_vorschuss || 0) + 
-                      Number(tenant.heizungskosten_vorschuss || 0)
+                      Number(tenant.betriebskostenVorschuss || 0) + 
+                      Number(tenant.heizungskostenVorschuss || 0)
       };
       
       // Berechne die Zuordnung (BK → Heizung → Miete)
@@ -499,16 +504,16 @@ export default function Reports() {
   const expenseTypeToSonstigeKosten = ['makler', 'notar', 'grundbuch', 'finanzierung'];
   
   const betriebskostenFromExpenses = periodExpenses
-    .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
+    .filter(e => expenseTypeToBetriebskosten.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
   
   const instandhaltungFromExpenses = periodExpenses
-    .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
+    .filter(e => expenseTypeToInstandhaltung.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
     
   // Sonstige Kosten aus expenses (nicht umlagefähig, nicht renditemin.)
   const sonstigeKostenFromExpenses = periodExpenses
-    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expense_type))
+    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
   
   const totalExpensesFromCosts = periodExpenses
@@ -532,8 +537,8 @@ export default function Reports() {
 
   // Property value estimation
   const totalQm = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + Number(p.total_qm || 0), 0) || 0
-    : Number(selectedProperty?.total_qm || 0);
+    ? properties?.reduce((sum, p) => sum + Number(p.totalQm || 0), 0) || 0
+    : Number(selectedProperty?.totalQm || 0);
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   
   // Rendite basierend auf Transaktionen (Mieteinnahmen aus kategorisierten Transaktionen)
@@ -588,11 +593,11 @@ export default function Reports() {
     // Filter nach Property wenn ausgewählt
     const relevantUnitIds = selectedPropertyId === 'all' 
       ? allUnits.map(u => u.id)
-      : allUnits.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+      : allUnits.filter(u => u.propertyId === selectedPropertyId).map(u => u.id);
     
     return allTenants.filter(t => {
       if (t.status !== 'aktiv') return false;
-      if (!relevantUnitIds.includes(t.unit_id)) return false;
+      if (!relevantUnitIds.includes(t.unitId)) return false;
       if (!t.mietbeginn) return false;
       
       const mietbeginn = new Date(t.mietbeginn);
@@ -607,19 +612,19 @@ export default function Reports() {
         return false;
       }
     }).map(t => {
-      const unit = allUnits.find(u => u.id === t.unit_id);
+      const unit = allUnits.find(u => u.id === t.unitId);
       return {
         ...t,
-        unitTopNummer: unit?.top_nummer || 'N/A',
+        unitTopNummer: unit?.topNummer || 'N/A',
         mietbeginnFormatted: t.mietbeginn ? new Date(t.mietbeginn).toLocaleDateString('de-AT') : '-'
       };
     });
   }, [allTenants, allUnits, selectedPropertyId, selectedYear, selectedMonth, reportPeriod]);
   
-  // Monatliche SOLL-Summen aus Mieterdaten
+  // Monatliche SOLL-Summen aus Mieterdaten (camelCase from useTenants)
   const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
-  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
-  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
+  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskostenVorschuss || 0), 0);
+  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskostenVorschuss || 0), 0);
   
   // Bei jährlicher Ansicht: x12 Monate
   const monthMultiplier = reportPeriod === 'yearly' ? 12 : 1;
@@ -631,13 +636,13 @@ export default function Reports() {
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
   const tenantSollIstDetails = useMemo(() => {
     return relevantTenants.map(tenant => {
-      const unit = allUnits?.find(u => u.id === tenant.unit_id);
-      const property = properties?.find(p => p.id === unit?.property_id);
+      const unit = allUnits?.find(u => u.id === tenant.unitId);
+      const property = properties?.find(p => p.id === unit?.propertyId);
       
-      // SOLL-Werte aus Mieterdaten (monatlich * multiplier)
+      // SOLL-Werte aus Mieterdaten (monatlich * multiplier) - camelCase from useTenants
       const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      const sollBk = Number(tenant.betriebskostenVorschuss || 0) * monthMultiplier;
+      const sollHk = Number(tenant.heizungskostenVorschuss || 0) * monthMultiplier;
       const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
@@ -665,8 +670,8 @@ export default function Reports() {
       
       return {
         tenantId: tenant.id,
-        tenantName: `${tenant.first_name} ${tenant.last_name}`,
-        unitName: unit?.top_nummer || 'N/A',
+        tenantName: `${tenant.firstName} ${tenant.lastName}`,
+        unitName: unit?.topNummer || 'N/A',
         propertyName: property?.name || 'N/A',
         sollMiete,
         sollBk,
@@ -685,21 +690,21 @@ export default function Reports() {
     });
   }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier]);
 
-  // USt aus SOLL-Werten berechnen (nach Einheitstyp)
+  // USt aus SOLL-Werten berechnen (nach Einheitstyp) - camelCase from useTenants
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
     const betrag = Number(t.grundmiete || 0) * monthMultiplier;
-    const vatRate = getVatRateForUnit(t.unit_id, 'miete');
+    const vatRate = getVatRateForUnit(t.unitId, 'miete');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollBk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.betriebskosten_vorschuss || 0) * monthMultiplier;
-    const vatRate = getVatRateForUnit(t.unit_id, 'bk');
+    const betrag = Number(t.betriebskostenVorschuss || 0) * monthMultiplier;
+    const vatRate = getVatRateForUnit(t.unitId, 'bk');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollHk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.heizungskosten_vorschuss || 0) * monthMultiplier;
+    const betrag = Number(t.heizungskostenVorschuss || 0) * monthMultiplier;
     return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
   }, 0);
   
@@ -786,9 +791,9 @@ export default function Reports() {
     'finanzierung': 0,   // Zinsen sind umsatzsteuerfrei
   };
   
-  // Vorsteuer-Aufschlüsselung nach expense_type
+  // Vorsteuer-Aufschlüsselung nach expenseType (camelCase from useExpenses)
   const vorsteuerByExpenseType = periodExpenses.reduce((acc, exp) => {
-    const expenseType = exp.expense_type || 'sonstiges';
+    const expenseType = exp.expenseType || 'sonstiges';
     const betrag = Number(exp.betrag || 0);
     const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
     const vorsteuer = calculateVatFromGross(betrag, vatRate);
@@ -1090,7 +1095,7 @@ export default function Reports() {
 
         {selectedPropertyId !== 'all' && selectedProperty && (
           <span className="text-sm text-muted-foreground">
-            {Number(selectedProperty.total_qm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
+            {Number(selectedProperty.totalQm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
           </span>
         )}
 
@@ -1122,7 +1127,7 @@ export default function Reports() {
               <div className="mt-3 flex flex-wrap gap-2">
                 {futureTenants.map(t => (
                   <Badge key={t.id} variant="outline" className="text-xs">
-                    {t.unitTopNummer} {t.first_name} {t.last_name} (ab {t.mietbeginnFormatted})
+                    {t.unitTopNummer} {t.firstName} {t.lastName} (ab {t.mietbeginnFormatted})
                   </Badge>
                 ))}
               </div>
@@ -2054,10 +2059,10 @@ export default function Reports() {
               tenants: typeof allTenants;
             }>();
 
-            // Initialisiere alle Einheiten
+            // Initialisiere alle Einheiten (camelCase from useUnits/useTenants)
             units?.forEach(unit => {
-              const property = properties?.find(p => p.id === unit.property_id);
-              const unitTenants = allTenants?.filter(t => t.unit_id === unit.id) || [];
+              const property = properties?.find(p => p.id === unit.propertyId);
+              const unitTenants = allTenants?.filter(t => t.unitId === unit.id) || [];
               unitTransactions.set(unit.id, {
                 unit: unit as any,
                 property: property as any,
@@ -2148,7 +2153,7 @@ export default function Reports() {
                       <div className="bg-muted p-4 flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-lg">{prop?.name}</h4>
-                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postal_code} {prop?.city}</p>
+                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postalCode} {prop?.city}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-success font-semibold">+€{propData.totalIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
@@ -2171,9 +2176,9 @@ export default function Reports() {
                             const saldo = unitData.income - unitData.expenses;
                             return (
                               <TableRow key={unitData.unit?.id}>
-                                <TableCell className="font-medium">Top {unitData.unit?.top_nummer}</TableCell>
+                                <TableCell className="font-medium">Top {unitData.unit?.topNummer}</TableCell>
                                 <TableCell>
-                                  {activeTenant ? `${activeTenant.first_name} ${activeTenant.last_name}` : <span className="text-muted-foreground">Leerstand</span>}
+                                  {activeTenant ? `${activeTenant.firstName} ${activeTenant.lastName}` : <span className="text-muted-foreground">Leerstand</span>}
                                 </TableCell>
                                 <TableCell className="text-right text-success">
                                   €{unitData.income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
@@ -2250,25 +2255,25 @@ export default function Reports() {
               });
             });
 
-            // Filtere nur relevante Units
+            // Filtere nur relevante Units (camelCase from useUnits)
             const relevantUnits = selectedPropertyId === 'all' 
               ? allUnits 
-              : allUnits?.filter(u => u.property_id === selectedPropertyId);
+              : allUnits?.filter(u => u.propertyId === selectedPropertyId);
 
             // Fülle SOLL-Daten aus Mietern
             relevantUnits?.forEach(unit => {
-              const property = properties?.find(p => p.id === unit.property_id);
+              const property = properties?.find(p => p.id === unit.propertyId);
               if (!property) return;
 
-              // Finde aktive Mieter für diese Unit
+              // Finde aktive Mieter für diese Unit (camelCase from useTenants)
               const activeTenants = allTenants?.filter(t => 
-                t.unit_id === unit.id && t.status === 'aktiv'
+                t.unitId === unit.id && t.status === 'aktiv'
               ) || [];
 
               activeTenants.forEach(tenant => {
                 const grundmiete = Number(tenant.grundmiete) || 0;
-                const bk = Number(tenant.betriebskosten_vorschuss) || 0;
-                const hk = Number(tenant.heizungskosten_vorschuss) || 0;
+                const bk = Number(tenant.betriebskostenVorschuss) || 0;
+                const hk = Number(tenant.heizungskostenVorschuss) || 0;
                 const gesamt = grundmiete + bk + hk;
 
                 if (gesamt > 0) {
@@ -2384,7 +2389,7 @@ export default function Reports() {
                           <TableRow key={idx}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">Top {item.unit?.top_nummer || '-'}</span>
+                                <span className="font-medium">Top {item.unit?.topNummer || '-'}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {unitTypeLabels[item.unit?.type || ''] || item.unit?.type}
                                 </span>
@@ -2392,7 +2397,7 @@ export default function Reports() {
                             </TableCell>
                             <TableCell>
                               {item.tenant ? (
-                                `${item.tenant.first_name} ${item.tenant.last_name}`
+                                `${item.tenant.firstName} ${item.tenant.lastName}`
                               ) : (
                                 <Badge variant="outline">Leerstand</Badge>
                               )}
@@ -2422,27 +2427,27 @@ export default function Reports() {
 
           {/* Kautionsübersicht Report */}
           {selectedReportId === 'kaution' && (() => {
-            // Filter tenants with kaution_bezahlt = true
+            // Filter tenants with kautionBezahlt = true (camelCase from useTenants)
             const tenantsWithKaution = (allTenants || []).filter(t => {
-              if (!t.kaution_bezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
+              if (!t.kautionBezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
               
               if (selectedPropertyId === 'all') return true;
               
-              const unit = (allUnits || []).find(u => u.id === t.unit_id);
-              return unit?.property_id === selectedPropertyId;
+              const unit = (allUnits || []).find(u => u.id === t.unitId);
+              return unit?.propertyId === selectedPropertyId;
             });
 
             // Sort by property, then by unit
             const sortedTenants = tenantsWithKaution.sort((a, b) => {
-              const unitA = (allUnits || []).find(u => u.id === a.unit_id);
-              const unitB = (allUnits || []).find(u => u.id === b.unit_id);
-              const propA = (properties || []).find(p => p.id === unitA?.property_id);
-              const propB = (properties || []).find(p => p.id === unitB?.property_id);
+              const unitA = (allUnits || []).find(u => u.id === a.unitId);
+              const unitB = (allUnits || []).find(u => u.id === b.unitId);
+              const propA = (properties || []).find(p => p.id === unitA?.propertyId);
+              const propB = (properties || []).find(p => p.id === unitB?.propertyId);
               
               if (propA?.name !== propB?.name) {
                 return (propA?.name || '').localeCompare(propB?.name || '');
               }
-              return (unitA?.top_nummer || '').localeCompare(unitB?.top_nummer || '');
+              return (unitA?.topNummer || '').localeCompare(unitB?.topNummer || '');
             });
 
             // Calculate total
@@ -2451,22 +2456,23 @@ export default function Reports() {
             const handleExportPdf = () => {
               if (!properties || !allUnits || !allTenants) return;
               
+              // Map camelCase data from hooks to snake_case for PDF export function interface
               generateKautionsReport(
                 allTenants.map(t => ({
                   id: t.id,
-                  first_name: t.first_name,
-                  last_name: t.last_name,
+                  first_name: t.firstName,
+                  last_name: t.lastName,
                   email: t.email,
                   phone: t.phone,
                   kaution: Number(t.kaution || 0),
-                  kaution_bezahlt: t.kaution_bezahlt || false,
-                  unit_id: t.unit_id,
+                  kaution_bezahlt: t.kautionBezahlt || false,
+                  unit_id: t.unitId,
                   mietbeginn: t.mietbeginn,
                 })),
                 allUnits.map(u => ({
                   id: u.id,
-                  top_nummer: u.top_nummer,
-                  property_id: u.property_id,
+                  top_nummer: u.topNummer,
+                  property_id: u.propertyId,
                 })),
                 properties.map(p => ({
                   id: p.id,
@@ -2495,13 +2501,13 @@ export default function Reports() {
                     <Button 
                       onClick={() => {
                         const csvData = sortedTenants.map(tenant => {
-                          const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
-                          const property = (properties || []).find(p => p.id === unit?.property_id);
+                          const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                          const property = (properties || []).find(p => p.id === unit?.propertyId);
                           return {
                             liegenschaft: property?.name || '',
-                            einheit: unit?.top_nummer || '',
-                            vorname: tenant.first_name,
-                            nachname: tenant.last_name,
+                            einheit: unit?.topNummer || '',
+                            vorname: tenant.firstName,
+                            nachname: tenant.lastName,
                             mietbeginn: tenant.mietbeginn || '',
                             kaution: Number(tenant.kaution || 0),
                           };
@@ -2573,15 +2579,15 @@ export default function Reports() {
                     </TableHeader>
                     <TableBody>
                       {sortedTenants.map((tenant) => {
-                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
-                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
                         
                         return (
                           <TableRow key={tenant.id} data-testid={`row-kaution-${tenant.id}`}>
                             <TableCell>{property?.name || '-'}</TableCell>
-                            <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                            <TableCell>{unit?.topNummer || '-'}</TableCell>
                             <TableCell className="font-medium">
-                              {tenant.first_name} {tenant.last_name}
+                              {tenant.firstName} {tenant.lastName}
                             </TableCell>
                             <TableCell>
                               {tenant.mietbeginn 
@@ -2609,7 +2615,7 @@ export default function Reports() {
             const threeMonths = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
             const sixMonths = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
 
-            // Filter tenants with mietende set
+            // Filter tenants with mietende set (camelCase from useTenants)
             const tenantsWithEndDate = (allTenants || []).filter(t => {
               if (!t.mietende || t.status === 'beendet') return false;
               
@@ -2619,8 +2625,8 @@ export default function Reports() {
               
               if (selectedPropertyId === 'all') return true;
               
-              const unit = (allUnits || []).find(u => u.id === t.unit_id);
-              return unit?.property_id === selectedPropertyId;
+              const unit = (allUnits || []).find(u => u.id === t.unitId);
+              return unit?.propertyId === selectedPropertyId;
             });
 
             // Sort by mietende (soonest first)
@@ -2663,13 +2669,13 @@ export default function Reports() {
                   <Button 
                     onClick={() => {
                       const csvData = sortedTenants.map(tenant => {
-                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
-                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
                         return {
                           liegenschaft: property?.name || '',
-                          einheit: unit?.top_nummer || '',
-                          vorname: tenant.first_name,
-                          nachname: tenant.last_name,
+                          einheit: unit?.topNummer || '',
+                          vorname: tenant.firstName,
+                          nachname: tenant.lastName,
                           mietbeginn: tenant.mietbeginn || '',
                           mietende: tenant.mietende || '',
                           tage_verbleibend: getDaysUntilEnd(tenant.mietende!),
@@ -2753,16 +2759,16 @@ export default function Reports() {
                     </TableHeader>
                     <TableBody>
                       {sortedTenants.map((tenant) => {
-                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
-                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
                         const daysLeft = getDaysUntilEnd(tenant.mietende!);
                         
                         return (
                           <TableRow key={tenant.id} data-testid={`row-vertragsablauf-${tenant.id}`}>
                             <TableCell>{property?.name || '-'}</TableCell>
-                            <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                            <TableCell>{unit?.topNummer || '-'}</TableCell>
                             <TableCell className="font-medium">
-                              {tenant.first_name} {tenant.last_name}
+                              {tenant.firstName} {tenant.lastName}
                             </TableCell>
                             <TableCell>
                               {tenant.mietbeginn 

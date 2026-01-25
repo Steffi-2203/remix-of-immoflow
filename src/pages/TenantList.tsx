@@ -57,24 +57,24 @@ export default function TenantList() {
   // Filter tenants
   const filteredTenants = tenants.filter(tenant => {
     const matchesSearch = searchTerm === '' || 
-      `${tenant.first_name} ${tenant.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tenant.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (selectedPropertyId === 'all') return matchesSearch;
     
-    const tenantUnit = units.find(u => u.id === tenant.unit_id);
-    return matchesSearch && tenantUnit?.property_id === selectedPropertyId;
+    const tenantUnit = units.find(u => u.id === tenant.unitId);
+    return matchesSearch && tenantUnit?.propertyId === selectedPropertyId;
   });
 
   const getUnit = (unitId: string) => units.find((u) => u.id === unitId);
   const getProperty = (unitId: string) => {
     const unit = units.find(u => u.id === unitId);
     if (!unit) return null;
-    return properties.find(p => p.id === unit.property_id);
+    return properties.find(p => p.id === unit.propertyId);
   };
 
   const activeCount = filteredTenants.filter(t => t.status === 'aktiv').length;
-  const sepaCount = filteredTenants.filter(t => t.sepa_mandat).length;
+  const sepaCount = filteredTenants.filter(t => t.sepaMandat).length;
   const totalKaution = filteredTenants.reduce((sum, t) => sum + (t.kaution || 0), 0);
 
   // Helper function to get unpaid fees for a tenant
@@ -86,7 +86,7 @@ export default function TenantList() {
 
   // Get units for the selected property for import
   const importUnits = selectedPropertyId !== 'all' 
-    ? units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))
+    ? units.map(u => ({ id: u.id, top_nummer: u.topNummer }))
     : [];
 
   return (
@@ -185,9 +185,9 @@ export default function TenantList() {
             </TableHeader>
             <TableBody>
               {filteredTenants.map((tenant) => {
-                const unit = getUnit(tenant.unit_id);
-                const property = getProperty(tenant.unit_id);
-                const totalRent = (tenant.grundmiete || 0) + (tenant.betriebskosten_vorschuss || 0) + (tenant.heizungskosten_vorschuss || 0);
+                const unit = getUnit(tenant.unitId);
+                const property = getProperty(tenant.unitId);
+                const totalRent = (Number(tenant.grundmiete) || 0) + (Number(tenant.betriebskostenVorschuss) || 0) + (Number(tenant.heizungskostenVorschuss) || 0);
 
                 return (
                   <TableRow 
@@ -199,7 +199,7 @@ export default function TenantList() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-foreground">
-                            {tenant.first_name} {tenant.last_name}
+                            {tenant.firstName} {tenant.lastName}
                           </p>
                           {getUnpaidFeesForTenant(tenant.id).length > 0 && (
                             <TooltipProvider>
@@ -249,7 +249,7 @@ export default function TenantList() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{unit?.top_nummer || '-'}</span>
+                      <span className="font-medium">{unit?.topNummer || '-'}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-muted-foreground">{property?.name || '-'}</span>
@@ -260,7 +260,7 @@ export default function TenantList() {
                           €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          (€{tenant.grundmiete} + €{tenant.betriebskosten_vorschuss} BK + €{tenant.heizungskosten_vorschuss} HK)
+                          (€{tenant.grundmiete} + €{tenant.betriebskostenVorschuss} BK + €{tenant.heizungskostenVorschuss} HK)
                         </p>
                       </div>
                     </TableCell>
@@ -268,7 +268,7 @@ export default function TenantList() {
                       {new Date(tenant.mietbeginn).toLocaleDateString('de-AT')}
                     </TableCell>
                     <TableCell>
-                      {tenant.sepa_mandat ? (
+                      {tenant.sepaMandat ? (
                         <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                           <CreditCard className="h-3 w-3 mr-1" />
                           Aktiv

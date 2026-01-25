@@ -220,14 +220,14 @@ export default function OperatingCostSettlement() {
   const bkKosten = useMemo(() => {
     if (!expenses) return [];
     return expenses.filter(e => 
-      e.category === 'betriebskosten_umlagefaehig' && e.expense_type !== 'heizung'
+      e.category === 'betriebskosten_umlagefaehig' && e.expenseType !== 'heizung'
     );
   }, [expenses]);
 
   const hkKosten = useMemo(() => {
     if (!expenses) return [];
     return expenses.filter(e => 
-      e.category === 'betriebskosten_umlagefaehig' && e.expense_type === 'heizung'
+      e.category === 'betriebskosten_umlagefaehig' && e.expenseType === 'heizung'
     );
   }, [expenses]);
 
@@ -235,7 +235,7 @@ export default function OperatingCostSettlement() {
   const expensesByType = useMemo(() => {
     const grouped: Record<string, number> = {};
     bkKosten.forEach(exp => {
-      grouped[exp.expense_type] = (grouped[exp.expense_type] || 0) + Number(exp.betrag);
+      grouped[exp.expenseType] = (grouped[exp.expenseType] || 0) + Number(exp.betrag);
     });
     return grouped;
   }, [bkKosten]);
@@ -821,7 +821,7 @@ export default function OperatingCostSettlement() {
                           name: selectedProperty.name,
                           address: selectedProperty.address,
                           city: selectedProperty.city,
-                          postal_code: selectedProperty.postal_code,
+                          postal_code: selectedProperty.postalCode,
                         },
                         unitDistribution,
                         selectedYear,
@@ -852,7 +852,7 @@ export default function OperatingCostSettlement() {
                           name: selectedProperty.name,
                           address: selectedProperty.address,
                           city: selectedProperty.city,
-                          postal_code: selectedProperty.postal_code,
+                          postal_code: selectedProperty.postalCode,
                         },
                         unitDistribution,
                         selectedYear,
@@ -909,7 +909,7 @@ export default function OperatingCostSettlement() {
                           saveSettlement.mutate({
                             propertyId: selectedPropertyId,
                             propertyName: selectedProperty.name,
-                            propertyAddress: `${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}`,
+                            propertyAddress: `${selectedProperty.address}, ${selectedProperty.postalCode} ${selectedProperty.city}`,
                             year: selectedYear,
                             totalBk: totalBkKosten,
                             totalHk: totalHeizkosten,
@@ -1121,7 +1121,7 @@ export default function OperatingCostSettlement() {
                                       name: selectedProperty.name,
                                       address: selectedProperty.address,
                                       city: selectedProperty.city,
-                                      postal_code: selectedProperty.postal_code,
+                                      postal_code: selectedProperty.postalCode,
                                     },
                                     unit,
                                     selectedYear,
@@ -1203,7 +1203,7 @@ export default function OperatingCostSettlement() {
           onOpenChange={setIsAdvanceDialogOpen}
           propertyId={selectedPropertyId}
           propertyName={selectedProperty.name}
-          propertyAddress={`${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}`}
+          propertyAddress={`${selectedProperty.address}, ${selectedProperty.postalCode} ${selectedProperty.city}`}
           settlementYear={selectedYear}
           tenantChanges={unitDistribution
             .filter(u => u.current_tenant && !u.isLeerstandBK)
