@@ -78,6 +78,30 @@ When a user has the "tester" role, personal data (Personenbezogene Daten) is aut
 
 Masking is applied to: tenants, payments, invoices, bank accounts, transactions, organization members
 
+## Subscription System
+Three-tier subscription model with Stripe integration:
+
+### Subscription Tiers
+- **Starter** (€29/month): 5 properties, 20 units, 2 users, basic features
+- **Professional** (€59/month): 25 properties, 100 units, 5 users, SEPA-Export, Mahnwesen, Wartungsverträge, OCR-Belegerfassung
+- **Enterprise** (€149/month): Unlimited everything, API access, Priority Support
+
+### Subscription Flow
+1. New organizations start with 14-day trial (subscription_status: 'trial')
+2. Trial users see countdown banner and can access basic features
+3. Premium features (Wartungen, Handwerker, Mahnwesen) show lock icon and redirect to subscription page
+4. Stripe Checkout for payment → webhook updates status to 'active'
+5. Stripe Billing Portal for subscription management
+
+### Key Components
+- `useSubscription` hook: subscription status, tier, trial days remaining
+- `SubscriptionTeaser`: wrapper component for gating features
+- `TrialBanner`: shows trial countdown or expired status
+- `SubscriptionSettings`: settings page with pricing plans
+
+### Admin Organization
+Admin organization (stephania.pfeffer@outlook.de) has active enterprise subscription by default.
+
 ## Migrated Edge Functions (server/functions.ts)
 1. generate-monthly-invoices - MRG-compliant invoice generation
 2. send-invite - Email invitations via Resend
