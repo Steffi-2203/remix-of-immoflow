@@ -55,10 +55,10 @@ export function useMrgAllocationYearly(
     const now = new Date();
     const dayOfMonth = now.getDate();
 
-    // Filter units by property
+    // Filter units by property (support both camelCase and snake_case)
     const propertyUnitIds = selectedPropertyId === 'all'
       ? null
-      : units.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+      : units.filter(u => (u.propertyId ?? u.property_id) === selectedPropertyId).map(u => u.id);
 
     const relevantUnits = propertyUnitIds
       ? units.filter(u => propertyUnitIds.includes(u.id))
@@ -89,7 +89,7 @@ export function useMrgAllocationYearly(
       });
     }
 
-    // Filter payments for the whole year
+    // Filter payments for the whole year (support both camelCase and snake_case)
     const yearPayments = combinedPayments.filter(p => {
       const date = new Date(p.date);
       const paymentYear = date.getFullYear();
@@ -99,16 +99,18 @@ export function useMrgAllocationYearly(
       
       // Filter by property if selected
       if (propertyUnitIds) {
-        const tenant = tenants.find(t => t.id === p.tenant_id);
-        return tenant && propertyUnitIds.includes(tenant.unit_id);
+        const paymentTenantId = p.tenantId ?? p.tenant_id;
+        const tenant = tenants.find(t => t.id === paymentTenantId);
+        const tenantUnitId = tenant?.unitId ?? tenant?.unit_id;
+        return tenant && tenantUnitId && propertyUnitIds.includes(tenantUnitId);
       }
       return true;
     });
 
     const allocations: TenantAllocation[] = Array.from(tenantMonthMap.values()).map(({ tenant, activeMonths }) => {
-      // SOLL = monatliche Werte × Anzahl aktiver Monate
-      const sollBkMonthly = Number(tenant.betriebskosten_vorschuss || 0);
-      const sollHkMonthly = Number(tenant.heizungskosten_vorschuss || 0);
+      // SOLL = monatliche Werte × Anzahl aktiver Monate (support both camelCase and snake_case)
+      const sollBkMonthly = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
+      const sollHkMonthly = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
       const sollMieteMonthly = Number(tenant.grundmiete || 0);
       
       const sollBk = sollBkMonthly * activeMonths;
@@ -117,7 +119,7 @@ export function useMrgAllocationYearly(
       const totalSoll = sollBk + sollHk + sollMiete;
 
       // IST = Summe aller Zahlungen des Mieters im Jahr
-      const tenantPayments = yearPayments.filter(p => p.tenant_id === tenant.id);
+      const tenantPayments = yearPayments.filter(p => (p.tenantId ?? p.tenant_id) === tenant.id);
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
       // MRG-konforme Aufteilung über das Jahr
@@ -152,26 +154,27 @@ export function useMrgAllocationYearly(
         status = 'teilbezahlt';
       }
 
-      const unit = units.find(u => u.id === tenant.unit_id) || null;
+      const tenantUnitId = tenant.unitId ?? tenant.unit_id;
+      const unit = units.find(u => u.id === tenantUnitId) || null;
 
       return {
         tenant: {
           id: tenant.id,
-          first_name: tenant.first_name,
-          last_name: tenant.last_name,
-          unit_id: tenant.unit_id,
+          first_name: tenant.firstName ?? tenant.first_name,
+          last_name: tenant.lastName ?? tenant.last_name,
+          unit_id: tenantUnitId,
           grundmiete: tenant.grundmiete,
-          betriebskosten_vorschuss: tenant.betriebskosten_vorschuss,
-          heizungskosten_vorschuss: tenant.heizungskosten_vorschuss,
+          betriebskosten_vorschuss: tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss,
+          heizungskosten_vorschuss: tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss,
           status: tenant.status,
           mietbeginn: tenant.mietbeginn,
           mietende: tenant.mietende,
         },
         unit: unit ? {
           id: unit.id,
-          top_nummer: unit.top_nummer,
+          top_nummer: unit.topNummer ?? unit.top_nummer,
           type: unit.type,
-          property_id: unit.property_id,
+          property_id: unit.propertyId ?? unit.property_id,
         } : null,
         sollBk,
         sollHk,

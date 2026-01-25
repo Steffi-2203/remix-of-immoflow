@@ -142,10 +142,10 @@ export function useMrgAllocation(
     const now = new Date();
     const dayOfMonth = now.getDate();
 
-    // Filter units by property
+    // Filter units by property (support both camelCase and snake_case)
     const propertyUnitIds = selectedPropertyId === 'all'
       ? null
-      : units.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+      : units.filter(u => (u.propertyId ?? u.property_id) === selectedPropertyId).map(u => u.id);
 
     const relevantUnits = propertyUnitIds
       ? units.filter(u => propertyUnitIds.includes(u.id))
@@ -160,28 +160,30 @@ export function useMrgAllocation(
       month
     );
 
-    // Filter payments for this period
+    // Filter payments for this period (support both camelCase and snake_case)
     const periodPayments = combinedPayments.filter(p => {
       const date = new Date(p.date);
       if (date.getFullYear() !== year || date.getMonth() + 1 !== month) return false;
       
       // Filter by property if selected
       if (propertyUnitIds) {
-        const tenant = tenants.find(t => t.id === p.tenant_id);
-        return tenant && propertyUnitIds.includes(tenant.unit_id);
+        const tenantId = p.tenantId ?? p.tenant_id;
+        const tenant = tenants.find(t => t.id === tenantId);
+        const unitId = tenant?.unitId ?? tenant?.unit_id;
+        return tenant && propertyUnitIds.includes(unitId);
       }
       return true;
     });
 
     const allocations: TenantAllocation[] = activeTenants.map(tenant => {
-      // SOLL from tenant data
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0);
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
+      // SOLL from tenant data (support both camelCase and snake_case)
+      const sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
+      const sollHk = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
       const sollMiete = Number(tenant.grundmiete || 0);
       const totalSoll = sollBk + sollHk + sollMiete;
 
       // IST from combined payments for this tenant and period
-      const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+      const tenantPayments = periodPayments.filter(p => (p.tenantId ?? p.tenant_id) === tenant.id);
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
       // MRG-konforme Aufteilung
@@ -221,26 +223,27 @@ export function useMrgAllocation(
         status = 'teilbezahlt';
       }
 
-      const unit = units.find(u => u.id === tenant.unit_id) || null;
+      const tenantUnitId = tenant.unitId ?? tenant.unit_id;
+      const unit = units.find(u => u.id === tenantUnitId) || null;
 
       return {
         tenant: {
           id: tenant.id,
-          first_name: tenant.first_name,
-          last_name: tenant.last_name,
-          unit_id: tenant.unit_id,
+          first_name: tenant.firstName ?? tenant.first_name,
+          last_name: tenant.lastName ?? tenant.last_name,
+          unit_id: tenantUnitId,
           grundmiete: tenant.grundmiete,
-          betriebskosten_vorschuss: tenant.betriebskosten_vorschuss,
-          heizungskosten_vorschuss: tenant.heizungskosten_vorschuss,
+          betriebskosten_vorschuss: tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss,
+          heizungskosten_vorschuss: tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss,
           status: tenant.status,
           mietbeginn: tenant.mietbeginn,
           mietende: tenant.mietende,
         },
         unit: unit ? {
           id: unit.id,
-          top_nummer: unit.top_nummer,
+          top_nummer: unit.topNummer ?? unit.top_nummer,
           type: unit.type,
-          property_id: unit.property_id,
+          property_id: unit.propertyId ?? unit.property_id,
         } : null,
         sollBk,
         sollHk,

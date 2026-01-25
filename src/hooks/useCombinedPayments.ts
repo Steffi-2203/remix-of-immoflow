@@ -15,13 +15,15 @@ import { useTransactions } from './useTransactions';
  */
 export interface CombinedPayment {
   id: string;
-  tenant_id: string;
+  tenantId: string;
+  tenant_id: string; // Alias for backwards compatibility
   amount: number;
   date: string;
   source: 'payments';
   description?: string;
   reference?: string;
-  invoice_id?: string | null;
+  invoiceId?: string | null;
+  invoice_id?: string | null; // Alias for backwards compatibility
 }
 
 /**
@@ -44,14 +46,18 @@ export function useCombinedPayments() {
     
     // Use ONLY payments table as source of truth for rent income
     (payments || []).forEach((p: any) => {
+      const tenantId = p.tenantId ?? p.tenant_id;
+      const invoiceId = p.invoiceId ?? p.invoice_id;
       combined.push({
         id: p.id,
-        tenant_id: p.tenantId,
+        tenantId: tenantId,
+        tenant_id: tenantId, // Alias for backwards compatibility
         amount: Number(p.betrag),
         date: p.eingangsDatum || p.buchungsDatum,
         source: 'payments',
         reference: p.verwendungszweck || undefined,
-        invoice_id: p.invoiceId,
+        invoiceId: invoiceId,
+        invoice_id: invoiceId, // Alias for backwards compatibility
       });
     });
     
@@ -76,7 +82,7 @@ export function useCombinedPaymentsByTenant(
   
   const filtered = useMemo(() => {
     return (allPayments || []).filter(p => {
-      if (p.tenant_id !== tenantId) return false;
+      if ((p.tenantId ?? p.tenant_id) !== tenantId) return false;
       
       const date = new Date(p.date);
       const paymentYear = date.getFullYear();
@@ -99,7 +105,7 @@ export function useCombinedPaymentsForPeriod(
   year: number,
   month?: number,
   propertyUnitIds?: string[] | null,
-  tenants?: { id: string; unit_id: string }[]
+  tenants?: { id: string; unitId?: string; unit_id?: string }[]
 ) {
   const { data: allPayments, isLoading } = useCombinedPayments();
   
@@ -116,10 +122,12 @@ export function useCombinedPaymentsForPeriod(
         if (paymentYear !== year || paymentMonth !== month) return false;
       }
       
-      // Property filter (via tenant's unit)
+      // Property filter (via tenant's unit) - support both camelCase and snake_case
       if (propertyUnitIds && tenants) {
-        const tenant = tenants.find(t => t.id === p.tenant_id);
-        if (!tenant || !propertyUnitIds.includes(tenant.unit_id)) {
+        const paymentTenantId = p.tenantId ?? p.tenant_id;
+        const tenant = tenants.find(t => t.id === paymentTenantId);
+        const tenantUnitId = tenant?.unitId ?? tenant?.unit_id;
+        if (!tenant || !tenantUnitId || !propertyUnitIds.includes(tenantUnitId)) {
           return false;
         }
       }
@@ -145,11 +153,13 @@ export function useTransactionIncome(propertyId?: string | null) {
       // Only positive amounts (income)
       if (t.amount <= 0) return false;
       
-      // Exclude transactions that have tenant_id (those are rent, handled by payments)
-      if (t.tenant_id) return false;
+      // Exclude transactions that have tenant_id (those are rent, handled by payments) - support both field names
+      const tenantId = t.tenantId ?? t.tenant_id;
+      if (tenantId) return false;
       
-      // Property filter if specified
-      if (propertyId && t.property_id !== propertyId) return false;
+      // Property filter if specified - support both field names
+      const txPropertyId = t.propertyId ?? t.property_id;
+      if (propertyId && txPropertyId !== propertyId) return false;
       
       return true;
     });
