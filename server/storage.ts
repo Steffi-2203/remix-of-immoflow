@@ -37,6 +37,8 @@ export interface IStorage {
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
   softDeleteUnit(id: string): Promise<void>;
   softDeleteTenant(id: string): Promise<void>;
+  getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]>;
+  createRentHistory(data: schema.InsertRentHistory): Promise<schema.RentHistory>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -489,6 +491,17 @@ class DatabaseStorage implements IStorage {
     await db.update(schema.tenants)
       .set({ deletedAt: new Date() })
       .where(eq(schema.tenants.id, id));
+  }
+
+  async getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]> {
+    return db.select().from(schema.rentHistory)
+      .where(eq(schema.rentHistory.tenantId, tenantId))
+      .orderBy(desc(schema.rentHistory.validFrom));
+  }
+
+  async createRentHistory(data: schema.InsertRentHistory): Promise<schema.RentHistory> {
+    const result = await db.insert(schema.rentHistory).values(data).returning();
+    return result[0];
   }
 
   async createPropertyManager(data: { userId: string; propertyId: string }): Promise<schema.PropertyManager> {

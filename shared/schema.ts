@@ -169,6 +169,21 @@ export const tenants = pgTable("tenants", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+export const rentHistory = pgTable("rent_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  validFrom: date("valid_from").notNull(),
+  validUntil: date("valid_until"),
+  grundmiete: numeric("grundmiete", { precision: 10, scale: 2 }).notNull(),
+  betriebskostenVorschuss: numeric("betriebskosten_vorschuss", { precision: 10, scale: 2 }).notNull(),
+  heizkostenVorschuss: numeric("heizungskosten_vorschuss", { precision: 10, scale: 2 }).notNull(),
+  changeReason: text("change_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export type RentHistory = typeof rentHistory.$inferSelect;
+export type InsertRentHistory = typeof rentHistory.$inferInsert;
+
 export const monthlyInvoices = pgTable("monthly_invoices", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
@@ -462,6 +477,7 @@ export const insertSettlementSchema = createInsertSchema(settlements).omit({ id:
 export const insertMaintenanceContractSchema = createInsertSchema(maintenanceContracts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMaintenanceTaskSchema = createInsertSchema(maintenanceTasks).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertContractorSchema = createInsertSchema(contractors).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRentHistorySchema = createInsertSchema(rentHistory).omit({ id: true, createdAt: true });
 
 // ====== EIGENTÜMER (OWNERS) ======
 export const owners = pgTable("owners", {
