@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
+
+function normalizeExpense(expense: any) {
+  const normalized = normalizeFields(expense);
+  if (normalized.properties) {
+    normalized.properties = normalizeFields(normalized.properties);
+  }
+  return normalized;
+}
 
 export type ExpenseCategory = 'betriebskosten_umlagefaehig' | 'instandhaltung' | 'sonstige_kosten';
 export type ExpenseType = 
@@ -83,13 +92,14 @@ export function useExpenses(propertyId?: string, year?: number, month?: number) 
         if (propsRes.ok) {
           const properties = await propsRes.json();
           return expenses.map((expense: Expense) => {
-            const property = properties.find((p: any) => p.id === expense.propertyId);
-            return { ...expense, properties: property ? { name: property.name } : undefined };
+            const expensePropertyId = expense.propertyId ?? (expense as any).property_id;
+            const property = properties.find((p: any) => p.id === expensePropertyId);
+            return normalizeExpense({ ...expense, properties: property ? { name: property.name } : undefined });
           });
         }
       }
       
-      return expenses;
+      return expenses.map(normalizeExpense);
     },
   });
 }

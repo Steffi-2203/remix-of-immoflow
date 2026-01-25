@@ -2,6 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from './useAuth';
 import { apiRequest } from '@/lib/queryClient';
+import { normalizeFields } from '@/utils/fieldNormalizer';
+
+function normalizeProperty(property: any) {
+  return normalizeFields(property);
+}
 
 export interface PropertyInsert {
   name: string;
@@ -27,7 +32,8 @@ export function useProperties() {
     queryFn: async () => {
       const response = await fetch('/api/properties', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch properties');
-      return response.json();
+      const properties = await response.json();
+      return properties.map(normalizeProperty);
     },
     staleTime: 60000,
     gcTime: 300000,
@@ -41,7 +47,8 @@ export function useProperty(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/properties/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch property');
-      return response.json();
+      const property = await response.json();
+      return normalizeProperty(property);
     },
     enabled: !!id,
   });

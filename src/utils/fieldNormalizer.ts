@@ -10,32 +10,78 @@
 
 // Common field mappings from camelCase to snake_case
 const fieldMappings: Record<string, string> = {
+  // IDs
   tenantId: 'tenant_id',
   propertyId: 'property_id',
   unitId: 'unit_id',
   invoiceId: 'invoice_id',
   organizationId: 'organization_id',
+  bankAccountId: 'bank_account_id',
+  categoryId: 'category_id',
+  ownerId: 'owner_id',
+  contractorId: 'contractor_id',
+  meterId: 'meter_id',
+  expenseId: 'expense_id',
+  taskId: 'task_id',
+  documentId: 'document_id',
+  settlementId: 'settlement_id',
+  collectionId: 'collection_id',
+  budgetId: 'budget_id',
+  messageId: 'message_id',
+  keyId: 'key_id',
+  contractId: 'contract_id',
+  adjustmentId: 'adjustment_id',
+  transactionId: 'transaction_id',
+  parentId: 'parent_id',
+  userId: 'user_id',
+  memberId: 'member_id',
+  matchedTenantId: 'matched_tenant_id',
+  matchedUnitId: 'matched_unit_id',
+  
+  // Names
   firstName: 'first_name',
   lastName: 'last_name',
+  companyName: 'company_name',
+  contactName: 'contact_name',
+  
+  // Tenant fields
   topNummer: 'top_nummer',
   betriebskostenVorschuss: 'betriebskosten_vorschuss',
   heizungskostenVorschuss: 'heizungskosten_vorschuss',
-  buchungsDatum: 'buchungs_datum',
-  eingangsDatum: 'eingangs_datum',
-  transactionDate: 'transaction_date',
-  bankAccountId: 'bank_account_id',
-  categoryId: 'category_id',
-  matchedTenantId: 'matched_tenant_id',
-  matchedUnitId: 'matched_unit_id',
   mobilePhone: 'mobile_phone',
   sepaMandatDatum: 'sepa_mandat_datum',
   sepaMandat: 'sepa_mandat',
   kautionBezahlt: 'kaution_bezahlt',
+  
+  // Dates
+  buchungsDatum: 'buchungs_datum',
+  eingangsDatum: 'eingangs_datum',
+  transactionDate: 'transaction_date',
   createdAt: 'created_at',
   updatedAt: 'updated_at',
   deletedAt: 'deleted_at',
   faelligAm: 'faellig_am',
+  dueDate: 'due_date',
+  startDate: 'start_date',
+  endDate: 'end_date',
+  readingDate: 'reading_date',
+  handoverDate: 'handover_date',
+  returnDate: 'return_date',
+  effectiveDate: 'effective_date',
+  expiryDate: 'expiry_date',
+  invoiceDate: 'invoice_date',
+  paymentDate: 'payment_date',
+  completedAt: 'completed_at',
+  sentAt: 'sent_at',
+  receivedAt: 'received_at',
+  
+  // URLs and paths
   pdfUrl: 'pdf_url',
+  fileUrl: 'file_url',
+  filePath: 'file_path',
+  documentUrl: 'document_url',
+  
+  // Financial
   vortragMiete: 'vortrag_miete',
   vortragBk: 'vortrag_bk',
   vortragHk: 'vortrag_hk',
@@ -44,8 +90,91 @@ const fieldMappings: Record<string, string> = {
   ustSatzBk: 'ust_satz_bk',
   ustSatzHeizung: 'ust_satz_heizung',
   paymentType: 'payment_type',
+  netAmount: 'net_amount',
+  grossAmount: 'gross_amount',
+  taxAmount: 'tax_amount',
+  taxRate: 'tax_rate',
+  baseAmount: 'base_amount',
+  totalAmount: 'total_amount',
+  openAmount: 'open_amount',
+  paidAmount: 'paid_amount',
+  
+  // Expense/Invoice
+  invoiceNumber: 'invoice_number',
+  expenseNumber: 'expense_number',
+  referenceNumber: 'reference_number',
+  supplierName: 'supplier_name',
+  expenseCategory: 'expense_category',
+  costType: 'cost_type',
+  distributionKey: 'distribution_key',
+  
+  // Meter
+  meterNumber: 'meter_number',
+  meterType: 'meter_type',
+  previousReading: 'previous_reading',
+  currentReading: 'current_reading',
+  readingValue: 'reading_value',
+  
+  // Bank/SEPA
+  accountNumber: 'account_number',
+  bankName: 'bank_name',
+  accountHolder: 'account_holder',
+  mandateReference: 'mandate_reference',
+  collectionDate: 'collection_date',
+  executionDate: 'execution_date',
+  
+  // Maintenance
+  priorityLevel: 'priority_level',
+  taskType: 'task_type',
+  contractType: 'contract_type',
+  
+  // Keys
+  keyNumber: 'key_number',
+  keyType: 'key_type',
+  keyCount: 'key_count',
+  
+  // VPI
+  indexValue: 'index_value',
+  baseIndex: 'base_index',
+  currentIndex: 'current_index',
+  adjustmentPercent: 'adjustment_percent',
+  
+  // Distribution keys
+  keyName: 'key_name',
+  keyDescription: 'key_description',
+  
+  // Documents
+  fileName: 'file_name',
+  fileSize: 'file_size',
+  fileType: 'file_type',
+  mimeType: 'mime_type',
+  
+  // Budget
+  budgetYear: 'budget_year',
+  budgetMonth: 'budget_month',
+  plannedAmount: 'planned_amount',
+  actualAmount: 'actual_amount',
+  
+  // Messages
+  messageType: 'message_type',
+  isRead: 'is_read',
+  readAt: 'read_at',
+  senderName: 'sender_name',
+  recipientId: 'recipient_id',
+  
+  // Organization
+  planType: 'plan_type',
+  subscriptionStatus: 'subscription_status',
+  trialEndsAt: 'trial_ends_at',
+  
+  // Misc
   verwendungszweck: 'verwendungszweck',
   notizen: 'notizen',
+  zipCode: 'zip_code',
+  postalCode: 'postal_code',
+  isActive: 'is_active',
+  isDeleted: 'is_deleted',
+  sortOrder: 'sort_order',
 };
 
 // Reverse mapping: snake_case to camelCase
