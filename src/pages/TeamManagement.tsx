@@ -14,12 +14,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import type { Database } from '@/integrations/supabase/types';
 import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
 import { PropertyAssignmentDialog } from '@/components/settings/PropertyAssignmentDialog';
 import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
-type AppRole = Database['public']['Enums']['app_role'];
+type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
 
 const ROLE_OPTIONS: { value: AppRole; label: string; description: string; permissions: string }[] = [
   { value: 'admin', label: 'Admin', description: 'Voller Zugriff auf alle Funktionen', permissions: 'Voller Zugriff' },

@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface TaskInvoiceSummary {
   taskId: string;
@@ -17,14 +16,11 @@ export function useTaskInvoices(taskIds: string[]) {
     queryFn: async () => {
       if (!taskIds.length) return {};
 
-      const { data, error } = await supabase
-        .from('maintenance_invoices')
-        .select('id, maintenance_task_id, amount, status')
-        .in('maintenance_task_id', taskIds);
+      const response = await fetch(`/api/task-invoices?task_ids=${taskIds.join(',')}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch task invoices');
+      
+      const data = await response.json();
 
-      if (error) throw error;
-
-      // Gruppieren nach Task
       const summaries: Record<string, TaskInvoiceSummary> = {};
 
       for (const invoice of data || []) {

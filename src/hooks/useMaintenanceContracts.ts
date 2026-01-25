@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface MaintenanceContract {
@@ -25,7 +25,6 @@ export interface MaintenanceContract {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  // Joined data
   properties?: {
     name: string;
     address: string;
@@ -72,26 +71,12 @@ export function useMaintenanceContracts(propertyId?: string) {
   return useQuery({
     queryKey: ['maintenance_contracts', propertyId],
     queryFn: async () => {
-      let query = supabase
-        .from('maintenance_contracts')
-        .select(`
-          *,
-          properties:property_id (
-            name,
-            address
-          )
-        `)
-        .eq('is_active', true)
-        .order('next_due_date', { ascending: true });
-
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      return data as MaintenanceContract[];
+      const url = propertyId 
+        ? `/api/maintenance-contracts?property_id=${propertyId}` 
+        : '/api/maintenance-contracts';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch maintenance contracts');
+      return response.json() as Promise<MaintenanceContract[]>;
     },
   });
 }
@@ -100,28 +85,12 @@ export function useUpcomingMaintenance(daysAhead: number = 30) {
   return useQuery({
     queryKey: ['upcoming_maintenance', daysAhead],
     queryFn: async () => {
+      const response = await fetch(`/api/maintenance-contracts/upcoming?days=${daysAhead}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch upcoming maintenance');
+      const contracts = await response.json() as MaintenanceContract[];
+      
       const today = new Date();
-      const futureDate = new Date();
-      futureDate.setDate(today.getDate() + daysAhead);
-
-      const { data, error } = await supabase
-        .from('maintenance_contracts')
-        .select(`
-          *,
-          properties:property_id (
-            name,
-            address
-          )
-        `)
-        .eq('is_active', true)
-        .lte('next_due_date', futureDate.toISOString().split('T')[0])
-        .order('next_due_date', { ascending: true });
-
-      if (error) throw error;
-
-      // Categorize into overdue and upcoming
       const todayStr = today.toISOString().split('T')[0];
-      const contracts = data as MaintenanceContract[];
       
       return {
         overdue: contracts.filter(c => c.next_due_date < todayStr),
@@ -137,27 +106,10 @@ export function useCreateMaintenanceContract() {
 
   return useMutation({
     mutationFn: async (contract: CreateMaintenanceContract) => {
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', userData.user?.id)
-        .single();
-
-      const { data, error } = await supabase
-        .from('maintenance_contracts')
-        .insert({
-          ...contract,
-          organization_id: profile?.organization_id,
-          created_by: userData.user?.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/maintenance-contracts', contract);
+      return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance_contracts'] });
       queryClient.invalidateQueries({ queryKey: ['upcoming_maintenance'] });
       toast.success('Wartungsvertrag erfolgreich erstellt');
@@ -173,15 +125,8 @@ export function useUpdateMaintenanceContract() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<MaintenanceContract> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('maintenance_contracts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/maintenance-contracts/${id}`, updates);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance_contracts'] });
@@ -199,32 +144,8 @@ export function useMarkMaintenanceComplete() {
 
   return useMutation({
     mutationFn: async ({ id, completedDate }: { id: string; completedDate: string }) => {
-      // First get the contract to calculate new due date
-      const { data: contract, error: fetchError } = await supabase
-        .from('maintenance_contracts')
-        .select('interval_months')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // Calculate new due date
-      const newDueDate = new Date(completedDate);
-      newDueDate.setMonth(newDueDate.getMonth() + contract.interval_months);
-
-      const { data, error } = await supabase
-        .from('maintenance_contracts')
-        .update({
-          last_maintenance_date: completedDate,
-          next_due_date: newDueDate.toISOString().split('T')[0],
-          reminder_sent_at: null, // Reset reminder
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', `/api/maintenance-contracts/${id}/complete`, { completedDate });
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance_contracts'] });
@@ -242,12 +163,7 @@ export function useDeleteMaintenanceContract() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('maintenance_contracts')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/maintenance-contracts/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance_contracts'] });

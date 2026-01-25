@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface AccountCategory {
@@ -19,14 +19,9 @@ export function useAccountCategories() {
   return useQuery({
     queryKey: ['account_categories'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('account_categories')
-        .select('*')
-        .order('type', { ascending: true })
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      return data as AccountCategory[];
+      const response = await fetch('/api/account-categories', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch account categories');
+      return response.json() as Promise<AccountCategory[]>;
     },
   });
 }
@@ -35,14 +30,9 @@ export function useAccountCategoriesByType(type: 'income' | 'expense' | 'asset')
   return useQuery({
     queryKey: ['account_categories', type],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('account_categories')
-        .select('*')
-        .eq('type', type)
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      return data as AccountCategory[];
+      const response = await fetch(`/api/account-categories?type=${type}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch account categories');
+      return response.json() as Promise<AccountCategory[]>;
     },
   });
 }
@@ -52,14 +42,8 @@ export function useCreateAccountCategory() {
   
   return useMutation({
     mutationFn: async (category: AccountCategoryInsert) => {
-      const { data, error } = await supabase
-        .from('account_categories')
-        .insert(category)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as AccountCategory;
+      const response = await apiRequest('POST', '/api/account-categories', category);
+      return response.json() as Promise<AccountCategory>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account_categories'] });
@@ -77,15 +61,8 @@ export function useUpdateAccountCategory() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: AccountCategoryUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('account_categories')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as AccountCategory;
+      const response = await apiRequest('PATCH', `/api/account-categories/${id}`, updates);
+      return response.json() as Promise<AccountCategory>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account_categories'] });
@@ -103,12 +80,7 @@ export function useDeleteAccountCategory() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('account_categories')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/account-categories/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account_categories'] });

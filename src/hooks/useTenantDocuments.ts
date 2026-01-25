@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export type TenantDocument = {
@@ -32,15 +32,9 @@ export function useTenantDocuments(tenantId: string | undefined) {
     queryKey: ['tenant-documents', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from('tenant_documents')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('uploaded_at', { ascending: false });
-
-      if (error) throw error;
-      return data as TenantDocument[];
+      const response = await fetch(`/api/tenants/${tenantId}/documents`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch tenant documents');
+      return response.json() as Promise<TenantDocument[]>;
     },
     enabled: !!tenantId,
   });
@@ -50,49 +44,9 @@ export function useAllTenantDocuments() {
   return useQuery({
     queryKey: ['all-tenant-documents'],
     queryFn: async () => {
-      // Fetch all tenant documents with tenant info
-      const { data: documents, error: docError } = await supabase
-        .from('tenant_documents')
-        .select('*')
-        .order('uploaded_at', { ascending: false });
-
-      if (docError) throw docError;
-      if (!documents || documents.length === 0) return [];
-
-      // Get unique tenant IDs
-      const tenantIds = [...new Set(documents.map(d => d.tenant_id))];
-      
-      // Fetch tenant info
-      const { data: tenants, error: tenantError } = await supabase
-        .from('tenants')
-        .select('id, first_name, last_name, unit_id')
-        .in('id', tenantIds);
-
-      if (tenantError) throw tenantError;
-
-      // Get unit info for property_id
-      const unitIds = [...new Set(tenants?.map(t => t.unit_id) || [])];
-      const { data: units, error: unitError } = await supabase
-        .from('units')
-        .select('id, property_id')
-        .in('id', unitIds);
-
-      if (unitError) throw unitError;
-
-      // Map documents with tenant info
-      const tenantMap = new Map(tenants?.map(t => [t.id, t]));
-      const unitMap = new Map(units?.map(u => [u.id, u]));
-
-      return documents.map(doc => {
-        const tenant = tenantMap.get(doc.tenant_id);
-        const unit = tenant ? unitMap.get(tenant.unit_id) : null;
-        return {
-          ...doc,
-          tenant_name: tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt',
-          unit_id: tenant?.unit_id || '',
-          property_id: unit?.property_id || '',
-        } as TenantDocumentWithTenant;
-      });
+      const response = await fetch('/api/tenant-documents', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch all tenant documents');
+      return response.json() as Promise<TenantDocumentWithTenant[]>;
     },
   });
 }
@@ -112,52 +66,19 @@ export function useUploadTenantDocument() {
       name: string;
       type: string;
     }) => {
-      // Generate unique filename
-      const timestamp = Date.now();
-      const fileName = file instanceof File ? file.name : `${name}.pdf`;
-      const fileExt = fileName.split('.').pop() || 'pdf';
-      const filePath = `${tenantId}/${timestamp}_${name.replace(/[^a-zA-Z0-9]/g, '_')}.${fileExt}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('name', name);
+      formData.append('type', type);
 
-      // Upload file to storage
-      const { error: uploadError } = await supabase.storage
-        .from('tenant-documents')
-        .upload(filePath, file, {
-          contentType: file instanceof File ? file.type : 'application/pdf',
-        });
+      const response = await fetch(`/api/tenants/${tenantId}/documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-      }
-
-      // Get signed URL
-      const { data: urlData } = await supabase.storage
-        .from('tenant-documents')
-        .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10); // 10 years
-
-      if (!urlData?.signedUrl) {
-        throw new Error('Could not create signed URL');
-      }
-
-      // Create database record
-      const { data, error: dbError } = await supabase
-        .from('tenant_documents')
-        .insert({
-          tenant_id: tenantId,
-          name,
-          type,
-          file_url: urlData.signedUrl,
-        })
-        .select()
-        .single();
-
-      if (dbError) {
-        // Clean up uploaded file on DB error
-        await supabase.storage.from('tenant-documents').remove([filePath]);
-        throw dbError;
-      }
-
-      return data;
+      if (!response.ok) throw new Error('Failed to upload document');
+      return response.json();
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tenant-documents', variables.tenantId] });
@@ -174,22 +95,8 @@ export function useDeleteTenantDocument() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, tenantId, fileUrl }: { id: string; tenantId: string; fileUrl: string }) => {
-      // Extract file path from URL
-      const urlParts = fileUrl.split('/tenant-documents/');
-      if (urlParts.length > 1) {
-        const filePath = decodeURIComponent(urlParts[1].split('?')[0]);
-        await supabase.storage.from('tenant-documents').remove([filePath]);
-      }
-
-      // Delete database record
-      const { error } = await supabase
-        .from('tenant_documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
+    mutationFn: async ({ id, tenantId }: { id: string; tenantId: string; fileUrl: string }) => {
+      await apiRequest('DELETE', `/api/tenant-documents/${id}`);
       return { id, tenantId };
     },
     onSuccess: (data) => {

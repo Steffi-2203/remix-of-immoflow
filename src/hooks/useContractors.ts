@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface Contractor {
@@ -49,19 +49,10 @@ export function useContractors(onlyActive = true) {
   return useQuery({
     queryKey: ['contractors', { onlyActive }],
     queryFn: async () => {
-      let query = supabase
-        .from('contractors')
-        .select('*')
-        .order('company_name');
-      
-      if (onlyActive) {
-        query = query.eq('is_active', true);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return data as Contractor[];
+      const url = onlyActive ? '/api/contractors?active=true' : '/api/contractors';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch contractors');
+      return response.json() as Promise<Contractor[]>;
     },
   });
 }
@@ -71,15 +62,9 @@ export function useContractor(id: string | undefined) {
     queryKey: ['contractors', id],
     queryFn: async () => {
       if (!id) return null;
-      
-      const { data, error } = await supabase
-        .from('contractors')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data as Contractor;
+      const response = await fetch(`/api/contractors/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch contractor');
+      return response.json() as Promise<Contractor>;
     },
     enabled: !!id,
   });
@@ -90,22 +75,8 @@ export function useCreateContractor() {
   
   return useMutation({
     mutationFn: async (contractor: ContractorInsert) => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .single();
-      
-      const { data, error } = await supabase
-        .from('contractors')
-        .insert({
-          ...contractor,
-          organization_id: profile?.organization_id,
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Contractor;
+      const response = await apiRequest('POST', '/api/contractors', contractor);
+      return response.json() as Promise<Contractor>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractors'] });
@@ -123,15 +94,8 @@ export function useUpdateContractor() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: ContractorUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('contractors')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Contractor;
+      const response = await apiRequest('PATCH', `/api/contractors/${id}`, updates);
+      return response.json() as Promise<Contractor>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractors'] });
@@ -149,12 +113,7 @@ export function useDeleteContractor() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('contractors')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/contractors/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractors'] });

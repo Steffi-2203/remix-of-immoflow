@@ -1,23 +1,32 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type RentExpectation = Tables<'rent_expectations'>;
-export type RentExpectationInsert = TablesInsert<'rent_expectations'>;
-export type RentExpectationUpdate = TablesUpdate<'rent_expectations'>;
+export interface RentExpectation {
+  id: string;
+  unit_id: string;
+  start_date: string;
+  end_date: string | null;
+  grundmiete: number;
+  betriebskosten: number;
+  heizkosten: number;
+  sonstige_kosten: number | null;
+  total_miete: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RentExpectationInsert = Omit<RentExpectation, 'id' | 'created_at' | 'updated_at' | 'total_miete'>;
+export type RentExpectationUpdate = Partial<RentExpectationInsert>;
 
 export function useRentExpectations() {
   return useQuery({
     queryKey: ['rent_expectations'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('rent_expectations')
-        .select('*')
-        .order('start_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as RentExpectation[];
+      const response = await fetch('/api/rent-expectations', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch rent expectations');
+      return response.json() as Promise<RentExpectation[]>;
     },
   });
 }
@@ -27,14 +36,9 @@ export function useRentExpectationsByUnit(unitId?: string) {
     queryKey: ['rent_expectations', 'unit', unitId],
     queryFn: async () => {
       if (!unitId) return [];
-      const { data, error } = await supabase
-        .from('rent_expectations')
-        .select('*')
-        .eq('unit_id', unitId)
-        .order('start_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as RentExpectation[];
+      const response = await fetch(`/api/rent-expectations?unit_id=${unitId}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch rent expectations');
+      return response.json() as Promise<RentExpectation[]>;
     },
     enabled: !!unitId,
   });
@@ -45,19 +49,9 @@ export function useCurrentRentExpectation(unitId?: string) {
     queryKey: ['rent_expectations', 'current', unitId],
     queryFn: async () => {
       if (!unitId) return null;
-      const today = new Date().toISOString().split('T')[0];
-      
-      const { data, error } = await supabase
-        .from('rent_expectations')
-        .select('*')
-        .eq('unit_id', unitId)
-        .lte('start_date', today)
-        .or(`end_date.is.null,end_date.gte.${today}`)
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      if (error) throw error;
+      const response = await fetch(`/api/rent-expectations/current?unit_id=${unitId}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch current rent expectation');
+      const data = await response.json();
       return data as RentExpectation | null;
     },
     enabled: !!unitId,
@@ -69,14 +63,8 @@ export function useCreateRentExpectation() {
   
   return useMutation({
     mutationFn: async (expectation: RentExpectationInsert) => {
-      const { data, error } = await supabase
-        .from('rent_expectations')
-        .insert(expectation)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as RentExpectation;
+      const response = await apiRequest('POST', '/api/rent-expectations', expectation);
+      return response.json() as Promise<RentExpectation>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rent_expectations'] });
@@ -94,15 +82,8 @@ export function useUpdateRentExpectation() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: RentExpectationUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('rent_expectations')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as RentExpectation;
+      const response = await apiRequest('PATCH', `/api/rent-expectations/${id}`, updates);
+      return response.json() as Promise<RentExpectation>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rent_expectations'] });
@@ -120,12 +101,7 @@ export function useDeleteRentExpectation() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('rent_expectations')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/rent-expectations/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rent_expectations'] });

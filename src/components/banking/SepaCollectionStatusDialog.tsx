@@ -36,7 +36,7 @@ import {
   SepaCollectionItem 
 } from '@/hooks/useSepaCollections';
 import { useCreateTenantFee, DEFAULT_RETURN_FEE } from '@/hooks/useTenantFees';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface SepaCollectionStatusDialogProps {
@@ -149,31 +149,28 @@ export function SepaCollectionStatusDialog({
         
         if (statusData.status === 'successful') {
           // Create payment for successful items
-          const { data: payment, error: paymentError } = await supabase
-            .from('payments')
-            .insert({
+          try {
+            const paymentResponse = await apiRequest('POST', '/api/payments', {
               tenant_id: item.tenant_id!,
               betrag: item.amount,
               buchungs_datum: collection!.collection_date,
               eingangs_datum: collection!.collection_date,
               zahlungsart: 'sepa',
               referenz: `SEPA-Lastschrift ${format(new Date(collection!.collection_date), 'MM/yyyy')}`,
-            })
-            .select()
-            .single();
-          
-          if (paymentError) {
+            });
+            const payment = await paymentResponse.json();
+            
+            // Update item with payment reference
+            await updateItemStatus.mutateAsync({
+              itemId,
+              status: 'successful',
+              paymentId: payment.id,
+            });
+          } catch (paymentError) {
             console.error('Error creating payment:', paymentError);
             toast.error(`Fehler beim Erstellen der Zahlung für ${item.tenant_name}`);
             continue;
           }
-          
-          // Update item with payment reference
-          await updateItemStatus.mutateAsync({
-            itemId,
-            status: 'successful',
-            paymentId: payment.id,
-          });
         } else if (statusData.status === 'returned' || statusData.status === 'rejected') {
           // Update item as returned/rejected
           await updateItemStatus.mutateAsync({

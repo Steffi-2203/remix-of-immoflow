@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useExpenses } from './useExpenses';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { fuzzyMatch, datesWithinRange, dateProximityScore } from '@/utils/matchingUtils';
@@ -25,7 +25,6 @@ export interface ExpenseMatch {
   matchReasons: string[];
 }
 
-// Find matching expenses for a transaction (Transaction-First workflow)
 export function useTransactionExpenseMatch(transaction: Transaction | null) {
   const { data: expenses = [] } = useExpenses();
   
@@ -34,32 +33,26 @@ export function useTransactionExpenseMatch(transaction: Transaction | null) {
     
     const txAmount = Number(transaction.amount);
     
-    // Only match outgoing transactions (negative amounts)
     if (txAmount >= 0) return [];
     
     const potentialMatches: ExpenseMatch[] = [];
     
     for (const expense of expenses) {
-      // Skip already linked expenses
       if (expense.transaction_id) continue;
       
-      // Amount matching
       const expenseAmount = Number(expense.betrag);
       const txAbsAmount = Math.abs(txAmount);
       const amountDiff = Math.abs(expenseAmount - txAbsAmount);
-      const amountMatch = amountDiff < 0.01; // Exact match
-      const closeAmountMatch = amountDiff / expenseAmount < 0.05; // Within 5%
+      const amountMatch = amountDiff < 0.01;
+      const closeAmountMatch = amountDiff / expenseAmount < 0.05;
       
       if (!amountMatch && !closeAmountMatch) continue;
       
-      // Date matching (within ±14 days)
       if (!datesWithinRange(expense.datum, transaction.transaction_date, 14)) continue;
       
-      // Calculate confidence score
       const matchReasons: string[] = [];
       let confidence = 0;
       
-      // Amount score
       if (amountMatch) {
         confidence += 0.5;
         matchReasons.push('Exakter Betrag');
@@ -68,7 +61,6 @@ export function useTransactionExpenseMatch(transaction: Transaction | null) {
         matchReasons.push('Ähnlicher Betrag');
       }
       
-      // Date score
       const dateScore = dateProximityScore(expense.datum, transaction.transaction_date);
       confidence += dateScore * 0.3;
       if (dateScore >= 0.9) {
@@ -77,7 +69,6 @@ export function useTransactionExpenseMatch(transaction: Transaction | null) {
         matchReasons.push('Naheliegendes Datum');
       }
       
-      // Description matching
       const supplierMatch = fuzzyMatch(expense.bezeichnung, transaction.counterpart_name);
       const descriptionMatch = fuzzyMatch(expense.bezeichnung, transaction.description);
       const bestTextMatch = Math.max(supplierMatch, descriptionMatch);
@@ -105,27 +96,20 @@ export function useTransactionExpenseMatch(transaction: Transaction | null) {
       }
     }
     
-    // Sort by confidence (highest first)
     potentialMatches.sort((a, b) => b.confidence - a.confidence);
     
-    return potentialMatches.slice(0, 5); // Top 5 matches
+    return potentialMatches.slice(0, 5);
   }, [transaction, expenses]);
   
   return suggestedExpenses;
 }
 
-// Hook to link transaction with expense (from transaction side)
 export function useLinkTransactionToExpense() {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ expenseId, transactionId }: { expenseId: string; transactionId: string }) => {
-      const { error } = await supabase
-        .from('expenses')
-        .update({ transaction_id: transactionId })
-        .eq('id', expenseId);
-      
-      if (error) throw error;
+      await apiRequest('PATCH', `/api/expenses/${expenseId}`, { transaction_id: transactionId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });

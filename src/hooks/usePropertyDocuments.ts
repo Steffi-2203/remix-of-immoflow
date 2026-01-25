@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { extractFilePath } from '@/utils/storageUtils';
 
 export type PropertyDocument = {
   id: string;
@@ -31,15 +30,9 @@ export function usePropertyDocuments(propertyId: string | undefined) {
     queryKey: ['property-documents', propertyId],
     queryFn: async () => {
       if (!propertyId) return [];
-      
-      const { data, error } = await supabase
-        .from('property_documents')
-        .select('*')
-        .eq('property_id', propertyId)
-        .order('uploaded_at', { ascending: false });
-
-      if (error) throw error;
-      return data as PropertyDocument[];
+      const response = await fetch(`/api/properties/${propertyId}/documents`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch property documents');
+      return response.json() as Promise<PropertyDocument[]>;
     },
     enabled: !!propertyId,
   });
@@ -61,40 +54,19 @@ export function useUploadPropertyDocument() {
       documentType: string;
       documentName: string;
     }) => {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${propertyId}/${Date.now()}.${fileExt}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', documentType);
+      formData.append('name', documentName);
 
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('expense-receipts')
-        .upload(`property-docs/${fileName}`, file);
+      const response = await fetch(`/api/properties/${propertyId}/documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
 
-      if (uploadError) throw uploadError;
-
-      // Get signed URL (more secure than public URL)
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('expense-receipts')
-        .createSignedUrl(`property-docs/${fileName}`, 31536000); // 1 year expiry for storage reference
-
-      if (signedError) throw signedError;
-
-      // Store the file path reference, not the full URL
-      const filePathReference = `property-docs/${fileName}`;
-
-      // Insert document record with file path
-      const { data, error } = await supabase
-        .from('property_documents')
-        .insert({
-          property_id: propertyId,
-          name: documentName,
-          type: documentType,
-          file_url: filePathReference,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      if (!response.ok) throw new Error('Failed to upload document');
+      return response.json();
     },
     onSuccess: (_, { propertyId }) => {
       queryClient.invalidateQueries({ queryKey: ['property-documents', propertyId] });
@@ -119,22 +91,8 @@ export function useDeletePropertyDocument() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, propertyId, fileUrl }: { id: string; propertyId: string; fileUrl: string }) => {
-      // Extract the file path - handle both old URL format and new path format
-      let filePath = fileUrl;
-      if (fileUrl.includes('/property-docs/')) {
-        filePath = extractFilePath(fileUrl, 'property-docs/') || fileUrl;
-      }
-      if (filePath.startsWith('property-docs/')) {
-        await supabase.storage.from('expense-receipts').remove([filePath]);
-      }
-
-      const { error } = await supabase
-        .from('property_documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+    mutationFn: async ({ id, propertyId }: { id: string; propertyId: string; fileUrl: string }) => {
+      await apiRequest('DELETE', `/api/property-documents/${id}`);
     },
     onSuccess: (_, { propertyId }) => {
       queryClient.invalidateQueries({ queryKey: ['property-documents', propertyId] });

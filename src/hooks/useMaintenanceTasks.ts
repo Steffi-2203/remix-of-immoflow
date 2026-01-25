@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 
@@ -51,31 +51,16 @@ export function useMaintenanceTasks(filters?: {
   return useQuery({
     queryKey: ['maintenance-tasks', user?.id, filters],
     queryFn: async () => {
-      let query = supabase
-        .from('maintenance_tasks')
-        .select(`
-          *,
-          properties(name),
-          units(top_nummer)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status);
-      }
-      if (filters?.priority && filters.priority !== 'all') {
-        query = query.eq('priority', filters.priority);
-      }
-      if (filters?.category && filters.category !== 'all') {
-        query = query.eq('category', filters.category);
-      }
-      if (filters?.propertyId && filters.propertyId !== 'all') {
-        query = query.eq('property_id', filters.propertyId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as MaintenanceTask[];
+      const params = new URLSearchParams();
+      if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
+      if (filters?.priority && filters.priority !== 'all') params.set('priority', filters.priority);
+      if (filters?.category && filters.category !== 'all') params.set('category', filters.category);
+      if (filters?.propertyId && filters.propertyId !== 'all') params.set('property_id', filters.propertyId);
+      
+      const url = `/api/maintenance-tasks${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch maintenance tasks');
+      return response.json() as Promise<MaintenanceTask[]>;
     },
     enabled: !!user?.id,
   });
@@ -83,22 +68,12 @@ export function useMaintenanceTasks(filters?: {
 
 export function useCreateMaintenanceTask() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (task: CreateMaintenanceTask) => {
-      const { data, error } = await supabase
-        .from('maintenance_tasks')
-        .insert({
-          ...task,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/maintenance-tasks', task);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-tasks'] });
@@ -124,15 +99,8 @@ export function useUpdateMaintenanceTask() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<MaintenanceTask> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('maintenance_tasks')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/maintenance-tasks/${id}`, updates);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-tasks'] });
@@ -158,12 +126,7 @@ export function useDeleteMaintenanceTask() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('maintenance_tasks')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/maintenance-tasks/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenance-tasks'] });

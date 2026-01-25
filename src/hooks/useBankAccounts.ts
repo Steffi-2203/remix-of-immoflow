@@ -1,23 +1,31 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type BankAccount = Tables<'bank_accounts'>;
-export type BankAccountInsert = TablesInsert<'bank_accounts'>;
-export type BankAccountUpdate = TablesUpdate<'bank_accounts'>;
+export interface BankAccount {
+  id: string;
+  organization_id: string | null;
+  account_name: string;
+  bank_name: string | null;
+  iban: string | null;
+  bic: string | null;
+  opening_balance: number | null;
+  opening_balance_date: string | null;
+  is_primary: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BankAccountInsert = Omit<BankAccount, 'id' | 'created_at' | 'updated_at'>;
+export type BankAccountUpdate = Partial<BankAccountInsert>;
 
 export function useBankAccounts() {
   return useQuery({
     queryKey: ['bank_accounts'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bank_accounts')
-        .select('*')
-        .order('account_name', { ascending: true });
-      
-      if (error) throw error;
-      return data as BankAccount[];
+      const response = await fetch('/api/bank-accounts', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch bank accounts');
+      return response.json() as Promise<BankAccount[]>;
     },
   });
 }
@@ -27,34 +35,24 @@ export function useBankAccount(id?: string) {
     queryKey: ['bank_accounts', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase
-        .from('bank_accounts')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data as BankAccount;
+      const response = await fetch(`/api/bank-accounts/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch bank account');
+      return response.json() as Promise<BankAccount>;
     },
     enabled: !!id,
   });
 }
 
-// Hook to calculate bank balance using the database function
 export function useBankBalance(accountId?: string, asOfDate?: string) {
   return useQuery({
     queryKey: ['bank_balance', accountId, asOfDate],
     queryFn: async () => {
       if (!accountId) return null;
-      
-      const { data, error } = await supabase
-        .rpc('calculate_bank_balance', { 
-          account_id: accountId,
-          as_of_date: asOfDate || new Date().toISOString().split('T')[0]
-        });
-      
-      if (error) throw error;
-      return data as number;
+      const date = asOfDate || new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/bank-accounts/${accountId}/balance?as_of_date=${date}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch bank balance');
+      const data = await response.json();
+      return data.balance as number;
     },
     enabled: !!accountId,
   });
@@ -65,14 +63,8 @@ export function useCreateBankAccount() {
   
   return useMutation({
     mutationFn: async (account: BankAccountInsert) => {
-      const { data, error } = await supabase
-        .from('bank_accounts')
-        .insert(account)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as BankAccount;
+      const response = await apiRequest('POST', '/api/bank-accounts', account);
+      return response.json() as Promise<BankAccount>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
@@ -90,15 +82,8 @@ export function useUpdateBankAccount() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: BankAccountUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('bank_accounts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as BankAccount;
+      const response = await apiRequest('PATCH', `/api/bank-accounts/${id}`, updates);
+      return response.json() as Promise<BankAccount>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
@@ -117,12 +102,7 @@ export function useDeleteBankAccount() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('bank_accounts')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/bank-accounts/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });

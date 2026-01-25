@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface PropertyBudget {
@@ -23,7 +23,6 @@ export interface PropertyBudget {
   notes: string | null;
   created_at: string;
   updated_at: string;
-  // Joined data
   properties?: {
     name: string;
     address: string;
@@ -50,32 +49,14 @@ export function useBudgets(propertyId?: string, year?: number) {
   return useQuery({
     queryKey: ['budgets', propertyId, year],
     queryFn: async () => {
-      let query = supabase
-        .from('property_budgets')
-        .select(`
-          *,
-          properties (
-            name,
-            address
-          )
-        `)
-        .order('year', { ascending: false });
-
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-      if (year) {
-        query = query.eq('year', year);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching budgets:', error);
-        throw error;
-      }
-
-      return data as PropertyBudget[];
+      const params = new URLSearchParams();
+      if (propertyId) params.set('property_id', propertyId);
+      if (year) params.set('year', String(year));
+      
+      const url = `/api/budgets${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch budgets');
+      return response.json() as Promise<PropertyBudget[]>;
     },
   });
 }
@@ -84,24 +65,9 @@ export function useBudget(budgetId: string) {
   return useQuery({
     queryKey: ['budget', budgetId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('property_budgets')
-        .select(`
-          *,
-          properties (
-            name,
-            address
-          )
-        `)
-        .eq('id', budgetId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching budget:', error);
-        throw error;
-      }
-
-      return data as PropertyBudget;
+      const response = await fetch(`/api/budgets/${budgetId}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch budget');
+      return response.json() as Promise<PropertyBudget>;
     },
     enabled: !!budgetId,
   });
@@ -112,29 +78,8 @@ export function useCreateBudget() {
 
   return useMutation({
     mutationFn: async (data: BudgetFormData) => {
-      const { data: result, error } = await supabase
-        .from('property_budgets')
-        .insert({
-          property_id: data.property_id,
-          year: data.year,
-          position_1_name: data.position_1_name || null,
-          position_1_amount: data.position_1_amount || 0,
-          position_2_name: data.position_2_name || null,
-          position_2_amount: data.position_2_amount || 0,
-          position_3_name: data.position_3_name || null,
-          position_3_amount: data.position_3_amount || 0,
-          position_4_name: data.position_4_name || null,
-          position_4_amount: data.position_4_amount || 0,
-          position_5_name: data.position_5_name || null,
-          position_5_amount: data.position_5_amount || 0,
-          notes: data.notes || null,
-          status: 'entwurf',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return result;
+      const response = await apiRequest('POST', '/api/budgets', data);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -156,27 +101,8 @@ export function useUpdateBudget() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<BudgetFormData> }) => {
-      const { data: result, error } = await supabase
-        .from('property_budgets')
-        .update({
-          position_1_name: data.position_1_name,
-          position_1_amount: data.position_1_amount,
-          position_2_name: data.position_2_name,
-          position_2_amount: data.position_2_amount,
-          position_3_name: data.position_3_name,
-          position_3_amount: data.position_3_amount,
-          position_4_name: data.position_4_name,
-          position_4_amount: data.position_4_amount,
-          position_5_name: data.position_5_name,
-          position_5_amount: data.position_5_amount,
-          notes: data.notes,
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return result;
+      const response = await apiRequest('PATCH', `/api/budgets/${id}`, data);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -203,22 +129,8 @@ export function useUpdateBudgetStatus() {
       status: 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt';
       approved_by?: string;
     }) => {
-      const updateData: Record<string, unknown> = { status };
-      
-      if (status === 'genehmigt' && approved_by) {
-        updateData.approved_by = approved_by;
-        updateData.approved_at = new Date().toISOString();
-      }
-
-      const { data: result, error } = await supabase
-        .from('property_budgets')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return result;
+      const response = await apiRequest('PATCH', `/api/budgets/${id}/status`, { status, approved_by });
+      return response.json();
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -244,12 +156,7 @@ export function useDeleteBudget() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('property_budgets')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/budgets/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
@@ -262,96 +169,25 @@ export function useDeleteBudget() {
   });
 }
 
-// Hook to get budget expenses (actual costs per position) - from expenses table only
 export function useBudgetExpenses(propertyId: string, year: number) {
   return useQuery({
     queryKey: ['budget-expenses', propertyId, year],
     queryFn: async () => {
-      const startDate = `${year}-01-01`;
-      const endDate = `${year}-12-31`;
-
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('budget_position, betrag')
-        .eq('property_id', propertyId)
-        .gte('datum', startDate)
-        .lte('datum', endDate)
-        .not('budget_position', 'is', null);
-
-      if (error) {
-        console.error('Error fetching budget expenses:', error);
-        throw error;
-      }
-
-      // Aggregate by position
-      const totals: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      data?.forEach((expense) => {
-        if (expense.budget_position) {
-          totals[expense.budget_position] += expense.betrag;
-        }
-      });
-
-      return totals;
+      const response = await fetch(`/api/budgets/expenses?property_id=${propertyId}&year=${year}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch budget expenses');
+      return response.json() as Promise<Record<number, number>>;
     },
     enabled: !!propertyId && !!year,
   });
 }
 
-// Hook to get combined budget expenses from both expenses AND transactions tables
 export function useBudgetExpensesFromAll(propertyId: string, year: number) {
   return useQuery({
     queryKey: ['budget-expenses-all', propertyId, year],
     queryFn: async () => {
-      const startDate = `${year}-01-01`;
-      const endDate = `${year}-12-31`;
-
-      // Fetch from expenses table
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('budget_position, betrag')
-        .eq('property_id', propertyId)
-        .gte('datum', startDate)
-        .lte('datum', endDate)
-        .not('budget_position', 'is', null);
-
-      if (expensesError) {
-        console.error('Error fetching budget expenses:', expensesError);
-        throw expensesError;
-      }
-
-      // Fetch from transactions table (only negative amounts = expenses)
-      const { data: transactionsData, error: transactionsError } = await supabase
-        .from('transactions')
-        .select('budget_position, amount')
-        .eq('property_id', propertyId)
-        .gte('transaction_date', startDate)
-        .lte('transaction_date', endDate)
-        .lt('amount', 0) // Only expenses (negative amounts)
-        .not('budget_position', 'is', null);
-
-      if (transactionsError) {
-        console.error('Error fetching budget transactions:', transactionsError);
-        throw transactionsError;
-      }
-
-      // Aggregate by position from both sources
-      const totals: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-      
-      // Add expenses (betrag is positive)
-      expensesData?.forEach((expense) => {
-        if (expense.budget_position) {
-          totals[expense.budget_position] += expense.betrag;
-        }
-      });
-
-      // Add transactions (amount is negative, so use absolute value)
-      transactionsData?.forEach((tx) => {
-        if (tx.budget_position) {
-          totals[tx.budget_position] += Math.abs(tx.amount);
-        }
-      });
-
-      return totals;
+      const response = await fetch(`/api/budgets/expenses-all?property_id=${propertyId}&year=${year}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch budget expenses');
+      return response.json() as Promise<Record<number, number>>;
     },
     enabled: !!propertyId && !!year,
   });

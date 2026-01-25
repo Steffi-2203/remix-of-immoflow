@@ -72,8 +72,8 @@ import { BatchResultsSummary, BatchResultItem } from '@/components/ocr/BatchResu
 import { TransactionMatchBadge } from '@/components/expenses/TransactionMatchBadge';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 // Parse euro amounts with German/Austrian format (comma as decimal separator)
 function parseEuroAmount(raw: string): number | null {
@@ -223,25 +223,40 @@ export default function ExpenseList() {
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `${propertyId}/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from('expense-receipts')
-      .upload(filePath, file);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'expense-receipts');
+      formData.append('path', filePath);
 
-    if (error) {
+      const response = await fetch('/api/storage/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Upload error:', errorData);
+        toast({
+          title: 'Upload fehlgeschlagen',
+          description: errorData.error || 'Upload fehlgeschlagen',
+          variant: 'destructive',
+        });
+        return null;
+      }
+
+      const data = await response.json();
+      return data.publicUrl;
+    } catch (error: any) {
       console.error('Upload error:', error);
       toast({
         title: 'Upload fehlgeschlagen',
-        description: error.message,
+        description: error.message || 'Upload fehlgeschlagen',
         variant: 'destructive',
       });
       return null;
     }
-
-    const { data: urlData } = supabase.storage
-      .from('expense-receipts')
-      .getPublicUrl(filePath);
-
-    return urlData.publicUrl;
   };
 
   // Reset dialog state
