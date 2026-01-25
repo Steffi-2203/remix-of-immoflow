@@ -78,8 +78,35 @@ export function useOCRBankStatement() {
 
       console.log('Sending bank statement for OCR processing...');
 
-      // OCR feature requires OpenAI integration - show user-friendly message
-      throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte importieren Sie Ihre Kontoauszüge als CSV.');
+      const response = await fetch('/api/functions/ocr-bank-statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          imageBase64, 
+          mimeType 
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+      }
+      
+      const ocrResult = await response.json() as OCRBankStatementResult;
+      setResult(ocrResult);
+      
+      if (ocrResult.validierung.ist_valide) {
+        toast.success('Kontoauszug analysiert', {
+          description: `${ocrResult.buchungen.length} Buchungen erkannt`
+        });
+      } else {
+        toast.warning('Kontoauszug analysiert - mit Warnungen', {
+          description: ocrResult.validierung.warnungen.join(', ')
+        });
+      }
+      
+      return ocrResult;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unbekannter Fehler';
       setError(errorMessage);
