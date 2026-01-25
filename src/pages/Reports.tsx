@@ -621,10 +621,10 @@ export default function Reports() {
     });
   }, [allTenants, allUnits, selectedPropertyId, selectedYear, selectedMonth, reportPeriod]);
   
-  // Monatliche SOLL-Summen aus Mieterdaten (camelCase from useTenants)
+  // Monatliche SOLL-Summen aus Mieterdaten (snake_case from TenantForFilter)
   const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
-  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskostenVorschuss || 0), 0);
-  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskostenVorschuss || 0), 0);
+  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
+  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
   
   // Bei jährlicher Ansicht: x12 Monate
   const monthMultiplier = reportPeriod === 'yearly' ? 12 : 1;
@@ -636,13 +636,13 @@ export default function Reports() {
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
   const tenantSollIstDetails = useMemo(() => {
     return relevantTenants.map(tenant => {
-      const unit = allUnits?.find(u => u.id === tenant.unitId);
+      const unit = allUnits?.find(u => u.id === tenant.unit_id);
       const property = properties?.find(p => p.id === unit?.propertyId);
       
-      // SOLL-Werte aus Mieterdaten (monatlich * multiplier) - camelCase from useTenants
+      // SOLL-Werte aus Mieterdaten (monatlich * multiplier) - snake_case from TenantForFilter
       const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-      const sollBk = Number(tenant.betriebskostenVorschuss || 0) * monthMultiplier;
-      const sollHk = Number(tenant.heizungskostenVorschuss || 0) * monthMultiplier;
+      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
       const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
@@ -670,8 +670,8 @@ export default function Reports() {
       
       return {
         tenantId: tenant.id,
-        tenantName: `${tenant.firstName} ${tenant.lastName}`,
-        unitName: unit?.topNummer || 'N/A',
+        tenantName: `${(tenant as any).vorname || (tenant as any).first_name || ''} ${(tenant as any).nachname || (tenant as any).last_name || ''}`.trim() || 'N/A',
+        unitName: unit?.top_nummer || 'N/A',
         propertyName: property?.name || 'N/A',
         sollMiete,
         sollBk,
@@ -690,21 +690,21 @@ export default function Reports() {
     });
   }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier]);
 
-  // USt aus SOLL-Werten berechnen (nach Einheitstyp) - camelCase from useTenants
+  // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
     const betrag = Number(t.grundmiete || 0) * monthMultiplier;
-    const vatRate = getVatRateForUnit(t.unitId, 'miete');
+    const vatRate = getVatRateForUnit(t.unit_id, 'miete');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollBk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.betriebskostenVorschuss || 0) * monthMultiplier;
-    const vatRate = getVatRateForUnit(t.unitId, 'bk');
+    const betrag = Number(t.betriebskosten_vorschuss || 0) * monthMultiplier;
+    const vatRate = getVatRateForUnit(t.unit_id, 'bk');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollHk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.heizungskostenVorschuss || 0) * monthMultiplier;
+    const betrag = Number(t.heizungskosten_vorschuss || 0) * monthMultiplier;
     return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
   }, 0);
   
@@ -807,8 +807,9 @@ export default function Reports() {
     return acc;
   }, {} as Record<string, { brutto: number; vorsteuer: number; vatRate: number }>);
 
-  const vorsteuerFromExpenses = Object.values(vorsteuerByExpenseType).reduce(
-    (sum, data) => sum + data.vorsteuer, 0
+  type VorsteuerData = { brutto: number; vorsteuer: number; vatRate: number };
+  const vorsteuerFromExpenses = (Object.values(vorsteuerByExpenseType) as VorsteuerData[]).reduce(
+    (sum: number, data: VorsteuerData) => sum + data.vorsteuer, 0
   );
 
   // VAT liability from invoices (alt)
@@ -1795,7 +1796,7 @@ export default function Reports() {
                     Aufschlüsselung nach Kostenart:
                   </p>
                   <div className="space-y-1.5 text-xs">
-                    {Object.entries(vorsteuerByExpenseType)
+                    {(Object.entries(vorsteuerByExpenseType) as [string, { brutto: number; vorsteuer: number; vatRate: number }][])
                       .filter(([, data]) => data.vorsteuer > 0)
                       .sort((a, b) => b[1].vorsteuer - a[1].vorsteuer)
                       .map(([type, data]) => (
@@ -2153,7 +2154,7 @@ export default function Reports() {
                       <div className="bg-muted p-4 flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-lg">{prop?.name}</h4>
-                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postalCode} {prop?.city}</p>
+                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postal_code} {prop?.city}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-success font-semibold">+€{propData.totalIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
@@ -2171,14 +2172,14 @@ export default function Reports() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {propData.units.map((unitData) => {
+                          {propData.units.map((unitData: any) => {
                             const activeTenant = (unitData.tenants as any[])?.find((t: any) => t.status === 'aktiv');
                             const saldo = unitData.income - unitData.expenses;
                             return (
                               <TableRow key={unitData.unit?.id}>
-                                <TableCell className="font-medium">Top {unitData.unit?.topNummer}</TableCell>
+                                <TableCell className="font-medium">Top {unitData.unit?.top_nummer}</TableCell>
                                 <TableCell>
-                                  {activeTenant ? `${activeTenant.firstName} ${activeTenant.lastName}` : <span className="text-muted-foreground">Leerstand</span>}
+                                  {activeTenant ? `${activeTenant.vorname || activeTenant.first_name || ''} ${activeTenant.nachname || activeTenant.last_name || ''}`.trim() || 'Mieter' : <span className="text-muted-foreground">Leerstand</span>}
                                 </TableCell>
                                 <TableCell className="text-right text-success">
                                   €{unitData.income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
@@ -2385,19 +2386,19 @@ export default function Reports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {propData.tenantsSoll.map((item, idx) => (
+                        {propData.tenantsSoll.map((item: any, idx: number) => (
                           <TableRow key={idx}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">Top {item.unit?.topNummer || '-'}</span>
+                                <span className="font-medium">Top {item.unit?.top_nummer || '-'}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {unitTypeLabels[item.unit?.type || ''] || item.unit?.type}
+                                  {unitTypeLabels[(item.unit as any)?.type || ''] || (item.unit as any)?.type}
                                 </span>
                               </div>
                             </TableCell>
                             <TableCell>
                               {item.tenant ? (
-                                `${item.tenant.firstName} ${item.tenant.lastName}`
+                                `${(item.tenant as any).vorname || (item.tenant as any).first_name || ''} ${(item.tenant as any).nachname || (item.tenant as any).last_name || ''}`.trim() || 'Mieter'
                               ) : (
                                 <Badge variant="outline">Leerstand</Badge>
                               )}
