@@ -122,7 +122,7 @@ export default function PaymentList() {
   const rentalIncomeTransactions = useMemo(() => {
     if (!transactions || incomeCategories.length === 0) return [];
     let filtered = transactions
-      .filter(t => incomeCategories.includes(t.category_id) && t.amount > 0);
+      .filter(t => incomeCategories.includes(t.category_id) && Number(t.amount) > 0);
     
     // Filter by property if selected
     if (propertyUnitIds) {
@@ -343,8 +343,6 @@ export default function PaymentList() {
           id: selectedTransaction.id,
           tenant_id: selectedTenantId,
           unit_id: tenant.unitId,
-          status: 'matched',
-          matched_at: new Date().toISOString(),
         });
 
         toast.success(`Transaktion wurde ${tenant.firstName} ${tenant.lastName} zugeordnet`);
