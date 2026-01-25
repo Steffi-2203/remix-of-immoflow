@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
 import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
-import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -253,21 +252,19 @@ export default function Reports() {
   const handleGenerateInvoices = useCallback(async () => {
     setIsGeneratingInvoices(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error('Bitte melden Sie sich an');
-        return;
-      }
-
-      const response = await supabase.functions.invoke('generate-monthly-invoices', {
-        body: { year: selectedYear, month: selectedMonth }
+      const response = await fetch('/api/functions/generate-monthly-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ year: selectedYear, month: selectedMonth })
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Fehler bei der Vorschreibungsgenerierung');
       }
 
-      const result = response.data;
+      const result = await response.json();
       
       if (result.created > 0) {
         toast.success(`${result.created} Vorschreibung(en) für ${monthNames[selectedMonth - 1]} ${selectedYear} erstellt`);

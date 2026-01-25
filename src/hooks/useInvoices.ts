@@ -106,12 +106,18 @@ export function useGenerateInvoices() {
 
   return useMutation({
     mutationFn: async ({ year, month }: { year?: number; month?: number }) => {
-      const { data, error } = await supabase.functions.invoke('generate-monthly-invoices', {
-        body: { year, month },
+      const response = await fetch('/api/functions/generate-monthly-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ year, month }),
       });
 
-      if (error) throw error;
-      return data;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Fehler bei der Vorschreibungsgenerierung');
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });

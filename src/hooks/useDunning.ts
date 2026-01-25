@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface DunningRequest {
@@ -20,13 +19,18 @@ export function useSendDunning() {
   
   return useMutation({
     mutationFn: async (request: DunningRequest) => {
-      const { data, error } = await supabase.functions.invoke('send-dunning', {
-        body: request,
+      const response = await fetch('/api/functions/send-dunning', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request),
       });
       
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Fehler beim Versenden');
+      }
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
