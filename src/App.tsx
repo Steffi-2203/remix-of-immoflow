@@ -44,6 +44,8 @@ import Budgets from "./pages/Budgets";
 import MeterReadings from "./pages/MeterReadings";
 import KeyManagement from "./pages/KeyManagement";
 import VpiAdjustments from "./pages/VpiAdjustments";
+import AccountantDashboard from "./pages/AccountantDashboard";
+import TenantPortal from "./pages/TenantPortal";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -105,6 +107,8 @@ const App = () => (
             <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/buchhalter" element={<ProtectedRoute><AccountantDashboard /></ProtectedRoute>} />
+            <Route path="/mieterportal" element={<ProtectedRoute><TenantPortal /></ProtectedRoute>} />
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
