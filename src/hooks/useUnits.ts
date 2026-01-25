@@ -119,13 +119,15 @@ export function useUnit(id: string | undefined) {
       const response = await fetch(`/api/units/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch unit');
       const unit = await response.json();
+      const normalized = normalizeUnit(unit);
       
       const tenantsResponse = await fetch(`/api/units/${id}/tenants`, { credentials: 'include' });
       if (tenantsResponse.ok) {
-        unit.tenants = await tenantsResponse.json();
+        const tenants = await tenantsResponse.json();
+        normalized.tenants = tenants.map(normalizeTenantForUnit);
       }
       
-      return unit;
+      return normalized;
     },
     enabled: !!id,
   });

@@ -135,7 +135,8 @@ export function usePaymentsByTenant(tenantId?: string) {
       if (!tenantId) return [];
       const response = await fetch(`/api/tenants/${tenantId}/payments`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch payments');
-      return response.json();
+      const payments = await response.json();
+      return payments.map(normalizePayment);
     },
     enabled: !!tenantId,
   });

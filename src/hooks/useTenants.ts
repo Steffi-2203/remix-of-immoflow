@@ -137,7 +137,8 @@ export function useTenantsByUnit(unitId?: string) {
       if (!unitId) return [];
       const response = await fetch(`/api/units/${unitId}/tenants`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenants');
-      return response.json();
+      const tenants = await response.json();
+      return tenants.map(normalizeTenant);
     },
     enabled: !!unitId,
   });
@@ -151,20 +152,24 @@ export function useTenant(id: string | undefined) {
       const response = await fetch(`/api/tenants/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenant');
       const tenant = await response.json();
+      const normalized = normalizeTenant(tenant);
       
-      if (tenant.unitId) {
-        const unitResponse = await fetch(`/api/units/${tenant.unitId}`, { credentials: 'include' });
+      const tenantUnitId = normalized.unitId ?? normalized.unit_id;
+      if (tenantUnitId) {
+        const unitResponse = await fetch(`/api/units/${tenantUnitId}`, { credentials: 'include' });
         if (unitResponse.ok) {
           const unit = await unitResponse.json();
-          const propertyResponse = await fetch(`/api/properties/${unit.propertyId}`, { credentials: 'include' });
+          const normalizedUnit = normalizeUnit(unit);
+          const unitPropertyId = normalizedUnit.propertyId ?? normalizedUnit.property_id;
+          const propertyResponse = await fetch(`/api/properties/${unitPropertyId}`, { credentials: 'include' });
           if (propertyResponse.ok) {
             const property = await propertyResponse.json();
-            tenant.units = { ...unit, properties: property };
+            normalized.units = { ...normalizedUnit, properties: property };
           }
         }
       }
       
-      return tenant;
+      return normalized;
     },
     enabled: !!id,
   });

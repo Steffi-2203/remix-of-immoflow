@@ -5,22 +5,38 @@
 
 export interface TenantForFilter {
   id: string;
-  unit_id: string;
+  unit_id?: string;
+  unitId?: string;
   status: string;
   mietbeginn: string | null;
   mietende?: string | null;
-  grundmiete?: number;
-  betriebskosten_vorschuss?: number;
-  heizungskosten_vorschuss?: number;
+  grundmiete?: number | string;
+  betriebskosten_vorschuss?: number | string;
+  betriebskostenVorschuss?: number | string;
+  heizungskosten_vorschuss?: number | string;
+  heizungskostenVorschuss?: number | string;
   first_name?: string;
+  firstName?: string;
   last_name?: string;
+  lastName?: string;
   vorname?: string;
   nachname?: string;
 }
 
 interface UnitForFilter {
   id: string;
-  property_id: string;
+  property_id?: string;
+  propertyId?: string;
+}
+
+// Helper to get unit_id from tenant (supports both formats)
+function getTenantUnitId(t: TenantForFilter): string {
+  return t.unit_id ?? t.unitId ?? '';
+}
+
+// Helper to get property_id from unit (supports both formats)
+function getUnitPropertyId(u: UnitForFilter): string {
+  return u.property_id ?? u.propertyId ?? '';
 }
 
 /**
@@ -96,18 +112,18 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
   periodYear: number,
   periodMonth?: number
 ): T[] {
-  // Filter Units nach Property
+  // Filter Units nach Property (supports both property_id and propertyId)
   const relevantUnits = propertyId === 'all' 
     ? units 
-    : units.filter(u => u.property_id === propertyId);
+    : units.filter(u => getUnitPropertyId(u) === propertyId);
   
   const relevantTenants: T[] = [];
   
   // Für jede Unit: Finde Mieter die im Zeitraum aktiv waren
   relevantUnits.forEach(unit => {
-    // Alle Mieter dieser Unit die im Zeitraum aktiv waren
+    // Alle Mieter dieser Unit die im Zeitraum aktiv waren (supports both unit_id and unitId)
     const unitTenants = tenants.filter(t => 
-      t.unit_id === unit.id && isTenantActiveInPeriod(t, periodYear, periodMonth)
+      getTenantUnitId(t) === unit.id && isTenantActiveInPeriod(t, periodYear, periodMonth)
     );
     
     // Normalerweise sollte nur ein Mieter pro Unit im Zeitraum aktiv sein
@@ -128,9 +144,32 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
 
 /**
  * Berechnet die monatliche Gesamtmiete eines Mieters
+ * Supports both camelCase and snake_case field names
  */
 export function calculateMonthlyRent(tenant: TenantForFilter): number {
-  return Number(tenant.grundmiete || 0) + 
-         Number(tenant.betriebskosten_vorschuss || 0) + 
-         Number(tenant.heizungskosten_vorschuss || 0);
+  const grundmiete = Number(tenant.grundmiete || 0);
+  const bk = Number(tenant.betriebskosten_vorschuss ?? tenant.betriebskostenVorschuss ?? 0);
+  const hk = Number(tenant.heizungskosten_vorschuss ?? tenant.heizungskostenVorschuss ?? 0);
+  return grundmiete + bk + hk;
+}
+
+/**
+ * Helper to get tenant's first name (supports both formats)
+ */
+export function getTenantFirstName(tenant: TenantForFilter): string {
+  return tenant.first_name ?? tenant.firstName ?? tenant.vorname ?? '';
+}
+
+/**
+ * Helper to get tenant's last name (supports both formats)
+ */
+export function getTenantLastName(tenant: TenantForFilter): string {
+  return tenant.last_name ?? tenant.lastName ?? tenant.nachname ?? '';
+}
+
+/**
+ * Helper to get tenant's full name
+ */
+export function getTenantFullName(tenant: TenantForFilter): string {
+  return `${getTenantFirstName(tenant)} ${getTenantLastName(tenant)}`.trim();
 }
