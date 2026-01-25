@@ -201,6 +201,8 @@ export function Sidebar() {
 
   const canAccessItem = (item: NavItem): boolean => {
     if (!item.requiredTier) return true;
+    // Admins always have full access regardless of subscription
+    if (isAdmin) return true;
     if (!canAccessFullFeatures) return false;
     const requiredTierIndex = tierOrder.indexOf(item.requiredTier);
     return currentTierIndex >= requiredTierIndex;
