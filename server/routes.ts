@@ -999,6 +999,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const account = await storage.getBankAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Bank account not found" });
+      res.json(account);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bank account" });
+    }
+  });
+
+  app.post("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const account = await storage.createBankAccount({
+        ...req.body,
+        organizationId: profile.organizationId,
+      });
+      res.status(201).json(account);
+    } catch (error) {
+      console.error('Create bank account error:', error);
+      res.status(500).json({ error: "Failed to create bank account" });
+    }
+  });
+
+  app.patch("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const account = await storage.getBankAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Bank account not found" });
+      if (account.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const updated = await storage.updateBankAccount(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error('Update bank account error:', error);
+      res.status(500).json({ error: "Failed to update bank account" });
+    }
+  });
+
+  app.delete("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const account = await storage.getBankAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Bank account not found" });
+      if (account.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      await storage.deleteBankAccount(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete bank account error:', error);
+      res.status(500).json({ error: "Failed to delete bank account" });
+    }
+  });
+
+  app.get("/api/bank-accounts/:id/balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const account = await storage.getBankAccount(req.params.id);
+      if (!account) return res.status(404).json({ error: "Bank account not found" });
+      if (account.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const asOfDate = req.query.as_of_date as string | undefined;
+      const balance = await storage.getBankAccountBalance(req.params.id, asOfDate);
+      res.json({ balance });
+    } catch (error) {
+      console.error('Get bank balance error:', error);
+      res.status(500).json({ error: "Failed to calculate bank balance" });
+    }
+  });
+
   app.get("/api/bank-accounts/:id/transactions", isAuthenticated, async (req: any, res) => {
     try {
       const transactions = await storage.getTransactionsByBankAccount(req.params.id);

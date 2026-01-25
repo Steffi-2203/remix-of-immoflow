@@ -27,6 +27,10 @@ export interface IStorage {
   getBankAccounts(): Promise<schema.BankAccount[]>;
   getBankAccount(id: string): Promise<schema.BankAccount | undefined>;
   getBankAccountsByOrganization(organizationId?: string): Promise<schema.BankAccount[]>;
+  createBankAccount(data: Partial<schema.InsertBankAccount>): Promise<schema.BankAccount>;
+  updateBankAccount(id: string, data: Partial<schema.InsertBankAccount>): Promise<schema.BankAccount | undefined>;
+  deleteBankAccount(id: string): Promise<void>;
+  getBankAccountBalance(id: string, asOfDate?: string): Promise<number>;
   getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]>;
   getTransactionsByOrganization(organizationId?: string): Promise<schema.Transaction[]>;
   getSettlementsByProperty(propertyId: string): Promise<schema.Settlement[]>;
@@ -260,6 +264,47 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.bankAccounts)
       .where(eq(schema.bankAccounts.organizationId, organizationId))
       .orderBy(asc(schema.bankAccounts.accountName));
+  }
+
+  async createBankAccount(data: Partial<schema.InsertBankAccount>): Promise<schema.BankAccount> {
+    const result = await db.insert(schema.bankAccounts).values(data as schema.InsertBankAccount).returning();
+    return result[0];
+  }
+
+  async updateBankAccount(id: string, data: Partial<schema.InsertBankAccount>): Promise<schema.BankAccount | undefined> {
+    const result = await db.update(schema.bankAccounts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.bankAccounts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteBankAccount(id: string): Promise<void> {
+    await db.delete(schema.bankAccounts).where(eq(schema.bankAccounts.id, id));
+  }
+
+  async getBankAccountBalance(id: string, asOfDate?: string): Promise<number> {
+    const account = await this.getBankAccount(id);
+    if (!account) return 0;
+    
+    const openingBalance = Number(account.openingBalance) || 0;
+    const openingDate = account.openingBalanceDate;
+    
+    const transactions = await this.getTransactionsByBankAccount(id);
+    
+    let balance = openingBalance;
+    const cutoffDate = asOfDate || new Date().toISOString().split('T')[0];
+    
+    for (const tx of transactions) {
+      const txDate = tx.transactionDate;
+      if (txDate && txDate <= cutoffDate) {
+        if (!openingDate || txDate >= openingDate) {
+          balance += Number(tx.amount) || 0;
+        }
+      }
+    }
+    
+    return balance;
   }
 
   async getTransactionsByBankAccount(bankAccountId: string): Promise<schema.Transaction[]> {
