@@ -17,6 +17,7 @@ export const paymentTypeEnum = pgEnum('payment_type', ['sepa', 'ueberweisung', '
 export const settlementStatusEnum = pgEnum('settlement_status', ['entwurf', 'berechnet', 'versendet', 'abgeschlossen']);
 export const subscriptionStatusEnum = pgEnum('subscription_status', ['trial', 'active', 'cancelled', 'expired']);
 export const subscriptionTierEnum = pgEnum('subscription_tier', ['starter', 'professional', 'enterprise']);
+export const userSubscriptionTierEnum = pgEnum('user_subscription_tier', ['trial', 'inactive', 'starter', 'pro', 'enterprise']);
 export const tenantStatusEnum = pgEnum('tenant_status', ['aktiv', 'leerstand', 'beendet']);
 export const unitTypeEnum = pgEnum('unit_type', ['wohnung', 'geschaeft', 'garage', 'stellplatz', 'lager', 'sonstiges']);
 export const mrgBkKategorieEnum = pgEnum('mrg_bk_kategorie', [
@@ -52,6 +53,11 @@ export const profiles = pgTable("profiles", {
   organizationId: uuid("organization_id").references(() => organizations.id),
   avatarUrl: text("avatar_url"),
   phone: text("phone"),
+  subscriptionTier: userSubscriptionTierEnum("subscription_tier").default('trial'),
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  subscriptionEndsAt: timestamp("subscription_ends_at", { withTimezone: true }),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
