@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 export interface Unit {
   id: string;
   propertyId: string;
+  property_id: string;
   topNummer: string;
+  top_nummer: string;
   type: 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
   status: 'aktiv' | 'leerstand' | 'beendet';
   flaeche: string | null;
@@ -14,15 +16,20 @@ export interface Unit {
   stockwerk: number | null;
   notes: string | null;
   createdAt: string;
+  created_at: string;
   updatedAt: string;
+  updated_at: string;
   tenants?: Tenant[];
 }
 
 export interface Tenant {
   id: string;
   unitId: string;
+  unit_id: string;
   firstName: string;
+  first_name: string;
   lastName: string;
+  last_name: string;
   email: string | null;
   phone: string | null;
   status: 'aktiv' | 'leerstand' | 'beendet';
@@ -30,7 +37,39 @@ export interface Tenant {
   mietende: string | null;
   grundmiete: string;
   betriebskostenVorschuss: string;
+  betriebskosten_vorschuss: string;
   heizungskostenVorschuss: string;
+  heizungskosten_vorschuss: string;
+}
+
+function normalizeUnit(u: any): Unit {
+  return {
+    ...u,
+    propertyId: u.propertyId ?? u.property_id ?? '',
+    property_id: u.propertyId ?? u.property_id ?? '',
+    topNummer: u.topNummer ?? u.top_nummer ?? '',
+    top_nummer: u.topNummer ?? u.top_nummer ?? '',
+    createdAt: u.createdAt ?? u.created_at ?? '',
+    created_at: u.createdAt ?? u.created_at ?? '',
+    updatedAt: u.updatedAt ?? u.updated_at ?? '',
+    updated_at: u.updatedAt ?? u.updated_at ?? '',
+  };
+}
+
+function normalizeTenantForUnit(t: any): Tenant {
+  return {
+    ...t,
+    unitId: t.unitId ?? t.unit_id ?? '',
+    unit_id: t.unitId ?? t.unit_id ?? '',
+    firstName: t.firstName ?? t.first_name ?? '',
+    first_name: t.firstName ?? t.first_name ?? '',
+    lastName: t.lastName ?? t.last_name ?? '',
+    last_name: t.lastName ?? t.last_name ?? '',
+    betriebskostenVorschuss: t.betriebskostenVorschuss ?? t.betriebskosten_vorschuss ?? '0',
+    betriebskosten_vorschuss: t.betriebskostenVorschuss ?? t.betriebskosten_vorschuss ?? '0',
+    heizungskostenVorschuss: t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
+    heizungskosten_vorschuss: t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
+  };
 }
 
 // Required: topNummer, propertyId. Optional: type, status, flaeche, zimmer, nutzwert, stockwerk, notes
@@ -54,14 +93,20 @@ export function useUnits(propertyId?: string) {
         const tenantsResponse = await fetch('/api/tenants', { credentials: 'include' });
         if (tenantsResponse.ok) {
           const tenants = await tenantsResponse.json();
-          return units.map((unit: Unit) => ({
-            ...unit,
-            tenants: tenants.filter((t: Tenant) => t.unitId === unit.id)
-          }));
+          const normalizedTenants = tenants.map(normalizeTenantForUnit);
+          return units.map((unit: any) => {
+            const normalizedUnit = normalizeUnit(unit);
+            return {
+              ...normalizedUnit,
+              tenants: normalizedTenants.filter((t: Tenant) => 
+                (t.unitId ?? t.unit_id) === normalizedUnit.id
+              )
+            };
+          });
         }
       }
       
-      return units;
+      return units.map(normalizeUnit);
     },
   });
 }

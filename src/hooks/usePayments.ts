@@ -6,24 +6,56 @@ import { allocatePayment, formatAllocationForDisplay, type InvoiceAmounts } from
 export interface Payment {
   id: string;
   tenantId: string;
+  tenant_id: string;
   invoiceId: string | null;
+  invoice_id: string | null;
   betrag: string;
   buchungsDatum: string;
+  buchungs_datum: string;
   eingangsDatum?: string;
+  eingangs_datum?: string;
   paymentType: 'sepa' | 'ueberweisung' | 'bar' | 'sonstiges';
+  payment_type: string;
   verwendungszweck: string | null;
   transactionId: string | null;
+  transaction_id: string | null;
   notizen: string | null;
   createdAt: string;
+  created_at: string;
   tenants?: {
     firstName: string;
+    first_name: string;
     lastName: string;
+    last_name: string;
     unitId: string;
+    unit_id: string;
     units?: {
       topNummer: string;
+      top_nummer: string;
       propertyId: string;
+      property_id: string;
       properties?: { name: string };
     };
+  };
+}
+
+function normalizePayment(p: any): Payment {
+  return {
+    ...p,
+    tenantId: p.tenantId ?? p.tenant_id ?? '',
+    tenant_id: p.tenantId ?? p.tenant_id ?? '',
+    invoiceId: p.invoiceId ?? p.invoice_id ?? null,
+    invoice_id: p.invoiceId ?? p.invoice_id ?? null,
+    buchungsDatum: p.buchungsDatum ?? p.buchungs_datum ?? '',
+    buchungs_datum: p.buchungsDatum ?? p.buchungs_datum ?? '',
+    eingangsDatum: p.eingangsDatum ?? p.eingangs_datum ?? undefined,
+    eingangs_datum: p.eingangsDatum ?? p.eingangs_datum ?? undefined,
+    paymentType: p.paymentType ?? p.payment_type ?? 'ueberweisung',
+    payment_type: p.paymentType ?? p.payment_type ?? 'ueberweisung',
+    transactionId: p.transactionId ?? p.transaction_id ?? null,
+    transaction_id: p.transactionId ?? p.transaction_id ?? null,
+    createdAt: p.createdAt ?? p.created_at ?? '',
+    created_at: p.createdAt ?? p.created_at ?? '',
   };
 }
 
@@ -61,20 +93,29 @@ export function usePayments() {
         const units = await unitsRes.json();
         const properties = await propsRes.json();
         
-        return payments.map((payment: Payment) => {
-          const tenant = tenants.find((t: any) => t.id === payment.tenantId);
-          const unit = tenant ? units.find((u: any) => u.id === tenant.unitId) : null;
-          const property = unit ? properties.find((p: any) => p.id === unit.propertyId) : null;
+        return payments.map((payment: any) => {
+          const normalizedPayment = normalizePayment(payment);
+          const paymentTenantId = normalizedPayment.tenantId ?? normalizedPayment.tenant_id;
+          const tenant = tenants.find((t: any) => t.id === paymentTenantId);
+          const tenantUnitId = tenant?.unitId ?? tenant?.unit_id;
+          const unit = tenantUnitId ? units.find((u: any) => u.id === tenantUnitId) : null;
+          const unitPropertyId = unit?.propertyId ?? unit?.property_id;
+          const property = unitPropertyId ? properties.find((p: any) => p.id === unitPropertyId) : null;
           
           return {
-            ...payment,
+            ...normalizedPayment,
             tenants: tenant ? {
-              firstName: tenant.firstName,
-              lastName: tenant.lastName,
-              unitId: tenant.unitId,
+              firstName: tenant.firstName ?? tenant.first_name,
+              first_name: tenant.firstName ?? tenant.first_name,
+              lastName: tenant.lastName ?? tenant.last_name,
+              last_name: tenant.lastName ?? tenant.last_name,
+              unitId: tenantUnitId,
+              unit_id: tenantUnitId,
               units: unit ? {
-                topNummer: unit.topNummer,
-                propertyId: unit.propertyId,
+                topNummer: unit.topNummer ?? unit.top_nummer,
+                top_nummer: unit.topNummer ?? unit.top_nummer,
+                propertyId: unitPropertyId,
+                property_id: unitPropertyId,
                 properties: property ? { name: property.name } : undefined
               } : undefined
             } : undefined
@@ -82,7 +123,7 @@ export function usePayments() {
         });
       }
       
-      return payments;
+      return payments.map(normalizePayment);
     },
   });
 }
