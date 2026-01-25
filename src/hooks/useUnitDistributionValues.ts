@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
+export const VS_COLUMN_TO_KEY_CODE: Record<string, string> = {
+  personenAnzahl: 'PERSONEN',
+  wasserVerbrauch: 'VERBRAUCH',
+  heizungVerbrauch: 'VERBRAUCH',
+  stromVerbrauch: 'VERBRAUCH',
+  gasVerbrauch: 'VERBRAUCH',
+  sondernutzung: 'SONDERNUTZUNG',
+};
+
 export interface UnitDistributionValue {
   id: string;
   unitId: string;
