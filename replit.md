@@ -11,6 +11,10 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
 - **Database**: PostgreSQL (Neon) with Drizzle ORM
 - **Frontend**: React with Vite, Tailwind CSS, shadcn/ui components
 
+## Recent Changes (January 2026)
+- Added Kautionsübersicht (security deposit) report showing all tenants with paid deposits (kaution_bezahlt = true)
+- Report includes PDF export functionality with property filtering support
+
 ## Tech Stack
 - **Backend**: Node.js, Express.js, TypeScript
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui
