@@ -449,6 +449,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Access denied" });
         }
       }
+      if (validationResult.data.distributionKeyId) {
+        const key = await storage.getDistributionKey(validationResult.data.distributionKeyId);
+        if (!key) {
+          return res.status(400).json({ error: "Invalid distribution key" });
+        }
+        if (!key.isSystem && key.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Distribution key access denied" });
+        }
+      }
       const expense = await storage.createExpense(validationResult.data);
       res.json(expense);
     } catch (error) {
@@ -483,6 +492,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validationResult = insertExpenseSchema.partial().safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      if (validationResult.data.distributionKeyId) {
+        const key = await storage.getDistributionKey(validationResult.data.distributionKeyId);
+        if (!key) {
+          return res.status(400).json({ error: "Invalid distribution key" });
+        }
+        if (!key.isSystem && key.organizationId !== profile?.organizationId) {
+          return res.status(403).json({ error: "Distribution key access denied" });
+        }
       }
       const expense = await storage.updateExpense(req.params.id, validationResult.data);
       res.json(expense);
@@ -970,6 +988,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete distribution key" });
+    }
+  });
+
+  app.get("/api/units/:unitId/distribution-values", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.unitId);
+      if (!unit) return res.status(404).json({ error: "Unit not found" });
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const values = await storage.getUnitDistributionValues(req.params.unitId);
+      res.json(values);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unit distribution values" });
+    }
+  });
+
+  app.get("/api/properties/:propertyId/distribution-values", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const values = await storage.getUnitDistributionValuesByProperty(req.params.propertyId);
+      res.json(values);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch property distribution values" });
+    }
+  });
+
+  app.post("/api/units/:unitId/distribution-values", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.unitId);
+      if (!unit) return res.status(404).json({ error: "Unit not found" });
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const { keyId, value } = req.body;
+      if (!keyId) return res.status(400).json({ error: "keyId is required" });
+      const key = await storage.getDistributionKey(keyId);
+      if (!key) return res.status(400).json({ error: "Invalid distribution key" });
+      if (!key.isSystem && key.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Distribution key access denied" });
+      }
+      const result = await storage.upsertUnitDistributionValue({
+        unitId: req.params.unitId,
+        keyId,
+        value: value?.toString() || '0'
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save unit distribution value" });
+    }
+  });
+
+  app.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.unitId);
+      if (!unit) return res.status(404).json({ error: "Unit not found" });
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.deleteUnitDistributionValue(req.params.unitId, req.params.keyId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete unit distribution value" });
     }
   });
 
