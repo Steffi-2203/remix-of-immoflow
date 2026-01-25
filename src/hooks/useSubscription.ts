@@ -69,6 +69,9 @@ export function useSubscription(): SubscriptionInfo {
 export function useCanAccessFeature(requiredTier: SubscriptionTier = 'starter'): boolean {
   const { tier, canAccessFullFeatures } = useSubscription();
   
+  // Check if user is admin - admins always have full access
+  // We need to import useIsAdmin but to avoid circular deps, we check localStorage or make a simple fetch
+  // For now, just check the subscription
   if (!canAccessFullFeatures) return false;
   
   const tierOrder: SubscriptionTier[] = ['starter', 'professional', 'enterprise'];
