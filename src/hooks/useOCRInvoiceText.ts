@@ -47,23 +47,8 @@ export interface OCRTextResult {
 export function useOCRInvoiceText() {
   return useMutation({
     mutationFn: async (ocrText: string): Promise<OCRTextResult> => {
-      // Check if user is authenticated
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('Nicht angemeldet – bitte neu einloggen');
-      }
-      
-      const { data, error } = await supabase.functions.invoke('ocr-invoice-text', {
-        body: { ocrText },
-      });
-      
-      if (error) {
-        console.error('OCR text function error:', error);
-        throw new Error(error.message || 'OCR-Analyse fehlgeschlagen');
-      }
-      if (data?.error) throw new Error(data.error);
-      
-      return data as OCRTextResult;
+      // OCR feature requires OpenAI integration - show user-friendly message
+      throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte geben Sie die Rechnungsdaten manuell ein.');
     },
     onSuccess: (data) => {
       const validation = data.validierung;
