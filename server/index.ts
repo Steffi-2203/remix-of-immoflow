@@ -1,19 +1,28 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 import { setupAuth } from "./auth";
+import { pool } from "./db";
 
 const app = express();
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'immoflowme-secret-key-change-in-production';
 
+const PgSession = connectPgSimple(session);
+
 app.set("trust proxy", 1);
 
 app.use(session({
+  store: new PgSession({
+    pool: pool as any,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+  }),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
