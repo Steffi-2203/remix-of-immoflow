@@ -71,9 +71,17 @@ export function checkFeatureAccess(
   }
 }
 
+async function fetchUserProfile(): Promise<UserProfile | null> {
+  const response = await fetch('/api/auth/user', { credentials: 'include' });
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error('Failed to fetch user');
+  return response.json();
+}
+
 export function usePaymentPhase() {
-  const { data: profile } = useQuery<UserProfile>({
+  const { data: profile } = useQuery<UserProfile | null>({
     queryKey: ['/api/auth/user'],
+    queryFn: fetchUserProfile,
   });
 
   const paymentStatus = profile?.paymentStatus;
@@ -104,8 +112,9 @@ export function PaymentStatusBanner() {
   const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
 
-  const { data: profile } = useQuery<UserProfile>({
+  const { data: profile } = useQuery<UserProfile | null>({
     queryKey: ['/api/auth/user'],
+    queryFn: fetchUserProfile,
   });
 
   const paymentStatus = profile?.paymentStatus;
