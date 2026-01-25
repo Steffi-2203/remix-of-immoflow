@@ -2366,7 +2366,7 @@ export default function Reports() {
               activeTenants.forEach(tenant => {
                 const grundmiete = Number(tenant.grundmiete) || 0;
                 const bk = Number(tenant.betriebskostenVorschuss) || 0;
-                const hk = Number(tenant.heizungskostenVorschuss) || 0;
+                const hk = Number(tenant.heizkostenVorschuss) || 0;
                 const gesamt = grundmiete + bk + hk;
 
                 if (gesamt > 0) {
