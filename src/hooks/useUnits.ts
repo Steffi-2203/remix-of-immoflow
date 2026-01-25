@@ -33,7 +33,8 @@ export interface Tenant {
   heizungskostenVorschuss: string;
 }
 
-export type UnitInsert = Omit<Unit, 'id' | 'createdAt' | 'updatedAt' | 'tenants'>;
+// Required: topNummer, propertyId. Optional: type, status, flaeche, zimmer, nutzwert, stockwerk, notes
+export type UnitInsert = Pick<Unit, 'topNummer' | 'propertyId'> & Partial<Pick<Unit, 'type' | 'status' | 'flaeche' | 'zimmer' | 'nutzwert' | 'stockwerk' | 'notes'>>;
 export type UnitUpdate = Partial<UnitInsert>;
 
 export function useUnits(propertyId?: string) {
