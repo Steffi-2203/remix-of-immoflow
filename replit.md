@@ -33,6 +33,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - **Settlement PDFs**: MRG §21 compliant Betriebskostenabrechnung templates with detailed expense breakdowns and per-tenant cost allocation.
     - **Automated Dunning**: A 3-level escalation system for overdue payments with ABGB §1333 interest calculation and automatic email sending.
     - **VPI Automation**: Monitoring of Austrian consumer price index (VPI) for automatic rent adjustment triggers and notification letter generation.
+    - **MieWeG-Indexierungsrechner**: Calculation tool for rent increases under the 2026 Mieten-Wertsicherungsgesetz with Hälfteregelung (50% rule for inflation > 3%), 2026/2027 caps for Kategorie/Richtwert (1%/2%), April 1 rule, and annual limit enforcement.
     - **Reporting**: Owner reporting with financial summaries and specific reports for contract expiration, security deposits, and meter readings.
     - **Export Formats**: BMD NTCS CSV and DATEV ASCII export formats for accounting software integration.
     - **FinanzOnline Integration**: USt-Voranmeldung XML generation (Form U30) with Austrian tax authority compliance.
