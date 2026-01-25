@@ -143,13 +143,17 @@ export default function PaymentList() {
 
   // Filter payments by property and current month (same as Reports logic)
   const filteredPayments = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    
     let filtered = (payments || []).filter(p => {
       const date = new Date(p.eingangs_datum);
-      return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      const paymentMonth = date.getMonth() + 1;
+      const paymentYear = date.getFullYear();
+      
+      // In 'year' viewMode, show all payments for the selected year
+      // In 'month' viewMode, filter by both month and year
+      if (viewMode === 'year') {
+        return paymentYear === selectedYear;
+      }
+      return paymentMonth === selectedMonth && paymentYear === selectedYear;
     });
     
     // Filter by property if selected
@@ -174,7 +178,7 @@ export default function PaymentList() {
     }
     
     return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
-  }, [payments, propertyUnitIds, tenants, searchQuery]);
+  }, [payments, propertyUnitIds, tenants, searchQuery, selectedYear, selectedMonth, viewMode]);
 
   // Use central MRG allocation hook for consistent logic with Reports (monthly)
   const { allocations: mrgAllocationsMonthly, totals: mrgTotalsMonthly, isLoading: mrgLoadingMonthly } = useMrgAllocation(
