@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, isNull } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 export interface IStorage {
@@ -48,29 +48,41 @@ class DatabaseStorage implements IStorage {
   }
 
   async getProperties(): Promise<schema.Property[]> {
-    return db.select().from(schema.properties).orderBy(asc(schema.properties.name));
+    return db.select().from(schema.properties)
+      .where(isNull(schema.properties.deletedAt))
+      .orderBy(asc(schema.properties.name));
   }
 
   async getPropertiesByOrganization(organizationId?: string): Promise<schema.Property[]> {
     if (!organizationId) return [];
     return db.select().from(schema.properties)
-      .where(eq(schema.properties.organizationId, organizationId))
+      .where(and(
+        eq(schema.properties.organizationId, organizationId),
+        isNull(schema.properties.deletedAt)
+      ))
       .orderBy(asc(schema.properties.name));
   }
 
   async getProperty(id: string): Promise<schema.Property | undefined> {
-    const result = await db.select().from(schema.properties).where(eq(schema.properties.id, id)).limit(1);
+    const result = await db.select().from(schema.properties)
+      .where(and(eq(schema.properties.id, id), isNull(schema.properties.deletedAt)))
+      .limit(1);
     return result[0];
   }
 
   async getUnitsByProperty(propertyId: string): Promise<schema.Unit[]> {
     return db.select().from(schema.units)
-      .where(eq(schema.units.propertyId, propertyId))
+      .where(and(
+        eq(schema.units.propertyId, propertyId),
+        isNull(schema.units.deletedAt)
+      ))
       .orderBy(asc(schema.units.topNummer));
   }
 
   async getTenants(): Promise<schema.Tenant[]> {
-    return db.select().from(schema.tenants).orderBy(asc(schema.tenants.lastName));
+    return db.select().from(schema.tenants)
+      .where(isNull(schema.tenants.deletedAt))
+      .orderBy(asc(schema.tenants.lastName));
   }
 
   async getTenantsByOrganization(organizationId?: string): Promise<schema.Tenant[]> {
@@ -80,7 +92,10 @@ class DatabaseStorage implements IStorage {
     const allTenants: schema.Tenant[] = [];
     for (const unit of units) {
       const tenants = await db.select().from(schema.tenants)
-        .where(eq(schema.tenants.unitId, unit.id))
+        .where(and(
+          eq(schema.tenants.unitId, unit.id),
+          isNull(schema.tenants.deletedAt)
+        ))
         .orderBy(asc(schema.tenants.lastName));
       allTenants.push(...tenants);
     }
@@ -88,13 +103,18 @@ class DatabaseStorage implements IStorage {
   }
 
   async getTenant(id: string): Promise<schema.Tenant | undefined> {
-    const result = await db.select().from(schema.tenants).where(eq(schema.tenants.id, id)).limit(1);
+    const result = await db.select().from(schema.tenants)
+      .where(and(eq(schema.tenants.id, id), isNull(schema.tenants.deletedAt)))
+      .limit(1);
     return result[0];
   }
 
   async getTenantsByUnit(unitId: string): Promise<schema.Tenant[]> {
     return db.select().from(schema.tenants)
-      .where(eq(schema.tenants.unitId, unitId))
+      .where(and(
+        eq(schema.tenants.unitId, unitId),
+        isNull(schema.tenants.deletedAt)
+      ))
       .orderBy(desc(schema.tenants.createdAt));
   }
 
@@ -248,7 +268,10 @@ class DatabaseStorage implements IStorage {
     const allUnits: schema.Unit[] = [];
     for (const prop of properties) {
       const units = await db.select().from(schema.units)
-        .where(eq(schema.units.propertyId, prop.id))
+        .where(and(
+          eq(schema.units.propertyId, prop.id),
+          isNull(schema.units.deletedAt)
+        ))
         .orderBy(asc(schema.units.topNummer));
       allUnits.push(...units);
     }
@@ -532,12 +555,14 @@ class DatabaseStorage implements IStorage {
 
   async getUnit(id: string): Promise<schema.Unit | undefined> {
     const result = await db.select().from(schema.units)
-      .where(eq(schema.units.id, id)).limit(1);
+      .where(and(eq(schema.units.id, id), isNull(schema.units.deletedAt)))
+      .limit(1);
     return result[0];
   }
 
   async getUnits(): Promise<schema.Unit[]> {
     return db.select().from(schema.units)
+      .where(isNull(schema.units.deletedAt))
       .orderBy(asc(schema.units.topNummer));
   }
 
