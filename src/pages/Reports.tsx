@@ -68,6 +68,8 @@ import {
 import { useBankAccounts } from '@/hooks/useBankAccounts';
 import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
+import { exportToCSV, formatDate, formatCurrency as formatCurrencyCSV } from '@/utils/csvExport';
+import { FileSpreadsheet } from 'lucide-react';
 
 // Berechnet Netto aus Brutto
 const calculateNetFromGross = (gross: number, vatRate: number): number => {
@@ -2478,10 +2480,42 @@ export default function Reports() {
                       Alle Mieter mit bezahlter Kaution
                     </p>
                   </div>
-                  <Button onClick={handleExportPdf} variant="outline" data-testid="button-kaution-export-pdf">
-                    <Download className="h-4 w-4 mr-2" />
-                    PDF Export
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handleExportPdf} variant="outline" data-testid="button-kaution-export-pdf">
+                      <Download className="h-4 w-4 mr-2" />
+                      PDF
+                    </Button>
+                    <Button 
+                      onClick={() => {
+                        const csvData = sortedTenants.map(tenant => {
+                          const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
+                          const property = (properties || []).find(p => p.id === unit?.property_id);
+                          return {
+                            liegenschaft: property?.name || '',
+                            einheit: unit?.top_nummer || '',
+                            vorname: tenant.first_name,
+                            nachname: tenant.last_name,
+                            mietbeginn: tenant.mietbeginn || '',
+                            kaution: Number(tenant.kaution || 0),
+                          };
+                        });
+                        exportToCSV(csvData, `Kautionsuebersicht_${new Date().toISOString().split('T')[0]}`, {
+                          liegenschaft: 'Liegenschaft',
+                          einheit: 'Einheit',
+                          vorname: 'Vorname',
+                          nachname: 'Nachname',
+                          mietbeginn: 'Mietbeginn',
+                          kaution: 'Kaution (€)',
+                        });
+                        toast.success('CSV wurde exportiert');
+                      }} 
+                      variant="outline" 
+                      data-testid="button-kaution-export-csv"
+                    >
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      CSV
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Summary Cards */}
@@ -2619,6 +2653,39 @@ export default function Reports() {
                       Mietverträge die in den nächsten 6 Monaten auslaufen
                     </p>
                   </div>
+                  <Button 
+                    onClick={() => {
+                      const csvData = sortedTenants.map(tenant => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unit_id);
+                        const property = (properties || []).find(p => p.id === unit?.property_id);
+                        return {
+                          liegenschaft: property?.name || '',
+                          einheit: unit?.top_nummer || '',
+                          vorname: tenant.first_name,
+                          nachname: tenant.last_name,
+                          mietbeginn: tenant.mietbeginn || '',
+                          mietende: tenant.mietende || '',
+                          tage_verbleibend: getDaysUntilEnd(tenant.mietende!),
+                        };
+                      });
+                      exportToCSV(csvData, `Vertragsablauf_${new Date().toISOString().split('T')[0]}`, {
+                        liegenschaft: 'Liegenschaft',
+                        einheit: 'Einheit',
+                        vorname: 'Vorname',
+                        nachname: 'Nachname',
+                        mietbeginn: 'Mietbeginn',
+                        mietende: 'Mietende',
+                        tage_verbleibend: 'Tage verbleibend',
+                      });
+                      toast.success('CSV wurde exportiert');
+                    }} 
+                    variant="outline" 
+                    data-testid="button-vertragsablauf-export-csv"
+                    disabled={sortedTenants.length === 0}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV Export
+                  </Button>
                 </div>
 
                 {/* Summary Cards */}
