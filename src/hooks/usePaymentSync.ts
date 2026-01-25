@@ -201,24 +201,36 @@ export function usePaymentSync() {
         throw new Error('Mieteinnahmen-Kategorie nicht gefunden');
       }
 
-      const [paymentsRes, transactionsRes] = await Promise.all([
+      const [paymentsRes, transactionsRes, tenantsRes, unitsRes] = await Promise.all([
         fetch('/api/payments', { credentials: 'include' }),
         fetch('/api/transactions', { credentials: 'include' }),
+        fetch('/api/tenants', { credentials: 'include' }),
+        fetch('/api/units', { credentials: 'include' }),
       ]);
 
       const payments = await paymentsRes.json();
       const transactions = await transactionsRes.json();
+      const tenants = await tenantsRes.json();
+      const units = await unitsRes.json();
+
+      const tenantMap = new Map<string, any>(tenants.map((t: any) => [t.id, t]));
+      const unitMap = new Map<string, any>(units.map((u: any) => [u.id, u]));
 
       let synced = 0;
       let skipped = 0;
 
       for (const payment of payments) {
-        const existingTransaction = transactions.find((t: any) =>
-          t.tenantId === payment.tenantId &&
-          t.categoryId === mieteinnahmenCategory.id &&
-          Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01 &&
-          (t.transactionDate === payment.eingangsDatum || t.transactionDate === payment.buchungsDatum)
-        );
+        // Support both camelCase and snake_case for payment.tenantId
+        const paymentTenantId = payment.tenantId || payment.tenant_id;
+        
+        const existingTransaction = transactions.find((t: any) => {
+          const txTenantId = t.tenantId || t.tenant_id;
+          return txTenantId === paymentTenantId &&
+            t.categoryId === mieteinnahmenCategory.id &&
+            Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01 &&
+            (t.transactionDate === payment.eingangsDatum || t.transactionDate === payment.buchungsDatum ||
+             t.transactionDate === payment.eingangs_datum || t.transactionDate === payment.buchungs_datum);
+        });
 
         if (existingTransaction) {
           skipped++;
@@ -226,18 +238,24 @@ export function usePaymentSync() {
         }
 
         try {
-          const unitId = payment.tenants?.unitId || null;
-          const propertyId = payment.tenants?.units?.propertyId || null;
+          const tenant = tenantMap.get(paymentTenantId);
+          const unitId = tenant?.unitId || tenant?.unit_id || null;
+          const unit = unitId ? unitMap.get(unitId) : null;
+          const propertyId = unit?.propertyId || unit?.property_id || null;
 
+          // Normalize date fields for both camelCase and snake_case
+          const transactionDate = payment.eingangsDatum || payment.eingangs_datum || payment.buchungsDatum || payment.buchungs_datum;
+          const bookingDate = payment.buchungsDatum || payment.buchungs_datum;
+          
           await apiRequest('POST', '/api/transactions', {
             organizationId: organization.id,
             unitId: unitId,
-            tenantId: payment.tenantId,
+            tenantId: paymentTenantId,
             propertyId: propertyId,
             amount: payment.betrag,
             currency: 'EUR',
-            transactionDate: payment.eingangsDatum || payment.buchungsDatum,
-            bookingDate: payment.buchungsDatum,
+            transactionDate: transactionDate,
+            bookingDate: bookingDate,
             description: `Mietzahlung ${payment.verwendungszweck || ''}`.trim(),
             reference: payment.verwendungszweck || null,
             categoryId: mieteinnahmenCategory.id,
