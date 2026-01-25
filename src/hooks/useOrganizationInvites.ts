@@ -1,24 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from './useAuth';
-import { useOrganization } from './useOrganization';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
-export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
+export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
 
 export interface OrganizationInvite {
   id: string;
-  organization_id: string;
+  organizationId: string;
   email: string;
   role: AppRole;
-  invited_by: string | null;
+  invitedBy: string | null;
   token: string;
-  expires_at: string;
-  accepted_at: string | null;
-  created_at: string;
-  organization?: {
-    name: string;
-  };
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+  status: string;
 }
 
 export const ROLE_LABELS: Record<AppRole, string> = {
@@ -26,6 +22,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   property_manager: 'Hausverwalter',
   finance: 'Buchhalter',
   viewer: 'Betrachter',
+  tester: 'Tester',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
@@ -33,119 +30,42 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   property_manager: 'Verwaltung von Immobilien, Einheiten und Mietern',
   finance: 'Zugriff auf Banking, SEPA, Rechnungen und Finanzdaten',
   viewer: 'Nur Leserechte, sensible Daten maskiert',
+  tester: 'Testmodus mit maskierten personenbezogenen Daten',
 };
 
-// Fetch pending invites for the current organization
 export function usePendingInvites() {
-  const { data: organization } = useOrganization();
-
-  return useQuery({
-    queryKey: ['organization_invites', organization?.id],
-    queryFn: async () => {
-      if (!organization?.id) return [];
-
-      const { data, error } = await supabase
-        .from('organization_invites')
-        .select('*')
-        .eq('organization_id', organization.id)
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data as OrganizationInvite[];
-    },
-    enabled: !!organization?.id,
+  return useQuery<OrganizationInvite[]>({
+    queryKey: ['/api/invites'],
   });
 }
 
-// Fetch a single invite by token (for registration)
 export function useInviteByToken(token: string | null) {
-  return useQuery({
-    queryKey: ['organization_invite_token', token],
+  return useQuery<OrganizationInvite | null>({
+    queryKey: ['/api/invites/token', token],
     queryFn: async () => {
       if (!token) return null;
-
-      const { data, error } = await supabase
-        .from('organization_invites')
-        .select(`
-          *,
-          organization:organizations(name)
-        `)
-        .eq('token', token)
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle();
-
-      if (error) throw error;
-      return data as (OrganizationInvite & { organization: { name: string } }) | null;
+      const response = await fetch(`/api/invites/token/${token}`);
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Fehler beim Laden der Einladung');
+      }
+      return response.json();
     },
     enabled: !!token,
   });
 }
 
-// Create a new invite
 export function useCreateInvite() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const { data: organization } = useOrganization();
 
   return useMutation({
     mutationFn: async (data: { email: string; role: AppRole }) => {
-      if (!organization?.id || !user?.id) {
-        throw new Error('Organisation oder Benutzer nicht gefunden');
-      }
-
-      // Check if invite already exists
-      const { data: existing } = await supabase
-        .from('organization_invites')
-        .select('id')
-        .eq('organization_id', organization.id)
-        .eq('email', data.email.toLowerCase())
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle();
-
-      if (existing) {
-        throw new Error('Eine Einladung für diese E-Mail-Adresse existiert bereits');
-      }
-
-      // Create the invite
-      const { data: invite, error } = await supabase
-        .from('organization_invites')
-        .insert({
-          organization_id: organization.id,
-          email: data.email.toLowerCase(),
-          role: data.role,
-          invited_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Call edge function to send email
-      const baseUrl = window.location.origin;
-      const { error: emailError } = await supabase.functions.invoke('send-invite', {
-        body: {
-          email: data.email.toLowerCase(),
-          inviteToken: invite.token,
-          organizationName: organization.name,
-          role: data.role,
-          baseUrl,
-        },
-      });
-
-      if (emailError) {
-        console.error('Email send error:', emailError);
-        // Don't throw - invite was created, email just failed
-        toast.warning('Einladung erstellt, aber E-Mail konnte nicht gesendet werden');
-      }
-
-      return invite;
+      const response = await apiRequest('POST', '/api/invites', data);
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization_invites'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invites'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/organization/members'] });
       toast.success('Einladung erfolgreich gesendet');
     },
     onError: (error) => {
@@ -155,61 +75,17 @@ export function useCreateInvite() {
   });
 }
 
-// Accept an invite (called after registration)
 export function useAcceptInvite() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (token: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Nicht angemeldet');
-
-      // Get the invite
-      const { data: invite, error: inviteError } = await supabase
-        .from('organization_invites')
-        .select('*')
-        .eq('token', token)
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .single();
-
-      if (inviteError || !invite) {
-        throw new Error('Einladung nicht gefunden oder abgelaufen');
-      }
-
-      // Update user's profile with organization
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ organization_id: invite.organization_id })
-        .eq('id', user.id);
-
-      if (profileError) throw profileError;
-
-      // Add user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .upsert({
-          user_id: user.id,
-          role: invite.role,
-        }, {
-          onConflict: 'user_id,role',
-        });
-
-      if (roleError) throw roleError;
-
-      // Mark invite as accepted
-      const { error: acceptError } = await supabase
-        .from('organization_invites')
-        .update({ accepted_at: new Date().toISOString() })
-        .eq('id', invite.id);
-
-      if (acceptError) throw acceptError;
-
-      return invite;
+      const response = await apiRequest('POST', `/api/invites/${token}/accept`, {});
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization'] });
-      queryClient.invalidateQueries({ queryKey: ['user_role'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profile'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profile/organization'] });
       toast.success('Einladung erfolgreich angenommen');
     },
     onError: (error) => {
@@ -219,21 +95,15 @@ export function useAcceptInvite() {
   });
 }
 
-// Delete/revoke an invite
 export function useDeleteInvite() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (inviteId: string) => {
-      const { error } = await supabase
-        .from('organization_invites')
-        .delete()
-        .eq('id', inviteId);
-
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/invites/${inviteId}`, undefined);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization_invites'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invites'] });
       toast.success('Einladung widerrufen');
     },
     onError: (error) => {

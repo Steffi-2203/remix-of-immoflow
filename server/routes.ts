@@ -706,6 +706,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/invites/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userEmail = req.user?.claims?.email;
+      const profile = await storage.getProfileByEmail(userEmail);
+      
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "No organization found" });
+      }
+      
+      const roles = await storage.getUserRoles(profile.id);
+      if (!roles.some(r => r.role === 'admin')) {
+        return res.status(403).json({ error: "Only admins can delete invites" });
+      }
+      
+      await storage.deleteInvite(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete invite error:", error);
+      res.status(500).json({ error: "Failed to delete invite" });
+    }
+  });
+
+  app.get("/api/invites/token/:token", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      
+      if (!invite) {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      
+      if (invite.status !== 'pending') {
+        return res.status(400).json({ error: "Invite is no longer valid" });
+      }
+      
+      if (new Date(invite.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Invite has expired" });
+      }
+      
+      const org = await storage.getOrganization(invite.organizationId);
+      res.json({ ...invite, organizationName: org?.name });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch invite" });
+    }
+  });
+
   app.get("/api/organization/members", isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.user?.claims?.email;
