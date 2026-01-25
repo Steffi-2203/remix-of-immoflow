@@ -43,6 +43,8 @@ export type TenantUpdate = Partial<TenantInsert>;
 export function useTenants() {
   return useQuery({
     queryKey: ['tenants'],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
       const response = await fetch('/api/tenants', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenants');

@@ -39,6 +39,8 @@ export type UnitUpdate = Partial<UnitInsert>;
 export function useUnits(propertyId?: string) {
   return useQuery({
     queryKey: ['units', propertyId],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
       const url = propertyId 
         ? `/api/properties/${propertyId}/units`

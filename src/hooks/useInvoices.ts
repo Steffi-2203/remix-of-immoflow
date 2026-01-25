@@ -39,6 +39,8 @@ export type InvoiceUpdate = Partial<InvoiceInsert>;
 export function useInvoices(year?: number, month?: number) {
   return useQuery({
     queryKey: ['invoices', year, month],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
       let url = '/api/invoices';
       const params = new URLSearchParams();

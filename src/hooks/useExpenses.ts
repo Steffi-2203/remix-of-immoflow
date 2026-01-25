@@ -63,6 +63,8 @@ export interface ExpenseUpdate extends Partial<ExpenseInsert> {
 export function useExpenses(propertyId?: string, year?: number, month?: number) {
   return useQuery({
     queryKey: ['expenses', propertyId, year, month],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
       let url = propertyId ? `/api/properties/${propertyId}/expenses` : '/api/expenses';
       const params = new URLSearchParams();
