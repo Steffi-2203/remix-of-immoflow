@@ -16,6 +16,7 @@ import { DataQualityWidget } from "@/components/dashboard/DataQualityWidget";
 import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
 import { UpcomingMaintenanceWidget } from "@/components/dashboard/UpcomingMaintenanceWidget";
 import { CalendarWidget } from "@/components/dashboard/CalendarWidget";
+import { PropertyKPIsWidget } from "@/components/dashboard/PropertyKPIsWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -207,8 +208,13 @@ export default function SimpleDashboard() {
           </CardContent>
         </Card>
 
+        {/* Property KPIs Widget */}
+        <PropertyKPIsWidget />
+
         {/* Sync Status Widget */}
-        <SyncStatusWidget />
+        <div className="mt-6">
+          <SyncStatusWidget />
+        </div>
 
         {/* Data Quality Widget */}
         <div className="mt-6">
