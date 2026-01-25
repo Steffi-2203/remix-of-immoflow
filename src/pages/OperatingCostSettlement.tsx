@@ -21,7 +21,6 @@ import {
 import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw, RefreshCcw } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
-import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { 
