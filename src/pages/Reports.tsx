@@ -209,7 +209,9 @@ export default function Reports() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
   const [selectedMonth, setSelectedMonth] = useState<number>(12); // Default to December 2025
-  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'quarterly' | 'halfyearly' | 'yearly'>('monthly');
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(4); // Q1=1, Q2=2, Q3=3, Q4=4
+  const [selectedHalfYear, setSelectedHalfYear] = useState<number>(2); // H1=1, H2=2
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [isGeneratingInvoices, setIsGeneratingInvoices] = useState(false);
   
@@ -954,7 +956,9 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            selectedQuarter,
+            selectedHalfYear
           );
           toast.success('USt-Voranmeldung wurde erstellt');
           break;
@@ -976,7 +980,9 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            selectedQuarter,
+            selectedHalfYear
           );
           toast.success('Offene Posten Liste wurde erstellt');
           break;
@@ -1098,9 +1104,11 @@ export default function Reports() {
         {/* Period Toggle */}
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-muted-foreground" />
-          <Tabs value={reportPeriod} onValueChange={(v) => setReportPeriod(v as 'monthly' | 'yearly')}>
+          <Tabs value={reportPeriod} onValueChange={(v) => setReportPeriod(v as 'monthly' | 'quarterly' | 'halfyearly' | 'yearly')}>
             <TabsList>
               <TabsTrigger value="monthly">Monatlich</TabsTrigger>
+              <TabsTrigger value="quarterly">Quartal</TabsTrigger>
+              <TabsTrigger value="halfyearly">Halbjahr</TabsTrigger>
               <TabsTrigger value="yearly">Jährlich</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1132,6 +1140,34 @@ export default function Reports() {
                   {month}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Quarter Selection */}
+        {reportPeriod === 'quarterly' && (
+          <Select value={selectedQuarter.toString()} onValueChange={(v) => setSelectedQuarter(parseInt(v))}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Q1 (Jan-Mär)</SelectItem>
+              <SelectItem value="2">Q2 (Apr-Jun)</SelectItem>
+              <SelectItem value="3">Q3 (Jul-Sep)</SelectItem>
+              <SelectItem value="4">Q4 (Okt-Dez)</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Half Year Selection */}
+        {reportPeriod === 'halfyearly' && (
+          <Select value={selectedHalfYear.toString()} onValueChange={(v) => setSelectedHalfYear(parseInt(v))}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1. Halbjahr (Jan-Jun)</SelectItem>
+              <SelectItem value="2">2. Halbjahr (Jul-Dez)</SelectItem>
             </SelectContent>
           </Select>
         )}

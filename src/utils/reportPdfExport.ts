@@ -193,13 +193,17 @@ export const generateRenditeReport = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
   selectedMonth?: number,
   expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF();
   const periodLabel = reportPeriod === 'yearly' 
     ? `Jahr ${selectedYear}` 
+    : reportPeriod === 'quarterly'
+    ? `Quartal ${selectedYear}`
+    : reportPeriod === 'halfyearly'
+    ? `Halbjahr ${selectedYear}`
     : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
@@ -467,13 +471,17 @@ export const generateUmsatzReport = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
   selectedMonth?: number,
   expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF('landscape');
   const periodLabel = reportPeriod === 'yearly' 
     ? `Jahr ${selectedYear}` 
+    : reportPeriod === 'quarterly'
+    ? `Quartal ${selectedYear}`
+    : reportPeriod === 'halfyearly'
+    ? `Halbjahr ${selectedYear}`
     : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
@@ -717,13 +725,44 @@ export const generateUstVoranmeldung = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
-  selectedMonth?: number
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
+  selectedMonth?: number,
+  selectedQuarter?: number,
+  selectedHalfYear?: number
 ) => {
   const doc = new jsPDF();
-  const periodLabel = reportPeriod === 'yearly' 
-    ? `Jahr ${selectedYear}` 
-    : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
+  
+  let periodLabel: string;
+  let startMonth: number;
+  let endMonth: number;
+  
+  switch (reportPeriod) {
+    case 'monthly':
+      periodLabel = `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
+      startMonth = selectedMonth || 1;
+      endMonth = selectedMonth || 1;
+      break;
+    case 'quarterly':
+      const quarter = selectedQuarter || 1;
+      periodLabel = `Q${quarter}/${selectedYear} (${['Jan-Mär', 'Apr-Jun', 'Jul-Sep', 'Okt-Dez'][quarter - 1]})`;
+      startMonth = (quarter - 1) * 3 + 1;
+      endMonth = quarter * 3;
+      break;
+    case 'halfyearly':
+      const halfYear = selectedHalfYear || 1;
+      periodLabel = `${halfYear}. Halbjahr ${selectedYear} (${halfYear === 1 ? 'Jan-Jun' : 'Jul-Dez'})`;
+      startMonth = halfYear === 1 ? 1 : 7;
+      endMonth = halfYear === 1 ? 6 : 12;
+      break;
+    case 'yearly':
+    default:
+      periodLabel = `Jahr ${selectedYear}`;
+      startMonth = 1;
+      endMonth = 12;
+      break;
+  }
+  
+  const monthCount = endMonth - startMonth + 1;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   
@@ -769,17 +808,22 @@ export const generateUstVoranmeldung = (
     const bk = Number(tenant.betriebskosten_vorschuss || 0);
     const heizung = Number(tenant.heizungskosten_vorschuss || 0);
     
-    // Bei yearly: Multiplikator für relevante Monate berechnen
+    // Multiplikator für relevante Monate im Zeitraum berechnen
     let multiplier = 1;
-    if (reportPeriod === 'yearly') {
-      // Berechne wie viele Monate der Mieter im Jahr aktiv war
+    if (reportPeriod !== 'monthly') {
+      // Berechne wie viele Monate der Mieter im gewählten Zeitraum aktiv war
       const mietbeginn = tenant.mietbeginn ? new Date(tenant.mietbeginn) : new Date(selectedYear, 0, 1);
       const mietende = tenant.mietende ? new Date(tenant.mietende) : new Date(selectedYear, 11, 31);
       
-      const startMonth = mietbeginn.getFullYear() < selectedYear ? 1 : mietbeginn.getMonth() + 1;
-      const endMonth = mietende.getFullYear() > selectedYear ? 12 : mietende.getMonth() + 1;
+      // Tenant-Aktivitätszeitraum
+      const tenantStartMonth = mietbeginn.getFullYear() < selectedYear ? 1 : mietbeginn.getMonth() + 1;
+      const tenantEndMonth = mietende.getFullYear() > selectedYear ? 12 : mietende.getMonth() + 1;
       
-      multiplier = Math.max(0, endMonth - startMonth + 1);
+      // Überlappung mit Berichtszeitraum berechnen
+      const effectiveStart = Math.max(tenantStartMonth, startMonth);
+      const effectiveEnd = Math.min(tenantEndMonth, endMonth);
+      
+      multiplier = Math.max(0, effectiveEnd - effectiveStart + 1);
     }
     
     bruttoGrundmiete += miete * multiplier;
@@ -1086,15 +1130,46 @@ export const generateOffenePostenReport = (
   combinedPayments: CombinedPaymentData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
-  selectedMonth: number
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
+  selectedMonth: number,
+  selectedQuarter?: number,
+  selectedHalfYear?: number
 ) => {
   const doc = new jsPDF('landscape');
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   
-  const periodLabel = reportPeriod === 'monthly' 
-    ? `${monthNames[selectedMonth - 1]} ${selectedYear}`
-    : `Jahr ${selectedYear}`;
+  // Calculate period range
+  let periodLabel: string;
+  let periodStartMonth: number;
+  let periodEndMonth: number;
+  
+  switch (reportPeriod) {
+    case 'monthly':
+      periodLabel = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
+      periodStartMonth = selectedMonth;
+      periodEndMonth = selectedMonth;
+      break;
+    case 'quarterly':
+      const quarter = selectedQuarter || 1;
+      periodLabel = `Q${quarter}/${selectedYear} (${['Jan-Mär', 'Apr-Jun', 'Jul-Sep', 'Okt-Dez'][quarter - 1]})`;
+      periodStartMonth = (quarter - 1) * 3 + 1;
+      periodEndMonth = quarter * 3;
+      break;
+    case 'halfyearly':
+      const halfYear = selectedHalfYear || 1;
+      periodLabel = `${halfYear}. Halbjahr ${selectedYear} (${halfYear === 1 ? 'Jan-Jun' : 'Jul-Dez'})`;
+      periodStartMonth = halfYear === 1 ? 1 : 7;
+      periodEndMonth = halfYear === 1 ? 6 : 12;
+      break;
+    case 'yearly':
+    default:
+      periodLabel = `Jahr ${selectedYear}`;
+      periodStartMonth = 1;
+      periodEndMonth = 12;
+      break;
+  }
+  
+  const monthCount = periodEndMonth - periodStartMonth + 1;
   
   addHeader(
     doc, 
@@ -1117,18 +1192,17 @@ export const generateOffenePostenReport = (
   );
   const tenantIds = relevantTenants.map(t => t.id);
   
-  // Calculate month multiplier for SOLL
-  const monthMultiplier = reportPeriod === 'monthly' ? 1 : 12;
+  // Month multiplier uses the calculated monthCount
+  const monthMultiplier = monthCount;
 
   // Filter combined payments by period (uses 'date' and 'amount' fields)
   const periodPayments = combinedPayments.filter(p => {
     if (!tenantIds.includes(p.tenant_id)) return false;
     const paymentDate = new Date(p.date);
     const matchesYear = paymentDate.getFullYear() === selectedYear;
-    if (reportPeriod === 'yearly') {
-      return matchesYear;
-    }
-    return matchesYear && (paymentDate.getMonth() + 1) === selectedMonth;
+    const paymentMonth = paymentDate.getMonth() + 1;
+    // Check if payment falls within the period range
+    return matchesYear && paymentMonth >= periodStartMonth && paymentMonth <= periodEndMonth;
   });
 
   // Calculate balance per tenant with MRG-konform allocation
@@ -1801,7 +1875,7 @@ interface DetailReportParams {
   categories: CategoryData[];
   selectedPropertyId: string;
   selectedYear: number;
-  reportPeriod: 'monthly' | 'yearly';
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly';
   selectedMonth?: number;
   expenses?: ExpenseData[];
 }
