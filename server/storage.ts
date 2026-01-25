@@ -224,6 +224,11 @@ class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async deleteInvite(id: string): Promise<void> {
+    await db.delete(schema.organizationInvites)
+      .where(eq(schema.organizationInvites.id, id));
+  }
+
   async getOrganization(id: string): Promise<schema.Organization | undefined> {
     const result = await db.select().from(schema.organizations)
       .where(eq(schema.organizations.id, id)).limit(1);
