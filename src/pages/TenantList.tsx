@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -23,6 +23,7 @@ import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
 import { useUnpaidTenantFees, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
 import { useHasFinanceAccess } from '@/hooks/useUserRole';
 import { maskEmail } from '@/lib/dataMasking';
+import { LimitGuard } from '@/components/subscription/FeatureGuard';
 
 const statusLabels = {
   aktiv: 'Aktiv',
@@ -127,10 +128,21 @@ export default function TenantList() {
               CSV Import
             </Button>
           )}
-          <Button onClick={() => navigate('/mieter/neu')}>
-            <Plus className="h-4 w-4 mr-2" />
-            Neuer Mieter
-          </Button>
+          <LimitGuard 
+            type="tenant" 
+            currentCount={tenants?.length || 0}
+            fallback={
+              <Button variant="outline" disabled className="gap-2" data-testid="button-tenant-limit-reached">
+                <Lock className="h-4 w-4" />
+                Mieter-Limit erreicht
+              </Button>
+            }
+          >
+            <Button onClick={() => navigate('/mieter/neu')} data-testid="button-create-tenant">
+              <Plus className="h-4 w-4 mr-2" />
+              Neuer Mieter
+            </Button>
+          </LimitGuard>
         </div>
       </div>
 

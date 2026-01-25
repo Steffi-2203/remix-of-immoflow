@@ -1,0 +1,141 @@
+function checkFeatureAccess(status, feature) {
+  // Account aktiv - alles OK
+  if (status === 'active') return true
+  
+  // Grace Period (3 Tage) - alles OK
+  if (status === 'past_due') {
+    const daysSinceFailed = /* berechnen */
+    if (daysSinceFailed <= 3) return true
+  }
+  
+  // Soft Lock (Tag 3-14) - nur lesen
+  if (status === 'past_due') {
+    return feature.startsWith('read_') // Nur read_* erlaubt
+  }
+  
+  // Hard Lock - gar nichts
+  if (status === 'canceled') return false
+  
+  return false
+}
+```
+
+---
+
+# **PRÄVENTION (Am wichtigsten!)**
+
+## **Zahlungsausfälle vermeiden:**
+
+### **1. Card Updater aktivieren (Stripe):**
+```
+Stripe aktualisiert automatisch abgelaufene Karten
+→ 30-40% weniger Zahlungsausfälle!
+```
+
+### **2. Smart Retry Logic (Stripe Billing):**
+```
+Stripe versucht zu optimalen Zeiten (Zahltag, etc.)
+→ Höhere Erfolgsrate
+```
+
+### **3. Email-Erinnerungen VOR Abbuchung:**
+```
+7 Tage vorher: "Deine nächste Zahlung: 299€ am 1. Feb"
+3 Tage vorher: "Erinnerung: Zahlung in 3 Tagen"
+```
+
+### **4. Mehrere Zahlungsmethoden:**
+```
+Backup-Karte hinterlegen lassen
+→ Automatischer Fallback bei Fehlschlag
+```
+
+### **5. Jährliche Zahlung incentivieren:**
+```
+Jahresabo: 2.990€ (statt 3.588€)
+→ 20% Rabatt
+→ 12x weniger Transaktionen = weniger Fails
+```
+
+---
+
+# **KOMMUNIKATIONS-VORLAGEN**
+
+## **Email 1 - Tag 0 (automatisch von Stripe):**
+```
+Betreff: Zahlungsproblem bei ImmoFlow
+
+Hallo [Name],
+
+deine letzte Zahlung über 299€ konnte nicht abgebucht werden.
+
+Häufige Gründe:
+- Kreditkarte abgelaufen
+- Unzureichende Deckung
+- Kartenlimit erreicht
+
+Bitte aktualisiere deine Zahlungsmethode:
+[Zahlungsmethode aktualisieren]
+
+Wir versuchen die Abbuchung automatisch erneut.
+
+Fragen? → support@immoflow.at
+```
+
+## **Email 2 - Tag 7 (von dir, persönlich):**
+```
+Betreff: Brauchen Sie Hilfe? - ImmoFlow Zahlung
+
+Hallo [Name],
+
+ich sehe, dass es immer noch ein Problem mit der Zahlung gibt.
+
+Ich möchte sicherstellen, dass Sie weiterhin
+Zugriff auf Ihre Hausverwaltungsdaten haben.
+
+Kann ich helfen?
+- Alternative Zahlungsmethode einrichten?
+- Fragen zum Abo?
+- Technisches Problem?
+
+Antworten Sie einfach auf diese Email.
+
+Beste Grüße,
+[Dein Name]
+```
+
+## **Email 3 - Tag 14 (Finale Warnung):**
+```
+Betreff: ⚠️ Account-Sperrung in 3 Tagen
+
+Hallo [Name],
+
+Ihr ImmoFlow-Account wird in 3 Tagen gesperrt,
+da die Zahlung seit 14 Tagen offen ist.
+
+WICHTIG:
+✓ Ihre Daten bleiben 30 Tage gespeichert
+✓ Reaktivierung jederzeit möglich
+✓ Kein Datenverlust
+
+Jetzt reaktivieren:
+[Zahlungsmethode aktualisieren]
+
+Oder Daten exportieren:
+[Einmalig Daten herunterladen]
+
+Support: support@immoflow.at
+Telefon: +43 XXX XXXXX (Mo-Fr 9-17 Uhr)
+```
+
+---
+
+# **ZUSAMMENFASSUNG - DEIN PROZESS:**
+```
+Tag 0:   ❌ Zahlung failed → Stripe versucht erneut
+Tag 1-3: ⚠️ Grace Period → User arbeitet normal
+Tag 3:   📧 Persönliche Email (optional)
+Tag 7:   🔒 Soft Lock → Nur noch lesen, nicht schreiben
+Tag 14:  🚨 Hard Lock → Nur Dashboard sehen
+Tag 30:  ⚠️ Lösch-Warnung → Email mit Export-Option
+Tag 60:  🗑️ Account-Löschung → DSGVO-compliant
