@@ -528,6 +528,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/user/subscription", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const profile = await storage.getProfileById(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      
+      const tier = (profile as any).subscriptionTier || 'trial';
+      const trialEndsAt = (profile as any).trialEndsAt;
+      const subscriptionEndsAt = (profile as any).subscriptionEndsAt;
+      
+      const now = new Date();
+      const trialDaysRemaining = trialEndsAt 
+        ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
+      
+      const isTrialExpired = tier === 'trial' && trialEndsAt ? new Date(trialEndsAt) < now : false;
+      const isSubscriptionExpired = subscriptionEndsAt ? new Date(subscriptionEndsAt) < now : false;
+      
+      res.json({
+        tier,
+        trialEndsAt,
+        subscriptionEndsAt,
+        trialDaysRemaining,
+        isTrialExpired,
+        isSubscriptionExpired,
+      });
+    } catch (error) {
+      console.error("Subscription error:", error);
+      res.status(500).json({ error: "Failed to get subscription" });
+    }
+  });
+
   app.get("/api/profile/organization", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session?.userId;
