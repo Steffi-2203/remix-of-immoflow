@@ -207,8 +207,8 @@ const monthNames = [
 export default function Reports() {
   const currentDate = new Date();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
+  const [selectedMonth, setSelectedMonth] = useState<number>(12); // Default to December 2025
   const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [isGeneratingInvoices, setIsGeneratingInvoices] = useState(false);

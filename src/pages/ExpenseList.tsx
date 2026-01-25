@@ -93,7 +93,7 @@ export default function ExpenseList() {
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
   const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedYear, setSelectedYear] = useState(2025); // Default to 2025 for simulation data
   const [selectedProperty, setSelectedProperty] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
@@ -169,14 +169,14 @@ export default function ExpenseList() {
     const searchLower = searchQuery.toLowerCase();
     return (
       expense.bezeichnung.toLowerCase().includes(searchLower) ||
-      expense.beleg_nummer?.toLowerCase().includes(searchLower) ||
+      expense.belegNummer?.toLowerCase().includes(searchLower) ||
       (expense as any).properties?.name?.toLowerCase().includes(searchLower)
     );
   });
   
   // Count unmatched expenses with suggestions for auto-match
   const unmatchedWithSuggestions = expensesWithMatches.filter(
-    e => !e.transaction_id && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
+    e => !e.transactionId && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
   );
   
   const handleAutoMatchAll = () => {
@@ -374,18 +374,18 @@ export default function ExpenseList() {
   };
 
   // Open edit dialog
-  const openEditDialog = (expense: Expense & { properties?: { name: string }, beleg_url?: string }) => {
+  const openEditDialog = (expense: Expense & { properties?: { name: string }, belegUrl?: string }) => {
     setEditingExpense(expense);
     setEditForm({
-      property_id: expense.property_id,
+      property_id: expense.propertyId,
       category: expense.category,
-      expense_type: expense.expense_type,
+      expense_type: expense.expenseType || '',
       bezeichnung: expense.bezeichnung,
       betrag: expense.betrag.toString().replace('.', ','),
       datum: expense.datum,
-      beleg_nummer: expense.beleg_nummer || '',
+      beleg_nummer: expense.belegNummer || '',
       notizen: expense.notizen || '',
-      beleg_url: expense.beleg_url || '',
+      beleg_url: expense.belegUrl || '',
     });
     setEditSelectedFile(null);
     setEditDialogOpen(true);
@@ -1335,7 +1335,7 @@ export default function ExpenseList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expenseTypeLabels[expense.expense_type]}
+                        {expenseTypeLabels[expense.expenseType as ExpenseType]}
                       </TableCell>
                       <TableCell>
                         <TransactionMatchBadge
@@ -1345,7 +1345,7 @@ export default function ExpenseList() {
                         />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expense.beleg_nummer || '-'}
+                        {expense.belegNummer || '-'}
                       </TableCell>
                       <TableCell>
                         {(expense as any).beleg_url ? (

@@ -76,7 +76,7 @@ const months = [
 export default function InvoiceList() {
   const { toast } = useToast();
   const now = new Date();
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
   const [selectedMonth, setSelectedMonth] = useState<number | undefined>(undefined);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);

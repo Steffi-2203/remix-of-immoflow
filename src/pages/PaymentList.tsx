@@ -70,8 +70,8 @@ export default function PaymentList() {
   const now = new Date();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
+  const [selectedMonth, setSelectedMonth] = useState<number>(1); // Default to January 2025
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
