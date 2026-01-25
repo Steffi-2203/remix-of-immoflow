@@ -2112,8 +2112,9 @@ export default function Reports() {
             });
 
             unitTransactions.forEach((data, unitId) => {
-              if (data.property && propertiesData.has(data.property.id)) {
-                const propData = propertiesData.get(data.property.id)!;
+              const prop = data.property as { id: string; name: string; address: string; postal_code: string; city: string } | null;
+              if (prop && propertiesData.has(prop.id)) {
+                const propData = propertiesData.get(prop.id)!;
                 propData.units.push({
                   unit: data.unit,
                   income: data.income,
@@ -2139,13 +2140,18 @@ export default function Reports() {
 
                 <div className="space-y-6">
                   {Array.from(propertiesData.values())
-                    .filter(p => selectedPropertyId === 'all' || p.property?.id === selectedPropertyId)
-                    .map((propData) => (
-                    <div key={propData.property?.id} className="border rounded-lg overflow-hidden">
+                    .filter(p => {
+                      const prop = p.property as { id: string } | null;
+                      return selectedPropertyId === 'all' || prop?.id === selectedPropertyId;
+                    })
+                    .map((propData) => {
+                      const prop = propData.property as { id: string; name: string; address: string; postal_code: string; city: string } | null;
+                      return (
+                    <div key={prop?.id} className="border rounded-lg overflow-hidden">
                       <div className="bg-muted p-4 flex justify-between items-center">
                         <div>
-                          <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
-                          <p className="text-sm text-muted-foreground">{propData.property?.address}, {propData.property?.postal_code} {propData.property?.city}</p>
+                          <h4 className="font-semibold text-lg">{prop?.name}</h4>
+                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postal_code} {prop?.city}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-success font-semibold">+€{propData.totalIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
@@ -2187,7 +2193,8 @@ export default function Reports() {
                         </TableBody>
                       </Table>
                     </div>
-                  ))}
+                      );
+                    })}
 
                   {unassignedTransactions.length > 0 && (
                     <div className="border rounded-lg overflow-hidden">
@@ -2348,12 +2355,14 @@ export default function Reports() {
 
                 {Array.from(propertiesData.values())
                   .filter(p => p.tenantsSoll.length > 0)
-                  .map((propData) => (
-                  <div key={propData.property?.id} className="border rounded-lg overflow-hidden mb-4">
+                  .map((propData) => {
+                    const prop = propData.property as { id: string; name: string; address: string } | null;
+                    return (
+                  <div key={prop?.id} className="border rounded-lg overflow-hidden mb-4">
                     <div className="bg-muted p-4 flex justify-between items-center">
                       <div>
-                        <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
-                        <p className="text-sm text-muted-foreground">{propData.property?.address}</p>
+                        <h4 className="font-semibold text-lg">{prop?.name}</h4>
+                        <p className="text-sm text-muted-foreground">{prop?.address}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-bold">SOLL: €{propData.totalGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}/Monat</p>
@@ -2408,7 +2417,8 @@ export default function Reports() {
                       </TableBody>
                     </Table>
                   </div>
-                ))}
+                    );
+                  })}
               </>
             );
           })()}
