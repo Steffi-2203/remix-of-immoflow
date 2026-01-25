@@ -79,25 +79,40 @@ When a user has the "tester" role, personal data (Personenbezogene Daten) is aut
 Masking is applied to: tenants, payments, invoices, bank accounts, transactions, organization members
 
 ## Subscription System
-Three-tier subscription model with Stripe integration:
+Two parallel subscription systems exist:
 
-### Subscription Tiers
+### Organization-Based Subscription (Legacy)
+Three-tier model with Stripe integration:
 - **Starter** (€29/month): 5 properties, 20 units, 2 users, basic features
 - **Professional** (€59/month): 25 properties, 100 units, 5 users, SEPA-Export, Mahnwesen, Wartungsverträge, OCR-Belegerfassung
 - **Enterprise** (€149/month): Unlimited everything, API access, Priority Support
 
-### Subscription Flow
-1. New organizations start with 14-day trial (subscription_status: 'trial')
-2. Trial users see countdown banner and can access basic features
-3. Premium features (Wartungen, Handwerker, Mahnwesen) show lock icon and redirect to subscription page
-4. Stripe Checkout for payment → webhook updates status to 'active'
-5. Stripe Billing Portal for subscription management
-
-### Key Components
-- `useSubscription` hook: subscription status, tier, trial days remaining
+Key Components:
+- `useSubscription` hook: organization subscription status
 - `SubscriptionTeaser`: wrapper component for gating features
-- `TrialBanner`: shows trial countdown or expired status
-- `SubscriptionSettings`: settings page with pricing plans
+- `TrialBanner`: shows trial countdown for organization
+
+### User-Based Subscription (New)
+Three-tier model stored in profiles table:
+- **Trial** (14 Tage kostenlos): 1 Immobilie, 3 Mieter, Abrechnungen nur ansehen, kein Export/Upload
+- **Starter** (€149/Monat): 50 Immobilien, unbegrenzte Mieter, voller Zugang außer Automatisierung
+- **Pro** (€299/Monat): Unbegrenzt, Automatisierung, API-Zugang, Priority Support
+
+Key Components:
+- `useSubscriptionLimits` hook: user subscription status and feature limits
+- `UserUpgradeBanner`: shows trial/expired status and upgrade prompt
+- `FeatureLockPopup`: dialog for locked features with upgrade button
+- `LimitGatedButton`: wrapper for buttons that check limits
+- `/pricing` page: plan comparison and selection
+- `/checkout` page: Stripe checkout for user subscriptions
+
+API Endpoints:
+- `GET /api/user/subscription`: Get user subscription status
+- `POST /api/stripe/checkout`: Create checkout session for user subscription
+
+Webhook Handler:
+- Updates profiles.subscriptionTier on successful checkout
+- Stores stripeCustomerId and stripeSubscriptionId in profiles
 
 ### Admin Organization
 Admin organization (stephania.pfeffer@outlook.de) has active enterprise subscription by default.
