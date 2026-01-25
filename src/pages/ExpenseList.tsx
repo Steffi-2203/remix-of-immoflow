@@ -63,6 +63,7 @@ import {
   type Expense
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
+import { useDistributionKeys } from '@/hooks/useDistributionKeys';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { useExpenseTransactionMatch, useAutoMatchExpenses } from '@/hooks/useExpenseTransactionMatch';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
@@ -109,7 +110,10 @@ export default function ExpenseList() {
     beleg_nummer: '',
     notizen: '',
     budget_position: null as number | null,
+    distribution_key_id: '' as string,
   };
+
+  const { data: distributionKeys = [] } = useDistributionKeys();
   
   const [newExpense, setNewExpense] = useState(initialExpenseState);
   const [hasReceipt, setHasReceipt] = useState<boolean | null>(null); // null = not yet selected
@@ -351,6 +355,7 @@ export default function ExpenseList() {
         year: bookingYear,
         month: bookingMonth,
         beleg_url,
+        distributionKeyId: newExpense.distribution_key_id || undefined,
         budget_position: newExpense.category === 'instandhaltung' ? newExpense.budget_position : undefined,
       } as any);
 
@@ -1009,6 +1014,30 @@ export default function ExpenseList() {
                   </Select>
                 </div>
               </div>
+
+              {newExpense.category === 'betriebskosten_umlagefaehig' && (
+                <div className="space-y-2">
+                  <Label>Verteilungsschlüssel</Label>
+                  <Select
+                    value={newExpense.distribution_key_id}
+                    onValueChange={(value) => setNewExpense(prev => ({ ...prev, distribution_key_id: value }))}
+                  >
+                    <SelectTrigger data-testid="select-distribution-key">
+                      <SelectValue placeholder="Schlüssel auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {distributionKeys.map(key => (
+                        <SelectItem key={key.id} value={key.id}>
+                          {key.name} {key.unit && `(${key.unit})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Bestimmt, wie diese Ausgabe auf die Mieter verteilt wird
+                  </p>
+                </div>
+              )}
 
               {/* Budget Position Select - only for Instandhaltung with property */}
               {newExpense.category === 'instandhaltung' && newExpense.property_id && (

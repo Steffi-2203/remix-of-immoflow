@@ -38,6 +38,7 @@ export interface Expense {
   year: number;
   month: number;
   transactionId: string | null;
+  distributionKeyId: string | null;
   createdAt: string;
   updatedAt: string;
   properties?: { name: string };
@@ -54,6 +55,7 @@ export interface ExpenseInsert {
   notizen?: string;
   year: number;
   month: number;
+  distributionKeyId?: string;
 }
 
 export interface ExpenseUpdate extends Partial<ExpenseInsert> {

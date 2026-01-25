@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,7 +41,6 @@ import {
 import { BarChart3, Plus, Pencil, Trash2, GripVertical, Loader2 } from 'lucide-react';
 import {
   useDistributionKeys,
-  useInitializeDistributionKeys,
   useCreateDistributionKey,
   useUpdateDistributionKey,
   useDeleteDistributionKey,
@@ -51,29 +50,28 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 
 interface KeyFormData {
-  key_code: string;
+  keyCode: string;
   name: string;
   unit: string;
-  input_type: string;
+  inputType: string;
   description: string;
-  is_active: boolean;
-  sort_order: number;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 const emptyFormData: KeyFormData = {
-  key_code: '',
+  keyCode: '',
   name: '',
   unit: 'Anteil',
-  input_type: 'direkteingabe',
+  inputType: 'direkteingabe',
   description: '',
-  is_active: true,
-  sort_order: 100,
+  isActive: true,
+  sortOrder: 100,
 };
 
 export function DistributionKeySettings() {
   const { data: organization } = useOrganization();
   const { data: keys, isLoading } = useDistributionKeys();
-  const initializeKeys = useInitializeDistributionKeys();
   const createKey = useCreateDistributionKey();
   const updateKey = useUpdateDistributionKey();
   const deleteKey = useDeleteDistributionKey();
@@ -84,19 +82,12 @@ export function DistributionKeySettings() {
   const [keyToDelete, setKeyToDelete] = useState<DistributionKey | null>(null);
   const [formData, setFormData] = useState<KeyFormData>(emptyFormData);
 
-  // Initialize keys if none exist
-  useEffect(() => {
-    if (organization?.id && keys && keys.length === 0 && !initializeKeys.isPending) {
-      initializeKeys.mutate(organization.id);
-    }
-  }, [organization?.id, keys, initializeKeys]);
-
   const handleOpenCreate = () => {
     setEditingKey(null);
     setFormData({
       ...emptyFormData,
-      key_code: `vs_custom_${Date.now()}`,
-      sort_order: (keys?.length || 0) + 1,
+      keyCode: `vs_custom_${Date.now()}`,
+      sortOrder: (keys?.length || 0) + 1,
     });
     setDialogOpen(true);
   };
@@ -104,13 +95,13 @@ export function DistributionKeySettings() {
   const handleOpenEdit = (key: DistributionKey) => {
     setEditingKey(key);
     setFormData({
-      key_code: key.key_code,
+      keyCode: key.keyCode,
       name: key.name,
       unit: key.unit,
-      input_type: key.input_type,
+      inputType: key.inputType,
       description: key.description || '',
-      is_active: key.is_active,
-      sort_order: key.sort_order,
+      isActive: key.isActive,
+      sortOrder: key.sortOrder,
     });
     setDialogOpen(true);
   };
@@ -124,7 +115,7 @@ export function DistributionKeySettings() {
     const option = inputTypeOptions.find(o => o.value === value);
     setFormData(prev => ({
       ...prev,
-      input_type: value,
+      inputType: value,
       unit: option?.unit || prev.unit,
     }));
   };
@@ -137,21 +128,21 @@ export function DistributionKeySettings() {
         id: editingKey.id,
         name: formData.name,
         unit: formData.unit,
-        input_type: formData.input_type,
+        inputType: formData.inputType,
         description: formData.description || null,
-        is_active: formData.is_active,
-        sort_order: formData.sort_order,
+        isActive: formData.isActive,
+        sortOrder: formData.sortOrder,
       });
     } else {
       await createKey.mutateAsync({
-        organization_id: organization.id,
-        key_code: formData.key_code,
+        organizationId: organization.id,
+        keyCode: formData.keyCode,
         name: formData.name,
         unit: formData.unit,
-        input_type: formData.input_type,
+        inputType: formData.inputType,
         description: formData.description || null,
-        is_active: formData.is_active,
-        sort_order: formData.sort_order,
+        isActive: formData.isActive,
+        sortOrder: formData.sortOrder,
       });
     }
     setDialogOpen(false);
@@ -168,11 +159,11 @@ export function DistributionKeySettings() {
   const handleToggleActive = async (key: DistributionKey) => {
     await updateKey.mutateAsync({
       id: key.id,
-      is_active: !key.is_active,
+      isActive: !key.isActive,
     });
   };
 
-  if (isLoading || initializeKeys.isPending) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="py-8">
@@ -219,28 +210,28 @@ export function DistributionKeySettings() {
             </TableHeader>
             <TableBody>
               {keys?.map((key) => (
-                <TableRow key={key.id} className={!key.is_active ? 'opacity-50' : ''}>
+                <TableRow key={key.id} className={!key.isActive ? 'opacity-50' : ''}>
                   <TableCell>
                     <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{key.name}</span>
-                      {key.is_system && (
+                      {key.isSystem && (
                         <Badge variant="secondary" className="text-xs">System</Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {inputTypeOptions.find(o => o.value === key.input_type)?.label || key.input_type}
+                      {inputTypeOptions.find(o => o.value === key.inputType)?.label || key.inputType}
                     </Badge>
                   </TableCell>
                   <TableCell>{key.unit}</TableCell>
                   <TableCell className="text-muted-foreground">{key.description}</TableCell>
                   <TableCell className="text-center">
                     <Switch
-                      checked={key.is_active}
+                      checked={key.isActive}
                       onCheckedChange={() => handleToggleActive(key)}
                     />
                   </TableCell>
@@ -253,7 +244,7 @@ export function DistributionKeySettings() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      {!key.is_system && (
+                      {!key.isSystem && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -293,9 +284,9 @@ export function DistributionKeySettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="input_type">Eingabetyp *</Label>
+              <Label htmlFor="inputType">Eingabetyp *</Label>
               <Select
-                value={formData.input_type}
+                value={formData.inputType}
                 onValueChange={handleInputTypeChange}
               >
                 <SelectTrigger>
@@ -330,11 +321,11 @@ export function DistributionKeySettings() {
             </div>
             <div className="flex items-center gap-2">
               <Switch
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
+                id="isActive"
+                checked={formData.isActive}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
               />
-              <Label htmlFor="is_active">Aktiv</Label>
+              <Label htmlFor="isActive">Aktiv</Label>
             </div>
           </div>
           <DialogFooter>
