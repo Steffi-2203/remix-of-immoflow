@@ -38,6 +38,7 @@ import InvoiceApproval from "./pages/InvoiceApproval";
 import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
 import Contractors from "./pages/Contractors";
+import OwnerList from "./pages/OwnerList";
 import Dunning from "./pages/Dunning";
 import Budgets from "./pages/Budgets";
 import NotFound from "./pages/NotFound";
@@ -91,6 +92,7 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
             <Route path="/handwerker" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
+            <Route path="/eigentuemer" element={<ProtectedRoute><OwnerList /></ProtectedRoute>} />
             <Route path="/mahnwesen" element={<ProtectedRoute><Dunning /></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
             <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
