@@ -8,9 +8,12 @@ export interface TenantForFilter {
   unit_id?: string;
   unitId?: string;
   status: string;
-  mietbeginn: string | null;
+  mietbeginn?: string | null;
+  mietBeginn?: string | null;
   mietende?: string | null;
+  mietEnde?: string | null;
   grundmiete?: number | string;
+  grundMiete?: number | string;
   betriebskosten_vorschuss?: number | string;
   betriebskostenVorschuss?: number | string;
   heizungskosten_vorschuss?: number | string;
@@ -53,46 +56,56 @@ export function isTenantActiveInPeriod(
   periodYear: number,
   periodMonth?: number // undefined = yearly
 ): boolean {
-  // Leerstand ist nie relevant
-  if (tenant.status === 'leerstand') return false;
+  // Normalize status (support various formats)
+  const status = (tenant.status || '').toLowerCase().trim();
+  
+  // Leerstand/vacancy ist nie relevant
+  if (status === 'leerstand' || status === 'vacancy' || status === 'inactive') return false;
   
   // Mietbeginn prüfen - Mieter ist nur relevant wenn Mietbeginn <= Ende des Zeitraums
-  if (tenant.mietbeginn) {
-    const mietbeginn = new Date(tenant.mietbeginn);
-    const mietbeginnYear = mietbeginn.getFullYear();
-    const mietbeginnMonth = mietbeginn.getMonth() + 1;
-    
-    if (periodMonth === undefined) {
-      // Yearly: Mietbeginn muss im Jahr oder früher sein
-      if (mietbeginnYear > periodYear) return false;
-    } else {
-      // Monthly: Mietbeginn muss im Monat oder früher sein
-      if (mietbeginnYear > periodYear) return false;
-      if (mietbeginnYear === periodYear && mietbeginnMonth > periodMonth) return false;
+  const mietbeginnStr = tenant.mietbeginn || tenant.mietBeginn;
+  if (mietbeginnStr) {
+    const mietbeginn = new Date(mietbeginnStr);
+    if (!isNaN(mietbeginn.getTime())) {
+      const mietbeginnYear = mietbeginn.getFullYear();
+      const mietbeginnMonth = mietbeginn.getMonth() + 1;
+      
+      if (periodMonth === undefined) {
+        // Yearly: Mietbeginn muss im Jahr oder früher sein
+        if (mietbeginnYear > periodYear) return false;
+      } else {
+        // Monthly: Mietbeginn muss im Monat oder früher sein
+        if (mietbeginnYear > periodYear) return false;
+        if (mietbeginnYear === periodYear && mietbeginnMonth > periodMonth) return false;
+      }
     }
   }
   
-  // Aktive Mieter (mit gültigem Mietbeginn) sind relevant
-  if (tenant.status === 'aktiv') return true;
+  // Aktive Mieter sind relevant (support various status values)
+  if (status === 'aktiv' || status === 'active' || status === '') return true;
   
   // Beendete Mieter: Mietende muss im oder nach dem Zeitraum liegen
-  if (tenant.status === 'beendet' && tenant.mietende) {
-    const mietende = new Date(tenant.mietende);
-    const mietendeYear = mietende.getFullYear();
-    const mietendeMonth = mietende.getMonth() + 1;
-    
-    if (periodMonth === undefined) {
-      // Yearly: Mietende muss im Jahr oder später sein
-      return mietendeYear >= periodYear;
-    } else {
-      // Monthly: Mietende muss im Monat oder später sein
-      if (mietendeYear > periodYear) return true;
-      if (mietendeYear === periodYear && mietendeMonth >= periodMonth) return true;
-      return false;
+  const mietendeStr = tenant.mietende || tenant.mietEnde;
+  if ((status === 'beendet' || status === 'ended' || status === 'terminated') && mietendeStr) {
+    const mietende = new Date(mietendeStr);
+    if (!isNaN(mietende.getTime())) {
+      const mietendeYear = mietende.getFullYear();
+      const mietendeMonth = mietende.getMonth() + 1;
+      
+      if (periodMonth === undefined) {
+        // Yearly: Mietende muss im Jahr oder später sein
+        return mietendeYear >= periodYear;
+      } else {
+        // Monthly: Mietende muss im Monat oder später sein
+        if (mietendeYear > periodYear) return true;
+        if (mietendeYear === periodYear && mietendeMonth >= periodMonth) return true;
+        return false;
+      }
     }
   }
   
-  return false;
+  // Default: Mieter ohne expliziten Status als aktiv behandeln
+  return true;
 }
 
 /**
