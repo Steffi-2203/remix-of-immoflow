@@ -1137,6 +1137,60 @@ export default function Reports() {
         </div>
       )}
 
+      {/* Kumulierte Einnahmen-Übersicht */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Euro className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Kumulierte Einnahmen (SOLL) - {periodLabel}</CardTitle>
+          </div>
+          <CardDescription>
+            Monatliche Vorschreibungen aus Mieterdaten für {relevantTenants.length} aktive Mieter
+            {reportPeriod === 'yearly' && ' × 12 Monate'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Grundmiete (Netto)</p>
+              <p className="text-xl font-bold text-success mt-1">
+                €{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Eigentumsrelevant
+              </p>
+            </div>
+            <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Betriebskosten</p>
+              <p className="text-xl font-bold text-blue-600 mt-1">
+                €{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Durchlaufposten (BK)
+              </p>
+            </div>
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Heizkosten</p>
+              <p className="text-xl font-bold text-orange-600 mt-1">
+                €{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Durchlaufposten (HK)
+              </p>
+            </div>
+            <div className="rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Gesamt SOLL</p>
+              <p className="text-xl font-bold text-primary mt-1">
+                €{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Alle Vorschreibungen
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quick Stats - JETZT AUS TRANSAKTIONEN */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>
