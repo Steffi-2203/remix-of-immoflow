@@ -52,6 +52,7 @@ export class SettlementService {
   async calculatePropertyExpenses(propertyId: string, year: number): Promise<{
     totalExpenses: number;
     byCategory: Map<string, number>;
+    byDistributionKey: Map<string, { amount: number; keyId: string | null }[]>;
     expenses: Array<typeof expenses.$inferSelect>;
   }> {
     const propertyExpenses = await db.select()
@@ -63,6 +64,7 @@ export class SettlementService {
       ));
 
     const byCategory = new Map<string, number>();
+    const byDistributionKey = new Map<string, { amount: number; keyId: string | null }[]>();
     let totalExpenses = 0;
 
     for (const expense of propertyExpenses) {
@@ -71,11 +73,18 @@ export class SettlementService {
       
       const category = expense.mrgKategorie || expense.category || 'sonstige';
       byCategory.set(category, (byCategory.get(category) || 0) + amount);
+
+      const keyId = expense.distributionKeyId || null;
+      if (!byDistributionKey.has(category)) {
+        byDistributionKey.set(category, []);
+      }
+      byDistributionKey.get(category)!.push({ amount, keyId });
     }
 
     return {
       totalExpenses: Math.round(totalExpenses * 100) / 100,
       byCategory,
+      byDistributionKey,
       expenses: propertyExpenses
     };
   }
@@ -124,6 +133,7 @@ export class SettlementService {
     year: number,
     propertyUnits: Array<typeof units.$inferSelect>,
     expensesByCategory: Map<string, number>,
+    byDistributionKey: Map<string, { amount: number; keyId: string | null }[]>,
     organizationId: string
   ): Promise<TenantSettlementResult | null> {
     const tenant = await db.select().from(tenants)
@@ -140,34 +150,49 @@ export class SettlementService {
     const details: SettlementDetailItem[] = [];
     let totalShare = 0;
 
-    const keys = await db.select().from(distributionKeys)
-      .where(eq(distributionKeys.organizationId, organizationId));
+    const allKeys = await db.select().from(distributionKeys)
+      .where(eq(distributionKeys.isActive, true));
+    const orgKeys = allKeys.filter(k => k.organizationId === organizationId || k.isSystem);
+    const keyMap = new Map(allKeys.map(k => [k.id, k]));
 
     const unitFlaeche = Number(unit.flaeche) || 1;
     const totalFlaeche = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche) || 1), 0);
     const anteil = totalFlaeche > 0 ? (unitFlaeche / totalFlaeche) : 0;
 
-    for (const [category, totalCost] of expensesByCategory) {
-      const key = keys.find(k => k.keyCode === category) || 
-                  keys.find(k => k.inputType === 'flaeche') ||
-                  keys[0];
-      const keyName = key?.name || 'Fläche';
+    for (const [category, categoryExpenses] of byDistributionKey) {
+      const totalCost = expensesByCategory.get(category) || 0;
+      let categoryShare = 0;
       
-      const { unitValue, totalValue } = await this.getDistributionValue(
-        unit.id, 
-        key?.id || '', 
-        propertyUnits
-      );
+      for (const exp of categoryExpenses) {
+        let key = exp.keyId ? keyMap.get(exp.keyId) : null;
+        if (!key) {
+          key = orgKeys.find(k => k.keyCode === category) || 
+                orgKeys.find(k => k.inputType === 'flaeche') ||
+                orgKeys[0];
+        }
+        
+        const { unitValue, totalValue } = await this.getDistributionValue(
+          unit.id, 
+          key?.id || '', 
+          propertyUnits
+        );
 
-      const share = totalValue > 0 ? (totalCost * unitValue / totalValue) : 0;
-      totalShare += share;
+        const share = totalValue > 0 ? (exp.amount * unitValue / totalValue) : 0;
+        categoryShare += share;
+      }
+      
+      totalShare += categoryShare;
+      
+      const primaryKey = categoryExpenses.find(e => e.keyId)?.keyId;
+      const keyName = primaryKey ? keyMap.get(primaryKey)?.name : 
+                      orgKeys.find(k => k.keyCode === category)?.name || 'Fläche';
 
       details.push({
         category,
         description: `Anteil an ${category}`,
         totalCost: Math.round(totalCost * 100) / 100,
-        tenantShare: Math.round(share * 100) / 100,
-        distributionKey: keyName
+        tenantShare: Math.round(categoryShare * 100) / 100,
+        distributionKey: keyName || 'Fläche'
       });
     }
 
@@ -191,7 +216,7 @@ export class SettlementService {
   }> {
     const { propertyId, year, organizationId, createdBy } = params;
 
-    const { totalExpenses, byCategory } = 
+    const { totalExpenses, byCategory, byDistributionKey } = 
       await this.calculatePropertyExpenses(propertyId, year);
 
     const propertyUnits = await db.select().from(units)
@@ -210,6 +235,7 @@ export class SettlementService {
         year,
         propertyUnits,
         byCategory,
+        byDistributionKey,
         organizationId
       );
       if (result) {
