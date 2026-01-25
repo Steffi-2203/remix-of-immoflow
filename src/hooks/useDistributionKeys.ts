@@ -1,23 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { apiRequest } from '@/lib/queryClient';
 
 export interface DistributionKey {
   id: string;
-  organization_id: string | null;
-  key_code: string;
+  organizationId: string | null;
+  keyCode: string;
   name: string;
-  unit: string;
-  input_type: string;
+  unit: string | null;
+  inputType: string | null;
   description: string | null;
-  is_active: boolean;
-  sort_order: number;
-  is_system: boolean;
-  created_at: string;
-  updated_at: string;
+  isActive: boolean | null;
+  sortOrder: number | null;
+  isSystem: boolean | null;
+  mrgKonform: boolean | null;
+  mrgParagraph: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export type DistributionKeyInsert = Omit<DistributionKey, 'id' | 'created_at' | 'updated_at'>;
+export type DistributionKeyInsert = Omit<DistributionKey, 'id' | 'createdAt' | 'updatedAt'>;
 export type DistributionKeyUpdate = Partial<DistributionKeyInsert> & { id: string };
 
 // Input type options
@@ -58,51 +59,8 @@ export const defaultDistributionKeys: Omit<DistributionKey, 'id' | 'organization
 ];
 
 export function useDistributionKeys() {
-  return useQuery({
-    queryKey: ['distribution-keys'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('distribution_keys')
-        .select('*')
-        .order('sort_order', { ascending: true });
-
-      if (error) throw error;
-      return data as DistributionKey[];
-    },
-  });
-}
-
-export function useInitializeDistributionKeys() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (organizationId: string) => {
-      // Check if keys already exist
-      const { data: existing } = await supabase
-        .from('distribution_keys')
-        .select('id')
-        .eq('organization_id', organizationId)
-        .limit(1);
-
-      if (existing && existing.length > 0) {
-        return; // Already initialized
-      }
-
-      // Insert default keys
-      const keysToInsert = defaultDistributionKeys.map(key => ({
-        ...key,
-        organization_id: organizationId,
-      }));
-
-      const { error } = await supabase
-        .from('distribution_keys')
-        .insert(keysToInsert);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
-    },
+  return useQuery<DistributionKey[]>({
+    queryKey: ['/api/distribution-keys'],
   });
 }
 
@@ -110,22 +68,15 @@ export function useCreateDistributionKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: Omit<DistributionKeyInsert, 'is_system'>) => {
-      const { data: result, error } = await supabase
-        .from('distribution_keys')
-        .insert({ ...data, is_system: false })
-        .select()
-        .single();
-
-      if (error) throw error;
+    mutationFn: async (data: Partial<DistributionKeyInsert>) => {
+      const result = await apiRequest('/api/distribution-keys', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
       return result as DistributionKey;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
-      toast.success('Verteilerschlüssel erstellt');
-    },
-    onError: (error: Error) => {
-      toast.error('Fehler beim Erstellen', { description: error.message });
+      queryClient.invalidateQueries({ queryKey: ['/api/distribution-keys'] });
     },
   });
 }
@@ -135,22 +86,14 @@ export function useUpdateDistributionKey() {
 
   return useMutation({
     mutationFn: async ({ id, ...data }: DistributionKeyUpdate) => {
-      const { data: result, error } = await supabase
-        .from('distribution_keys')
-        .update(data)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
+      const result = await apiRequest(`/api/distribution-keys/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
       return result as DistributionKey;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
-      toast.success('Verteilerschlüssel aktualisiert');
-    },
-    onError: (error: Error) => {
-      toast.error('Fehler beim Aktualisieren', { description: error.message });
+      queryClient.invalidateQueries({ queryKey: ['/api/distribution-keys'] });
     },
   });
 }
@@ -160,19 +103,12 @@ export function useDeleteDistributionKey() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('distribution_keys')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/api/distribution-keys/${id}`, {
+        method: 'DELETE',
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
-      toast.success('Verteilerschlüssel gelöscht');
-    },
-    onError: (error: Error) => {
-      toast.error('Fehler beim Löschen', { description: error.message });
+      queryClient.invalidateQueries({ queryKey: ['/api/distribution-keys'] });
     },
   });
 }

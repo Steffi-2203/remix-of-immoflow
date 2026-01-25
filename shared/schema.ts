@@ -5,6 +5,12 @@ import { relations } from "drizzle-orm";
 
 export * from "./models/auth";
 
+export const userSessions = pgTable("user_sessions", {
+  sid: varchar("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire", { precision: 6, withTimezone: false }).notNull(),
+});
+
 export const appRoleEnum = pgEnum('app_role', ['admin', 'property_manager', 'finance', 'viewer', 'tester']);
 export const expenseCategoryEnum = pgEnum('expense_category', ['betriebskosten_umlagefaehig', 'instandhaltung']);
 export const expenseTypeEnum = pgEnum('expense_type', [
@@ -272,6 +278,7 @@ export const expenses = pgTable("expenses", {
   mrgKategorie: mrgBkKategorieEnum("mrg_kategorie"),
   mrgParagraph: text("mrg_paragraph"),
   istUmlagefaehig: boolean("ist_umlagefaehig").default(true),
+  distributionKeyId: uuid("distribution_key_id").references(() => distributionKeys.id),
   transactionId: uuid("transaction_id").references(() => transactions.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -629,6 +636,8 @@ export type MaintenanceContract = typeof maintenanceContracts.$inferSelect;
 export type MaintenanceTask = typeof maintenanceTasks.$inferSelect;
 export type Contractor = typeof contractors.$inferSelect;
 export type DistributionKey = typeof distributionKeys.$inferSelect;
+export const insertDistributionKeySchema = createInsertSchema(distributionKeys).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDistributionKey = z.infer<typeof insertDistributionKeySchema>;
 export type AccountCategory = typeof accountCategories.$inferSelect;
 export type LearnedMatch = typeof learnedMatches.$inferSelect;
 export type SepaCollection = typeof sepaCollections.$inferSelect;

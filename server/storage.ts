@@ -36,6 +36,9 @@ export interface IStorage {
   getContractors(): Promise<schema.Contractor[]>;
   getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]>;
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
+  createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey>;
+  updateDistributionKey(id: string, data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey | undefined>;
+  deleteDistributionKey(id: string): Promise<void>;
   softDeleteUnit(id: string): Promise<void>;
   softDeleteTenant(id: string): Promise<void>;
   getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]>;
@@ -356,6 +359,25 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.distributionKeys)
       .where(eq(schema.distributionKeys.isActive, true))
       .orderBy(asc(schema.distributionKeys.sortOrder));
+  }
+
+  async createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey> {
+    const result = await db.insert(schema.distributionKeys).values(data as schema.InsertDistributionKey).returning();
+    return result[0];
+  }
+
+  async updateDistributionKey(id: string, data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey | undefined> {
+    const result = await db.update(schema.distributionKeys)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.distributionKeys.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteDistributionKey(id: string): Promise<void> {
+    await db.update(schema.distributionKeys)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(schema.distributionKeys.id, id));
   }
 
   async getProfileByEmail(email: string): Promise<schema.Profile | undefined> {

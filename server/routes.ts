@@ -914,6 +914,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/distribution-keys", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const org = await storage.getUserOrganization(userId);
+      if (!org) return res.status(403).json({ error: "No organization" });
+
+      const { keyCode, name, description, unit, inputType } = req.body;
+      if (!keyCode || !name) {
+        return res.status(400).json({ error: "keyCode and name required" });
+      }
+
+      const newKey = await storage.createDistributionKey({
+        organizationId: org.id,
+        keyCode,
+        name,
+        description,
+        unit: unit || "Anteil",
+        inputType: inputType || "custom",
+        isSystem: false,
+        isActive: true,
+        mrgKonform: true,
+      });
+      res.status(201).json(newKey);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create distribution key" });
+    }
+  });
+
+  app.patch("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { id } = req.params;
+      const updates = req.body;
+
+      const updated = await storage.updateDistributionKey(id, updates);
+      if (!updated) return res.status(404).json({ error: "Key not found" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update distribution key" });
+    }
+  });
+
+  app.delete("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { id } = req.params;
+      await storage.deleteDistributionKey(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete distribution key" });
+    }
+  });
+
   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
   
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
