@@ -43,6 +43,8 @@ export interface PaymentWithAllocation extends Payment {
 export function usePayments() {
   return useQuery({
     queryKey: ['payments'],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
       const response = await fetch('/api/payments', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch payments');

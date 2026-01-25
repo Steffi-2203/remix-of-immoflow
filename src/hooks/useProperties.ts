@@ -29,6 +29,8 @@ export function useProperties() {
       if (!response.ok) throw new Error('Failed to fetch properties');
       return response.json();
     },
+    staleTime: 60000,
+    gcTime: 300000,
   });
 }
 
