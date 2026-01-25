@@ -43,15 +43,15 @@ export function useCombinedPayments() {
     const combined: CombinedPayment[] = [];
     
     // Use ONLY payments table as source of truth for rent income
-    (payments || []).forEach(p => {
+    (payments || []).forEach((p: any) => {
       combined.push({
         id: p.id,
-        tenant_id: p.tenant_id,
+        tenant_id: p.tenantId,
         amount: Number(p.betrag),
-        date: p.eingangs_datum,
+        date: p.eingangsDatum || p.buchungsDatum,
         source: 'payments',
-        reference: p.referenz || undefined,
-        invoice_id: p.invoice_id,
+        reference: p.verwendungszweck || undefined,
+        invoice_id: p.invoiceId,
       });
     });
     
