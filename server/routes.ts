@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { registerFunctionRoutes } from "./functions";
+import { registerStripeRoutes } from "./stripeRoutes";
 import crypto from "crypto";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
@@ -778,6 +779,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   registerFunctionRoutes(app);
+  registerStripeRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

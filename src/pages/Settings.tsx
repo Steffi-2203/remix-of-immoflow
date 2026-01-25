@@ -18,6 +18,7 @@ import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDialog';
 import { UserRoleManager } from '@/components/settings/UserRoleManager';
 import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
+import { SubscriptionSettings } from '@/components/settings/SubscriptionSettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useIsAdmin } from '@/hooks/useAdmin';
@@ -69,6 +70,7 @@ export default function Settings() {
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="account">Konto</TabsTrigger>
+            <TabsTrigger value="subscription">Abo</TabsTrigger>
             {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
@@ -182,6 +184,10 @@ export default function Settings() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="subscription">
+            <SubscriptionSettings />
           </TabsContent>
 
           {canViewFinancials && (
