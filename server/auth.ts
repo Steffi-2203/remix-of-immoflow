@@ -175,12 +175,19 @@ export function setupAuth(app: Express) {
 
       const roles = await getUserRoles(profile.id);
       
-      res.json({
-        id: profile.id,
-        email: profile.email,
-        fullName: profile.fullName,
-        organizationId: profile.organizationId,
-        roles: roles.map(r => r.role),
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
+        }
+        
+        res.json({
+          id: profile.id,
+          email: profile.email,
+          fullName: profile.fullName,
+          organizationId: profile.organizationId,
+          roles: roles.map(r => r.role),
+        });
       });
     } catch (error) {
       console.error("Register error:", error);

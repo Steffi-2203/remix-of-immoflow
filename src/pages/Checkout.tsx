@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
 
 interface PlanDetails {
   id: 'starter' | 'pro';
@@ -53,7 +52,7 @@ const planDetails: Record<'starter' | 'pro', PlanDetails> = {
 export default function Checkout() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -68,10 +67,18 @@ export default function Checkout() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       navigate('/login?redirect=/checkout?plan=' + planId);
     }
-  }, [user, navigate, planId]);
+  }, [user, loading, navigate, planId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!planId || !planDetails[planId]) {
     return (
@@ -125,11 +132,29 @@ export default function Checkout() {
   const Icon = plan.icon;
 
   const handleCheckout = async () => {
+    if (!user) {
+      navigate('/login?redirect=/checkout?plan=' + planId);
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      const response = await apiRequest('POST', '/api/stripe/checkout', {
-        planId: plan.id,
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ planId: plan.id }),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          navigate('/login?redirect=/checkout?plan=' + planId);
+          return;
+        }
+        throw new Error(errorData.error || 'Checkout failed');
+      }
+      
       const data = await response.json();
       
       if (data.url) {
