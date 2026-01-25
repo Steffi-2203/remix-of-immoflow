@@ -42,9 +42,10 @@ export function PropertyKPIsWidget() {
   const vacantUnits = units.filter(u => u.status !== 'aktiv').length;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  const activeInvoices = (invoices || []).filter(i => i.status !== 'offen');
-  const overdueInvoices = activeInvoices.filter(i => {
-    if (i.status === 'bezahlt') return false;
+  const openInvoices = (invoices || []).filter(i => 
+    i.status === 'offen' || i.status === 'ueberfaellig' || i.status === 'teilbezahlt'
+  );
+  const overdueInvoices = openInvoices.filter(i => {
     if (!i.faellig_am) return false;
     return new Date(i.faellig_am) < new Date();
   });
