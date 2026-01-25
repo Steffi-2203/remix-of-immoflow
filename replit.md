@@ -18,6 +18,9 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
   - Dropdown bei Ausgaben-Erfassung für Schlüssel-Auswahl (nur Betriebskosten umlagefähig)
   - Settlement-Service verwendet gewählte Schlüssel für korrekte Kostenverteilung pro Ausgabe
   - CRUD-Endpoints für distribution_keys (/api/distribution-keys)
+  - **Neu**: Sicherheitsvalidierung für distributionKeyId bei Ausgaben (Organisations-/System-Key Prüfung)
+  - **Neu**: CRUD-Endpoints für unit_distribution_values (/api/units/:unitId/distribution-values)
+  - **Neu**: useUnitDistributionValues Hook migriert mit Delete-on-Zero Verhalten für korrekte Datenbereinigung
 - **Architektur-Verbesserungen (Keller→Mauern→Dach Ansatz)**:
   - **API-Sicherheit**: Authentifizierung auf 14+ Routen, Organisation-basierte Mandantentrennung
   - **Ownership-Checks**: Strenge Zugriffsprüfung mit Relationship-Traversal (tenant→unit→property→org)
