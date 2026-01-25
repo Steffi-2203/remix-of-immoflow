@@ -12,6 +12,7 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
 - **Frontend**: React with Vite, Tailwind CSS, shadcn/ui components
 
 ## Recent Changes (January 2026)
+- **OCR-Integration**: GPT-4o vision-based OCR for invoices and bank statements via Replit AI Integrations
 - **Eigentümerverwaltung**: Owner management with property assignment (OwnerList.tsx)
 - **Zählerstand-Erfassung**: Meter readings with history tracking (MeterReadings.tsx)
 - **Vertragsablauf Report**: Contract expiration report with 1/3/6 month alerts
@@ -20,6 +21,15 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
 - **Dashboard KPIs**: New widget showing vacancy rate, outstanding receivables, dunning status
 - **Schlüsselverwaltung**: Key inventory and handover tracking (KeyManagement.tsx)
 - **VPI-Indexanpassungen**: Rent adjustments based on Austrian consumer price index (VpiAdjustments.tsx)
+
+### OCR Functionality
+OCR is now fully functional using OpenAI's GPT-4o via Replit AI Integrations:
+- **ocr-invoice**: Extracts data from invoice images (lieferant, betrag, datum, IBAN, etc.)
+- **ocr-invoice-text**: Analyzes OCR text from PDFs for structured invoice data
+- **ocr-bank-statement**: Extracts transactions from bank statement images
+- All endpoints return consistent `{data}` response format
+- Austrian-specific categories and expense types supported
+- File type validation (JPEG, PNG, GIF, WebP) with 10MB limit
 
 ### New Database Tables
 - `owners` - Property owner information

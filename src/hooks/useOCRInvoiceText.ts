@@ -58,7 +58,8 @@ export function useOCRInvoiceText() {
         throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
       }
       
-      return response.json();
+      const result = await response.json();
+      return result.data as OCRTextResult;
     },
     onSuccess: (data) => {
       const validation = data.validierung;
