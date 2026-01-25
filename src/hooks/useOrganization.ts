@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
+import { apiRequest } from '@/lib/queryClient';
 
 export type SubscriptionTier = 'starter' | 'professional' | 'enterprise';
 export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'expired';
@@ -20,7 +20,6 @@ export interface Organization {
   sepa_creditor_id: string | null;
 }
 
-// Unlimited usage - no subscription limits
 export const TIER_LIMITS = {
   starter: { properties: 999, unitsPerProperty: 999 },
   professional: { properties: 999, unitsPerProperty: 999 },
@@ -47,26 +46,12 @@ export function useOrganization() {
     queryKey: ['organization', user?.id],
     queryFn: async () => {
       if (!user) return null;
-
-      // First get the user's profile to find their organization
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) throw profileError;
-      if (!profile?.organization_id) return null;
-
-      // Then get the organization details
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', profile.organization_id)
-        .single();
-
-      if (orgError) throw orgError;
-      return org as Organization;
+      const response = await fetch('/api/profile/organization', { credentials: 'include' });
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch organization');
+      }
+      return response.json() as Promise<Organization>;
     },
     enabled: !!user,
   });
@@ -81,40 +66,29 @@ export function useSubscriptionLimits() {
   const { user } = useAuth();
   const { data: organization, isLoading: isLoadingOrg } = useOrganization();
 
-  // Fetch managed properties count
   const { data: propertiesData, isLoading: isLoadingProperties } = useQuery({
-    queryKey: ['managed_properties_count', user?.id],
+    queryKey: ['properties_for_limits', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      
-      const { data: managedPropertyIds, error: pmError } = await supabase
-        .from('property_managers')
-        .select('property_id')
-        .eq('user_id', user.id);
-      
-      if (pmError) throw pmError;
-      return managedPropertyIds?.map(pm => pm.property_id) || [];
+      const response = await fetch('/api/properties', { credentials: 'include' });
+      if (!response.ok) return [];
+      const properties = await response.json();
+      return properties.map((p: any) => p.id);
     },
     enabled: !!user,
   });
 
-  // Fetch units count per property
   const { data: unitsData, isLoading: isLoadingUnits } = useQuery({
-    queryKey: ['units_per_property', propertiesData],
+    queryKey: ['units_for_limits', user?.id],
     queryFn: async () => {
-      if (!propertiesData || propertiesData.length === 0) return [];
+      if (!user) return [];
+      const response = await fetch('/api/units', { credentials: 'include' });
+      if (!response.ok) return [];
+      const units = await response.json();
       
-      const { data: units, error } = await supabase
-        .from('units')
-        .select('id, property_id')
-        .in('property_id', propertiesData);
-      
-      if (error) throw error;
-      
-      // Count units per property
       const countByProperty: Record<string, number> = {};
-      units?.forEach(unit => {
-        countByProperty[unit.property_id] = (countByProperty[unit.property_id] || 0) + 1;
+      units?.forEach((unit: any) => {
+        countByProperty[unit.propertyId] = (countByProperty[unit.propertyId] || 0) + 1;
       });
       
       return Object.entries(countByProperty).map(([propertyId, unitCount]) => ({
@@ -122,13 +96,11 @@ export function useSubscriptionLimits() {
         unitCount,
       })) as PropertyUnitCount[];
     },
-    enabled: !!propertiesData && propertiesData.length > 0,
+    enabled: !!user,
   });
 
-  // Always use unlimited limits
   const maxLimits = { properties: 999, unitsPerProperty: 999 };
 
-  // Current usage
   const currentUsage = useMemo(() => {
     const propertiesCount = propertiesData?.length || 0;
     const unitsPerProperty: Record<string, number> = {};
@@ -137,7 +109,6 @@ export function useSubscriptionLimits() {
       unitsPerProperty[item.propertyId] = item.unitCount;
     });
 
-    // Also include properties with 0 units
     propertiesData?.forEach(propertyId => {
       if (!(propertyId in unitsPerProperty)) {
         unitsPerProperty[propertyId] = 0;
@@ -151,41 +122,27 @@ export function useSubscriptionLimits() {
     };
   }, [propertiesData, unitsData]);
 
-  // Always allow adding properties and units (no limits)
   const canAddProperty = true;
   const canAddUnit = useCallback((_propertyId: string): boolean => true, []);
   const getRemainingUnits = useCallback((_propertyId: string): number => 999, []);
 
   return {
-    // Loading state
     isLoading: isLoadingOrg || isLoadingProperties || isLoadingUnits,
-    
-    // Organization info
     organization,
     subscriptionTier: 'enterprise' as SubscriptionTier,
     tierLabel: 'Vollversion',
     status: 'active' as SubscriptionStatus,
     statusLabel: 'Aktiv',
-    
-    // No trial - always active
     trialEndsAt: null,
     trialDaysRemaining: 0,
     isTrialExpired: false,
     isTrialExpiringSoon: false,
-    
-    // Unlimited limits
     maxLimits,
     limits: maxLimits,
-    
-    // Current usage
     currentUsage,
-    
-    // Permission checks - always allowed
     canAddProperty,
     canAddUnit,
     getRemainingUnits,
-    
-    // No limits reached
     hasReachedPropertyLimit: false,
     getUnitLimitReached: (_propertyId: string) => false,
   };
@@ -197,7 +154,6 @@ export function calculateTrialDaysRemaining(_trialEndsAt: Date | null): number {
 
 export function useUpdateOrganization() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (data: {
@@ -207,17 +163,8 @@ export function useUpdateOrganization() {
       bic?: string;
       sepa_creditor_id?: string;
     }) => {
-      const { id, ...updateData } = data;
-      
-      const { data: result, error } = await supabase
-        .from('organizations')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return result;
+      const response = await apiRequest('PATCH', `/api/organizations/${data.id}`, data);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization'] });

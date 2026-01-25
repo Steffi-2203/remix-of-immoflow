@@ -305,6 +305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to finalize settlement" });
     }
   });
+
+  app.post("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
