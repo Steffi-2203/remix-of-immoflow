@@ -650,6 +650,7 @@ export type UserRole = typeof userRoles.$inferSelect;
 
 export type Owner = typeof owners.$inferSelect;
 export type PropertyOwner = typeof propertyOwners.$inferSelect;
+export type PropertyManager = typeof propertyManagers.$inferSelect;
 export type Meter = typeof meters.$inferSelect;
 export type MeterReading = typeof meterReadings.$inferSelect;
 export type KeyInventory = typeof keyInventory.$inferSelect;
