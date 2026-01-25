@@ -227,15 +227,20 @@ export function Sidebar() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
-  const { data: isAdmin } = useIsAdmin();
+  const { data: isAdmin, isLoading: isAdminLoading } = useIsAdmin();
   const permissions = usePermissions();
-  const { tier, canAccessFullFeatures } = useSubscription();
-  const { limits } = useSubscriptionLimits();
+  const { tier, canAccessFullFeatures, isLoading: isSubscriptionLoading } = useSubscription();
+  const { limits, isLoading: isLimitsLoading } = useSubscriptionLimits();
 
   const tierOrder: SubscriptionTier[] = ['starter', 'professional', 'enterprise'];
   const currentTierIndex = tierOrder.indexOf(tier);
+  
+  const isDataLoading = isAdminLoading || isSubscriptionLoading || isLimitsLoading;
 
   const canAccessItem = (item: NavItem): boolean => {
+    // During loading, allow all items to prevent flickering disabled state
+    if (isDataLoading) return true;
+    
     // Admins always have full access regardless of subscription
     if (isAdmin) return true;
     
