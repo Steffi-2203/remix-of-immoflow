@@ -1,9 +1,12 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, LogIn, Building2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function Register() {
@@ -11,7 +14,15 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('invite');
   
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, register } = useAuth();
+  const { toast } = useToast();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -19,11 +30,61 @@ export default function Register() {
     }
   }, [isAuthenticated, loading, navigate]);
 
-  const handleLogin = () => {
-    const redirectUrl = inviteToken 
-      ? `/api/login?invite=${inviteToken}`
-      : '/api/login';
-    window.location.href = redirectUrl;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: "Fehler",
+        description: "Bitte alle Pflichtfelder ausfüllen",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 8) {
+      toast({
+        title: "Fehler",
+        description: "Das Passwort muss mindestens 8 Zeichen lang sein",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "Fehler",
+        description: "Die Passwörter stimmen nicht überein",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      await register({
+        email,
+        password,
+        fullName: fullName || undefined,
+        token: inviteToken || undefined,
+      });
+      
+      toast({
+        title: "Erfolgreich registriert",
+        description: "Willkommen bei ImmoflowMe!",
+      });
+      
+      navigate('/dashboard', { replace: true });
+    } catch (error: any) {
+      toast({
+        title: "Registrierung fehlgeschlagen",
+        description: error.message || "Ein Fehler ist aufgetreten",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -50,29 +111,94 @@ export default function Register() {
             </CardTitle>
             <CardDescription>
               {inviteToken 
-                ? 'Sie wurden zu ImmoflowMe eingeladen. Melden Sie sich an, um fortzufahren.'
+                ? 'Erstellen Sie Ihr Konto, um die Einladung anzunehmen'
                 : 'Erstellen Sie Ihr Konto bei ImmoflowMe'}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex flex-col items-center gap-4 py-6">
-              <UserPlus className="h-16 w-16 text-primary opacity-80" />
-              <p className="text-center text-muted-foreground">
-                {inviteToken 
-                  ? 'Klicken Sie auf "Anmelden", um Ihre Einladung anzunehmen und Zugang zu erhalten.'
-                  : 'Melden Sie sich an, um ein neues Konto zu erstellen.'}
-              </p>
-            </div>
-            <Button 
-              onClick={handleLogin} 
-              className="w-full" 
-              size="lg"
-              data-testid="button-register"
-            >
-              <LogIn className="mr-2 h-5 w-5" />
-              Anmelden
-            </Button>
-          </CardContent>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Vollständiger Name</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Max Mustermann"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={isSubmitting}
+                  data-testid="input-fullname"
+                  autoComplete="name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">E-Mail *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="ihre@email.at"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
+                  required
+                  data-testid="input-email"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Passwort * (min. 8 Zeichen)</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Ihr Passwort"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    required
+                    data-testid="input-password"
+                    autoComplete="new-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Passwort bestätigen *</Label>
+                <Input
+                  id="confirmPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Passwort wiederholen"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isSubmitting}
+                  required
+                  data-testid="input-confirm-password"
+                  autoComplete="new-password"
+                />
+              </div>
+              <Button 
+                type="submit"
+                className="w-full" 
+                size="lg"
+                disabled={isSubmitting}
+                data-testid="button-register"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <UserPlus className="mr-2 h-5 w-5" />
+                )}
+                Registrieren
+              </Button>
+            </CardContent>
+          </form>
           <CardFooter className="flex flex-col gap-4 text-center text-sm text-muted-foreground">
             <p>
               Bereits registriert?{' '}

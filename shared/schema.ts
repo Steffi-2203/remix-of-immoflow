@@ -47,12 +47,22 @@ export const organizations = pgTable("organizations", {
 export const profiles = pgTable("profiles", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
+  passwordHash: text("password_hash"),
   fullName: text("full_name"),
   organizationId: uuid("organization_id").references(() => organizations.id),
   avatarUrl: text("avatar_url"),
   phone: text("phone"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const userRoles = pgTable("user_roles", {

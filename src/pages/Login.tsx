@@ -1,15 +1,24 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, LogIn, Building2 } from 'lucide-react';
+import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, login } = useAuth();
+  const { toast } = useToast();
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -18,8 +27,33 @@ export default function Login() {
     }
   }, [isAuthenticated, loading, navigate, location]);
 
-  const handleLogin = () => {
-    window.location.href = '/api/login';
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: "Fehler",
+        description: "Bitte E-Mail und Passwort eingeben",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      await login(email, password);
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    } catch (error: any) {
+      toast({
+        title: "Anmeldung fehlgeschlagen",
+        description: error.message || "Ungültige E-Mail oder Passwort",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -42,32 +76,79 @@ export default function Login() {
               <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
             </div>
             <CardTitle className="text-2xl font-bold">
-              Willkommen bei ImmoflowMe
+              Anmelden
             </CardTitle>
             <CardDescription>
-              Professionelle Hausverwaltung - MRG-konform und effizient
+              Melden Sie sich mit Ihrer E-Mail und Passwort an
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex flex-col items-center gap-4 py-6">
-              <Building2 className="h-16 w-16 text-primary opacity-80" />
-              <p className="text-center text-muted-foreground">
-                Melden Sie sich an, um auf Ihre Liegenschaften, Mieter und Abrechnungen zuzugreifen.
-              </p>
-            </div>
-            <Button 
-              onClick={handleLogin} 
-              className="w-full" 
-              size="lg"
-              data-testid="button-login"
-            >
-              <LogIn className="mr-2 h-5 w-5" />
-              Anmelden
-            </Button>
-          </CardContent>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-Mail</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="ihre@email.at"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
+                  data-testid="input-email"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Passwort</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Ihr Passwort"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    data-testid="input-password"
+                    autoComplete="current-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="text-right">
+                <Link 
+                  to="/reset-password" 
+                  className="text-sm text-primary hover:underline"
+                  data-testid="link-forgot-password"
+                >
+                  Passwort vergessen?
+                </Link>
+              </div>
+              <Button 
+                type="submit"
+                className="w-full" 
+                size="lg"
+                disabled={isSubmitting}
+                data-testid="button-login"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <LogIn className="mr-2 h-5 w-5" />
+                )}
+                Anmelden
+              </Button>
+            </CardContent>
+          </form>
           <CardFooter className="flex flex-col gap-4 text-center text-sm text-muted-foreground">
             <p>
-              Sichere Anmeldung via Replit Auth
+              Noch kein Konto? <Link to="/register" className="text-primary hover:underline">Registrieren</Link>
             </p>
             <div className="flex gap-4 justify-center text-xs">
               <Link to="/impressum" className="hover:underline">Impressum</Link>

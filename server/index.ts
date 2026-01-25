@@ -1,11 +1,27 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
+import { setupAuth } from "./auth";
 
 const app = express();
+
+const SESSION_SECRET = process.env.SESSION_SECRET || 'immoflowme-secret-key-change-in-production';
+
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
+  },
+}));
 
 app.post(
   '/api/stripe/webhook',
@@ -100,6 +116,7 @@ async function initStripe() {
 
 (async () => {
   await initStripe();
+  setupAuth(app);
   const server = await registerRoutes(app);
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
