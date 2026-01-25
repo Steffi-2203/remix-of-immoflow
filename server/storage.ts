@@ -36,9 +36,14 @@ export interface IStorage {
   getContractors(): Promise<schema.Contractor[]>;
   getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]>;
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
+  getDistributionKey(id: string): Promise<schema.DistributionKey | undefined>;
   createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey>;
   updateDistributionKey(id: string, data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey | undefined>;
   deleteDistributionKey(id: string): Promise<void>;
+  getUnitDistributionValues(unitId: string): Promise<schema.UnitDistributionValue[]>;
+  getUnitDistributionValuesByProperty(propertyId: string): Promise<schema.UnitDistributionValue[]>;
+  upsertUnitDistributionValue(data: schema.InsertUnitDistributionValue): Promise<schema.UnitDistributionValue>;
+  deleteUnitDistributionValue(unitId: string, keyId: string): Promise<void>;
   softDeleteUnit(id: string): Promise<void>;
   softDeleteTenant(id: string): Promise<void>;
   getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]>;
@@ -361,6 +366,13 @@ class DatabaseStorage implements IStorage {
       .orderBy(asc(schema.distributionKeys.sortOrder));
   }
 
+  async getDistributionKey(id: string): Promise<schema.DistributionKey | undefined> {
+    const result = await db.select().from(schema.distributionKeys)
+      .where(eq(schema.distributionKeys.id, id))
+      .limit(1);
+    return result[0];
+  }
+
   async createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey> {
     const result = await db.insert(schema.distributionKeys).values(data as schema.InsertDistributionKey).returning();
     return result[0];
@@ -378,6 +390,50 @@ class DatabaseStorage implements IStorage {
     await db.update(schema.distributionKeys)
       .set({ isActive: false, updatedAt: new Date() })
       .where(eq(schema.distributionKeys.id, id));
+  }
+
+  async getUnitDistributionValues(unitId: string): Promise<schema.UnitDistributionValue[]> {
+    return db.select().from(schema.unitDistributionValues)
+      .where(eq(schema.unitDistributionValues.unitId, unitId));
+  }
+
+  async getUnitDistributionValuesByProperty(propertyId: string): Promise<schema.UnitDistributionValue[]> {
+    const propertyUnits = await db.select({ id: schema.units.id })
+      .from(schema.units)
+      .where(eq(schema.units.propertyId, propertyId));
+    const unitIds = propertyUnits.map(u => u.id);
+    if (unitIds.length === 0) return [];
+    const { inArray } = await import("drizzle-orm");
+    return db.select().from(schema.unitDistributionValues)
+      .where(inArray(schema.unitDistributionValues.unitId, unitIds));
+  }
+
+  async upsertUnitDistributionValue(data: schema.InsertUnitDistributionValue): Promise<schema.UnitDistributionValue> {
+    const existing = await db.select().from(schema.unitDistributionValues)
+      .where(and(
+        eq(schema.unitDistributionValues.unitId, data.unitId),
+        eq(schema.unitDistributionValues.keyId, data.keyId)
+      ))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      const result = await db.update(schema.unitDistributionValues)
+        .set({ value: data.value, updatedAt: new Date() })
+        .where(eq(schema.unitDistributionValues.id, existing[0].id))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db.insert(schema.unitDistributionValues).values(data).returning();
+      return result[0];
+    }
+  }
+
+  async deleteUnitDistributionValue(unitId: string, keyId: string): Promise<void> {
+    await db.delete(schema.unitDistributionValues)
+      .where(and(
+        eq(schema.unitDistributionValues.unitId, unitId),
+        eq(schema.unitDistributionValues.keyId, keyId)
+      ));
   }
 
   async getProfileByEmail(email: string): Promise<schema.Profile | undefined> {
