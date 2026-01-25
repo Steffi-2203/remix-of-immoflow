@@ -143,7 +143,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isTester(roles)) {
         props = maskPersonalData(props);
       }
-      res.json(props);
+      
+      // Enrich properties with unit statistics
+      const allUnits = await storage.getUnitsByOrganization(profile?.organizationId);
+      const allTenants = await storage.getTenantsByOrganization(profile?.organizationId);
+      
+      const enrichedProps = props.map(prop => {
+        const propertyUnits = allUnits.filter(u => u.propertyId === prop.id);
+        const activeUnits = propertyUnits.filter(u => u.status === 'aktiv');
+        const totalQm = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche) || 0), 0);
+        
+        // Count units with active tenants
+        const rentedUnits = propertyUnits.filter(unit => {
+          return allTenants.some(t => 
+            t.unitId === unit.id && 
+            t.status === 'aktiv' &&
+            (!t.mietende || new Date(t.mietende) >= new Date())
+          );
+        }).length;
+        
+        return {
+          ...prop,
+          total_units: propertyUnits.length,
+          rented_units: rentedUnits,
+          total_qm: totalQm,
+        };
+      });
+      
+      res.json(enrichedProps);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch properties" });
     }

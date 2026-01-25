@@ -339,7 +339,7 @@ export default function SimpleDashboard() {
                             {property.address}, {property.postalCode} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {property.total_units} Einheiten • {property.total_qm} m²
+                            {property.total_units || 0} Einheiten • {property.rented_units || 0} vermietet • {property.total_qm || 0} m²
                           </p>
                         </div>
                       </div>
