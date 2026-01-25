@@ -8,6 +8,7 @@ import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 import { setupAuth } from "./auth";
 import { pool } from "./db";
+import { seedDistributionKeys } from "./seedDistributionKeys";
 
 const app = express();
 
@@ -127,6 +128,7 @@ async function initStripe() {
 
 (async () => {
   await initStripe();
+  await seedDistributionKeys();
   setupAuth(app);
   const server = await registerRoutes(app);
 
