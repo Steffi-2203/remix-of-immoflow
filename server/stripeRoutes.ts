@@ -19,6 +19,11 @@ const PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
   },
 };
 
+const USER_PRICE_IDS: Record<string, string> = {
+  starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_user_starter_monthly',
+  pro: process.env.STRIPE_USER_PRICE_PRO || 'price_user_pro_monthly',
+};
+
 function isAuthenticated(req: Request, res: Response, next: () => void) {
   if (req.session?.userId) {
     return next();
@@ -95,6 +100,65 @@ export function registerStripeRoutes(app: Express) {
       res.json({ sessionId: session.id, url: session.url });
     } catch (error: any) {
       console.error("Checkout session error:", error.message);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  app.post("/api/stripe/checkout", isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId } = req.body;
+      const userId = req.session.userId;
+
+      if (!planId || !['starter', 'pro'].includes(planId)) {
+        return res.status(400).json({ error: "Invalid plan" });
+      }
+
+      const profile = await getProfileById(userId);
+      if (!profile) {
+        return res.status(400).json({ error: "Profile not found" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const priceId = USER_PRICE_IDS[planId];
+
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+
+      let customerId = (profile as any).stripeCustomerId;
+      
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: profile.email,
+          metadata: { userId: userId },
+        });
+        customerId = customer.id;
+        
+        await db.update(schema.profiles)
+          .set({ stripeCustomerId: customer.id } as any)
+          .where(eq(schema.profiles.id, userId));
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        payment_method_types: ['card', 'sepa_debit'],
+        customer: customerId,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          userId: userId,
+          planId: planId,
+          type: 'user_subscription',
+        },
+        success_url: `${baseUrl}/checkout?plan=${planId}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/pricing`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("User checkout session error:", error.message);
       res.status(500).json({ error: "Failed to create checkout session" });
     }
   });
@@ -180,19 +244,42 @@ export async function handleSubscriptionWebhook(event: any) {
 
   if (type === 'checkout.session.completed') {
     const session = data.object;
-    const organizationId = session.metadata?.organizationId;
-    const tier = session.metadata?.tier || 'starter';
-
-    if (organizationId) {
-      await db.update(schema.organizations)
-        .set({ 
-          subscriptionStatus: 'active',
-          subscriptionTier: tier as any,
-          trialEndsAt: null,
-        })
-        .where(eq(schema.organizations.id, organizationId));
+    
+    if (session.metadata?.type === 'user_subscription') {
+      const userId = session.metadata?.userId;
+      const planId = session.metadata?.planId;
+      const subscriptionId = session.subscription;
       
-      console.log(`Subscription activated for organization ${organizationId}`);
+      if (userId && planId) {
+        const subscriptionEndsAt = new Date();
+        subscriptionEndsAt.setMonth(subscriptionEndsAt.getMonth() + 1);
+        
+        await db.update(schema.profiles)
+          .set({ 
+            subscriptionTier: planId as any,
+            stripeSubscriptionId: subscriptionId,
+            subscriptionEndsAt: subscriptionEndsAt,
+            trialEndsAt: null,
+          } as any)
+          .where(eq(schema.profiles.id, userId));
+        
+        console.log(`User subscription activated for user ${userId} with plan ${planId}`);
+      }
+    } else {
+      const organizationId = session.metadata?.organizationId;
+      const tier = session.metadata?.tier || 'starter';
+
+      if (organizationId) {
+        await db.update(schema.organizations)
+          .set({ 
+            subscriptionStatus: 'active',
+            subscriptionTier: tier as any,
+            trialEndsAt: null,
+          })
+          .where(eq(schema.organizations.id, organizationId));
+        
+        console.log(`Subscription activated for organization ${organizationId}`);
+      }
     }
   }
 
@@ -207,5 +294,21 @@ export async function handleSubscriptionWebhook(event: any) {
 
   if (type === 'customer.subscription.deleted') {
     console.log('Subscription deleted');
+  }
+
+  if (type === 'invoice.paid') {
+    const invoice = data.object;
+    const subscriptionId = invoice.subscription;
+    
+    if (subscriptionId) {
+      const subscriptionEndsAt = new Date();
+      subscriptionEndsAt.setMonth(subscriptionEndsAt.getMonth() + 1);
+      
+      await db.update(schema.profiles)
+        .set({ 
+          subscriptionEndsAt: subscriptionEndsAt,
+        } as any)
+        .where(eq((schema.profiles as any).stripeSubscriptionId, subscriptionId));
+    }
   }
 }
