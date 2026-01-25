@@ -407,8 +407,9 @@ export default function Reports() {
     let totalGesamt = 0;
     
     periodCombinedPayments.forEach(p => {
-      // Finde den Mieter für diese Zahlung
-      const tenant = allTenants?.find(t => t.id === p.tenant_id);
+      // Finde den Mieter für diese Zahlung (supports both tenantId and tenant_id)
+      const paymentTenantId = p.tenantId ?? p.tenant_id;
+      const tenant = allTenants?.find(t => t.id === paymentTenantId);
       if (!tenant) {
         // Wenn kein Mieter gefunden, zähle alles als Miete
         totalMieteAnteil += Number(p.amount);
@@ -424,12 +425,13 @@ export default function Reports() {
       // WICHTIG: SOLL-Beträge aus Vorschreibung (monthlyInvoice) statt Mieter-Stammdaten!
       // Die Vorschreibung enthält die tatsächlichen Soll-Beträge für den spezifischen Monat
       const invoice = allInvoices?.find(inv => 
-        inv.tenantId === p.tenant_id && 
+        (inv.tenantId ?? inv.tenant_id) === paymentTenantId && 
         inv.year === paymentYear && 
         inv.month === paymentMonth
       );
       
       // Fallback auf Mieter-Stammdaten nur wenn keine Vorschreibung existiert
+      // Supports both camelCase and snake_case field names
       const invoiceAmounts: InvoiceAmounts = invoice ? {
         grundmiete: Number(invoice.grundmiete || 0),
         betriebskosten: Number(invoice.betriebskosten || 0),
@@ -437,11 +439,11 @@ export default function Reports() {
         gesamtbetrag: Number(invoice.gesamtbetrag || 0)
       } : {
         grundmiete: Number(tenant.grundmiete || 0),
-        betriebskosten: Number(tenant.betriebskostenVorschuss || 0),
-        heizungskosten: Number(tenant.heizkostenVorschuss || 0),
+        betriebskosten: Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0),
+        heizungskosten: Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0),
         gesamtbetrag: Number(tenant.grundmiete || 0) + 
-                      Number(tenant.betriebskostenVorschuss || 0) + 
-                      Number(tenant.heizkostenVorschuss || 0)
+                      Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0) + 
+                      Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0)
       };
       
       // Berechne die Zuordnung (BK → Heizung → Miete)
@@ -472,8 +474,9 @@ export default function Reports() {
   // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
   const paymentsByTenant = new Map<string, number>();
   periodCombinedPayments.forEach(p => {
-    const current = paymentsByTenant.get(p.tenant_id) || 0;
-    paymentsByTenant.set(p.tenant_id, current + Number(p.amount));
+    const paymentTenantId = p.tenantId ?? p.tenant_id;
+    const current = paymentsByTenant.get(paymentTenantId) || 0;
+    paymentsByTenant.set(paymentTenantId, current + Number(p.amount));
   });
 
 
