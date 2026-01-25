@@ -12,8 +12,23 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
 - **Frontend**: React with Vite, Tailwind CSS, shadcn/ui components
 
 ## Recent Changes (January 2026)
-- Added Kautionsübersicht (security deposit) report showing all tenants with paid deposits (kaution_bezahlt = true)
-- Report includes PDF export functionality with property filtering support
+- **Eigentümerverwaltung**: Owner management with property assignment (OwnerList.tsx)
+- **Zählerstand-Erfassung**: Meter readings with history tracking (MeterReadings.tsx)
+- **Vertragsablauf Report**: Contract expiration report with 1/3/6 month alerts
+- **Kautionsübersicht**: Security deposit report with PDF/CSV export
+- **CSV Export**: Export functionality added to Kaution and Vertragsablauf reports
+- **Dashboard KPIs**: New widget showing vacancy rate, outstanding receivables, dunning status
+- **Schlüsselverwaltung**: Key inventory and handover tracking (KeyManagement.tsx)
+- **VPI-Indexanpassungen**: Rent adjustments based on Austrian consumer price index (VpiAdjustments.tsx)
+
+### New Database Tables
+- `owners` - Property owner information
+- `property_owners` - Many-to-many relationship for properties and owners
+- `meters` - Water/gas/electric/heating meters
+- `meter_readings` - Historical meter readings
+- `key_inventory` - Key inventory per property/unit
+- `key_handovers` - Key handover tracking
+- `vpi_adjustments` - VPI rent adjustment calculations
 
 ## Tech Stack
 - **Backend**: Node.js, Express.js, TypeScript
