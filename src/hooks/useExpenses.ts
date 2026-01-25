@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export type ExpenseCategory = 'betriebskosten_umlagefaehig' | 'instandhaltung' | 'sonstige_kosten';
@@ -40,6 +40,7 @@ export interface Expense {
   transaction_id: string | null;
   created_at: string;
   updated_at: string;
+  properties?: { name: string };
 }
 
 export interface ExpenseInsert {
@@ -63,25 +64,28 @@ export function useExpenses(propertyId?: string, year?: number, month?: number) 
   return useQuery({
     queryKey: ['expenses', propertyId, year, month],
     queryFn: async () => {
-      let query = supabase
-        .from('expenses')
-        .select('*, properties(name)')
-        .order('datum', { ascending: false });
+      let url = propertyId ? `/api/properties/${propertyId}/expenses` : '/api/expenses';
+      const params = new URLSearchParams();
+      if (year) params.append('year', year.toString());
+      if (month) params.append('month', month.toString());
+      if (params.toString()) url += `?${params.toString()}`;
       
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-      if (year) {
-        query = query.eq('year', year);
-      }
-      if (month) {
-        query = query.eq('month', month);
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch expenses');
+      const expenses = await response.json();
+      
+      if (!propertyId) {
+        const propsRes = await fetch('/api/properties', { credentials: 'include' });
+        if (propsRes.ok) {
+          const properties = await propsRes.json();
+          return expenses.map((expense: Expense) => {
+            const property = properties.find((p: any) => p.id === expense.property_id);
+            return { ...expense, properties: property ? { name: property.name } : undefined };
+          });
+        }
       }
       
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return data as (Expense & { properties: { name: string } })[];
+      return expenses;
     },
   });
 }
@@ -90,23 +94,15 @@ export function useExpensesByCategory(propertyId?: string, year?: number) {
   return useQuery({
     queryKey: ['expenses', 'by-category', propertyId, year],
     queryFn: async () => {
-      let query = supabase
-        .from('expenses')
-        .select('*')
-        .order('datum', { ascending: false });
+      let url = propertyId ? `/api/properties/${propertyId}/expenses` : '/api/expenses';
+      const params = new URLSearchParams();
+      if (year) params.append('year', year.toString());
+      if (params.toString()) url += `?${params.toString()}`;
       
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-      if (year) {
-        query = query.eq('year', year);
-      }
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch expenses');
       
-      const { data, error } = await query;
-      
-      if (error) throw error;
-
-      const expenses = data as Expense[];
+      const expenses: Expense[] = await response.json();
       
       const betriebskosten = expenses.filter(e => e.category === 'betriebskosten_umlagefaehig');
       const instandhaltung = expenses.filter(e => e.category === 'instandhaltung');
@@ -127,14 +123,8 @@ export function useCreateExpense() {
   
   return useMutation({
     mutationFn: async (expense: ExpenseInsert) => {
-      const { data, error } = await supabase
-        .from('expenses')
-        .insert(expense)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/expenses', expense);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -152,15 +142,8 @@ export function useUpdateExpense() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: ExpenseUpdate) => {
-      const { data, error } = await supabase
-        .from('expenses')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/expenses/${id}`, updates);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -178,12 +161,7 @@ export function useDeleteExpense() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('expenses')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/expenses/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
