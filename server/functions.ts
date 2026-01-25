@@ -767,6 +767,17 @@ export function registerFunctionRoutes(app: Express) {
       if (!imageBase64) {
         return res.status(400).json({ error: "Bild-Daten erforderlich" });
       }
+      
+      // Validate image type
+      const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (mimeType && !validMimeTypes.includes(mimeType)) {
+        return res.status(400).json({ error: "Nur Bilder werden unterstützt (JPEG, PNG, GIF, WebP)" });
+      }
+      
+      // Basic payload size validation (max ~10MB base64)
+      if (imageBase64.length > 10 * 1024 * 1024 * 1.37) {
+        return res.status(400).json({ error: "Datei ist zu groß (max. 10MB)" });
+      }
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -925,7 +936,7 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format:
         return res.status(500).json({ error: "Fehler beim Parsen der OCR-Ergebnisse" });
       }
 
-      res.json(data);
+      res.json({ data });
     } catch (error) {
       console.error("Error in ocr-invoice-text:", error);
       res.status(500).json({ error: "OCR-Analyse fehlgeschlagen" });
@@ -939,6 +950,17 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format:
 
       if (!imageBase64) {
         return res.status(400).json({ error: "Bild-Daten erforderlich" });
+      }
+      
+      // Validate image type
+      const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (mimeType && !validMimeTypes.includes(mimeType)) {
+        return res.status(400).json({ error: "Nur Bilder werden unterstützt (JPEG, PNG, GIF, WebP). Für PDFs bitte erst in Bild konvertieren." });
+      }
+      
+      // Basic payload size validation (max ~10MB base64)
+      if (imageBase64.length > 10 * 1024 * 1024 * 1.37) {
+        return res.status(400).json({ error: "Datei ist zu groß (max. 10MB)" });
       }
 
       const response = await openai.chat.completions.create({
@@ -1011,7 +1033,7 @@ Wichtig:
         return res.status(500).json({ error: "Fehler beim Parsen der OCR-Ergebnisse" });
       }
 
-      res.json(data);
+      res.json({ data });
     } catch (error) {
       console.error("Error in ocr-bank-statement:", error);
       res.status(500).json({ error: "OCR-Analyse fehlgeschlagen" });

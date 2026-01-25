@@ -93,7 +93,8 @@ export function useOCRBankStatement() {
         throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
       }
       
-      const ocrResult = await response.json() as OCRBankStatementResult;
+      const result = await response.json();
+      const ocrResult = result.data as OCRBankStatementResult;
       setResult(ocrResult);
       
       if (ocrResult.validierung.ist_valide) {
