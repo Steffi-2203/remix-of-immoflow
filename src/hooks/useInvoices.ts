@@ -1,6 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
+
+function normalizeInvoice(invoice: any) {
+  const normalized = normalizeFields(invoice);
+  if (normalized.tenants) {
+    normalized.tenants = normalizeFields(normalized.tenants);
+    if (normalized.tenants.units) {
+      normalized.tenants.units = normalizeFields(normalized.tenants.units);
+    }
+  }
+  return normalized;
+}
 
 export interface Invoice {
   id: string;
@@ -64,27 +76,30 @@ export function useInvoices(year?: number, month?: number) {
         const properties = await propsRes.json();
         
         return invoices.map((invoice: Invoice) => {
-          const tenant = tenants.find((t: any) => t.id === invoice.tenantId);
-          const unit = tenant ? units.find((u: any) => u.id === tenant.unitId) : null;
-          const property = unit ? properties.find((p: any) => p.id === unit.propertyId) : null;
+          const invoiceTenantId = invoice.tenantId ?? (invoice as any).tenant_id;
+          const tenant = tenants.find((t: any) => t.id === invoiceTenantId);
+          const tenantUnitId = tenant?.unitId ?? tenant?.unit_id;
+          const unit = tenant ? units.find((u: any) => u.id === tenantUnitId) : null;
+          const unitPropertyId = unit?.propertyId ?? unit?.property_id;
+          const property = unit ? properties.find((p: any) => p.id === unitPropertyId) : null;
           
-          return {
+          return normalizeInvoice({
             ...invoice,
             tenants: tenant ? {
-              firstName: tenant.firstName,
-              lastName: tenant.lastName,
-              unitId: tenant.unitId,
+              firstName: tenant.firstName ?? tenant.first_name,
+              lastName: tenant.lastName ?? tenant.last_name,
+              unitId: tenantUnitId,
               units: unit ? {
-                topNummer: unit.topNummer,
-                propertyId: unit.propertyId,
+                topNummer: unit.topNummer ?? unit.top_nummer,
+                propertyId: unitPropertyId,
                 properties: property ? { name: property.name } : undefined
               } : undefined
             } : undefined
-          };
+          });
         });
       }
       
-      return invoices;
+      return invoices.map(normalizeInvoice);
     },
   });
 }
@@ -95,7 +110,8 @@ export function useInvoicesByTenant(tenantId: string) {
     queryFn: async () => {
       const response = await fetch(`/api/tenants/${tenantId}/invoices`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch invoices');
-      return response.json();
+      const invoices = await response.json();
+      return invoices.map(normalizeInvoice);
     },
     enabled: !!tenantId,
   });
