@@ -17,6 +17,7 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
   - **Ownership-Checks**: Strenge Zugriffsprüfung mit Relationship-Traversal (tenant→unit→property→org)
   - **Soft-Delete**: deletedAt Timestamps für properties, units, tenants mit isNull-Filter
   - **Miethistorie**: rent_history Tabelle mit validFrom/validUntil Tracking, Zod-Validierung
+  - **Zod-Validierung**: Alle POST/PATCH Endpoints (properties, payments, transactions, expenses, invoices) validiert
 - **Hook Migration abgeschlossen**: Alle Frontend-Hooks von Supabase auf Express API migriert
   - useInvoices, useExpenses, usePayments, useUnits, useTenants verwenden jetzt Express API
   - CRUD-Operationen (GET/POST/PATCH/DELETE) für alle Entitäten verfügbar
