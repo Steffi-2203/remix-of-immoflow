@@ -669,6 +669,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/account-categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const { name, type, parent_id, is_system } = req.body;
+      
+      const category = await storage.createAccountCategory({
+        organizationId: profile.organizationId,
+        name: name,
+        type: type,
+        parentId: parent_id || null,
+        isSystem: is_system || false,
+      });
+      res.status(201).json(category);
+    } catch (error) {
+      console.error('Create account category error:', error);
+      res.status(500).json({ error: "Failed to create account category" });
+    }
+  });
+
+  app.delete("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteAccountCategory(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Delete account category error:', error);
+      res.status(500).json({ error: "Failed to delete account category" });
+    }
+  });
+
   app.get("/api/units", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -1014,9 +1045,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
       
+      const { account_name, bank_name, opening_balance, opening_balance_date, property_id, iban, bic } = req.body;
+      
       const account = await storage.createBankAccount({
-        ...req.body,
         organizationId: profile.organizationId,
+        accountName: account_name,
+        bankName: bank_name || null,
+        openingBalance: opening_balance?.toString() || '0',
+        openingBalanceDate: opening_balance_date || null,
+        propertyId: property_id || null,
+        iban: iban || null,
+        bic: bic || null,
       });
       res.status(201).json(account);
     } catch (error) {
@@ -1034,7 +1073,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       
-      const updated = await storage.updateBankAccount(req.params.id, req.body);
+      const { account_name, bank_name, opening_balance, opening_balance_date, property_id, iban, bic } = req.body;
+      
+      const updateData: any = {};
+      if (account_name !== undefined) updateData.accountName = account_name;
+      if (bank_name !== undefined) updateData.bankName = bank_name;
+      if (opening_balance !== undefined) updateData.openingBalance = opening_balance?.toString();
+      if (opening_balance_date !== undefined) updateData.openingBalanceDate = opening_balance_date;
+      if (property_id !== undefined) updateData.propertyId = property_id;
+      if (iban !== undefined) updateData.iban = iban;
+      if (bic !== undefined) updateData.bic = bic;
+      
+      const updated = await storage.updateBankAccount(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
       console.error('Update bank account error:', error);
