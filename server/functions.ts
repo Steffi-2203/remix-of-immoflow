@@ -3,6 +3,7 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/resend";
 import OpenAI from "openai";
+import { invoiceService } from "./services/invoiceService";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -139,125 +140,8 @@ export function registerFunctionRoutes(app: Express) {
       const year = req.body.year || now.getFullYear();
       const month = req.body.month || now.getMonth() + 1;
 
-      const isJanuary = month === 1;
-
-      const managedProperties = await db.select({ propertyId: propertyManagers.propertyId })
-        .from(propertyManagers)
-        .where(eq(propertyManagers.userId, user.id));
-
-      if (!managedProperties.length) {
-        return res.json({ success: true, message: "No managed properties found", created: 0 });
-      }
-
-      const propertyIds = managedProperties.map(p => p.propertyId);
-
-      const unitsData = await db.select()
-        .from(units)
-        .where(inArray(units.propertyId, propertyIds));
-
-      if (!unitsData.length) {
-        return res.json({ success: true, message: "No units found", created: 0 });
-      }
-
-      const unitIds = unitsData.map(u => u.id);
-      const unitTypeMap = new Map(unitsData.map(u => [u.id, u.type || 'wohnung']));
-
-      const tenantsData = await db.select()
-        .from(tenants)
-        .where(and(
-          inArray(tenants.unitId, unitIds),
-          eq(tenants.status, 'aktiv')
-        ));
-
-      if (!tenantsData.length) {
-        return res.json({ success: true, message: "No active tenants found", created: 0 });
-      }
-
-      const existingInvoices = await db.select({ tenantId: monthlyInvoices.tenantId })
-        .from(monthlyInvoices)
-        .where(and(
-          eq(monthlyInvoices.year, year),
-          eq(monthlyInvoices.month, month)
-        ));
-
-      const existingTenantIds = new Set(existingInvoices.map(inv => inv.tenantId));
-      const tenantsToInvoice = tenantsData.filter(t => !existingTenantIds.has(t.id));
-
-      if (!tenantsToInvoice.length) {
-        return res.json({ 
-          success: true, 
-          message: `All ${tenantsData.length} tenants already have invoices for ${month}/${year}`,
-          created: 0,
-          skipped: tenantsData.length
-        });
-      }
-
-      const dueDate = new Date(year, month - 1, 5);
-      const dueDateStr = dueDate.toISOString().split('T')[0];
-
-      const carryForwardMap = new Map<string, CarryForward>();
-      if (isJanuary) {
-        for (const tenant of tenantsToInvoice) {
-          const carryForward = await calculateTenantCarryForward(tenant.id, year);
-          carryForwardMap.set(tenant.id, carryForward);
-        }
-      }
-
-      const invoicesToCreate = tenantsToInvoice.map(tenant => {
-        const unitType = unitTypeMap.get(tenant.unitId || '') || 'wohnung';
-        const vatRates = getVatRates(unitType);
-        
-        const grundmiete = Number(tenant.grundmiete) || 0;
-        const betriebskosten = Number(tenant.betriebskostenVorschuss) || 0;
-        const heizungskosten = Number(tenant.heizkostenVorschuss) || 0;
-        
-        const ustMiete = calculateVatFromGross(grundmiete, vatRates.ust_satz_miete);
-        const ustBk = calculateVatFromGross(betriebskosten, vatRates.ust_satz_bk);
-        const ustHeizung = calculateVatFromGross(heizungskosten, vatRates.ust_satz_heizung);
-        const ust = ustMiete + ustBk + ustHeizung;
-
-        const carryForward = carryForwardMap.get(tenant.id) || {
-          vortrag_miete: 0, vortrag_bk: 0, vortrag_hk: 0, vortrag_sonstige: 0,
-        };
-        const vortragGesamt = carryForward.vortrag_miete + carryForward.vortrag_bk + 
-                             carryForward.vortrag_hk + carryForward.vortrag_sonstige;
-        
-        const gesamtbetrag = grundmiete + betriebskosten + heizungskosten + vortragGesamt;
-
-        return {
-          tenantId: tenant.id,
-          unitId: tenant.unitId,
-          year,
-          month,
-          grundmiete: grundmiete.toString(),
-          betriebskosten: betriebskosten.toString(),
-          heizungskosten: heizungskosten.toString(),
-          gesamtbetrag: gesamtbetrag.toString(),
-          ust: (Math.round(ust * 100) / 100).toString(),
-          ustSatzMiete: vatRates.ust_satz_miete,
-          ustSatzBk: vatRates.ust_satz_bk,
-          ustSatzHeizung: vatRates.ust_satz_heizung,
-          status: "offen" as const,
-          faelligAm: dueDateStr,
-          vortragMiete: carryForward.vortrag_miete.toString(),
-          vortragBk: carryForward.vortrag_bk.toString(),
-          vortragHk: carryForward.vortrag_hk.toString(),
-          vortragSonstige: carryForward.vortrag_sonstige.toString(),
-        };
-      });
-
-      const createdInvoices = await db.insert(monthlyInvoices)
-        .values(invoicesToCreate)
-        .returning();
-
-      res.json({ 
-        success: true, 
-        message: `Successfully created ${createdInvoices.length} invoices for ${month}/${year}`,
-        created: createdInvoices.length,
-        skipped: existingTenantIds.size,
-        carryForwardsCalculated: isJanuary ? carryForwardMap.size : 0,
-        invoices: createdInvoices
-      });
+      const result = await invoiceService.generateMonthlyInvoices(user.id, year, month);
+      res.json(result);
     } catch (error) {
       console.error("Error generating invoices:", error);
       res.status(500).json({ success: false, error: "Ein Fehler ist aufgetreten. Bitte kontaktieren Sie den Support." });
