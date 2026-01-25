@@ -1,28 +1,64 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type Unit = Tables<'units'>;
-export type UnitInsert = TablesInsert<'units'>;
-export type UnitUpdate = TablesUpdate<'units'>;
+export interface Unit {
+  id: string;
+  property_id: string;
+  top_nummer: string;
+  type: 'wohnung' | 'geschaeft' | 'garage' | 'stellplatz' | 'lager' | 'sonstiges';
+  status: 'aktiv' | 'leerstand' | 'beendet';
+  flaeche: string | null;
+  zimmer: number | null;
+  nutzwert: string | null;
+  stockwerk: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  tenants?: Tenant[];
+}
+
+export interface Tenant {
+  id: string;
+  unit_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  status: 'aktiv' | 'leerstand' | 'beendet';
+  mietbeginn: string | null;
+  mietende: string | null;
+  grundmiete: string;
+  betriebskosten_vorschuss: string;
+  heizungskosten_vorschuss: string;
+}
+
+export type UnitInsert = Omit<Unit, 'id' | 'created_at' | 'updated_at' | 'tenants'>;
+export type UnitUpdate = Partial<UnitInsert>;
 
 export function useUnits(propertyId?: string) {
   return useQuery({
     queryKey: ['units', propertyId],
     queryFn: async () => {
-      let query = supabase
-        .from('units')
-        .select('*, tenants(*)');
+      const url = propertyId 
+        ? `/api/properties/${propertyId}/units`
+        : '/api/units';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch units');
+      const units = await response.json();
       
       if (propertyId) {
-        query = query.eq('property_id', propertyId);
+        const tenantsResponse = await fetch('/api/tenants', { credentials: 'include' });
+        if (tenantsResponse.ok) {
+          const tenants = await tenantsResponse.json();
+          return units.map((unit: Unit) => ({
+            ...unit,
+            tenants: tenants.filter((t: Tenant) => t.unit_id === unit.id)
+          }));
+        }
       }
       
-      const { data, error } = await query.order('top_nummer');
-      
-      if (error) throw error;
-      return data;
+      return units;
     },
   });
 }
@@ -32,14 +68,16 @@ export function useUnit(id: string | undefined) {
     queryKey: ['unit', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase
-        .from('units')
-        .select('*, tenants(*)')
-        .eq('id', id)
-        .maybeSingle();
+      const response = await fetch(`/api/units/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch unit');
+      const unit = await response.json();
       
-      if (error) throw error;
-      return data;
+      const tenantsResponse = await fetch(`/api/units/${id}/tenants`, { credentials: 'include' });
+      if (tenantsResponse.ok) {
+        unit.tenants = await tenantsResponse.json();
+      }
+      
+      return unit;
     },
     enabled: !!id,
   });
@@ -50,14 +88,8 @@ export function useCreateUnit() {
   
   return useMutation({
     mutationFn: async (unit: UnitInsert) => {
-      const { data, error } = await supabase
-        .from('units')
-        .insert(unit)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/units', unit);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['units'] });
@@ -76,15 +108,8 @@ export function useUpdateUnit() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: UnitUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('units')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/units/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['units'] });
@@ -103,12 +128,7 @@ export function useDeleteUnit() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('units')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/units/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['units'] });

@@ -1,12 +1,34 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { allocatePayment, formatAllocationForDisplay, type InvoiceAmounts } from '@/lib/paymentAllocation';
 
-export type Payment = Tables<'payments'>;
-export type PaymentInsert = TablesInsert<'payments'>;
-export type PaymentUpdate = TablesUpdate<'payments'>;
+export interface Payment {
+  id: string;
+  tenant_id: string;
+  invoice_id: string | null;
+  betrag: string;
+  buchungs_datum: string;
+  eingangs_datum?: string;
+  payment_type: 'sepa' | 'ueberweisung' | 'bar' | 'sonstiges';
+  verwendungszweck: string | null;
+  transaction_id: string | null;
+  notizen: string | null;
+  created_at: string;
+  tenants?: {
+    first_name: string;
+    last_name: string;
+    unit_id: string;
+    units?: {
+      top_nummer: string;
+      property_id: string;
+      properties?: { name: string };
+    };
+  };
+}
+
+export type PaymentInsert = Omit<Payment, 'id' | 'created_at' | 'tenants'>;
+export type PaymentUpdate = Partial<PaymentInsert>;
 
 export interface PaymentWithAllocation extends Payment {
   allocation?: {
@@ -22,13 +44,43 @@ export function usePayments() {
   return useQuery({
     queryKey: ['payments'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*, tenants(first_name, last_name, unit_id, units(top_nummer, property_id, properties(name)))')
-        .order('eingangs_datum', { ascending: false });
+      const response = await fetch('/api/payments', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch payments');
+      const payments = await response.json();
       
-      if (error) throw error;
-      return data;
+      const [tenantsRes, unitsRes, propsRes] = await Promise.all([
+        fetch('/api/tenants', { credentials: 'include' }),
+        fetch('/api/units', { credentials: 'include' }),
+        fetch('/api/properties', { credentials: 'include' })
+      ]);
+      
+      if (tenantsRes.ok && unitsRes.ok && propsRes.ok) {
+        const tenants = await tenantsRes.json();
+        const units = await unitsRes.json();
+        const properties = await propsRes.json();
+        
+        return payments.map((payment: Payment) => {
+          const tenant = tenants.find((t: any) => t.id === payment.tenant_id);
+          const unit = tenant ? units.find((u: any) => u.id === tenant.unit_id) : null;
+          const property = unit ? properties.find((p: any) => p.id === unit.property_id) : null;
+          
+          return {
+            ...payment,
+            tenants: tenant ? {
+              first_name: tenant.first_name,
+              last_name: tenant.last_name,
+              unit_id: tenant.unit_id,
+              units: unit ? {
+                top_nummer: unit.top_nummer,
+                property_id: unit.property_id,
+                properties: property ? { name: property.name } : undefined
+              } : undefined
+            } : undefined
+          };
+        });
+      }
+      
+      return payments;
     },
   });
 }
@@ -38,49 +90,30 @@ export function usePaymentsByTenant(tenantId?: string) {
     queryKey: ['payments', 'tenant', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('eingangs_datum', { ascending: false });
-      
-      if (error) throw error;
-      return data;
+      const response = await fetch(`/api/tenants/${tenantId}/payments`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch payments');
+      return response.json();
     },
     enabled: !!tenantId,
   });
 }
 
-/**
- * Zahlungen mit Zuordnung (BK → Heizung → Miete) für eine Rechnung
- */
 export function usePaymentsWithAllocation(invoiceId?: string) {
   return useQuery({
     queryKey: ['payments', 'allocation', invoiceId],
     queryFn: async () => {
       if (!invoiceId) return [];
       
-      // Hole Rechnung und zugehörige Zahlungen
-      const [invoiceResult, paymentsResult] = await Promise.all([
-        supabase
-          .from('monthly_invoices')
-          .select('*')
-          .eq('id', invoiceId)
-          .single(),
-        supabase
-          .from('payments')
-          .select('*')
-          .eq('invoice_id', invoiceId)
-          .order('eingangs_datum', { ascending: true })
+      const [invoiceRes, paymentsRes] = await Promise.all([
+        fetch(`/api/invoices/${invoiceId}`, { credentials: 'include' }),
+        fetch(`/api/invoices/${invoiceId}/payments`, { credentials: 'include' })
       ]);
       
-      if (invoiceResult.error) throw invoiceResult.error;
-      if (paymentsResult.error) throw paymentsResult.error;
+      if (!invoiceRes.ok) throw new Error('Failed to fetch invoice');
       
-      const invoice = invoiceResult.data;
-      const payments = paymentsResult.data || [];
+      const invoice = await invoiceRes.json();
+      const payments = paymentsRes.ok ? await paymentsRes.json() : [];
       
-      // Berechne Zuordnung für jede Zahlung
       let remainingInvoice: InvoiceAmounts = {
         grundmiete: invoice.grundmiete,
         betriebskosten: invoice.betriebskosten,
@@ -88,10 +121,9 @@ export function usePaymentsWithAllocation(invoiceId?: string) {
         gesamtbetrag: invoice.gesamtbetrag
       };
       
-      const paymentsWithAllocation: PaymentWithAllocation[] = payments.map(payment => {
-        const result = allocatePayment(payment.betrag, remainingInvoice);
+      const paymentsWithAllocation: PaymentWithAllocation[] = payments.map((payment: Payment) => {
+        const result = allocatePayment(parseFloat(payment.betrag), remainingInvoice);
         
-        // Reduziere verbleibende Beträge
         remainingInvoice = {
           betriebskosten: Math.max(0, remainingInvoice.betriebskosten - result.allocation.betriebskosten_anteil / 1.10),
           heizungskosten: Math.max(0, remainingInvoice.heizungskosten - result.allocation.heizung_anteil / 1.20),
@@ -126,45 +158,13 @@ export function useCreatePayment() {
   
   return useMutation({
     mutationFn: async (payment: PaymentInsert) => {
-      const { data, error } = await supabase
-        .from('payments')
-        .insert(payment)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Wenn invoice_id vorhanden, berechne Zuordnung für Toast
-      if (payment.invoice_id) {
-        const { data: invoice } = await supabase
-          .from('monthly_invoices')
-          .select('*')
-          .eq('id', payment.invoice_id)
-          .single();
-        
-        if (invoice) {
-          const invoiceAmounts: InvoiceAmounts = {
-            grundmiete: invoice.grundmiete,
-            betriebskosten: invoice.betriebskosten,
-            heizungskosten: invoice.heizungskosten,
-            gesamtbetrag: invoice.gesamtbetrag
-          };
-          
-          const result = allocatePayment(payment.betrag, invoiceAmounts);
-          const lines = formatAllocationForDisplay(result.allocation);
-          
-          toast.success('Zahlung erfasst', {
-            description: lines.slice(0, 3).join(' | ')
-          });
-          return data;
-        }
-      }
-      
-      return data;
+      const response = await apiRequest('POST', '/api/payments', payment);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Zahlung erfasst');
     },
     onError: (error) => {
       toast.error('Fehler beim Erfassen der Zahlung');
@@ -178,15 +178,8 @@ export function useUpdatePayment() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: PaymentUpdate & { id: string }) => {
-      const { data, error } = await supabase
-        .from('payments')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/payments/${id}`, updates);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
@@ -204,12 +197,7 @@ export function useDeletePayment() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('payments')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/payments/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });

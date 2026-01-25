@@ -1,23 +1,74 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type Tenant = Tables<'tenants'>;
-export type TenantInsert = TablesInsert<'tenants'>;
-export type TenantUpdate = TablesUpdate<'tenants'>;
+export interface Tenant {
+  id: string;
+  unit_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  mobile_phone: string | null;
+  status: 'aktiv' | 'leerstand' | 'beendet';
+  mietbeginn: string | null;
+  mietende: string | null;
+  grundmiete: string;
+  betriebskosten_vorschuss: string;
+  heizungskosten_vorschuss: string;
+  kaution: string | null;
+  kaution_bezahlt: boolean;
+  iban: string | null;
+  bic: string | null;
+  sepa_mandat: boolean;
+  sepa_mandat_datum: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  units?: {
+    id: string;
+    top_nummer: string;
+    property_id: string;
+    properties?: {
+      id: string;
+      name: string;
+      address: string;
+    };
+  };
+}
+
+export type TenantInsert = Omit<Tenant, 'id' | 'created_at' | 'updated_at' | 'units'>;
+export type TenantUpdate = Partial<TenantInsert>;
 
 export function useTenants() {
   return useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('*, units(*, properties(*))')
-        .order('last_name');
+      const response = await fetch('/api/tenants', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch tenants');
+      const tenants = await response.json();
       
-      if (error) throw error;
-      return data;
+      const unitsResponse = await fetch('/api/units', { credentials: 'include' });
+      const propertiesResponse = await fetch('/api/properties', { credentials: 'include' });
+      
+      if (unitsResponse.ok && propertiesResponse.ok) {
+        const units = await unitsResponse.json();
+        const properties = await propertiesResponse.json();
+        
+        return tenants.map((tenant: Tenant) => {
+          const unit = units.find((u: any) => u.id === tenant.unit_id);
+          const property = unit ? properties.find((p: any) => p.id === unit.property_id) : null;
+          return {
+            ...tenant,
+            units: unit ? {
+              ...unit,
+              properties: property
+            } : undefined
+          };
+        });
+      }
+      
+      return tenants;
     },
   });
 }
@@ -27,14 +78,9 @@ export function useTenantsByUnit(unitId?: string) {
     queryKey: ['tenants', 'unit', unitId],
     queryFn: async () => {
       if (!unitId) return [];
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('unit_id', unitId)
-        .order('mietbeginn', { ascending: false });
-      
-      if (error) throw error;
-      return data;
+      const response = await fetch(`/api/units/${unitId}/tenants`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch tenants');
+      return response.json();
     },
     enabled: !!unitId,
   });
@@ -45,14 +91,23 @@ export function useTenant(id: string | undefined) {
     queryKey: ['tenant', id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('*, units(*, properties(*))')
-        .eq('id', id)
-        .maybeSingle();
+      const response = await fetch(`/api/tenants/${id}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch tenant');
+      const tenant = await response.json();
       
-      if (error) throw error;
-      return data;
+      if (tenant.unit_id) {
+        const unitResponse = await fetch(`/api/units/${tenant.unit_id}`, { credentials: 'include' });
+        if (unitResponse.ok) {
+          const unit = await unitResponse.json();
+          const propertyResponse = await fetch(`/api/properties/${unit.property_id}`, { credentials: 'include' });
+          if (propertyResponse.ok) {
+            const property = await propertyResponse.json();
+            tenant.units = { ...unit, properties: property };
+          }
+        }
+      }
+      
+      return tenant;
     },
     enabled: !!id,
   });
@@ -63,33 +118,8 @@ export function useCreateTenant() {
   
   return useMutation({
     mutationFn: async (tenant: TenantInsert) => {
-      // If the new tenant is "aktiv", first set all other active tenants of the same unit to "beendet"
-      if (tenant.status === 'aktiv' && tenant.unit_id) {
-        const { error: updateError } = await supabase
-          .from('tenants')
-          .update({ 
-            status: 'beendet',
-            // Set mietende to day before new tenant's mietbeginn if not already set
-            mietende: tenant.mietbeginn ? 
-              new Date(new Date(tenant.mietbeginn).getTime() - 86400000).toISOString().split('T')[0] 
-              : new Date().toISOString().split('T')[0]
-          })
-          .eq('unit_id', tenant.unit_id)
-          .eq('status', 'aktiv');
-        
-        if (updateError) {
-          console.warn('Could not update existing tenants:', updateError);
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('tenants')
-        .insert(tenant)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('POST', '/api/tenants', tenant);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
@@ -108,29 +138,8 @@ export function useUpdateTenant() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TenantUpdate & { id: string }) => {
-      // If updating status to "aktiv", first deactivate all other active tenants of the same unit
-      if (updates.status === 'aktiv' && updates.unit_id) {
-        const { error: updateError } = await supabase
-          .from('tenants')
-          .update({ status: 'beendet' })
-          .eq('unit_id', updates.unit_id)
-          .eq('status', 'aktiv')
-          .neq('id', id);
-        
-        if (updateError) {
-          console.warn('Could not deactivate other tenants:', updateError);
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('tenants')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const response = await apiRequest('PATCH', `/api/tenants/${id}`, updates);
+      return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
@@ -149,12 +158,7 @@ export function useDeleteTenant() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('tenants')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/tenants/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
