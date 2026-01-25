@@ -2095,3 +2095,118 @@ export const generateDetailReport = ({
 
   doc.save(`Detailbericht_${periodLabel.replace(' ', '_')}.pdf`);
 };
+
+// ====== KAUTION REPORT ======
+interface KautionTenantData {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
+  kaution: number;
+  kaution_bezahlt: boolean;
+  unit_id: string;
+  mietbeginn?: string | null;
+}
+
+interface KautionUnitData {
+  id: string;
+  top_nummer: string;
+  property_id: string;
+}
+
+interface KautionPropertyData {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export const generateKautionsReport = (
+  tenants: KautionTenantData[],
+  units: KautionUnitData[],
+  properties: KautionPropertyData[],
+  selectedPropertyId: string
+) => {
+  const doc = new jsPDF();
+  
+  const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+  
+  addHeader(
+    doc, 
+    'Kautionsübersicht', 
+    `Stand: ${new Date().toLocaleDateString('de-AT')}`,
+    selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
+  );
+
+  // Filter tenants with kaution_bezahlt = true
+  const tenantsWithKaution = tenants.filter(t => {
+    if (!t.kaution_bezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
+    
+    if (selectedPropertyId === 'all') return true;
+    
+    const unit = units.find(u => u.id === t.unit_id);
+    return unit?.property_id === selectedPropertyId;
+  });
+
+  // Sort by property, then by unit
+  const sortedTenants = tenantsWithKaution.sort((a, b) => {
+    const unitA = units.find(u => u.id === a.unit_id);
+    const unitB = units.find(u => u.id === b.unit_id);
+    const propA = properties.find(p => p.id === unitA?.property_id);
+    const propB = properties.find(p => p.id === unitB?.property_id);
+    
+    if (propA?.name !== propB?.name) {
+      return (propA?.name || '').localeCompare(propB?.name || '');
+    }
+    return (unitA?.top_nummer || '').localeCompare(unitB?.top_nummer || '');
+  });
+
+  // Calculate total
+  const totalKaution = sortedTenants.reduce((sum, t) => sum + Number(t.kaution), 0);
+
+  // Create table data
+  const tableData = sortedTenants.map(tenant => {
+    const unit = units.find(u => u.id === tenant.unit_id);
+    const property = properties.find(p => p.id === unit?.property_id);
+    
+    return [
+      property?.name || '-',
+      unit?.top_nummer || '-',
+      `${tenant.first_name} ${tenant.last_name}`,
+      tenant.mietbeginn ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT') : '-',
+      formatCurrency(Number(tenant.kaution)),
+    ];
+  });
+
+  // Add table
+  autoTable(doc, {
+    startY: 45,
+    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Mietbeginn', 'Kaution']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
+    styles: { fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 45 },
+      1: { cellWidth: 25 },
+      2: { cellWidth: 50 },
+      3: { cellWidth: 30 },
+      4: { halign: 'right', cellWidth: 30 },
+    },
+  });
+
+  // Add summary
+  const finalY = (doc as any).lastAutoTable?.finalY + 15 || 200;
+  
+  doc.setFillColor(219, 234, 254);
+  doc.roundedRect(14, finalY, 180, 25, 3, 3, 'F');
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Zusammenfassung', 20, finalY + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Anzahl Mietkautionen: ${sortedTenants.length}`, 20, finalY + 18);
+  doc.text(`Gesamtsumme: ${formatCurrency(totalKaution)}`, 100, finalY + 18);
+
+  doc.save(`Kautionsuebersicht_${new Date().toISOString().split('T')[0]}.pdf`);
+};
