@@ -91,10 +91,9 @@ export function SubscriptionTeaser({
 }
 
 export function TrialBanner() {
-  const { isTrial, trialDaysRemaining, isExpired, canAccessFullFeatures } = useSubscription();
+  const { isTrial, trialDaysRemaining, isExpired } = useSubscription();
 
   if (!isTrial && !isExpired) return null;
-  if (!canAccessFullFeatures && isExpired) return null;
 
   return (
     <div className={`px-4 py-2 text-center text-sm ${isExpired ? 'bg-destructive text-destructive-foreground' : 'bg-primary/10 text-primary'}`}>

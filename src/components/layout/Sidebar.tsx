@@ -22,13 +22,15 @@ import {
   MessageSquare,
   HardHat,
   AlertTriangle,
-  PiggyBank
+  PiggyBank,
+  Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useSubscription, SubscriptionTier } from '@/hooks/useSubscription';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -39,6 +41,7 @@ interface NavItem {
   href: string;
   badge?: number;
   tourId?: string;
+  requiredTier?: SubscriptionTier;
 }
 
 const navItems: NavItem[] = [
@@ -118,6 +121,17 @@ export function Sidebar() {
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
   const { data: isAdmin } = useIsAdmin();
   const permissions = usePermissions();
+  const { tier, canAccessFullFeatures } = useSubscription();
+
+  const tierOrder: SubscriptionTier[] = ['starter', 'professional', 'enterprise'];
+  const currentTierIndex = tierOrder.indexOf(tier);
+
+  const canAccessItem = (item: NavItem): boolean => {
+    if (!item.requiredTier) return true;
+    if (!canAccessFullFeatures) return false;
+    const requiredTierIndex = tierOrder.indexOf(item.requiredTier);
+    return currentTierIndex >= requiredTierIndex;
+  };
 
   // Role-based navigation items
   const roleBasedItems: NavItem[] = [
@@ -125,16 +139,19 @@ export function Sidebar() {
       label: 'Wartungen & Aufträge',
       icon: Wrench,
       href: '/wartungen',
-      tourId: 'nav-maintenance'
+      tourId: 'nav-maintenance',
+      requiredTier: 'professional' as SubscriptionTier
     }, {
       label: 'Handwerker',
       icon: HardHat,
       href: '/handwerker',
+      requiredTier: 'professional' as SubscriptionTier
     }] : []),
     ...(permissions.canEditFinances || permissions.isAdmin ? [{
       label: 'Mahnwesen',
       icon: AlertTriangle,
       href: '/mahnwesen',
+      requiredTier: 'professional' as SubscriptionTier
     }, {
       label: 'Budgetplanung',
       icon: PiggyBank,
@@ -218,21 +235,26 @@ export function Sidebar() {
             {allNavItems.map(item => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
+              const hasAccess = canAccessItem(item);
               return (
                 <Link 
                   key={item.href} 
-                  to={item.href}
+                  to={hasAccess ? item.href : '/einstellungen?tab=subscription'}
                   onClick={handleLinkClick}
                   data-tour={item.tourId}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
                     'text-white/80 hover:text-white hover:bg-white/10',
-                    isActive && 'bg-white/15 text-white'
+                    isActive && hasAccess && 'bg-white/15 text-white',
+                    !hasAccess && 'opacity-60'
                   )}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
+                  {!hasAccess && (
+                    <Lock className="h-4 w-4 text-white/50" />
+                  )}
+                  {item.badge && hasAccess && (
                     <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
                       {item.badge}
                     </span>
@@ -305,23 +327,28 @@ export function Sidebar() {
         {allNavItems.map(item => {
           const isActive = location.pathname === item.href || 
             (item.href !== '/' && location.pathname.startsWith(item.href));
+          const hasAccess = canAccessItem(item);
           return (
             <Link 
               key={item.href} 
-              to={item.href} 
+              to={hasAccess ? item.href : '/einstellungen?tab=subscription'} 
               title={collapsed ? item.label : undefined}
               data-tour={item.tourId}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
                 'text-white/80 hover:text-white hover:bg-white/10',
-                isActive && 'bg-white/15 text-white'
+                isActive && hasAccess && 'bg-white/15 text-white',
+                !hasAccess && 'opacity-60'
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
               {!collapsed && (
                 <>
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
+                  {!hasAccess && (
+                    <Lock className="h-4 w-4 text-white/50" />
+                  )}
+                  {item.badge && hasAccess && (
                     <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
                       {item.badge}
                     </span>
