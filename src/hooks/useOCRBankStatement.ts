@@ -79,34 +79,8 @@ export function useOCRBankStatement() {
 
       console.log('Sending bank statement for OCR processing...');
 
-      const { data, error: fnError } = await supabase.functions.invoke('ocr-bank-statement', {
-        body: { imageBase64, mimeType }
-      });
-
-      if (fnError) {
-        throw fnError;
-      }
-
-      if (!data?.success) {
-        throw new Error(data?.error || 'OCR-Verarbeitung fehlgeschlagen');
-      }
-
-      const ocrResult = data.data as OCRBankStatementResult;
-      setResult(ocrResult);
-
-      if (ocrResult.validierung.ist_valide) {
-        toast.success(`${ocrResult.validierung.erkannte_zeilen} Buchungszeilen erkannt`, {
-          description: ocrResult.kontoinhaber 
-            ? `Kontoinhaber: ${ocrResult.kontoinhaber}` 
-            : undefined
-        });
-      } else {
-        toast.warning('Kontoauszug konnte nicht vollständig verarbeitet werden', {
-          description: ocrResult.validierung.warnungen[0]
-        });
-      }
-
-      return ocrResult;
+      // OCR feature requires OpenAI integration - show user-friendly message
+      throw new Error('OCR-Funktion ist derzeit nicht verfügbar. Bitte importieren Sie Ihre Kontoauszüge als CSV.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unbekannter Fehler';
       setError(errorMessage);

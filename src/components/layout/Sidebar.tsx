@@ -124,6 +124,52 @@ const navItems: NavItem[] = [
     href: '/abrechnung'
   },
   {
+    label: 'Budgetplanung',
+    icon: PiggyBank,
+    href: '/budgets',
+    tourId: 'nav-budgets',
+    requiredTier: 'professional' as SubscriptionTier
+  },
+  {
+    label: 'Mahnwesen',
+    icon: AlertTriangle,
+    href: '/mahnwesen',
+    tourId: 'nav-dunning',
+    requiredTier: 'professional' as SubscriptionTier
+  },
+  {
+    label: 'Wartungen & Aufträge',
+    icon: Wrench,
+    href: '/wartungen',
+    tourId: 'nav-maintenance',
+    requiredTier: 'professional' as SubscriptionTier
+  },
+  {
+    label: 'Handwerker',
+    icon: HardHat,
+    href: '/handwerker',
+    tourId: 'nav-contractors',
+    requiredTier: 'professional' as SubscriptionTier
+  },
+  {
+    label: 'Rechnungsfreigabe',
+    icon: CheckSquare,
+    href: '/rechnungsfreigabe',
+    tourId: 'nav-invoice-approval'
+  },
+  {
+    label: 'Nachrichten',
+    icon: MessageSquare,
+    href: '/nachrichten',
+    tourId: 'nav-messages'
+  },
+  {
+    label: 'Team-Verwaltung',
+    icon: Users,
+    href: '/team',
+    tourId: 'nav-team'
+  },
+  {
     label: 'Dokumente',
     icon: FileStack,
     href: '/dokumente'
@@ -160,56 +206,8 @@ export function Sidebar() {
     return currentTierIndex >= requiredTierIndex;
   };
 
-  // Role-based navigation items
-  const roleBasedItems: NavItem[] = [
-    ...(permissions.canManageMaintenance || permissions.isAdmin ? [{
-      label: 'Wartungen & Aufträge',
-      icon: Wrench,
-      href: '/wartungen',
-      tourId: 'nav-maintenance',
-      requiredTier: 'professional' as SubscriptionTier
-    }, {
-      label: 'Handwerker',
-      icon: HardHat,
-      href: '/handwerker',
-      requiredTier: 'professional' as SubscriptionTier
-    }] : []),
-    ...(permissions.canEditFinances || permissions.isAdmin ? [{
-      label: 'Mahnwesen',
-      icon: AlertTriangle,
-      href: '/mahnwesen',
-      requiredTier: 'professional' as SubscriptionTier
-    }, {
-      label: 'Budgetplanung',
-      icon: PiggyBank,
-      href: '/budgets',
-    }] : []),
-    ...(permissions.canApproveInvoices || permissions.isAdmin ? [{
-      label: 'Rechnungsfreigabe',
-      icon: CheckSquare,
-      href: '/rechnungsfreigabe',
-      tourId: 'nav-invoice-approval'
-    }] : []),
-    ...(permissions.canSendMessages || permissions.isAdmin ? [{
-      label: 'Nachrichten',
-      icon: MessageSquare,
-      href: '/nachrichten',
-      tourId: 'nav-messages'
-    }] : []),
-    ...(permissions.canManageUsers || permissions.isAdmin ? [{
-      label: 'Team-Verwaltung',
-      icon: Users,
-      href: '/team',
-      tourId: 'nav-team'
-    }] : []),
-  ];
-
-  // Combine base nav items with role-based items (insert before Einstellungen)
-  const allNavItems = [
-    ...navItems.slice(0, -1), // All items except Einstellungen
-    ...roleBasedItems,
-    navItems[navItems.length - 1] // Einstellungen at the end
-  ];
+  // All nav items are now in the main navItems array
+  const allNavItems = navItems;
 
   const handleLinkClick = () => {
     // Close sidebar on mobile after clicking a link
