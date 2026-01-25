@@ -3,6 +3,7 @@ import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { isAuthenticated } from "./auth";
 
 const PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
   starter: {
@@ -23,13 +24,6 @@ const USER_PRICE_IDS: Record<string, string> = {
   starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_user_starter_monthly',
   pro: process.env.STRIPE_USER_PRICE_PRO || 'price_user_pro_monthly',
 };
-
-function isAuthenticated(req: Request, res: Response, next: () => void) {
-  if (req.session?.userId) {
-    return next();
-  }
-  return res.status(401).json({ message: "Unauthorized" });
-}
 
 async function getProfileById(id: string) {
   const result = await db.select().from(schema.profiles)
