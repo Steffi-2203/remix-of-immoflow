@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -382,7 +383,7 @@ export default function PropertyDetail() {
                     <TableHead>MEA</TableHead>
                     <TableHead>Personen</TableHead>
                     <TableHead>Mieter</TableHead>
-                    <TableHead>Gesamtmiete</TableHead>
+                    <TableHead>Vorschreibung/Monat</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
@@ -391,11 +392,10 @@ export default function PropertyDetail() {
                   {units.map((unit) => {
                     const tenants = unit.tenants as any[];
                     const activeTenant = tenants?.find((t: any) => t.status === 'aktiv');
-                    const totalRent = activeTenant
-                      ? Number(activeTenant.grundmiete || 0) +
-                        Number(activeTenant.betriebskosten_vorschuss || 0) +
-                        Number(activeTenant.heizungskosten_vorschuss || 0)
-                      : 0;
+                    const grundmiete = activeTenant ? Number(activeTenant.grundmiete || 0) : 0;
+                    const bk = activeTenant ? Number(activeTenant.betriebskosten_vorschuss || 0) : 0;
+                    const hk = activeTenant ? Number(activeTenant.heizungskosten_vorschuss || 0) : 0;
+                    const totalRent = grundmiete + bk + hk;
 
                     return (
                       <TableRow key={unit.id} className="hover:bg-muted/30">
@@ -421,9 +421,36 @@ export default function PropertyDetail() {
                         </TableCell>
                         <TableCell>
                           {activeTenant ? (
-                            <span className="font-medium">
-                              €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className="font-medium cursor-help underline decoration-dotted">
+                                    €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="p-3">
+                                  <div className="space-y-1 text-sm">
+                                    <p className="font-semibold border-b pb-1 mb-2">Monatliche Vorschreibung</p>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Grundmiete:</span>
+                                      <span className="font-medium">€ {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Betriebskosten:</span>
+                                      <span className="font-medium">€ {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Heizkosten:</span>
+                                      <span className="font-medium">€ {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4 border-t pt-1 mt-2 font-semibold">
+                                      <span>Gesamt:</span>
+                                      <span>€ {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}

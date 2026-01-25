@@ -317,7 +317,7 @@ export default function UnitList() {
                   <TableHead>MRG</TableHead>
                   <TableHead>Mieter</TableHead>
                   <TableHead>Mietvertrag</TableHead>
-                  <TableHead className="text-right">Gesamt</TableHead>
+                  <TableHead className="text-right">Vorschreibung/Monat</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -420,9 +420,36 @@ export default function UnitList() {
                       </TableCell>
                       <TableCell className="text-right">
                         {tenant ? (
-                          <span className="font-semibold text-foreground">
-                            € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          </span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <span className="font-semibold text-foreground cursor-help underline decoration-dotted">
+                                  € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="p-3">
+                                <div className="space-y-1 text-sm">
+                                  <p className="font-semibold border-b pb-1 mb-2">Monatliche Vorschreibung</p>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Grundmiete:</span>
+                                    <span className="font-medium">€ {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Betriebskosten:</span>
+                                    <span className="font-medium">€ {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Heizkosten:</span>
+                                    <span className="font-medium">€ {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4 border-t pt-1 mt-2 font-semibold">
+                                    <span>Gesamt:</span>
+                                    <span>€ {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
