@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type UnitDocument = {
   id: string;
@@ -25,6 +26,10 @@ export const UNIT_DOCUMENT_TYPES = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
+function normalizeUnitDocument(doc: any) {
+  return normalizeFields(doc);
+}
+
 export function useUnitDocuments(unitId: string | undefined) {
   return useQuery({
     queryKey: ['unit-documents', unitId],
@@ -32,7 +37,8 @@ export function useUnitDocuments(unitId: string | undefined) {
       if (!unitId) return [];
       const response = await fetch(`/api/units/${unitId}/documents`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch unit documents');
-      return response.json() as Promise<UnitDocument[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeUnitDocument) : [normalizeUnitDocument(data)] as UnitDocument[];
     },
     enabled: !!unitId,
   });
@@ -66,7 +72,8 @@ export function useUploadUnitDocument() {
       });
 
       if (!response.ok) throw new Error('Failed to upload document');
-      return response.json();
+      const data = await response.json();
+      return normalizeUnitDocument(data);
     },
     onSuccess: (_, { unitId }) => {
       queryClient.invalidateQueries({ queryKey: ['unit-documents', unitId] });

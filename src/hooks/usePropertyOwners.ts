@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface PropertyOwner {
   id: string;
@@ -21,6 +22,10 @@ export interface PropertyOwner {
 export type PropertyOwnerInsert = Omit<PropertyOwner, 'id' | 'created_at' | 'updated_at'>;
 export type PropertyOwnerUpdate = Partial<PropertyOwnerInsert> & { id: string };
 
+function normalizePropertyOwner(owner: any) {
+  return normalizeFields(owner);
+}
+
 export function usePropertyOwners(propertyId: string | undefined) {
   return useQuery({
     queryKey: ['property-owners', propertyId],
@@ -28,7 +33,8 @@ export function usePropertyOwners(propertyId: string | undefined) {
       if (!propertyId) return [];
       const response = await fetch(`/api/properties/${propertyId}/owners`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch property owners');
-      return response.json() as Promise<PropertyOwner[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizePropertyOwner) : [normalizePropertyOwner(data)] as PropertyOwner[];
     },
     enabled: !!propertyId,
   });
@@ -40,7 +46,8 @@ export function useCreatePropertyOwner() {
   return useMutation({
     mutationFn: async (owner: PropertyOwnerInsert) => {
       const response = await apiRequest('POST', `/api/properties/${owner.property_id}/owners`, owner);
-      return response.json() as Promise<PropertyOwner>;
+      const data = await response.json();
+      return normalizePropertyOwner(data) as PropertyOwner;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['property-owners', variables.property_id] });
@@ -54,7 +61,8 @@ export function useUpdatePropertyOwner() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: PropertyOwnerUpdate) => {
       const response = await apiRequest('PATCH', `/api/property-owners/${id}`, updates);
-      return response.json() as Promise<PropertyOwner>;
+      const data = await response.json();
+      return normalizePropertyOwner(data) as PropertyOwner;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['property-owners', data.property_id] });

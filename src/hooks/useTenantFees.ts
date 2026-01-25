@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 type FeeType = 'ruecklastschrift' | 'mahnung' | 'sonstiges';
 
@@ -34,13 +35,18 @@ export const FEE_TYPE_LABELS: Record<FeeType, string> = {
   sonstiges: 'Sonstige Gebühr',
 };
 
+function normalizeTenantFee(fee: any) {
+  return normalizeFields(fee);
+}
+
 export function useTenantFees() {
   return useQuery({
     queryKey: ['tenant-fees'],
     queryFn: async () => {
       const response = await fetch('/api/tenant-fees', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenant fees');
-      return response.json() as Promise<TenantFee[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTenantFee) : [normalizeTenantFee(data)] as TenantFee[];
     },
   });
 }
@@ -52,7 +58,8 @@ export function useTenantFeesByTenantId(tenantId: string | null) {
       if (!tenantId) return [];
       const response = await fetch(`/api/tenant-fees?tenant_id=${tenantId}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch tenant fees');
-      return response.json() as Promise<TenantFee[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTenantFee) : [normalizeTenantFee(data)] as TenantFee[];
     },
     enabled: !!tenantId,
   });
@@ -64,7 +71,8 @@ export function useUnpaidTenantFees() {
     queryFn: async () => {
       const response = await fetch('/api/tenant-fees?unpaid=true', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch unpaid tenant fees');
-      return response.json() as Promise<TenantFee[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTenantFee) : [normalizeTenantFee(data)] as TenantFee[];
     },
   });
 }
@@ -82,7 +90,8 @@ export function useCreateTenantFee() {
         sepa_item_id: input.sepa_item_id,
         notes: input.notes,
       });
-      return response.json() as Promise<TenantFee>;
+      const data = await response.json();
+      return normalizeTenantFee(data) as TenantFee;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-fees'] });
@@ -100,7 +109,8 @@ export function useMarkFeePaid() {
   return useMutation({
     mutationFn: async ({ feeId, paymentId }: { feeId: string; paymentId?: string }) => {
       const response = await apiRequest('PATCH', `/api/tenant-fees/${feeId}/paid`, { paymentId });
-      return response.json() as Promise<TenantFee>;
+      const data = await response.json();
+      return normalizeTenantFee(data) as TenantFee;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-fees'] });

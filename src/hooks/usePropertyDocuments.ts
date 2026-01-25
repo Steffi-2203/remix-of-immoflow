@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type PropertyDocument = {
   id: string;
@@ -25,6 +26,10 @@ export const PROPERTY_DOCUMENT_TYPES = [
   { value: 'sonstiges', label: 'Sonstiges' },
 ];
 
+function normalizePropertyDocument(doc: any) {
+  return normalizeFields(doc);
+}
+
 export function usePropertyDocuments(propertyId: string | undefined) {
   return useQuery({
     queryKey: ['property-documents', propertyId],
@@ -32,7 +37,8 @@ export function usePropertyDocuments(propertyId: string | undefined) {
       if (!propertyId) return [];
       const response = await fetch(`/api/properties/${propertyId}/documents`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch property documents');
-      return response.json() as Promise<PropertyDocument[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizePropertyDocument) : [normalizePropertyDocument(data)] as PropertyDocument[];
     },
     enabled: !!propertyId,
   });
@@ -66,7 +72,8 @@ export function useUploadPropertyDocument() {
       });
 
       if (!response.ok) throw new Error('Failed to upload document');
-      return response.json();
+      const data = await response.json();
+      return normalizePropertyDocument(data);
     },
     onSuccess: (_, { propertyId }) => {
       queryClient.invalidateQueries({ queryKey: ['property-documents', propertyId] });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface Meter {
   id: string;
@@ -67,6 +68,21 @@ export interface MeterReadingInsert {
   notes?: string | null;
 }
 
+function normalizeMeter(meter: any) {
+  const normalized = normalizeFields(meter);
+  if (normalized.units) {
+    normalized.units = normalizeFields(normalized.units);
+    if (normalized.units.properties) {
+      normalized.units.properties = normalizeFields(normalized.units.properties);
+    }
+  }
+  return normalized;
+}
+
+function normalizeMeterReading(reading: any) {
+  return normalizeFields(reading);
+}
+
 export function useMeters(unitId?: string) {
   return useQuery({
     queryKey: ['meters', unitId],
@@ -74,7 +90,8 @@ export function useMeters(unitId?: string) {
       const url = unitId ? `/api/meters?unit_id=${unitId}` : '/api/meters';
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch meters');
-      return response.json() as Promise<Meter[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeMeter) : [normalizeMeter(data)] as Meter[];
     },
   });
 }
@@ -86,7 +103,8 @@ export function useMeter(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/meters/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch meter');
-      return response.json() as Promise<Meter | null>;
+      const data = await response.json();
+      return data ? normalizeMeter(data) as Meter : null;
     },
     enabled: !!id,
   });
@@ -98,7 +116,8 @@ export function useCreateMeter() {
   return useMutation({
     mutationFn: async (meter: MeterInsert) => {
       const response = await apiRequest('POST', '/api/meters', meter);
-      return response.json() as Promise<Meter>;
+      const data = await response.json();
+      return normalizeMeter(data) as Meter;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meters'] });
@@ -117,7 +136,8 @@ export function useUpdateMeter() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: MeterUpdate) => {
       const response = await apiRequest('PATCH', `/api/meters/${id}`, updates);
-      return response.json() as Promise<Meter>;
+      const data = await response.json();
+      return normalizeMeter(data) as Meter;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['meters'] });
@@ -156,7 +176,8 @@ export function useMeterReadings(meterId: string | undefined) {
       if (!meterId) return [];
       const response = await fetch(`/api/meters/${meterId}/readings`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch meter readings');
-      return response.json() as Promise<MeterReading[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeMeterReading) : [normalizeMeterReading(data)] as MeterReading[];
     },
     enabled: !!meterId,
   });
@@ -173,7 +194,8 @@ export function useLatestMeterReadings(meterIds: string[]) {
       for (const meterId of meterIds) {
         const response = await fetch(`/api/meters/${meterId}/readings?limit=2`, { credentials: 'include' });
         if (!response.ok) throw new Error('Failed to fetch meter readings');
-        results[meterId] = await response.json();
+        const data = await response.json();
+        results[meterId] = Array.isArray(data) ? data.map(normalizeMeterReading) : [normalizeMeterReading(data)];
       }
       
       return results;
@@ -188,7 +210,8 @@ export function useCreateMeterReading() {
   return useMutation({
     mutationFn: async (reading: MeterReadingInsert) => {
       const response = await apiRequest('POST', `/api/meters/${reading.meter_id}/readings`, reading);
-      return response.json() as Promise<MeterReading>;
+      const data = await response.json();
+      return normalizeMeterReading(data) as MeterReading;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meter-readings'] });

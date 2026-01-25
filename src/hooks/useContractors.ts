@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface Contractor {
   id: string;
@@ -45,6 +46,10 @@ export const SPECIALIZATIONS = [
   { value: 'sonstige', label: 'Sonstige' },
 ] as const;
 
+function normalizeContractor(contractor: any) {
+  return normalizeFields(contractor);
+}
+
 export function useContractors(onlyActive = true) {
   return useQuery({
     queryKey: ['contractors', { onlyActive }],
@@ -52,7 +57,8 @@ export function useContractors(onlyActive = true) {
       const url = onlyActive ? '/api/contractors?active=true' : '/api/contractors';
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch contractors');
-      return response.json() as Promise<Contractor[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeContractor) : [normalizeContractor(data)] as Contractor[];
     },
   });
 }
@@ -64,7 +70,8 @@ export function useContractor(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/contractors/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch contractor');
-      return response.json() as Promise<Contractor>;
+      const data = await response.json();
+      return normalizeContractor(data) as Contractor;
     },
     enabled: !!id,
   });
@@ -76,7 +83,8 @@ export function useCreateContractor() {
   return useMutation({
     mutationFn: async (contractor: ContractorInsert) => {
       const response = await apiRequest('POST', '/api/contractors', contractor);
-      return response.json() as Promise<Contractor>;
+      const data = await response.json();
+      return normalizeContractor(data) as Contractor;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractors'] });
@@ -95,7 +103,8 @@ export function useUpdateContractor() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: ContractorUpdate & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/contractors/${id}`, updates);
-      return response.json() as Promise<Contractor>;
+      const data = await response.json();
+      return normalizeContractor(data) as Contractor;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractors'] });

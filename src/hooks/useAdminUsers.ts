@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
 
@@ -15,6 +16,10 @@ export interface AdminUser {
   created_at: string;
 }
 
+function normalizeAdminUser(user: any) {
+  return normalizeFields(user);
+}
+
 export function useAdminUsers() {
   const { data: isAdmin } = useIsAdmin();
 
@@ -23,7 +28,8 @@ export function useAdminUsers() {
     queryFn: async (): Promise<AdminUser[]> => {
       const response = await fetch('/api/admin/users', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch admin users');
-      return response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeAdminUser) : [normalizeAdminUser(data)];
     },
     enabled: !!isAdmin,
   });

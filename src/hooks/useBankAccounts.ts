@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface BankAccount {
   id: string;
@@ -19,13 +20,18 @@ export interface BankAccount {
 export type BankAccountInsert = Omit<BankAccount, 'id' | 'created_at' | 'updated_at'>;
 export type BankAccountUpdate = Partial<BankAccountInsert>;
 
+function normalizeBankAccount(account: any) {
+  return normalizeFields(account);
+}
+
 export function useBankAccounts() {
   return useQuery({
     queryKey: ['bank_accounts'],
     queryFn: async () => {
       const response = await fetch('/api/bank-accounts', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch bank accounts');
-      return response.json() as Promise<BankAccount[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeBankAccount) : [normalizeBankAccount(data)] as BankAccount[];
     },
   });
 }
@@ -37,7 +43,8 @@ export function useBankAccount(id?: string) {
       if (!id) return null;
       const response = await fetch(`/api/bank-accounts/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch bank account');
-      return response.json() as Promise<BankAccount>;
+      const data = await response.json();
+      return normalizeBankAccount(data) as BankAccount;
     },
     enabled: !!id,
   });
@@ -64,7 +71,8 @@ export function useCreateBankAccount() {
   return useMutation({
     mutationFn: async (account: BankAccountInsert) => {
       const response = await apiRequest('POST', '/api/bank-accounts', account);
-      return response.json() as Promise<BankAccount>;
+      const data = await response.json();
+      return normalizeBankAccount(data) as BankAccount;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });
@@ -83,7 +91,8 @@ export function useUpdateBankAccount() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: BankAccountUpdate & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/bank-accounts/${id}`, updates);
-      return response.json() as Promise<BankAccount>;
+      const data = await response.json();
+      return normalizeBankAccount(data) as BankAccount;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bank_accounts'] });

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export type VpiAdjustmentStatus = 'pending' | 'applied' | 'rejected';
 
@@ -63,6 +64,20 @@ export interface VpiAdjustmentUpdate {
   notes?: string | null;
 }
 
+function normalizeVpiAdjustment(adjustment: any) {
+  const normalized = normalizeFields(adjustment);
+  if (normalized.tenants) {
+    normalized.tenants = normalizeFields(normalized.tenants);
+    if (normalized.tenants.units) {
+      normalized.tenants.units = normalizeFields(normalized.tenants.units);
+      if (normalized.tenants.units.properties) {
+        normalized.tenants.units.properties = normalizeFields(normalized.tenants.units.properties);
+      }
+    }
+  }
+  return normalized;
+}
+
 export function getVpiStatus(adjustment: VpiAdjustment): VpiAdjustmentStatus {
   if (adjustment.notification_sent && adjustment.effective_date) {
     const effectiveDate = new Date(adjustment.effective_date);
@@ -83,7 +98,8 @@ export function useVpiAdjustments() {
     queryFn: async () => {
       const response = await fetch('/api/vpi-adjustments', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch VPI adjustments');
-      return response.json() as Promise<VpiAdjustment[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeVpiAdjustment) : [normalizeVpiAdjustment(data)] as VpiAdjustment[];
     },
   });
 }
@@ -95,7 +111,8 @@ export function useVpiAdjustment(id: string | undefined) {
       if (!id) return null;
       const response = await fetch(`/api/vpi-adjustments/${id}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch VPI adjustment');
-      return response.json() as Promise<VpiAdjustment | null>;
+      const data = await response.json();
+      return data ? normalizeVpiAdjustment(data) as VpiAdjustment : null;
     },
     enabled: !!id,
   });
@@ -107,7 +124,8 @@ export function useCreateVpiAdjustment() {
   return useMutation({
     mutationFn: async (adjustment: VpiAdjustmentInsert) => {
       const response = await apiRequest('POST', '/api/vpi-adjustments', adjustment);
-      return response.json();
+      const data = await response.json();
+      return normalizeVpiAdjustment(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -126,7 +144,8 @@ export function useUpdateVpiAdjustment() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: VpiAdjustmentUpdate) => {
       const response = await apiRequest('PATCH', `/api/vpi-adjustments/${id}`, updates);
-      return response.json();
+      const data = await response.json();
+      return normalizeVpiAdjustment(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -146,7 +165,8 @@ export function useApplyVpiAdjustment() {
   return useMutation({
     mutationFn: async ({ id, sendNotification }: { id: string; sendNotification: boolean }) => {
       const response = await apiRequest('POST', `/api/vpi-adjustments/${id}/apply`, { sendNotification });
-      return response.json();
+      const data = await response.json();
+      return normalizeVpiAdjustment(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });
@@ -166,7 +186,8 @@ export function useRejectVpiAdjustment() {
   return useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest('POST', `/api/vpi-adjustments/${id}/reject`, {});
-      return response.json();
+      const data = await response.json();
+      return normalizeVpiAdjustment(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vpi-adjustments'] });

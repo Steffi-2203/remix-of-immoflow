@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface RentExpectation {
   id: string;
@@ -20,13 +21,18 @@ export interface RentExpectation {
 export type RentExpectationInsert = Omit<RentExpectation, 'id' | 'created_at' | 'updated_at' | 'total_miete'>;
 export type RentExpectationUpdate = Partial<RentExpectationInsert>;
 
+function normalizeRentExpectation(expectation: any) {
+  return normalizeFields(expectation);
+}
+
 export function useRentExpectations() {
   return useQuery({
     queryKey: ['rent_expectations'],
     queryFn: async () => {
       const response = await fetch('/api/rent-expectations', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch rent expectations');
-      return response.json() as Promise<RentExpectation[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeRentExpectation) : [normalizeRentExpectation(data)] as RentExpectation[];
     },
   });
 }
@@ -38,7 +44,8 @@ export function useRentExpectationsByUnit(unitId?: string) {
       if (!unitId) return [];
       const response = await fetch(`/api/rent-expectations?unit_id=${unitId}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch rent expectations');
-      return response.json() as Promise<RentExpectation[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeRentExpectation) : [normalizeRentExpectation(data)] as RentExpectation[];
     },
     enabled: !!unitId,
   });
@@ -52,7 +59,7 @@ export function useCurrentRentExpectation(unitId?: string) {
       const response = await fetch(`/api/rent-expectations/current?unit_id=${unitId}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch current rent expectation');
       const data = await response.json();
-      return data as RentExpectation | null;
+      return data ? normalizeRentExpectation(data) as RentExpectation : null;
     },
     enabled: !!unitId,
   });
@@ -64,7 +71,8 @@ export function useCreateRentExpectation() {
   return useMutation({
     mutationFn: async (expectation: RentExpectationInsert) => {
       const response = await apiRequest('POST', '/api/rent-expectations', expectation);
-      return response.json() as Promise<RentExpectation>;
+      const data = await response.json();
+      return normalizeRentExpectation(data) as RentExpectation;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rent_expectations'] });
@@ -83,7 +91,8 @@ export function useUpdateRentExpectation() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: RentExpectationUpdate & { id: string }) => {
       const response = await apiRequest('PATCH', `/api/rent-expectations/${id}`, updates);
-      return response.json() as Promise<RentExpectation>;
+      const data = await response.json();
+      return normalizeRentExpectation(data) as RentExpectation;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rent_expectations'] });

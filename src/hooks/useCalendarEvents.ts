@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 export interface CalendarEvent {
   id: string;
@@ -23,6 +24,10 @@ export function getEventColor(type: CalendarEvent['type']): string {
   return EVENT_COLORS[type];
 }
 
+function normalizeCalendarEvent(event: any) {
+  return normalizeFields(event);
+}
+
 export function useCalendarEvents(year: number, month: number) {
   const startDate = format(startOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
   const endDate = format(endOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
@@ -32,7 +37,8 @@ export function useCalendarEvents(year: number, month: number) {
     queryFn: async () => {
       const response = await fetch(`/api/calendar-events?start_date=${startDate}&end_date=${endDate}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch calendar events');
-      return response.json() as Promise<CalendarEvent[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeCalendarEvent) : [normalizeCalendarEvent(data)] as CalendarEvent[];
     },
   });
 }

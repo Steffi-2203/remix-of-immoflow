@@ -3,6 +3,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from './useAuth';
 import { useOrganization } from './useOrganization';
 import { toast } from 'sonner';
+import { normalizeFields } from '@/utils/fieldNormalizer';
 
 type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
 
@@ -15,6 +16,10 @@ export interface TeamMember {
   assignedPropertiesCount: number;
 }
 
+function normalizeTeamMember(member: any) {
+  return normalizeFields(member);
+}
+
 export function useTeamMembers() {
   const { user } = useAuth();
   const { data: organization } = useOrganization();
@@ -25,7 +30,8 @@ export function useTeamMembers() {
       if (!organization?.id) return [];
       const response = await fetch(`/api/organizations/${organization.id}/team-members`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch team members');
-      return response.json() as Promise<TeamMember[]>;
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeTeamMember) : [normalizeTeamMember(data)] as TeamMember[];
     },
     enabled: !!organization?.id && !!user?.id,
   });
@@ -53,7 +59,8 @@ export function useUpdateTeamMemberRole() {
   return useMutation({
     mutationFn: async ({ userId, newRole }: { userId: string; newRole: AppRole }) => {
       const response = await apiRequest('PUT', `/api/users/${userId}/role`, { role: newRole });
-      return response.json();
+      const data = await response.json();
+      return normalizeTeamMember(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members', organization?.id] });
