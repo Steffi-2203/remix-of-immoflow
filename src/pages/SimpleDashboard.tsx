@@ -68,7 +68,14 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
                 await createUnit.mutateAsync({
                   topNummer: newUnit.top_nummer,
                   propertyId: propertyId,
-                });
+                  type: 'wohnung',
+                  status: 'leerstand',
+                  notes: null,
+                  flaeche: null,
+                  zimmer: null,
+                  nutzwert: null,
+                  stockwerk: null,
+                } as any);
                 setNewUnit({ top_nummer: '' });
                 setShowAddUnit(false);
               }}
