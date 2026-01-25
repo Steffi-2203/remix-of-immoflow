@@ -69,6 +69,7 @@ export function VpiCalculator({ open, onOpenChange, editingAdjustment }: VpiCalc
     if (useMieWeg && currentRent > 0 && inflationRate > 0) {
       const calculateMieWeg = async () => {
         setIsCalculating(true);
+        setMieWegResult(null);
         try {
           const response = await fetch('/api/mieweg-calculate', {
             method: 'POST',
@@ -86,9 +87,22 @@ export function VpiCalculator({ open, onOpenChange, editingAdjustment }: VpiCalc
           if (response.ok) {
             const result = await response.json();
             setMieWegResult(result);
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('MieWeG API error:', errorData);
+            setMieWegResult({
+              isApplicable: false,
+              notApplicableReason: errorData.error || 'Berechnung fehlgeschlagen',
+              allowedIncreasePercent: 0,
+              newRent: currentRent,
+              increaseAmount: 0,
+              explanation: '',
+              nextIndexationDate: '',
+            });
           }
         } catch (error) {
           console.error('MieWeG calculation error:', error);
+          setMieWegResult(null);
         } finally {
           setIsCalculating(false);
         }
