@@ -131,6 +131,8 @@ export function setupAuth(app: Express) {
         if (!adminOrg[0]) {
           const newOrg = await db.insert(schema.organizations).values({
             name: "ImmoflowMe Admin",
+            subscriptionStatus: 'active',
+            subscriptionTier: 'enterprise',
           }).returning();
           adminOrg = newOrg;
         }
