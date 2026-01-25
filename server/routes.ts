@@ -150,15 +150,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const enrichedProps = props.map(prop => {
         const propertyUnits = allUnits.filter(u => u.propertyId === prop.id);
-        const activeUnits = propertyUnits.filter(u => u.status === 'aktiv');
-        const totalQm = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche) || 0), 0);
+        const totalQm = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche || u.qm) || 0), 0);
         
         // Count units with active tenants
         const rentedUnits = propertyUnits.filter(unit => {
           return allTenants.some(t => 
             t.unitId === unit.id && 
-            t.status === 'aktiv' &&
-            (!t.mietende || new Date(t.mietende) >= new Date())
+            t.status === 'aktiv'
           );
         }).length;
         
@@ -200,13 +198,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       const units = await storage.getUnitsByProperty(req.params.propertyId);
+      
+      if (req.query.includeTenants === 'true') {
+        const allTenants = await storage.getTenantsByOrganization(profile?.organizationId);
+        const enrichedUnits = units.map(unit => ({
+          ...unit,
+          tenants: allTenants.filter(t => t.unitId === unit.id)
+        }));
+        return res.json(enrichedUnits);
+      }
+      
       res.json(units);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
   });
 
-  app.post("/api/properties", isAuthenticated, async (req: any, res) => {
+  app.get("/api/settlements", isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId, year } = req.query;
+      if (!propertyId || !year) {
+        return res.status(400).json({ error: "Missing propertyId or year" });
+      }
+      const settlement = await storage.getSettlementByPropertyAndYear(propertyId as string, parseInt(year as string));
+      if (!settlement) return res.status(404).json({ error: "Settlement not found" });
+      
+      const items = await storage.getSettlementItems(settlement.id);
+      res.json({ ...settlement, settlement_items: items });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settlement" });
+    }
+  });
+
+  app.post("/api/settlements", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const { propertyId, year, items, ...data } = req.body;
+      
+      const existing = await storage.getSettlementByPropertyAndYear(propertyId, year);
+      let settlementId: string;
+      
+      if (existing) {
+        await storage.updateSettlement(existing.id, {
+          gesamtkosten: data.totalBk + data.totalHk,
+          totalBk: data.totalBk,
+          totalHk: data.totalHk,
+          bkMieter: data.bkMieter,
+          hkMieter: data.hkMieter,
+          bkEigentuemer: data.bkEigentuemer,
+          hkEigentuemer: data.hkEigentuemer,
+          status: 'berechnet',
+        });
+        settlementId = existing.id;
+        await storage.deleteSettlementItems(settlementId);
+      } else {
+        const settlement = await storage.createSettlement({
+          propertyId,
+          year,
+          gesamtkosten: data.totalBk + data.totalHk,
+          totalBk: data.totalBk,
+          totalHk: data.totalHk,
+          bkMieter: data.bkMieter,
+          hkMieter: data.hkMieter,
+          bkEigentuemer: data.bkEigentuemer,
+          hkEigentuemer: data.hkEigentuemer,
+          status: 'berechnet',
+          organizationId: profile?.organizationId
+        });
+        settlementId = settlement.id;
+      }
+      
+      for (const item of items) {
+        await storage.createSettlementItem({
+          settlementId,
+          unitId: item.unitId,
+          tenantId: item.tenantId,
+          tenantName: item.tenantName,
+          tenantEmail: item.tenantEmail,
+          isLeerstandBk: item.isLeerstandBK,
+          isLeerstandHk: item.isLeerstandHK,
+          bkAnteil: item.bkAnteil,
+          hkAnteil: item.hkAnteil,
+          bkVorschuss: item.bkVorschuss,
+          hkVorschuss: item.hkVorschuss,
+          bkSaldo: item.bkSaldo,
+          hkSaldo: item.hkSaldo,
+          gesamtSaldo: item.gesamtSaldo,
+        });
+      }
+      
+      res.json({ id: settlementId, itemsCount: items.length });
+    } catch (error) {
+      console.error('Save settlement error:', error);
+      res.status(500).json({ error: "Failed to save settlement" });
+    }
+  });
+
+  app.post("/api/settlements/:id/finalize", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.updateSettlement(req.params.id, {
+        status: 'abgeschlossen',
+        finalizedAt: new Date(),
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to finalize settlement" });
+    }
+  });
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);

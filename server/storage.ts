@@ -48,6 +48,12 @@ export interface IStorage {
   softDeleteTenant(id: string): Promise<void>;
   getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]>;
   createRentHistory(data: schema.InsertRentHistory): Promise<schema.RentHistory>;
+  getSettlementByPropertyAndYear(propertyId: string, year: number): Promise<schema.Settlement | undefined>;
+  getSettlementItems(settlementId: string): Promise<schema.SettlementDetail[]>;
+  createSettlement(data: any): Promise<schema.Settlement>;
+  updateSettlement(id: string, data: any): Promise<schema.Settlement | undefined>;
+  deleteSettlementItems(settlementId: string): Promise<void>;
+  createSettlementItem(data: any): Promise<schema.SettlementDetail>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -729,6 +735,60 @@ class DatabaseStorage implements IStorage {
       .where(eq(schema.payments.id, id))
       .returning();
     return result[0];
+  }
+  async getSettlementByPropertyAndYear(propertyId: string, year: number): Promise<schema.Settlement | undefined> {
+    const result = await db.select().from(schema.settlements)
+      .where(and(
+        eq(schema.settlements.propertyId, propertyId),
+        eq(schema.settlements.year, year)
+      ))
+      .limit(1);
+    return result[0];
+  }
+
+  async getSettlementItems(settlementId: string): Promise<schema.SettlementDetail[]> {
+    return db.select().from(schema.settlementDetails)
+      .where(eq(schema.settlementDetails.settlementId, settlementId));
+  }
+
+  async createSettlement(data: any): Promise<schema.Settlement> {
+    const [result] = await db.insert(schema.settlements).values({
+      propertyId: data.propertyId,
+      year: data.year,
+      gesamtausgaben: data.totalBk + data.totalHk,
+      status: data.status,
+      createdBy: data.createdBy,
+    }).returning();
+    return result;
+  }
+
+  async updateSettlement(id: string, data: any): Promise<schema.Settlement | undefined> {
+    const [result] = await db.update(schema.settlements)
+      .set({
+        gesamtausgaben: data.gesamtkosten,
+        status: data.status,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.settlements.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteSettlementItems(settlementId: string): Promise<void> {
+    await db.delete(schema.settlementDetails).where(eq(schema.settlementDetails.settlementId, settlementId));
+  }
+
+  async createSettlementItem(data: any): Promise<schema.SettlementDetail> {
+    const [result] = await db.insert(schema.settlementDetails).values({
+      settlementId: data.settlementId,
+      unitId: data.unitId,
+      tenantId: data.tenantId,
+      anteil: data.bkAnteil + data.hkAnteil,
+      ausgabenAnteil: data.bkAnteil + data.hkAnteil,
+      vorschuss: data.bkVorschuss + data.hkVorschuss,
+      differenz: data.gesamtSaldo,
+    }).returning();
+    return result;
   }
 }
 

@@ -129,68 +129,52 @@ export default function OperatingCostSettlement() {
     queryFn: async () => {
       if (!selectedPropertyId) return [];
       
-      // Get all units first
-      const { data: unitsData, error: unitsError } = await supabase
-        .from('units')
-        .select('id, top_nummer, type, qm, mea, vs_personen, status')
-        .eq('property_id', selectedPropertyId)
-        .order('top_nummer');
-      
-      if (unitsError) throw unitsError;
-      if (!unitsData) return [];
+      const response = await fetch(`/api/properties/${selectedPropertyId}/units?includeTenants=true`);
+      if (!response.ok) throw new Error('Failed to fetch units');
+      const unitsData = await response.json();
 
-      // Get ALL tenants for this property's units (including past tenants)
-      const unitIds = unitsData.map(u => u.id);
-      const { data: tenantsData } = await supabase
-        .from('tenants')
-        .select('id, first_name, last_name, email, unit_id, mietbeginn, mietende, status, betriebskosten_vorschuss, heizungskosten_vorschuss')
-        .in('unit_id', unitIds);
+      return unitsData.map((u: any) => {
+        const allTenants = u.tenants || [];
+        
+        // Current tenant = active tenant
+        const currentTenant = allTenants.find((t: any) => t.status === 'aktiv') || null;
+        
+        const yearStart = `${selectedYear}-01-01`;
+        const yearEnd = `${selectedYear}-12-31`;
 
-      // Group tenants by unit
-      const tenantsByUnit = new Map<string, TenantInfo[]>();
-      tenantsData?.forEach(t => {
-        const tenant: TenantInfo = {
+        const yearTenants = allTenants.filter((t: any) => {
+          const beginn = t.mietbeginn;
+          const ende = t.mietende;
+          return beginn <= yearEnd && (ende === null || ende >= yearStart);
+        }).map((t: any) => ({
           id: t.id,
-          name: `${t.first_name} ${t.last_name}`,
+          name: `${t.firstName || t.first_name} ${t.lastName || t.last_name}`,
           email: t.email,
           mietbeginn: t.mietbeginn,
           mietende: t.mietende,
           status: t.status,
           bk_vorschuss_monatlich: Number(t.betriebskosten_vorschuss || 0),
           hk_vorschuss_monatlich: Number(t.heizungskosten_vorschuss || 0),
-        };
-        const existing = tenantsByUnit.get(t.unit_id) || [];
-        existing.push(tenant);
-        tenantsByUnit.set(t.unit_id, existing);
-      });
-
-      const yearStart = `${selectedYear}-01-01`;
-      const yearEnd = `${selectedYear}-12-31`;
-
-      return unitsData.map(u => {
-        const allTenants = tenantsByUnit.get(u.id) || [];
-        
-        // Current tenant = active tenant (for BK assignment)
-        const currentTenant = allTenants.find(t => t.status === 'aktiv') || null;
-        
-        // Year tenants = tenants who lived there during the selected year (for HK)
-        // A tenant lived during the year if:
-        // - mietbeginn <= yearEnd AND (mietende is null OR mietende >= yearStart)
-        const yearTenants = allTenants.filter(t => {
-          const beginn = t.mietbeginn;
-          const ende = t.mietende;
-          return beginn <= yearEnd && (ende === null || ende >= yearStart);
-        });
+        }));
 
         return {
           id: u.id,
-          top_nummer: u.top_nummer,
+          top_nummer: u.topNummer || u.top_nummer,
           type: u.type,
-          qm: Number(u.qm),
-          mea: Number(u.mea),
-          vs_personen: u.vs_personen,
+          qm: Number(u.qm || u.flaeche || 0),
+          mea: Number(u.mea || 0),
+          vs_personen: u.vsPersonen || u.vs_personen || 0,
           status: u.status,
-          current_tenant: currentTenant,
+          current_tenant: currentTenant ? {
+            id: currentTenant.id,
+            name: `${currentTenant.firstName || currentTenant.first_name} ${currentTenant.lastName || currentTenant.last_name}`,
+            email: currentTenant.email,
+            mietbeginn: currentTenant.mietbeginn,
+            mietende: currentTenant.mietende,
+            status: currentTenant.status,
+            bk_vorschuss_monatlich: Number(currentTenant.betriebskosten_vorschuss || 0),
+            hk_vorschuss_monatlich: Number(currentTenant.heizungskosten_vorschuss || 0),
+          } : null,
           year_tenants: yearTenants,
         };
       });
