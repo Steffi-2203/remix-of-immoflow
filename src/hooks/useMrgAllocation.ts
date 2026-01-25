@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTenants } from './useTenants';
 import { useUnits } from './useUnits';
 import { useCombinedPayments } from './useCombinedPayments';
+import { useInvoices } from './useInvoices';
 import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 
 /**
@@ -123,8 +124,9 @@ export function useMrgAllocation(
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: combinedPayments, isLoading: paymentsLoading } = useCombinedPayments();
+  const { data: invoices, isLoading: invoicesLoading } = useInvoices();
 
-  const isLoading = tenantsLoading || unitsLoading || paymentsLoading;
+  const isLoading = tenantsLoading || unitsLoading || paymentsLoading || invoicesLoading;
 
   const result = useMemo(() => {
     if (!tenants || !units || !combinedPayments) {
@@ -176,10 +178,30 @@ export function useMrgAllocation(
     });
 
     const allocations: TenantAllocation[] = activeTenants.map(tenant => {
-      // SOLL from tenant data (support both camelCase and snake_case)
-      const sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
-      const sollHk = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
-      const sollMiete = Number(tenant.grundmiete || 0);
+      // SOLL: Bevorzugt aus Vorschreibung (monthlyInvoice) für den spezifischen Monat
+      // Fallback auf Mieter-Stammdaten nur wenn keine Vorschreibung existiert
+      const tenantInvoice = invoices?.find(inv => 
+        (inv.tenantId ?? inv.tenant_id) === tenant.id && 
+        inv.year === year && 
+        inv.month === month
+      );
+      
+      let sollBk: number, sollHk: number, sollMiete: number;
+      
+      if (tenantInvoice) {
+        // Vorschreibung vorhanden - verwende diese (inkl. aller Änderungen)
+        // Support both camelCase and snake_case invoice field names
+        const inv = tenantInvoice as any;
+        sollBk = Number(inv.betriebskosten ?? inv.betriebskostenVorschuss ?? inv.betriebskosten_vorschuss ?? 0);
+        sollHk = Number(inv.heizkosten ?? inv.heizkostenVorschuss ?? inv.heizkosten_vorschuss ?? inv.heizungskosten ?? inv.heizungskosten_vorschuss ?? 0);
+        sollMiete = Number(inv.grundmiete || 0);
+      } else {
+        // Fallback auf Mieter-Stammdaten (support both camelCase and snake_case)
+        sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
+        sollHk = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
+        sollMiete = Number(tenant.grundmiete || 0);
+      }
+      
       const totalSoll = sollBk + sollHk + sollMiete;
 
       // IST from combined payments for this tenant and period

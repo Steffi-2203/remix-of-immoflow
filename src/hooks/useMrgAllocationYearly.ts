@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTenants } from './useTenants';
 import { useUnits } from './useUnits';
 import { useCombinedPayments } from './useCombinedPayments';
+import { useInvoices } from './useInvoices';
 import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 import { TenantAllocation, calculateMrgAllocation } from './useMrgAllocation';
 
@@ -36,8 +37,9 @@ export function useMrgAllocationYearly(
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: combinedPayments, isLoading: paymentsLoading } = useCombinedPayments();
+  const { data: invoices, isLoading: invoicesLoading } = useInvoices();
 
-  const isLoading = tenantsLoading || unitsLoading || paymentsLoading;
+  const isLoading = tenantsLoading || unitsLoading || paymentsLoading || invoicesLoading;
 
   const result = useMemo(() => {
     if (!tenants || !units || !combinedPayments) {
@@ -108,14 +110,40 @@ export function useMrgAllocationYearly(
     });
 
     const allocations: TenantAllocation[] = Array.from(tenantMonthMap.values()).map(({ tenant, activeMonths }) => {
-      // SOLL = monatliche Werte × Anzahl aktiver Monate (support both camelCase and snake_case)
-      const sollBkMonthly = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
-      const sollHkMonthly = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
-      const sollMieteMonthly = Number(tenant.grundmiete || 0);
+      // SOLL: Summiere Vorschreibungen (monthlyInvoices) für den Mieter im gesamten Zeitraum
+      // Fallback auf Mieter-Stammdaten × aktive Monate nur wenn keine Vorschreibungen existieren
+      const tenantInvoices = invoices?.filter(inv => 
+        (inv.tenantId ?? inv.tenant_id) === tenant.id && 
+        inv.year === year && 
+        inv.month <= monthCount
+      ) || [];
       
-      const sollBk = sollBkMonthly * activeMonths;
-      const sollHk = sollHkMonthly * activeMonths;
-      const sollMiete = sollMieteMonthly * activeMonths;
+      let sollBk: number, sollHk: number, sollMiete: number;
+      
+      if (tenantInvoices.length > 0) {
+        // Summiere alle Vorschreibungen für den Zeitraum
+        // Support both camelCase and snake_case invoice field names
+        sollBk = tenantInvoices.reduce((sum, invoice) => {
+          const inv = invoice as any;
+          return sum + Number(inv.betriebskosten ?? inv.betriebskostenVorschuss ?? inv.betriebskosten_vorschuss ?? 0);
+        }, 0);
+        sollHk = tenantInvoices.reduce((sum, invoice) => {
+          const inv = invoice as any;
+          return sum + Number(inv.heizkosten ?? inv.heizkostenVorschuss ?? inv.heizkosten_vorschuss ?? inv.heizungskosten ?? inv.heizungskosten_vorschuss ?? 0);
+        }, 0);
+        sollMiete = tenantInvoices.reduce((sum, invoice) => 
+          sum + Number((invoice as any).grundmiete || 0), 0);
+      } else {
+        // Fallback auf Mieter-Stammdaten × aktive Monate (support both camelCase and snake_case)
+        const sollBkMonthly = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
+        const sollHkMonthly = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
+        const sollMieteMonthly = Number(tenant.grundmiete || 0);
+        
+        sollBk = sollBkMonthly * activeMonths;
+        sollHk = sollHkMonthly * activeMonths;
+        sollMiete = sollMieteMonthly * activeMonths;
+      }
+      
       const totalSoll = sollBk + sollHk + sollMiete;
 
       // IST = Summe aller Zahlungen des Mieters im Jahr
