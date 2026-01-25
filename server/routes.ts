@@ -249,6 +249,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/payments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const payment = await storage.updatePayment(req.params.id, req.body);
+      res.json(payment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update payment" });
+    }
+  });
+
   app.delete("/api/payments/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deletePayment(req.params.id);
@@ -320,6 +329,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create expense error:", error);
       res.status(500).json({ error: "Failed to create expense" });
+    }
+  });
+
+  app.get("/api/expenses", isAuthenticated, async (req, res) => {
+    try {
+      const { year, month } = req.query;
+      const expenses = await storage.getExpenses(
+        year ? parseInt(year as string) : undefined,
+        month ? parseInt(month as string) : undefined
+      );
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  app.patch("/api/expenses/:id", isAuthenticated, async (req, res) => {
+    try {
+      const expense = await storage.updateExpense(req.params.id, req.body);
+      res.json(expense);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update expense" });
+    }
+  });
+
+  app.delete("/api/expenses/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteExpense(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete expense" });
     }
   });
 
@@ -404,6 +444,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(isTester(roles) ? maskPersonalData(invoices) : invoices);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch invoices" });
+    }
+  });
+
+  app.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      const roles = await getUserRoles(req);
+      res.json(isTester(roles) ? maskPersonalData(invoice) : invoice);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch invoice" });
+    }
+  });
+
+  app.post("/api/invoices", isAuthenticated, async (req, res) => {
+    try {
+      const invoice = await storage.createInvoice(req.body);
+      res.json(invoice);
+    } catch (error) {
+      console.error("Create invoice error:", error);
+      res.status(500).json({ error: "Failed to create invoice" });
+    }
+  });
+
+  app.patch("/api/invoices/:id", isAuthenticated, async (req, res) => {
+    try {
+      const invoice = await storage.updateInvoice(req.params.id, req.body);
+      res.json(invoice);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update invoice" });
+    }
+  });
+
+  app.delete("/api/invoices/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteInvoice(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete invoice" });
+    }
+  });
+
+  app.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any, res) => {
+    try {
+      const payments = await storage.getPaymentsByInvoice(req.params.invoiceId);
+      const roles = await getUserRoles(req);
+      res.json(isTester(roles) ? maskPersonalData(payments) : payments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch invoice payments" });
     }
   });
 

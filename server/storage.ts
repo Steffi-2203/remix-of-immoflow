@@ -352,6 +352,64 @@ class DatabaseStorage implements IStorage {
     return db.select().from(schema.units)
       .orderBy(asc(schema.units.topNummer));
   }
+
+  async getExpenses(year?: number, month?: number): Promise<schema.Expense[]> {
+    let query = db.select().from(schema.expenses);
+    if (year && month) {
+      return query.where(and(
+        eq(schema.expenses.year, year),
+        eq(schema.expenses.month, month)
+      )).orderBy(desc(schema.expenses.datum));
+    } else if (year) {
+      return query.where(eq(schema.expenses.year, year)).orderBy(desc(schema.expenses.datum));
+    }
+    return query.orderBy(desc(schema.expenses.datum));
+  }
+
+  async updateExpense(id: string, data: Partial<schema.InsertExpense>): Promise<schema.Expense> {
+    const result = await db.update(schema.expenses)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.expenses.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async getInvoice(id: string): Promise<schema.MonthlyInvoice | undefined> {
+    const result = await db.select().from(schema.monthlyInvoices)
+      .where(eq(schema.monthlyInvoices.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createInvoice(data: schema.InsertMonthlyInvoice): Promise<schema.MonthlyInvoice> {
+    const result = await db.insert(schema.monthlyInvoices).values(data).returning();
+    return result[0];
+  }
+
+  async updateInvoice(id: string, data: Partial<schema.InsertMonthlyInvoice>): Promise<schema.MonthlyInvoice> {
+    const result = await db.update(schema.monthlyInvoices)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.monthlyInvoices.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteInvoice(id: string): Promise<void> {
+    await db.delete(schema.monthlyInvoices).where(eq(schema.monthlyInvoices.id, id));
+  }
+
+  async getPaymentsByInvoice(invoiceId: string): Promise<schema.Payment[]> {
+    return db.select().from(schema.payments)
+      .where(eq(schema.payments.invoiceId, invoiceId))
+      .orderBy(asc(schema.payments.buchungsDatum));
+  }
+
+  async updatePayment(id: string, data: Partial<schema.InsertPayment>): Promise<schema.Payment> {
+    const result = await db.update(schema.payments)
+      .set(data)
+      .where(eq(schema.payments.id, id))
+      .returning();
+    return result[0];
+  }
 }
 
 export const storage = new DatabaseStorage();
