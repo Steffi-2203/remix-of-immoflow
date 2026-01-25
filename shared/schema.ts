@@ -453,6 +453,126 @@ export const insertMaintenanceContractSchema = createInsertSchema(maintenanceCon
 export const insertMaintenanceTaskSchema = createInsertSchema(maintenanceTasks).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertContractorSchema = createInsertSchema(contractors).omit({ id: true, createdAt: true, updatedAt: true });
 
+// ====== EIGENTÜMER (OWNERS) ======
+export const owners = pgTable("owners", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  companyName: text("company_name"),
+  email: text("email"),
+  phone: text("phone"),
+  mobilePhone: text("mobile_phone"),
+  address: text("address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  country: text("country").default('Österreich'),
+  iban: text("iban"),
+  bic: text("bic"),
+  bankName: text("bank_name"),
+  taxNumber: text("tax_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+// Zuordnung Eigentümer zu Liegenschaften (many-to-many mit Anteil)
+export const propertyOwners = pgTable("property_owners", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  ownershipShare: numeric("ownership_share", { precision: 5, scale: 2 }).default('100.00'),
+  validFrom: date("valid_from"),
+  validTo: date("valid_to"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// ====== ZÄHLERSTÄNDE (METER READINGS) ======
+export const meterTypeEnum = pgEnum('meter_type', ['strom', 'gas', 'wasser', 'heizung', 'warmwasser', 'sonstiges']);
+
+export const meters = pgTable("meters", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  meterNumber: text("meter_number").notNull(),
+  meterType: meterTypeEnum("meter_type").notNull(),
+  location: text("location"),
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const meterReadings = pgTable("meter_readings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  meterId: uuid("meter_id").references(() => meters.id).notNull(),
+  readingDate: date("reading_date").notNull(),
+  readingValue: numeric("reading_value", { precision: 12, scale: 3 }).notNull(),
+  isEstimated: boolean("is_estimated").default(false),
+  readBy: text("read_by"),
+  imageUrl: text("image_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// ====== SCHLÜSSELVERWALTUNG (KEY MANAGEMENT) ======
+export const keyTypeEnum = pgEnum('key_type', ['hauptschluessel', 'wohnungsschluessel', 'kellerschluessel', 'garagenschluessel', 'briefkastenschluessel', 'sonstiges']);
+export const keyStatusEnum = pgEnum('key_status', ['vorhanden', 'ausgegeben', 'verloren', 'gesperrt']);
+
+export const keyInventory = pgTable("key_inventory", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id),
+  keyType: keyTypeEnum("key_type").notNull(),
+  keyNumber: text("key_number"),
+  description: text("description"),
+  totalCount: integer("total_count").default(1),
+  availableCount: integer("available_count").default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const keyHandovers = pgTable("key_handovers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  keyInventoryId: uuid("key_inventory_id").references(() => keyInventory.id).notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  recipientName: text("recipient_name"),
+  handoverDate: date("handover_date").notNull(),
+  returnDate: date("return_date"),
+  quantity: integer("quantity").default(1),
+  status: keyStatusEnum("status").default('ausgegeben'),
+  handoverProtocol: text("handover_protocol"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+// ====== VPI INDEXANPASSUNGEN ======
+export const vpiAdjustments = pgTable("vpi_adjustments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  adjustmentDate: date("adjustment_date").notNull(),
+  previousRent: numeric("previous_rent", { precision: 10, scale: 2 }).notNull(),
+  newRent: numeric("new_rent", { precision: 10, scale: 2 }).notNull(),
+  vpiOld: numeric("vpi_old", { precision: 8, scale: 2 }),
+  vpiNew: numeric("vpi_new", { precision: 8, scale: 2 }),
+  percentageChange: numeric("percentage_change", { precision: 5, scale: 2 }),
+  notificationSent: boolean("notification_sent").default(false),
+  notificationDate: date("notification_date"),
+  effectiveDate: date("effective_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertOwnerSchema = createInsertSchema(owners).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPropertyOwnerSchema = createInsertSchema(propertyOwners).omit({ id: true, createdAt: true });
+export const insertMeterSchema = createInsertSchema(meters).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertMeterReadingSchema = createInsertSchema(meterReadings).omit({ id: true, createdAt: true });
+export const insertKeyInventorySchema = createInsertSchema(keyInventory).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKeyHandoverSchema = createInsertSchema(keyHandovers).omit({ id: true, createdAt: true });
+export const insertVpiAdjustmentSchema = createInsertSchema(vpiAdjustments).omit({ id: true, createdAt: true });
+
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
@@ -489,3 +609,19 @@ export type SepaCollection = typeof sepaCollections.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type UserRole = typeof userRoles.$inferSelect;
+
+export type Owner = typeof owners.$inferSelect;
+export type PropertyOwner = typeof propertyOwners.$inferSelect;
+export type Meter = typeof meters.$inferSelect;
+export type MeterReading = typeof meterReadings.$inferSelect;
+export type KeyInventory = typeof keyInventory.$inferSelect;
+export type KeyHandover = typeof keyHandovers.$inferSelect;
+export type VpiAdjustment = typeof vpiAdjustments.$inferSelect;
+
+export type InsertOwner = z.infer<typeof insertOwnerSchema>;
+export type InsertPropertyOwner = z.infer<typeof insertPropertyOwnerSchema>;
+export type InsertMeter = z.infer<typeof insertMeterSchema>;
+export type InsertMeterReading = z.infer<typeof insertMeterReadingSchema>;
+export type InsertKeyInventory = z.infer<typeof insertKeyInventorySchema>;
+export type InsertKeyHandover = z.infer<typeof insertKeyHandoverSchema>;
+export type InsertVpiAdjustment = z.infer<typeof insertVpiAdjustmentSchema>;
