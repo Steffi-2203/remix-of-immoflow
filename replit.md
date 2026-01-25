@@ -12,6 +12,12 @@ ImmoflowMe is a comprehensive Austrian property management (Hausverwaltung) appl
 - **Frontend**: React with Vite, Tailwind CSS, shadcn/ui components
 
 ## Recent Changes (January 2026)
+- **Verteilungsschlüssel-System**:
+  - 6 MRG-konforme Standard-Schlüssel: Nutzfläche, Einheiten, Personen, Pauschal, Verbrauch, Sondernutzung
+  - Seed-Daten werden automatisch beim Server-Start eingefügt
+  - Dropdown bei Ausgaben-Erfassung für Schlüssel-Auswahl (nur Betriebskosten umlagefähig)
+  - Settlement-Service verwendet gewählte Schlüssel für korrekte Kostenverteilung pro Ausgabe
+  - CRUD-Endpoints für distribution_keys (/api/distribution-keys)
 - **Architektur-Verbesserungen (Keller→Mauern→Dach Ansatz)**:
   - **API-Sicherheit**: Authentifizierung auf 14+ Routen, Organisation-basierte Mandantentrennung
   - **Ownership-Checks**: Strenge Zugriffsprüfung mit Relationship-Traversal (tenant→unit→property→org)
