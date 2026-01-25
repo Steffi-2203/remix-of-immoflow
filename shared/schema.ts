@@ -473,7 +473,15 @@ export const auditLogs = pgTable("audit_logs", {
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertUnitSchema = createInsertSchema(units).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUnitSchema = createInsertSchema(units).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true }).partial({
+  type: true,
+  status: true,
+  flaeche: true,
+  zimmer: true,
+  nutzwert: true,
+  stockwerk: true,
+  notes: true,
+});
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMonthlyInvoiceSchema = createInsertSchema(monthlyInvoices).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
