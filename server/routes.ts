@@ -1,9 +1,15 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerFunctionRoutes } from "./functions";
 import crypto from "crypto";
+
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.userId) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+}
 
 function maskPersonalData(data: any): any {
   if (!data) return data;
@@ -73,15 +79,19 @@ function maskPersonalData(data: any): any {
 
 async function getUserRoles(req: any): Promise<string[]> {
   try {
-    const userEmail = req.user?.claims?.email;
-    if (!userEmail) return [];
-    const profile = await storage.getProfileByEmail(userEmail);
-    if (!profile) return [];
-    const roles = await storage.getUserRoles(profile.id, profile.organizationId);
+    const userId = req.session?.userId;
+    if (!userId) return [];
+    const roles = await storage.getUserRoles(userId);
     return roles.map((r: any) => r.role);
   } catch {
     return [];
   }
+}
+
+async function getProfileFromSession(req: any) {
+  const userId = req.session?.userId;
+  if (!userId) return null;
+  return storage.getProfileById(userId);
 }
 
 function isTester(roles: string[]): boolean {
@@ -89,8 +99,6 @@ function isTester(roles: string[]): boolean {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  await setupAuth(app);
-  registerAuthRoutes(app);
   
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -137,7 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile) {
@@ -186,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/property-managers", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile) {
@@ -205,7 +213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/property-managers/:propertyId", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile) {
@@ -315,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/account-categories", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile?.organizationId) {
@@ -500,51 +508,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
-      if (!userEmail) {
-        return res.status(400).json({ error: "No email found" });
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
       }
       
-      const emailLower = userEmail.toLowerCase();
-      let profile = await storage.getProfileByEmail(userEmail);
+      const profile = await storage.getProfileById(userId);
       
       if (!profile) {
-        const isAdmin = emailLower === ADMIN_EMAIL.toLowerCase();
-        const hasPendingInvite = await storage.getPendingInviteByEmail(emailLower);
-        
-        if (!isAdmin && !hasPendingInvite) {
-          return res.status(403).json({ 
-            error: "Zugriff verweigert. Nur eingeladene Benutzer können sich anmelden.",
-            code: "NOT_AUTHORIZED"
-          });
-        }
-        
-        const fullName = [req.user?.claims?.first_name, req.user?.claims?.last_name]
-          .filter(Boolean).join(' ') || userEmail;
-        profile = await storage.createProfile({
-          email: userEmail,
-          fullName,
-        });
-        
-        if (isAdmin) {
-          let adminOrg = await storage.getOrganizationByName("ImmoflowMe Admin");
-          if (!adminOrg) {
-            adminOrg = await storage.createOrganization({
-              name: "ImmoflowMe Admin",
-              slug: "immoflowme-admin",
-            });
-          }
-          await storage.updateProfile(profile.id, { organizationId: adminOrg.id });
-          await storage.createUserRole({
-            userId: profile.id,
-            organizationId: adminOrg.id,
-            role: 'admin'
-          });
-          profile = await storage.getProfileByEmail(userEmail);
-        }
+        return res.status(404).json({ error: "Profile not found" });
       }
       
-      const roles = await storage.getUserRoles(profile!.id);
+      const roles = await storage.getUserRoles(profile.id);
       res.json({ ...profile, roles: roles.map(r => r.role) });
     } catch (error) {
       console.error("Profile error:", error);
@@ -554,8 +529,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/profile/organization", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
-      const profile = await storage.getProfileByEmail(userEmail);
+      const userId = req.session?.userId;
+      const profile = await storage.getProfileById(userId);
       
       if (!profile?.organizationId) {
         return res.json(null);
@@ -570,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invites", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile?.organizationId) {
@@ -625,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invites", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile?.organizationId) {
@@ -664,7 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invites/:token/accept", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const invite = await storage.getInviteByToken(req.params.token);
       
       if (!invite || invite.status !== 'pending' || new Date(invite.expiresAt) < new Date()) {
@@ -678,7 +653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile) {
-        const fullName = [req.user?.claims?.first_name, req.user?.claims?.last_name]
+        const fullName = []
           .filter(Boolean).join(' ') || userEmail;
         profile = await storage.createProfile({
           email: userEmail,
@@ -708,7 +683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/invites/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile?.organizationId) {
@@ -753,7 +728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/organization/members", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       if (!profile?.organizationId) {
@@ -778,7 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/organization/members/:memberId/roles", isAuthenticated, async (req: any, res) => {
     try {
-      const userEmail = req.user?.claims?.email;
+      const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
       
       const roles = await storage.getUserRoles(profile!.id);

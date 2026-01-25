@@ -1,16 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-interface ReplitUser {
+interface User {
   id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  profileImageUrl: string | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
+  email: string;
+  fullName: string | null;
+  organizationId: string | null;
+  roles: string[];
 }
 
-async function fetchUser(): Promise<ReplitUser | null> {
+async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
   });
@@ -26,56 +24,135 @@ async function fetchUser(): Promise<ReplitUser | null> {
   return response.json();
 }
 
+async function loginFn(email: string, password: string): Promise<User> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Anmeldung fehlgeschlagen");
+  }
+
+  return response.json();
+}
+
+async function registerFn(data: {
+  email: string;
+  password: string;
+  fullName?: string;
+  token?: string;
+}): Promise<User> {
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Registrierung fehlgeschlagen");
+  }
+
+  return response.json();
+}
+
 async function logoutFn(): Promise<void> {
-  window.location.href = "/api/logout";
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+  });
 }
 
 export const useAuth = () => {
   const queryClient = useQueryClient();
   
-  const { data: user, isLoading: loading } = useQuery<ReplitUser | null>({
+  const { data: user, isLoading: loading, refetch } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
 
+  const loginMutation = useMutation({
+    mutationFn: (data: { email: string; password: string }) => 
+      loginFn(data.email, data.password),
+    onSuccess: (userData) => {
+      queryClient.setQueryData(["/api/auth/user"], userData);
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: registerFn,
+    onSuccess: (userData) => {
+      queryClient.setQueryData(["/api/auth/user"], userData);
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+    },
+  });
+
   const logoutMutation = useMutation({
     mutationFn: logoutFn,
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/user"], null);
+      queryClient.setQueryData(["/api/profile"], null);
+      queryClient.clear();
     },
   });
 
-  const signIn = async (_email: string, _password: string) => {
-    window.location.href = "/api/login";
-    return { data: null, error: null };
+  const login = async (email: string, password: string) => {
+    return loginMutation.mutateAsync({ email, password });
   };
 
-  const signUp = async (_email: string, _password: string, _fullName?: string, _companyName?: string, _inviteToken?: string) => {
-    window.location.href = "/api/login";
-    return { data: null, error: null };
+  const register = async (data: {
+    email: string;
+    password: string;
+    fullName?: string;
+    token?: string;
+  }) => {
+    return registerMutation.mutateAsync(data);
+  };
+
+  const signIn = login;
+  const signUp = async (
+    email: string, 
+    password: string, 
+    fullName?: string, 
+    _companyName?: string, 
+    inviteToken?: string
+  ) => {
+    return register({ email, password, fullName, token: inviteToken });
   };
 
   const signOut = async () => {
-    logoutMutation.mutate();
+    await logoutMutation.mutateAsync();
     return { error: null };
   };
+
+  const logout = signOut;
 
   return {
     user: user ? {
       id: user.id,
       email: user.email,
       user_metadata: {
-        full_name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName || user.lastName || user.email,
-        avatar_url: user.profileImageUrl,
+        full_name: user.fullName || user.email,
+        avatar_url: null,
       }
     } : null,
     session: user ? { user } : null,
     loading,
+    login,
+    register,
+    logout,
     signIn,
     signUp,
     signOut,
+    refetch,
     isAuthenticated: !!user,
     isSupabaseConfigured: true,
   };
