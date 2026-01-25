@@ -5,6 +5,7 @@ import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { runSimulation } from "./seed-2025-simulation";
 import crypto from "crypto";
+import { insertRentHistorySchema } from "@shared/schema";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
@@ -530,6 +531,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  app.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const tenant = await storage.getTenant(req.params.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const history = await storage.getRentHistoryByTenant(req.params.tenantId);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch rent history" });
+    }
+  });
+
+  app.post("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const tenant = await storage.getTenant(req.params.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const unit = await storage.getUnit(tenant.unitId);
+      if (!unit) {
+        return res.status(403).json({ error: "Access denied - unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const validationResult = insertRentHistorySchema.safeParse({
+        ...req.body,
+        tenantId: req.params.tenantId
+      });
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const rentHistory = await storage.createRentHistory(validationResult.data);
+      res.json(rentHistory);
+    } catch (error) {
+      console.error("Create rent history error:", error);
+      res.status(500).json({ error: "Failed to create rent history" });
     }
   });
 
