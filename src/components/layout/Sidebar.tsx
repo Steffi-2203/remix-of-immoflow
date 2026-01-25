@@ -24,7 +24,8 @@ import {
   HardHat,
   AlertTriangle,
   PiggyBank,
-  Lock
+  Lock,
+  Gauge
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -75,6 +76,12 @@ const navItems: NavItem[] = [
     icon: User,
     href: '/eigentuemer',
     tourId: 'nav-owners'
+  },
+  {
+    label: 'Zählerstände',
+    icon: Gauge,
+    href: '/zaehlerstaende',
+    tourId: 'nav-meter-readings'
   },
   {
     label: 'Mieteinnahmen',
