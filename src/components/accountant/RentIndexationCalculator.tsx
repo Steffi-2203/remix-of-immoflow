@@ -56,7 +56,53 @@ export function RentIndexationCalculator() {
     const year = parseInt(indexationYear);
     const lastDate = new Date(lastIndexationDate);
 
-    if (isNaN(rent) || isNaN(inflation) || isNaN(year)) {
+    if (isNaN(rent) || rent <= 0 || isNaN(inflation) || inflation < 0 || isNaN(year) || isNaN(lastDate.getTime())) {
+      setResult({
+        allowedIncreasePercent: 0,
+        newRent: rent || 0,
+        increaseAmount: 0,
+        explanation: 'Bitte geben Sie gültige Werte ein (positive Miete, nicht-negative Inflation, gültiges Datum).',
+        nextIndexationDate: new Date(),
+        isApplicable: false,
+        notApplicableReason: 'Ungültige Eingabewerte.'
+      });
+      return;
+    }
+
+    const today = new Date();
+    const oneYearFromLast = new Date(lastDate);
+    oneYearFromLast.setFullYear(oneYearFromLast.getFullYear() + 1);
+    
+    const april1OfYear = new Date(year, 3, 1);
+    
+    let nextPossibleDate = calculateNextIndexationDate(lastDate);
+    if (nextPossibleDate < april1OfYear) {
+      nextPossibleDate = april1OfYear;
+    }
+
+    if (today < april1OfYear) {
+      setResult({
+        allowedIncreasePercent: 0,
+        newRent: rent,
+        increaseAmount: 0,
+        explanation: `Die Indexierung für ${year} ist frühestens am 1. April ${year} möglich. Aktuelles Datum: ${formatDate(today)}.`,
+        nextIndexationDate: april1OfYear,
+        isApplicable: false,
+        notApplicableReason: `Indexierung frühestens ab 01.04.${year} möglich.`
+      });
+      return;
+    }
+
+    if (today < oneYearFromLast) {
+      setResult({
+        allowedIncreasePercent: 0,
+        newRent: rent,
+        increaseAmount: 0,
+        explanation: `Die letzte Indexierung (${formatDate(lastDate)}) liegt weniger als ein Jahr zurück. Eine Indexierung ist nur einmal jährlich zulässig.`,
+        nextIndexationDate: nextPossibleDate,
+        isApplicable: false,
+        notApplicableReason: `Nächste mögliche Indexierung: ${formatDate(nextPossibleDate)}`
+      });
       return;
     }
 

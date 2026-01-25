@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { RentIndexationCalculator } from '@/components/accountant/RentIndexationCalculator';
 
 interface AccountantDashboardData {
   dunning: {
@@ -188,10 +189,11 @@ export default function AccountantDashboard() {
         </div>
 
         <Tabs defaultValue="dunning" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="dunning" data-testid="tab-dunning">Mahnwesen</TabsTrigger>
             <TabsTrigger value="maintenance" data-testid="tab-maintenance">Wartungen</TabsTrigger>
             <TabsTrigger value="vpi" data-testid="tab-vpi">VPI-Anpassungen</TabsTrigger>
+            <TabsTrigger value="indexation" data-testid="tab-indexation">MieWeG-Rechner</TabsTrigger>
             <TabsTrigger value="exports" data-testid="tab-exports">Exporte</TabsTrigger>
           </TabsList>
 
@@ -352,6 +354,10 @@ export default function AccountantDashboard() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="indexation" className="space-y-4">
+            <RentIndexationCalculator />
           </TabsContent>
 
           <TabsContent value="exports" className="space-y-4">
