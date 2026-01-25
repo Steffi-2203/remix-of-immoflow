@@ -86,7 +86,7 @@ export function useDataConsistencyCheck(): ConsistencyCheckResult {
     // Get rent income transactions (with Mieteinnahmen category)
     const rentIncomeTransactions = transactions.filter(t =>
       t.category_id === mieteinnahmenCategory.id && 
-      t.amount > 0
+      Number(t.amount) > 0
     );
 
     // Prüfung 1: Payments ohne Transactions
