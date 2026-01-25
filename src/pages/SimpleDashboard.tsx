@@ -66,8 +66,8 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
               onClick={async () => {
                 if (!newUnit.top_nummer) return;
                 await createUnit.mutateAsync({
-                  top_nummer: newUnit.top_nummer,
-                  property_id: propertyId,
+                  topNummer: newUnit.top_nummer,
+                  propertyId: propertyId,
                 });
                 setNewUnit({ top_nummer: '' });
                 setShowAddUnit(false);
@@ -95,7 +95,7 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
             <div key={unit.id} className="flex justify-between items-center p-2 bg-muted rounded text-sm">
               <div className="flex items-center gap-2">
                 <Home className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{unit.top_nummer}</span>
+                <span className="font-medium">{unit.topNummer}</span>
                 <Badge variant={unit.status === 'aktiv' ? 'default' : 'secondary'} className="text-xs">
                   {unit.status === 'aktiv' ? 'Vermietet' : 'Leerstand'}
                 </Badge>
@@ -336,7 +336,7 @@ export default function SimpleDashboard() {
                         <div className="min-w-0">
                           <h3 className="font-semibold text-lg truncate">{property.name}</h3>
                           <p className="text-muted-foreground text-sm truncate">
-                            {property.address}, {property.postal_code} {property.city}
+                            {property.address}, {property.postalCode} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
                             {property.total_units} Einheiten • {property.total_qm} m²

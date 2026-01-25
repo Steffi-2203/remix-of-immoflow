@@ -93,8 +93,8 @@ export default function UnitList() {
   const { data: invoices } = useInvoices();
 
   const getProperty = (propertyId: string) => properties?.find((p) => p.id === propertyId);
-  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unit_id === unitId && t.status === 'aktiv');
-  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unit_id === unitId) || [];
+  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unitId === unitId && t.status === 'aktiv');
+  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unitId === unitId) || [];
 
   // Check if contract expires within 3 months
   const getContractExpirationInfo = (tenant: any) => {
@@ -120,16 +120,16 @@ export default function UnitList() {
   }).length || 0;
   // Filter units
   const filteredUnits = units?.filter(unit => {
-    if (propertyFilter !== 'all' && unit.property_id !== propertyFilter) return false;
+    if (propertyFilter !== 'all' && unit.propertyId !== propertyFilter) return false;
     if (typeFilter !== 'all' && unit.type !== typeFilter) return false;
     if (statusFilter !== 'all' && unit.status !== statusFilter) return false;
     if (searchQuery) {
-      const property = getProperty(unit.property_id);
+      const property = getProperty(unit.propertyId);
       const tenant = getTenantForUnit(unit.id);
       const searchLower = searchQuery.toLowerCase();
-      const matchesTop = unit.top_nummer.toLowerCase().includes(searchLower);
+      const matchesTop = unit.topNummer.toLowerCase().includes(searchLower);
       const matchesProperty = property?.name.toLowerCase().includes(searchLower);
-      const matchesTenant = tenant && `${tenant.first_name} ${tenant.last_name}`.toLowerCase().includes(searchLower);
+      const matchesTenant = tenant && `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(searchLower);
       if (!matchesTop && !matchesProperty && !matchesTenant) return false;
     }
     return true;
@@ -238,7 +238,7 @@ export default function UnitList() {
             if (!open) setSelectedPropertyForImport(null);
           }}
           propertyId={selectedPropertyForImport}
-          existingUnits={units?.filter(u => u.property_id === selectedPropertyForImport) || []}
+          existingUnits={units?.filter(u => u.propertyId === selectedPropertyForImport) || []}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['units'] });
             setImportDialogOpen(false);
@@ -323,28 +323,28 @@ export default function UnitList() {
               </TableHeader>
               <TableBody>
                 {filteredUnits.map((unit) => {
-                  const property = getProperty(unit.property_id);
+                  const property = getProperty(unit.propertyId);
                   const tenant = getTenantForUnit(unit.id);
                   const expirationInfo = tenant ? getContractExpirationInfo(tenant) : null;
                   const Icon = unitTypeIcons[unit.type] || Building2;
                   
                   const grundmiete = tenant ? Number(tenant.grundmiete) : 0;
-                  const bk = tenant ? Number(tenant.betriebskosten_vorschuss) : 0;
-                  const hk = tenant ? Number(tenant.heizungskosten_vorschuss) : 0;
+                  const bk = tenant ? Number(tenant.betriebskostenVorschuss) : 0;
+                  const hk = tenant ? Number(tenant.heizungskostenVorschuss) : 0;
                   const totalRent = grundmiete + bk + hk;
 
                   return (
                     <TableRow 
                       key={unit.id} 
                       className="hover:bg-muted/30 cursor-pointer"
-                      onClick={() => window.location.href = `/einheiten/${unit.property_id}/${unit.id}`}
+                      onClick={() => window.location.href = `/einheiten/${unit.propertyId}/${unit.id}`}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="rounded-lg bg-muted p-1.5">
                             <Icon className="h-4 w-4 text-muted-foreground" />
                           </div>
-                          <span className="font-medium">{unit.top_nummer}</span>
+                          <span className="font-medium">{unit.topNummer}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -374,7 +374,7 @@ export default function UnitList() {
                         {tenant ? (
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{tenant.first_name} {tenant.last_name}</span>
+                            <span className="font-medium">{tenant.firstName} {tenant.lastName}</span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>

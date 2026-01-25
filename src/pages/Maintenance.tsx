@@ -161,7 +161,7 @@ export default function MaintenancePage() {
   };
 
   const getUnitsForProperty = (propertyId: string) => {
-    return units?.filter((u) => u.property_id === propertyId) || [];
+    return units?.filter((u) => u.propertyId === propertyId) || [];
   };
 
   // Statistics
@@ -536,7 +536,7 @@ export default function MaintenancePage() {
                     <SelectItem value="">Keine Einheit</SelectItem>
                     {getUnitsForProperty(newTask.property_id).map((u) => (
                       <SelectItem key={u.id} value={u.id}>
-                        Top {u.top_nummer}
+                        Top {u.topNummer}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -57,7 +57,7 @@ export default function TenantForm() {
   const isEditing = !!tenantId;
 
   const { data: unit, isLoading: isLoadingUnit } = useUnit(unitId);
-  const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId || unit?.property_id);
+  const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId || unit?.propertyId);
   const { data: tenant, isLoading: isLoadingTenant } = useTenant(tenantId);
   const createTenant = useCreateTenant();
   const updateTenant = useUpdateTenant();
@@ -83,21 +83,21 @@ export default function TenantForm() {
       status: 'aktiv',
     },
     values: tenant ? {
-      first_name: tenant.first_name,
-      last_name: tenant.last_name,
+      first_name: tenant.firstName,
+      last_name: tenant.lastName,
       email: tenant.email || '',
       phone: tenant.phone || '',
       mietbeginn: tenant.mietbeginn,
       mietende: tenant.mietende || '',
       kaution: Number(tenant.kaution),
-      kaution_bezahlt: tenant.kaution_bezahlt,
+      kaution_bezahlt: tenant.kautionBezahlt,
       grundmiete: Number(tenant.grundmiete),
-      betriebskosten_vorschuss: Number(tenant.betriebskosten_vorschuss),
-      heizungskosten_vorschuss: Number(tenant.heizungskosten_vorschuss),
-      sepa_mandat: tenant.sepa_mandat,
+      betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss),
+      heizungskosten_vorschuss: Number(tenant.heizungskostenVorschuss),
+      sepa_mandat: tenant.sepaMandat,
       iban: tenant.iban || '',
       bic: tenant.bic || '',
-      mandat_reference: tenant.mandat_reference || '',
+      mandat_reference: tenant.mandatReference || '',
       status: tenant.status,
     } : undefined,
   });
@@ -109,24 +109,28 @@ export default function TenantForm() {
   const totalRent = (watchGrundmiete || 0) + (watchBK || 0) + (watchHeizung || 0);
 
   const onSubmit = async (data: TenantFormData) => {
+    // Convert form data (snake_case) to API format (camelCase)
     const tenantData = {
-      first_name: data.first_name,
-      last_name: data.last_name,
-      unit_id: unitId!,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      unitId: unitId!,
       mietbeginn: data.mietbeginn,
       mietende: data.mietende || null,
-      kaution: data.kaution,
-      kaution_bezahlt: data.kaution_bezahlt,
-      grundmiete: data.grundmiete,
-      betriebskosten_vorschuss: data.betriebskosten_vorschuss,
-      heizungskosten_vorschuss: data.heizungskosten_vorschuss,
-      sepa_mandat: data.sepa_mandat,
+      kaution: String(data.kaution),
+      kautionBezahlt: data.kaution_bezahlt,
+      grundmiete: String(data.grundmiete),
+      betriebskostenVorschuss: String(data.betriebskosten_vorschuss),
+      heizungskostenVorschuss: String(data.heizungskosten_vorschuss),
+      sepaMandat: data.sepa_mandat,
+      sepaMandatDatum: null,
       status: data.status,
       email: data.email || null,
       phone: data.phone || null,
+      mobilePhone: null,
       iban: data.iban || null,
       bic: data.bic || null,
-      mandat_reference: data.mandat_reference || null,
+      mandatReference: data.mandat_reference || null,
+      notes: null,
     };
 
     if (isEditing && tenantId) {
@@ -135,7 +139,7 @@ export default function TenantForm() {
       await createTenant.mutateAsync(tenantData);
     }
 
-    const effectivePropertyId = propertyId || unit?.property_id;
+    const effectivePropertyId = propertyId || unit?.propertyId;
     navigate(`/einheiten/${effectivePropertyId}/${unitId}`);
   };
 
@@ -152,13 +156,13 @@ export default function TenantForm() {
     );
   }
 
-  const effectivePropertyId = propertyId || unit?.property_id;
+  const effectivePropertyId = propertyId || unit?.propertyId;
   const backUrl = `/einheiten/${effectivePropertyId}/${unitId}`;
 
   return (
     <MainLayout
       title={isEditing ? 'Mieter bearbeiten' : 'Neuer Mieter'}
-      subtitle={unit ? `${unit.top_nummer} - ${property?.name || ''}` : ''}
+      subtitle={unit ? `${unit.topNummer} - ${property?.name || ''}` : ''}
     >
       {/* Back Button */}
       <Link

@@ -102,7 +102,7 @@ export default function UnitForm() {
   useEffect(() => {
     if (existingUnit) {
       setFormData({
-        top_nummer: existingUnit.top_nummer || '',
+        top_nummer: existingUnit.topNummer || '',
         type: existingUnit.type || 'wohnung',
         floor: existingUnit.floor?.toString() || '',
         qm: existingUnit.qm?.toString() || '',
