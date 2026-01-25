@@ -1,23 +1,42 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
-import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
-export type Transaction = Tables<'transactions'>;
-export type TransactionInsert = TablesInsert<'transactions'>;
-export type TransactionUpdate = TablesUpdate<'transactions'>;
+export interface Transaction {
+  id: string;
+  bank_account_id: string | null;
+  transaction_date: string;
+  value_date: string | null;
+  amount: number;
+  currency: string;
+  description: string | null;
+  counterpart_name: string | null;
+  counterpart_iban: string | null;
+  reference: string | null;
+  category_id: string | null;
+  tenant_id: string | null;
+  unit_id: string | null;
+  property_id: string | null;
+  is_matched: boolean;
+  matched_expense_id: string | null;
+  matched_payment_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TransactionInsert = Omit<Transaction, 'id' | 'created_at' | 'updated_at'>;
+export type TransactionUpdate = Partial<TransactionInsert>;
 
 export function useTransactions() {
   return useQuery({
     queryKey: ['transactions'],
+    staleTime: 60000,
+    gcTime: 300000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('transaction_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch('/api/transactions', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
   });
 }
@@ -25,16 +44,12 @@ export function useTransactions() {
 export function useTransactionsByUnit(unitId?: string) {
   return useQuery({
     queryKey: ['transactions', 'unit', unitId],
+    staleTime: 60000,
     queryFn: async () => {
       if (!unitId) return [];
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('unit_id', unitId)
-        .order('transaction_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch(`/api/transactions?unit_id=${unitId}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
     enabled: !!unitId,
   });
@@ -43,16 +58,12 @@ export function useTransactionsByUnit(unitId?: string) {
 export function useTransactionsByBankAccount(bankAccountId?: string) {
   return useQuery({
     queryKey: ['transactions', 'bank_account', bankAccountId],
+    staleTime: 60000,
     queryFn: async () => {
       if (!bankAccountId) return [];
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('bank_account_id', bankAccountId)
-        .order('transaction_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch(`/api/bank-accounts/${bankAccountId}/transactions`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
     enabled: !!bankAccountId,
   });
@@ -61,16 +72,12 @@ export function useTransactionsByBankAccount(bankAccountId?: string) {
 export function useTransactionsByCategory(categoryId?: string) {
   return useQuery({
     queryKey: ['transactions', 'category', categoryId],
+    staleTime: 60000,
     queryFn: async () => {
       if (!categoryId) return [];
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('category_id', categoryId)
-        .order('transaction_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch(`/api/transactions?category_id=${categoryId}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
     enabled: !!categoryId,
   });
@@ -79,15 +86,11 @@ export function useTransactionsByCategory(categoryId?: string) {
 export function useRecentTransactions(limit: number = 10) {
   return useQuery({
     queryKey: ['transactions', 'recent', limit],
+    staleTime: 60000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('transaction_date', { ascending: false })
-        .limit(limit);
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch(`/api/transactions?limit=${limit}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
   });
 }
@@ -95,15 +98,11 @@ export function useRecentTransactions(limit: number = 10) {
 export function useUnmatchedTransactions() {
   return useQuery({
     queryKey: ['transactions', 'unmatched'],
+    staleTime: 60000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('status', 'unmatched')
-        .order('transaction_date', { ascending: false });
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const response = await fetch('/api/transactions?unmatched=true', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch transactions');
+      return response.json() as Promise<Transaction[]>;
     },
   });
 }
@@ -117,42 +116,32 @@ export interface TransactionSummary {
 }
 
 export function useTransactionSummary(startDate?: string, endDate?: string) {
+  const { data: transactions } = useTransactions();
+  
   return useQuery({
     queryKey: ['transactions', 'summary', startDate, endDate],
+    staleTime: 60000,
     queryFn: async () => {
-      let query = supabase
-        .from('transactions')
-        .select('*, account_categories(id, name, type)');
+      const filtered = (transactions || []).filter(t => {
+        if (startDate && t.transaction_date < startDate) return false;
+        if (endDate && t.transaction_date > endDate) return false;
+        return true;
+      });
       
-      if (startDate) {
-        query = query.gte('transaction_date', startDate);
-      }
-      if (endDate) {
-        query = query.lte('transaction_date', endDate);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      
-      const transactions = data as Array<Transaction & { account_categories: { id: string; name: string; type: string } | null }>;
-      
-      // Calculate totals
-      const totalIncome = transactions
+      const totalIncome = filtered
         .filter(t => t.amount > 0)
         .reduce((sum, t) => sum + Number(t.amount), 0);
       
-      const totalExpenses = transactions
+      const totalExpenses = filtered
         .filter(t => t.amount < 0)
         .reduce((sum, t) => sum + Number(t.amount), 0);
       
-      // Group by category
       const incomeByCategory = new Map<string | null, { categoryName: string; total: number }>();
       const expensesByCategory = new Map<string | null, { categoryName: string; total: number }>();
       
-      for (const t of transactions) {
+      for (const t of filtered) {
         const categoryId = t.category_id;
-        const categoryName = t.account_categories?.name || 'Nicht kategorisiert';
+        const categoryName = 'Nicht kategorisiert';
         const map = t.amount > 0 ? incomeByCategory : expensesByCategory;
         
         const existing = map.get(categoryId);
@@ -174,9 +163,10 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
         expensesByCategory: Array.from(expensesByCategory.entries()).map(([categoryId, data]) => ({
           categoryId,
           ...data
-        })).sort((a, b) => a.total - b.total), // Most negative first
+        })).sort((a, b) => a.total - b.total),
       } as TransactionSummary;
     },
+    enabled: !!transactions,
   });
 }
 
@@ -185,14 +175,8 @@ export function useCreateTransaction() {
   
   return useMutation({
     mutationFn: async (transaction: TransactionInsert) => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert(transaction)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Transaction;
+      const response = await apiRequest('POST', '/api/transactions', transaction);
+      return response.json() as Promise<Transaction>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -208,13 +192,12 @@ export function useCreateTransactions() {
   
   return useMutation({
     mutationFn: async (transactions: TransactionInsert[]) => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert(transactions)
-        .select();
-      
-      if (error) throw error;
-      return data as Transaction[];
+      const results: Transaction[] = [];
+      for (const t of transactions) {
+        const response = await apiRequest('POST', '/api/transactions', t);
+        results.push(await response.json());
+      }
+      return results;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -232,31 +215,20 @@ export function useUpdateTransaction() {
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TransactionUpdate & { id: string }) => {
-      // Auto-set status to 'matched' if unit, tenant, property, or category is assigned
       const finalUpdates = { ...updates };
       
-      // If any assignment field is being set, auto-update status to matched
       const hasAssignment = 
         updates.unit_id || 
         updates.tenant_id || 
         updates.property_id || 
         updates.category_id;
       
-      // Only auto-update status if not explicitly set and there's an assignment
-      if (hasAssignment && !updates.status) {
-        finalUpdates.status = 'matched';
-        finalUpdates.matched_at = new Date().toISOString();
+      if (hasAssignment) {
+        finalUpdates.is_matched = true;
       }
       
-      const { data, error } = await supabase
-        .from('transactions')
-        .update(finalUpdates)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Transaction;
+      const response = await apiRequest('PATCH', `/api/transactions/${id}`, finalUpdates);
+      return response.json() as Promise<Transaction>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -274,12 +246,7 @@ export function useDeleteTransaction() {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/transactions/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
