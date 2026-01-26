@@ -29,6 +29,9 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - Six standard MRG-compliant distribution keys (Nutzfläche, Einheiten, Personen, Pauschal, Verbrauch, Sondernutzung) are managed for operating cost allocation.
     - Rent history is tracked in a `rent_history` table with `validFrom`/`validUntil` fields.
     - Austrian VAT rates are applied consistently (e.g., 10% for residential rent/BK, 20% for heating/commercial).
+    - **§ 21 MRG Legal Warnings**: Automatic warnings for settlement deadlines (Abs 3: after 30.06. of following year) and statute of limitations (Abs 4: expires 01.01. of 4th following year).
+    - **Offene Posten**: SOLL values sourced from Vorschreibung (monthly_invoices) with fallback to tenant fields.
+    - **Bank Account Year-End Carry-Over**: API route `/api/bank-accounts/:id/carry-over` transfers 31.12. closing balance to 01.01. opening balance with conflict detection.
 - **Professional Accountant Features**:
     - **SEPA Export**: Generation of `pain.008.001.02` (Direct Debit) and `pain.001.001.03` (Credit Transfer) XML files compliant with Austrian banking standards.
     - **Settlement PDFs**: MRG §21 compliant Betriebskostenabrechnung templates with detailed expense breakdowns and per-tenant cost allocation.
