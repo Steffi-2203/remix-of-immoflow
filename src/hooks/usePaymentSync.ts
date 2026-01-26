@@ -352,13 +352,13 @@ export function usePaymentSync() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       if (result.synced > 0) {
-        toast.success(`${result.synced} Mieteinnahme(n) erfolgreich aus Banking übernommen`);
+        toast.success(`${result.synced} Einnahme(n) erfolgreich aus Banking übernommen`);
       } else {
-        toast.info('Alle Mieteinnahmen bereits synchronisiert');
+        toast.info('Alle kategorisierten Einnahmen bereits synchronisiert');
       }
     },
     onError: (error) => {
-      toast.error('Fehler beim Übernehmen der Mieteinnahmen aus Banking');
+      toast.error('Fehler beim Übernehmen der Einnahmen aus Banking');
       console.error('Sync transactions to payments error:', error);
     },
   });

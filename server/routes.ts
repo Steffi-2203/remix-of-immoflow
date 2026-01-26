@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -2780,20 +2780,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orgId = req.session.organizationId;
       
-      // Get Mieteinnahmen category
+      // Get ALL income categories for this organization
       const categories = await db.select()
         .from(schema.accountCategories)
         .where(eq(schema.accountCategories.organizationId, orgId));
       
-      const mieteinnahmenCategory = categories.find(c => c.name === 'Mieteinnahmen' && c.type === 'income');
-      if (!mieteinnahmenCategory) {
-        return res.status(400).json({ error: "Mieteinnahmen-Kategorie nicht gefunden" });
+      // Filter for income categories (Mieteinnahmen, Betriebskosten-Nachzahlung, Kaution, etc.)
+      const incomeCategories = categories.filter(c => c.type === 'income');
+      if (incomeCategories.length === 0) {
+        return res.status(400).json({ error: "Keine Einnahmen-Kategorien gefunden" });
       }
+      const incomeCategoryIds = incomeCategories.map(c => c.id);
       
-      // Get transactions that are categorized as Mieteinnahmen (org-scoped via category)
+      // Get transactions that are categorized as ANY income category (org-scoped via category IDs at DB level)
       const transactions = await db.select()
         .from(schema.transactions)
-        .where(eq(schema.transactions.categoryId, mieteinnahmenCategory.id));
+        .where(inArray(schema.transactions.categoryId, incomeCategoryIds));
       
       // Get properties belonging to this organization
       const orgProperties = await db.select()
