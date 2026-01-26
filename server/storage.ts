@@ -61,6 +61,7 @@ export interface IStorage {
   updateSettlement(id: string, data: any): Promise<schema.Settlement | undefined>;
   deleteSettlementItems(settlementId: string): Promise<void>;
   createSettlementItem(data: any): Promise<schema.SettlementDetail>;
+  updateTenantAdvances(tenantId: string, betriebskostenVorschuss: number, heizkostenVorschuss: number): Promise<schema.Tenant | undefined>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -849,6 +850,18 @@ class DatabaseStorage implements IStorage {
       vorschuss: data.bkVorschuss + data.hkVorschuss,
       differenz: data.gesamtSaldo,
     }).returning();
+    return result;
+  }
+
+  async updateTenantAdvances(tenantId: string, betriebskostenVorschuss: number, heizkostenVorschuss: number): Promise<schema.Tenant | undefined> {
+    const [result] = await db.update(schema.tenants)
+      .set({
+        betriebskostenVorschuss: betriebskostenVorschuss.toString(),
+        heizkostenVorschuss: heizkostenVorschuss.toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.tenants.id, tenantId))
+      .returning();
     return result;
   }
 }

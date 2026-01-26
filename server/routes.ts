@@ -345,6 +345,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update tenant advances after BK-Abrechnung (MRG-konform)
+  // Formel: (BK gesamt + HK gesamt) / 12 × 1,03 = neue monatliche Vorschreibung
+  app.post("/api/advances/update", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const { propertyId, totalBkKosten, totalHkKosten, units, totals } = req.body;
+
+      if (!propertyId || !units || !totals) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Verify property ownership
+      const property = await storage.getProperty(propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const SICHERHEITSRESERVE = 1.03; // 3% MRG-konforme Reserve
+      let updatedCount = 0;
+
+      for (const unit of units) {
+        if (!unit.currentTenantId) continue;
+
+        // BK: Nach MEA verteilt
+        const bkAnteil = totals.mea > 0 ? (unit.mea / totals.mea) * totalBkKosten : 0;
+        // HK: Nach qm verteilt
+        const hkAnteil = totals.qm > 0 ? (unit.qm / totals.qm) * totalHkKosten : 0;
+
+        // Neue monatliche Vorschreibung: (Jahreskosten / 12) × 1,03
+        const neueBkVorschreibung = Math.round((bkAnteil / 12) * SICHERHEITSRESERVE * 100) / 100;
+        const neueHkVorschreibung = Math.round((hkAnteil / 12) * SICHERHEITSRESERVE * 100) / 100;
+
+        await storage.updateTenantAdvances(
+          unit.currentTenantId,
+          neueBkVorschreibung,
+          neueHkVorschreibung
+        );
+        updatedCount++;
+      }
+
+      res.json({ success: true, updatedCount });
+    } catch (error) {
+      console.error("Update advances error:", error);
+      res.status(500).json({ error: "Failed to update advances" });
+    }
+  });
+
   app.post("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
