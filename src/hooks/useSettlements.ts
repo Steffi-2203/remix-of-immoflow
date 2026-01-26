@@ -78,6 +78,14 @@ export function useSaveSettlement() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settlement'] });
       toast.success('Abrechnung gespeichert');
+      
+      // MRG-Warnungen anzeigen
+      if (data.mrgDeadlineWarning) {
+        toast.warning(data.mrgDeadlineWarning, { duration: 10000 });
+      }
+      if (data.mrgExpirationWarning) {
+        toast.warning(data.mrgExpirationWarning, { duration: 10000 });
+      }
     },
     onError: (error) => {
       console.error('Save settlement error:', error);

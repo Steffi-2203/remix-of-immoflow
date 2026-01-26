@@ -972,6 +972,20 @@ export default function Reports() {
             date: p.date,
             source: p.source,
           }));
+          // Vorschreibungen für SOLL-Berechnung (statt Mieter-Stammdaten)
+          const invoicesData = (allInvoices || []).map(inv => ({
+            id: inv.id,
+            tenantId: inv.tenantId,
+            tenant_id: inv.tenant_id,
+            unitId: inv.unitId,
+            unit_id: inv.unit_id,
+            year: inv.year,
+            month: inv.month,
+            grundmiete: inv.grundmiete,
+            betriebskosten: inv.betriebskosten,
+            heizungskosten: inv.heizungskosten,
+            gesamtbetrag: inv.gesamtbetrag,
+          }));
           generateOffenePostenReport(
             properties,
             allUnits,
@@ -982,7 +996,8 @@ export default function Reports() {
             reportPeriod,
             selectedMonth,
             selectedQuarter,
-            selectedHalfYear
+            selectedHalfYear,
+            invoicesData
           );
           toast.success('Offene Posten Liste wurde erstellt');
           break;
