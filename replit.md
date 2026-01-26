@@ -35,6 +35,8 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **Professional Accountant Features**:
     - **SEPA Export**: Generation of `pain.008.001.02` (Direct Debit) and `pain.001.001.03` (Credit Transfer) XML files compliant with Austrian banking standards.
     - **Settlement PDFs**: MRG §21 compliant Betriebskostenabrechnung templates with detailed expense breakdowns and per-tenant cost allocation.
+    - **Automatic Advance Adjustment**: After BK-Abrechnung, new advances are calculated using MRG-compliant formula: `(BK + HK) / 12 × 1.03` (3% safety reserve). API route `/api/advances/update` updates tenant `betriebskostenVorschuss` and `heizkostenVorschuss` fields.
+    - **Owner Plausibility Report**: `generateGesamtabrechnungPdf` creates comprehensive owner summary with cost overview (BK/HK by tenant/owner), per-unit breakdown, and verification calculation.
     - **Automated Dunning**: A 3-level escalation system for overdue payments with ABGB §1333 interest calculation and automatic email sending.
     - **VPI Automation**: Monitoring of Austrian consumer price index (VPI) for automatic rent adjustment triggers and notification letter generation.
     - **MieWeG-Indexierungsrechner**: Calculation tool for rent increases under the 2026 Mieten-Wertsicherungsgesetz with Hälfteregelung (50% rule for inflation > 3%), 2026/2027 caps for Kategorie/Richtwert (1%/2%), April 1 rule, and annual limit enforcement.
