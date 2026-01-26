@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home, Sparkles } from "lucide-react";
-import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
+import { OffenePostenWidget } from "@/components/dashboard/OffenePostenWidget";
 import { DataQualityWidget } from "@/components/dashboard/DataQualityWidget";
 import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
 import { UpcomingMaintenanceWidget } from "@/components/dashboard/UpcomingMaintenanceWidget";
@@ -207,7 +207,7 @@ export default function SimpleDashboard() {
         <PropertyKPIsWidget />
 
         <div className="mt-6">
-          <SyncStatusWidget />
+          <OffenePostenWidget />
         </div>
 
         <div className="mt-6">
