@@ -672,3 +672,34 @@ export type InsertMeterReading = z.infer<typeof insertMeterReadingSchema>;
 export type InsertKeyInventory = z.infer<typeof insertKeyInventorySchema>;
 export type InsertKeyHandover = z.infer<typeof insertKeyHandoverSchema>;
 export type InsertVpiAdjustment = z.infer<typeof insertVpiAdjustmentSchema>;
+
+// Budget status enum
+export const budgetStatusEnum = pgEnum('budget_status', ['entwurf', 'eingereicht', 'genehmigt', 'abgelehnt']);
+
+// Property Budgets table
+export const propertyBudgets = pgTable("property_budgets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  year: integer("year").notNull(),
+  position1Name: text("position_1_name"),
+  position1Amount: numeric("position_1_amount", { precision: 12, scale: 2 }).default("0"),
+  position2Name: text("position_2_name"),
+  position2Amount: numeric("position_2_amount", { precision: 12, scale: 2 }).default("0"),
+  position3Name: text("position_3_name"),
+  position3Amount: numeric("position_3_amount", { precision: 12, scale: 2 }).default("0"),
+  position4Name: text("position_4_name"),
+  position4Amount: numeric("position_4_amount", { precision: 12, scale: 2 }).default("0"),
+  position5Name: text("position_5_name"),
+  position5Amount: numeric("position_5_amount", { precision: 12, scale: 2 }).default("0"),
+  status: budgetStatusEnum("status").default('entwurf'),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertPropertyBudgetSchema = createInsertSchema(propertyBudgets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPropertyBudget = z.infer<typeof insertPropertyBudgetSchema>;
+export type PropertyBudget = typeof propertyBudgets.$inferSelect;
