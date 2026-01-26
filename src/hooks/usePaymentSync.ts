@@ -342,6 +342,27 @@ export function usePaymentSync() {
     },
   });
 
+  const syncTransactionsToPayments = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/sync/transactions-to-payments');
+      return response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      if (result.synced > 0) {
+        toast.success(`${result.synced} Mieteinnahme(n) erfolgreich aus Banking übernommen`);
+      } else {
+        toast.info('Alle Mieteinnahmen bereits synchronisiert');
+      }
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Übernehmen der Mieteinnahmen aus Banking');
+      console.error('Sync transactions to payments error:', error);
+    },
+  });
+
   return {
     createPaymentWithSync,
     createTransactionWithSync,
@@ -349,6 +370,7 @@ export function usePaymentSync() {
     deletePaymentWithSync,
     syncExistingTransactionsToExpenses,
     syncExistingPaymentsToTransactions,
+    syncTransactionsToPayments,
     getMieteinnahmenCategory,
     getCategoryNameById,
     CATEGORY_TO_EXPENSE_MAPPING,
