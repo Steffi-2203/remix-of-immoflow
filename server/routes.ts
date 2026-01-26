@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -2393,9 +2393,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const orgId = req.session.organizationId;
       const result = await db.select()
         .from(schema.propertyBudgets)
-        .where(eq(schema.propertyBudgets.id, id));
+        .where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)));
       
       if (result.length === 0) {
         return res.status(404).json({ error: "Budget not found" });
@@ -2431,6 +2432,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
+      
+      // Validate property ownership
+      const propertyId = body.propertyId || body.property_id;
+      const property = await db.select().from(schema.properties)
+        .where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, orgId)));
+      if (property.length === 0) {
+        return res.status(403).json({ error: "Property not found or access denied" });
+      }
       
       const result = await db.insert(schema.propertyBudgets).values({
         propertyId: body.propertyId || body.property_id,
@@ -2480,11 +2489,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (body.position5Amount !== undefined || body.position_5_amount !== undefined) updateData.position5Amount = String(body.position5Amount ?? body.position_5_amount ?? 0);
       if (body.notes !== undefined) updateData.notes = body.notes;
       
+      const orgId = req.session.organizationId;
       const result = await db.update(schema.propertyBudgets)
         .set(updateData)
-        .where(eq(schema.propertyBudgets.id, id))
+        .where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)))
         .returning();
       
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Budget not found" });
+      }
       res.json(result[0]);
     } catch (error) {
       console.error('Budget update error:', error);
@@ -2495,6 +2508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/budgets/:id/status", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const orgId = req.session.organizationId;
       const { status, approved_by } = req.body;
       
       const updateData: any = { 
@@ -2509,9 +2523,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const result = await db.update(schema.propertyBudgets)
         .set(updateData)
-        .where(eq(schema.propertyBudgets.id, id))
+        .where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)))
         .returning();
       
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Budget not found" });
+      }
       res.json(result[0]);
     } catch (error) {
       console.error('Budget status update error:', error);
@@ -2522,7 +2539,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      await db.delete(schema.propertyBudgets).where(eq(schema.propertyBudgets.id, id));
+      const orgId = req.session.organizationId;
+      await db.delete(schema.propertyBudgets).where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)));
       res.json({ success: true });
     } catch (error) {
       console.error('Budget delete error:', error);
@@ -2594,9 +2612,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
     try {
       const { propertyId } = req.params;
+      const orgId = req.session.organizationId;
       const documents = await db.select()
         .from(schema.propertyDocuments)
-        .where(eq(schema.propertyDocuments.propertyId, propertyId));
+        .where(and(eq(schema.propertyDocuments.propertyId, propertyId), eq(schema.propertyDocuments.organizationId, orgId)));
       
       res.json(documents.map(d => ({
         ...d,
@@ -2620,6 +2639,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
       
+      // Validate property ownership
+      const property = await db.select().from(schema.properties)
+        .where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, orgId)));
+      if (property.length === 0) {
+        return res.status(403).json({ error: "Property not found or access denied" });
+      }
+      
       const result = await db.insert(schema.propertyDocuments).values({
         propertyId,
         organizationId: orgId,
@@ -2641,7 +2667,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      await db.delete(schema.propertyDocuments).where(eq(schema.propertyDocuments.id, id));
+      const orgId = req.session.organizationId;
+      await db.delete(schema.propertyDocuments).where(and(eq(schema.propertyDocuments.id, id), eq(schema.propertyDocuments.organizationId, orgId)));
       res.json({ success: true });
     } catch (error) {
       console.error('Property document delete error:', error);
@@ -2702,6 +2729,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
       
+      // Validate tenant ownership via unit -> property -> org chain
+      const tenantResult = await db.select({
+        tenantId: schema.tenants.id,
+        unitId: schema.tenants.unitId,
+        propertyId: schema.units.propertyId,
+        organizationId: schema.properties.organizationId,
+      })
+        .from(schema.tenants)
+        .leftJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .leftJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(eq(schema.tenants.id, tenantId));
+      
+      if (tenantResult.length === 0 || tenantResult[0].organizationId !== orgId) {
+        return res.status(403).json({ error: "Tenant not found or access denied" });
+      }
+      
       const result = await db.insert(schema.tenantDocuments).values({
         tenantId,
         organizationId: orgId,
@@ -2723,7 +2766,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/tenant-documents/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      await db.delete(schema.tenantDocuments).where(eq(schema.tenantDocuments.id, id));
+      const orgId = req.session.organizationId;
+      await db.delete(schema.tenantDocuments).where(and(eq(schema.tenantDocuments.id, id), eq(schema.tenantDocuments.organizationId, orgId)));
       res.json({ success: true });
     } catch (error) {
       console.error('Tenant document delete error:', error);
@@ -2746,17 +2790,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Mieteinnahmen-Kategorie nicht gefunden" });
       }
       
-      // Get transactions that are categorized as Mieteinnahmen
+      // Get transactions that are categorized as Mieteinnahmen (org-scoped via category)
       const transactions = await db.select()
         .from(schema.transactions)
         .where(eq(schema.transactions.categoryId, mieteinnahmenCategory.id));
       
-      // Get existing payments
-      const payments = await db.select().from(schema.payments);
+      // Get properties belonging to this organization
+      const orgProperties = await db.select()
+        .from(schema.properties)
+        .where(eq(schema.properties.organizationId, orgId));
+      const orgPropertyIds = orgProperties.map(p => p.id);
       
-      // Get tenants and units for matching
-      const tenants = await db.select().from(schema.tenants);
-      const units = await db.select().from(schema.units);
+      // Get units for org properties only
+      const allUnits = await db.select().from(schema.units);
+      const units = allUnits.filter(u => orgPropertyIds.includes(u.propertyId!));
+      const orgUnitIds = units.map(u => u.id);
+      
+      // Get tenants for org units only
+      const allTenants = await db.select().from(schema.tenants);
+      const tenants = allTenants.filter(t => orgUnitIds.includes(t.unitId!));
+      const orgTenantIds = tenants.map(t => t.id);
+      
+      // Get existing payments for org tenants only
+      const allPayments = await db.select().from(schema.payments);
+      const payments = allPayments.filter(p => orgTenantIds.includes(p.tenantId!));
       
       let synced = 0;
       let skipped = 0;
