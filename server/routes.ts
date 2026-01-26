@@ -2590,6 +2590,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== Property Documents =====
+  app.get("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const documents = await db.select()
+        .from(schema.propertyDocuments)
+        .where(eq(schema.propertyDocuments.propertyId, propertyId));
+      
+      res.json(documents.map(d => ({
+        ...d,
+        property_id: d.propertyId,
+        organization_id: d.organizationId,
+        file_url: d.fileUrl,
+        file_size: d.fileSize,
+        mime_type: d.mimeType,
+        created_at: d.createdAt,
+        updated_at: d.updatedAt,
+      })));
+    } catch (error) {
+      console.error('Property documents fetch error:', error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  app.post("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const { propertyId } = req.params;
+      const orgId = req.session.organizationId;
+      const body = snakeToCamel(req.body);
+      
+      const result = await db.insert(schema.propertyDocuments).values({
+        propertyId,
+        organizationId: orgId,
+        name: body.name,
+        category: body.category || 'sonstiges',
+        fileUrl: body.fileUrl || body.file_url,
+        fileSize: body.fileSize || body.file_size,
+        mimeType: body.mimeType || body.mime_type,
+        notes: body.notes,
+      }).returning();
+      
+      res.json(result[0]);
+    } catch (error) {
+      console.error('Property document create error:', error);
+      res.status(500).json({ error: "Failed to create document" });
+    }
+  });
+
+  app.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(schema.propertyDocuments).where(eq(schema.propertyDocuments.id, id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Property document delete error:', error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
+  // ===== Tenant Documents =====
+  app.get("/api/tenant-documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const orgId = req.session.organizationId;
+      const documents = await db.select()
+        .from(schema.tenantDocuments)
+        .where(eq(schema.tenantDocuments.organizationId, orgId));
+      
+      res.json(documents.map(d => ({
+        ...d,
+        tenant_id: d.tenantId,
+        organization_id: d.organizationId,
+        file_url: d.fileUrl,
+        file_size: d.fileSize,
+        mime_type: d.mimeType,
+        created_at: d.createdAt,
+        updated_at: d.updatedAt,
+      })));
+    } catch (error) {
+      console.error('Tenant documents fetch error:', error);
+      res.status(500).json({ error: "Failed to fetch tenant documents" });
+    }
+  });
+
+  app.get("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const documents = await db.select()
+        .from(schema.tenantDocuments)
+        .where(eq(schema.tenantDocuments.tenantId, tenantId));
+      
+      res.json(documents.map(d => ({
+        ...d,
+        tenant_id: d.tenantId,
+        organization_id: d.organizationId,
+        file_url: d.fileUrl,
+        file_size: d.fileSize,
+        mime_type: d.mimeType,
+        created_at: d.createdAt,
+        updated_at: d.updatedAt,
+      })));
+    } catch (error) {
+      console.error('Tenant documents fetch error:', error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  app.post("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tenantId } = req.params;
+      const orgId = req.session.organizationId;
+      const body = snakeToCamel(req.body);
+      
+      const result = await db.insert(schema.tenantDocuments).values({
+        tenantId,
+        organizationId: orgId,
+        name: body.name,
+        category: body.category || 'sonstiges',
+        fileUrl: body.fileUrl || body.file_url,
+        fileSize: body.fileSize || body.file_size,
+        mimeType: body.mimeType || body.mime_type,
+        notes: body.notes,
+      }).returning();
+      
+      res.json(result[0]);
+    } catch (error) {
+      console.error('Tenant document create error:', error);
+      res.status(500).json({ error: "Failed to create document" });
+    }
+  });
+
+  app.delete("/api/tenant-documents/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(schema.tenantDocuments).where(eq(schema.tenantDocuments.id, id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Tenant document delete error:', error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
+  // ===== Banking Sync - Transactions to Payments =====
+  app.post("/api/sync/transactions-to-payments", isAuthenticated, async (req: any, res) => {
+    try {
+      const orgId = req.session.organizationId;
+      
+      // Get Mieteinnahmen category
+      const categories = await db.select()
+        .from(schema.accountCategories)
+        .where(eq(schema.accountCategories.organizationId, orgId));
+      
+      const mieteinnahmenCategory = categories.find(c => c.name === 'Mieteinnahmen' && c.type === 'income');
+      if (!mieteinnahmenCategory) {
+        return res.status(400).json({ error: "Mieteinnahmen-Kategorie nicht gefunden" });
+      }
+      
+      // Get transactions that are categorized as Mieteinnahmen
+      const transactions = await db.select()
+        .from(schema.transactions)
+        .where(eq(schema.transactions.categoryId, mieteinnahmenCategory.id));
+      
+      // Get existing payments
+      const payments = await db.select().from(schema.payments);
+      
+      // Get tenants and units for matching
+      const tenants = await db.select().from(schema.tenants);
+      const units = await db.select().from(schema.units);
+      
+      let synced = 0;
+      let skipped = 0;
+      
+      for (const transaction of transactions) {
+        if (Number(transaction.amount) <= 0) {
+          skipped++;
+          continue;
+        }
+        
+        // Check if payment already exists
+        const existingPayment = payments.find(p => {
+          const pTenantId = p.tenantId;
+          const tTenantId = transaction.tenantId;
+          return pTenantId === tTenantId &&
+            Math.abs(Number(p.betrag) - Number(transaction.amount)) < 0.01 &&
+            p.buchungsDatum === transaction.transactionDate;
+        });
+        
+        if (existingPayment) {
+          skipped++;
+          continue;
+        }
+        
+        // Find tenant from transaction
+        let tenantId = transaction.tenantId;
+        if (!tenantId && transaction.propertyId) {
+          // Try to match by property and amount
+          const propertyUnits = units.filter(u => u.propertyId === transaction.propertyId);
+          const propertyTenants = tenants.filter(t => 
+            propertyUnits.some(u => u.id === t.unitId)
+          );
+          // Take first active tenant if only one matches
+          if (propertyTenants.length === 1) {
+            tenantId = propertyTenants[0].id;
+          }
+        }
+        
+        if (!tenantId) {
+          skipped++;
+          continue;
+        }
+        
+        try {
+          await db.insert(schema.payments).values({
+            tenantId,
+            betrag: String(transaction.amount),
+            buchungsDatum: transaction.transactionDate || new Date().toISOString().split('T')[0],
+            eingangsDatum: transaction.bookingDate || transaction.transactionDate,
+            verwendungszweck: transaction.description || 'Mietzahlung',
+            paymentType: 'ueberweisung',
+            transactionId: transaction.id,
+          });
+          synced++;
+        } catch (error) {
+          console.error('Failed to sync transaction to payment:', transaction.id, error);
+        }
+      }
+      
+      res.json({ synced, skipped, message: `${synced} Mieteinnahmen synchronisiert, ${skipped} übersprungen` });
+    } catch (error) {
+      console.error('Sync transactions to payments error:', error);
+      res.status(500).json({ error: "Synchronisierung fehlgeschlagen" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
