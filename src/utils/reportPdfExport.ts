@@ -272,11 +272,8 @@ export const generateRenditeReport = (
     // Combined maintenance costs (Banking + Belege)
     const instandhaltung = instandhaltungFromTransactions + instandhaltungFromExpenses;
 
-    // Nettoertrag = Mieteinnahmen - Instandhaltung
+    // Nettoertrag = Mieteinnahmen - Instandhaltung (absoluter Wert, keine Division)
     const nettoertrag = mieteinnahmen - instandhaltung;
-    const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
-    const estimatedValue = Number(property.total_qm) * 3000;
-    const yieldPercent = estimatedValue > 0 ? (annualNettoertrag / estimatedValue) * 100 : 0;
     const vacantUnits = propertyUnits.filter(u => u.status === 'leerstand').length;
     const occupancyRate = propertyUnits.length > 0 ? ((propertyUnits.length - vacantUnits) / propertyUnits.length) * 100 : 0;
     
@@ -287,7 +284,6 @@ export const generateRenditeReport = (
       formatCurrency(mieteinnahmen),
       formatCurrency(instandhaltung),
       formatCurrency(nettoertrag),
-      formatPercent(yieldPercent),
       formatPercent(occupancyRate),
     ];
   });
@@ -337,15 +333,11 @@ export const generateRenditeReport = (
   
   const totalInstandhaltung = totalInstandhaltungFromTransactions + totalInstandhaltungFromExpenses;
   const totalNettoertrag = totalMieteinnahmen - totalInstandhaltung;
-  const annualTotalNettoertrag = reportPeriod === 'monthly' ? totalNettoertrag * 12 : totalNettoertrag;
-  const totalValue = totalQm * 3000;
-  const totalYield = totalValue > 0 ? (annualTotalNettoertrag / totalValue) * 100 : 0;
-
   autoTable(doc, {
     startY: 45,
-    head: [['Liegenschaft', 'Fläche', 'Einheiten', 'Mieteinnahmen', 'Instandhaltung', 'Nettoertrag', 'Rendite p.a.', 'Belegung']],
+    head: [['Liegenschaft', 'Fläche', 'Einheiten', 'Mieteinnahmen', 'Instandhaltung', 'Nettoertrag', 'Belegung']],
     body: tableData,
-    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalMieteinnahmen), formatCurrency(totalInstandhaltung), formatCurrency(totalNettoertrag), formatPercent(totalYield), '-']],
+    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalMieteinnahmen), formatCurrency(totalInstandhaltung), formatCurrency(totalNettoertrag), '-']],
     theme: 'striped',
     headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -357,7 +349,7 @@ export const generateRenditeReport = (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(100);
-  doc.text('Hinweis: Rendite = (Mieteinnahmen - Instandhaltungskosten) / Immobilienwert × 100', 14, y1 + 10);
+  doc.text('Hinweis: Nettoertrag = Mieteinnahmen - Instandhaltungskosten', 14, y1 + 10);
   doc.text('Instandhaltungskosten beinhalten Banking-Transaktionen und manuell erfasste Belege.', 14, y1 + 16);
   doc.text('Betriebskosten sind nicht enthalten, da diese auf die Mieter umgelegt werden.', 14, y1 + 22);
   doc.setTextColor(0);
@@ -1122,6 +1114,21 @@ export interface CombinedPaymentData {
   source: 'payments' | 'transactions';
 }
 
+// Interface for monthly invoices (Vorschreibungen)
+export interface MonthlyInvoiceData {
+  id: string;
+  tenantId?: string;
+  tenant_id?: string;
+  unitId?: string;
+  unit_id?: string;
+  year: number;
+  month: number;
+  grundmiete: number | string;
+  betriebskosten: number | string;
+  heizungskosten: number | string;
+  gesamtbetrag: number | string;
+}
+
 // ====== OFFENE POSTEN REPORT ======
 export const generateOffenePostenReport = (
   properties: PropertyData[],
@@ -1133,7 +1140,8 @@ export const generateOffenePostenReport = (
   reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
   selectedMonth: number,
   selectedQuarter?: number,
-  selectedHalfYear?: number
+  selectedHalfYear?: number,
+  monthlyInvoices?: MonthlyInvoiceData[]
 ) => {
   const doc = new jsPDF('landscape');
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
@@ -1241,10 +1249,30 @@ export const generateOffenePostenReport = (
   relevantTenants.forEach(tenant => {
     const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
     
-    // SOLL from tenant data (MRG-konform: BK → HK → Miete)
-    const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-    const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
-    const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+    // SOLL aus Vorschreibung (monthly_invoices) - bevorzugt über Mieter-Stammdaten
+    // Filtere Vorschreibungen für diesen Mieter und den Zeitraum
+    const tenantInvoices = (monthlyInvoices || []).filter(inv => {
+      const invTenantId = inv.tenantId || inv.tenant_id;
+      const matchesTenant = invTenantId === tenant.id;
+      const matchesYear = inv.year === selectedYear;
+      const matchesPeriod = inv.month >= periodStartMonth && inv.month <= periodEndMonth;
+      return matchesTenant && matchesYear && matchesPeriod;
+    });
+    
+    let sollBk: number, sollHk: number, sollMiete: number;
+    
+    if (tenantInvoices.length > 0) {
+      // SOLL aus Vorschreibungen (Summe aller Monate im Zeitraum)
+      sollBk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+      sollHk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+      sollMiete = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+    } else {
+      // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
+      sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+      sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+    }
+    
     const sollBetrag = sollBk + sollHk + sollMiete;
     
     // IST from combined payments (uses 'amount' field)

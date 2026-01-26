@@ -253,6 +253,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const normalizedBody = snakeToCamel(req.body);
       const { propertyId, year, items, ...data } = normalizedBody;
       
+      // § 21 Abs 3 MRG: Fristprüfung - BK-Abrechnung muss bis 30.06. des Folgejahres erstellt werden
+      const deadlineDate = new Date(year + 1, 5, 30); // 30. Juni des Folgejahres (Monat 5 = Juni, 0-indexed)
+      const today = new Date();
+      const isAfterDeadline = today > deadlineDate;
+      const mrgDeadlineWarning = isAfterDeadline 
+        ? `Achtung: Die Frist gemäß § 21 Abs 3 MRG für die BK-Abrechnung ${year} (30.06.${year + 1}) ist bereits abgelaufen. Eine verspätete Abrechnung kann zu Rechtsverlusten führen.`
+        : null;
+      
+      // § 21 Abs 4 MRG: 3-Jahre-Verjährung - Nachforderungen verjähren 3 Jahre nach Ende des Abrechnungsjahres
+      // Verjährungsfrist beginnt am 01.01. des Folgejahres und endet am 31.12. drei Jahre später
+      const expirationDate = new Date(year + 4, 0, 1); // 01.01. des 4. Folgejahres = nach Ablauf von 3 Jahren ab Jahresende
+      const isExpired = today >= expirationDate;
+      const mrgExpirationWarning = isExpired
+        ? `Achtung: Die Nachforderungen für ${year} sind gemäß § 21 Abs 4 MRG seit 01.01.${year + 4} verjährt. Nachforderungen können rechtlich nicht mehr durchgesetzt werden.`
+        : null;
+      
       const existing = await storage.getSettlementByPropertyAndYear(propertyId, year);
       let settlementId: string;
       
@@ -305,7 +321,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      res.json({ id: settlementId, itemsCount: items.length });
+      res.json({ 
+        id: settlementId, 
+        itemsCount: items.length,
+        mrgDeadlineWarning, // § 21 Abs 3 MRG Frist-Warnung
+        mrgExpirationWarning, // § 21 Abs 4 MRG 3-Jahre-Verjährung
+      });
     } catch (error) {
       console.error('Save settlement error:', error);
       res.status(500).json({ error: "Failed to save settlement" });
@@ -1164,6 +1185,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // Jahresübertrag: Endbestand 31.12. wird Anfangsbestand 01.01. des Folgejahres
+  app.post("/api/bank-accounts/:id/carry-over", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const account = await storage.getBankAccount(req.params.id);
+      
+      if (!account) {
+        return res.status(404).json({ error: "Bankkonto nicht gefunden" });
+      }
+      if (account.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+      
+      const { year, force } = req.body;
+      if (!year || typeof year !== 'number') {
+        return res.status(400).json({ error: "Jahr ist erforderlich" });
+      }
+      
+      // Prüfe ob bereits ein Anfangsbestand für das Folgejahr existiert
+      const newOpeningBalanceDate = `${year + 1}-01-01`;
+      const existingDate = account.openingBalanceDate;
+      const existingBalance = Number(account.openingBalance) || 0;
+      
+      if (existingDate && existingDate === newOpeningBalanceDate && !force) {
+        return res.status(409).json({ 
+          error: "Anfangsbestand existiert bereits",
+          warning: `Es existiert bereits ein Anfangsbestand für 01.01.${year + 1} (${existingBalance.toFixed(2)} €). Senden Sie { force: true } um zu überschreiben.`,
+          existingBalance,
+          existingDate,
+        });
+      }
+      
+      // Berechne Endbestand zum 31.12. des angegebenen Jahres
+      const endDate = `${year}-12-31`;
+      const closingBalance = await storage.getBankAccountBalance(req.params.id, endDate);
+      
+      const updated = await storage.updateBankAccount(req.params.id, {
+        openingBalance: closingBalance.toString(),
+        openingBalanceDate: newOpeningBalanceDate,
+      });
+      
+      res.json({
+        success: true,
+        message: `Endbestand vom 31.12.${year} (${closingBalance.toFixed(2)} €) wurde als Anfangsbestand für 01.01.${year + 1} übertragen.`,
+        previousBalance: closingBalance,
+        newOpeningBalanceDate,
+        account: updated,
+        wasOverwritten: existingDate === newOpeningBalanceDate,
+      });
+    } catch (error) {
+      console.error('Bank account carry-over error:', error);
+      res.status(500).json({ error: "Fehler beim Jahresübertrag" });
     }
   });
 
