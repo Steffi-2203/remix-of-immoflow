@@ -183,15 +183,20 @@ export default function OperatingCostSettlement() {
   });
 
   // Calculate totals for distribution
+  // Use fallback: mea from API alias OR nutzwert from DB, qm from alias OR flaeche from DB
   const totals = useMemo(() => {
     if (!units) return { qm: 0, qmBeheizt: 0, mea: 0, personen: 0 };
     return units.reduce(
-      (acc, unit) => ({
-        qm: acc.qm + Number(unit.qm),
-        qmBeheizt: acc.qmBeheizt + (unit.type !== 'garage' ? Number(unit.qm) : 0),
-        mea: acc.mea + Number(unit.mea),
-        personen: acc.personen + (unit.vs_personen ?? 0),
-      }),
+      (acc, unit: any) => {
+        const unitQm = Number(unit.qm || unit.flaeche || 0);
+        const unitMea = Number(unit.mea || unit.nutzwert || 0);
+        return {
+          qm: acc.qm + unitQm,
+          qmBeheizt: acc.qmBeheizt + (unit.type !== 'garage' ? unitQm : 0),
+          mea: acc.mea + unitMea,
+          personen: acc.personen + (unit.vs_personen ?? 0),
+        };
+      },
       { qm: 0, qmBeheizt: 0, mea: 0, personen: 0 }
     );
   }, [units]);
@@ -237,6 +242,10 @@ export default function OperatingCostSettlement() {
       let totalBkCost = 0;
 
       // Calculate BK costs per expense type
+      // Use fallback for mea/qm to handle both API alias and DB field names
+      const unitMea = Number((unit as any).mea || (unit as any).nutzwert || 0);
+      const unitQm = Number((unit as any).qm || (unit as any).flaeche || 0);
+      
       Object.entries(expensesByType).forEach(([expenseType, totalAmount]) => {
         const distributionKey = expenseDistributionKeys[expenseType] || 'qm';
         let unitShare = 0;
@@ -245,11 +254,11 @@ export default function OperatingCostSettlement() {
 
         switch (distributionKey) {
           case 'mea':
-            unitValue = Number(unit.mea);
+            unitValue = unitMea;
             totalValue = totals.mea;
             break;
           case 'qm':
-            unitValue = Number(unit.qm);
+            unitValue = unitQm;
             totalValue = totals.qm;
             break;
           case 'personen':
@@ -269,7 +278,7 @@ export default function OperatingCostSettlement() {
       // Calculate HK costs (distributed by qm - only for heated units, excluding garages)
       let hkCost = 0;
       if (unit.type !== 'garage' && totals.qmBeheizt > 0) {
-        hkCost = (Number(unit.qm) / totals.qmBeheizt) * totalHeizkosten;
+        hkCost = (unitQm / totals.qmBeheizt) * totalHeizkosten;
       }
 
       // Determine who pays what:
