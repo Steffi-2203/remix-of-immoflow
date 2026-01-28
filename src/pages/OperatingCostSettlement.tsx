@@ -162,7 +162,7 @@ export default function OperatingCostSettlement() {
           top_nummer: u.topNummer || u.top_nummer,
           type: u.type,
           qm: Number(u.qm || u.flaeche || 0),
-          mea: Number(u.mea || 0),
+          mea: Number(u.nutzwert || u.mea || 0),
           vs_personen: u.vsPersonen || u.vs_personen || 0,
           status: u.status,
           current_tenant: currentTenant ? {
