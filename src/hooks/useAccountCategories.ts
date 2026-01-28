@@ -10,6 +10,7 @@ export interface AccountCategory {
   parent_id: string | null;
   is_system: boolean;
   created_at: string;
+  default_distribution_key_id: string | null;
 }
 
 export type AccountCategoryInsert = Omit<AccountCategory, 'id' | 'created_at'>;

@@ -64,6 +64,7 @@ import {
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
 import { useDistributionKeys } from '@/hooks/useDistributionKeys';
+import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { useExpenseTransactionMatch, useAutoMatchExpenses } from '@/hooks/useExpenseTransactionMatch';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
@@ -114,6 +115,26 @@ export default function ExpenseList() {
   };
 
   const { data: distributionKeys = [] } = useDistributionKeys();
+  const { data: accountCategories = [] } = useAccountCategories();
+  
+  const findDefaultDistributionKey = (expenseType: ExpenseType): string => {
+    const expenseTypeName = expenseTypeLabels[expenseType]?.toLowerCase() || '';
+    const matchingCategory = accountCategories.find(cat => 
+      cat.name.toLowerCase() === expenseTypeName ||
+      cat.name.toLowerCase().includes(expenseTypeName) ||
+      expenseTypeName.includes(cat.name.toLowerCase())
+    );
+    return matchingCategory?.default_distribution_key_id || '';
+  };
+
+  const handleExpenseTypeChange = (value: ExpenseType) => {
+    const defaultKeyId = findDefaultDistributionKey(value);
+    setNewExpense(prev => ({
+      ...prev,
+      expense_type: value,
+      distribution_key_id: defaultKeyId || prev.distribution_key_id,
+    }));
+  };
   
   const [newExpense, setNewExpense] = useState(initialExpenseState);
   const [hasReceipt, setHasReceipt] = useState<boolean | null>(null); // null = not yet selected
@@ -1016,7 +1037,7 @@ export default function ExpenseList() {
                   <Label>Art</Label>
                   <Select
                     value={newExpense.expense_type}
-                    onValueChange={(value: ExpenseType) => setNewExpense(prev => ({ ...prev, expense_type: value }))}
+                    onValueChange={handleExpenseTypeChange}
                   >
                     <SelectTrigger>
                       <SelectValue />
