@@ -216,16 +216,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const units = await storage.getUnitsByProperty(req.params.propertyId);
       
+      // Add mea alias for nutzwert for frontend compatibility
+      const unitsWithMea = units.map(unit => ({
+        ...unit,
+        mea: unit.nutzwert, // Alias for frontend compatibility
+        qm: unit.flaeche,   // Alias for frontend compatibility
+      }));
+      
       if (req.query.includeTenants === 'true') {
         const allTenants = await storage.getTenantsByOrganization(profile?.organizationId);
-        const enrichedUnits = units.map(unit => ({
+        const enrichedUnits = unitsWithMea.map(unit => ({
           ...unit,
           tenants: allTenants.filter(t => t.unitId === unit.id)
         }));
         return res.json(enrichedUnits);
       }
       
-      res.json(units);
+      res.json(unitsWithMea);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
@@ -799,7 +806,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const units = await storage.getUnitsByOrganization(profile?.organizationId);
-      res.json(units);
+      // Add mea/qm aliases for frontend compatibility
+      const unitsWithAliases = units.map(unit => ({
+        ...unit,
+        mea: unit.nutzwert,
+        qm: unit.flaeche,
+      }));
+      res.json(unitsWithAliases);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
@@ -816,7 +829,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      res.json(unit);
+      // Add mea/qm aliases for frontend compatibility
+      const unitWithAliases = {
+        ...unit,
+        mea: unit.nutzwert,
+        qm: unit.flaeche,
+      };
+      res.json(unitWithAliases);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch unit" });
     }
