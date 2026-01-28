@@ -1088,6 +1088,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate monthly invoices (Vorschreibungen) for all active tenants
+  app.post("/api/functions/generate-monthly-invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Organization not found" });
+      }
+
+      const { year, month } = req.body;
+      const currentDate = new Date();
+      const targetYear = year || currentDate.getFullYear();
+      const targetMonth = month || (currentDate.getMonth() + 1);
+
+      // Get all active tenants for the organization
+      const tenants = await storage.getTenantsByOrganization(profile.organizationId);
+      const activeTenants = tenants.filter(t => t.status === 'aktiv');
+
+      const createdInvoices = [];
+      const errors: string[] = [];
+
+      for (const tenant of activeTenants) {
+        try {
+          // Check if invoice already exists for this month
+          const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
+          const alreadyExists = existingInvoices.some(
+            inv => inv.month === targetMonth && inv.year === targetYear
+          );
+
+          if (alreadyExists) {
+            continue; // Skip if already exists
+          }
+
+          // Get unit for property info
+          const unit = await storage.getUnit(tenant.unitId);
+          if (!unit) continue;
+
+          const property = await storage.getProperty(unit.propertyId);
+          if (!property) continue;
+
+          // Calculate amounts from tenant data
+          const grundmiete = Number(tenant.grundmiete || 0);
+          const betriebskosten = Number(tenant.betriebskostenVorschuss || 0);
+          const heizkosten = Number(tenant.heizkostenVorschuss || 0);
+          const sonstigeKosten = Number(tenant.sonstigeKosten || 0);
+          const gesamtbetrag = grundmiete + betriebskosten + heizkosten + sonstigeKosten;
+
+          // Calculate due date (1st of month)
+          const faelligAm = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+
+          // Create invoice with schema-compliant field names
+          const invoiceData = {
+            tenantId: tenant.id,
+            unitId: tenant.unitId,
+            month: targetMonth,
+            year: targetYear,
+            grundmiete: String(grundmiete),
+            betriebskosten: String(betriebskosten),
+            heizkosten: String(heizkosten),
+            sonstigeKosten: String(sonstigeKosten),
+            gesamtbetrag: String(gesamtbetrag),
+            faelligAm,
+            status: 'offen' as const,
+            vortragMiete: '0',
+            vortragBk: '0',
+            vortragHk: '0',
+          };
+
+          const newInvoice = await storage.createInvoice(invoiceData);
+          createdInvoices.push(newInvoice);
+        } catch (err) {
+          errors.push(`Fehler bei Mieter ${tenant.firstName} ${tenant.lastName}: ${err}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        created: createdInvoices.length,
+        skipped: activeTenants.length - createdInvoices.length - errors.length,
+        errors: errors.length,
+        errorDetails: errors,
+      });
+    } catch (error) {
+      console.error('Generate invoices error:', error);
+      res.status(500).json({ error: "Vorschreibungen konnten nicht erstellt werden" });
+    }
+  });
+
   app.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any, res) => {
     try {
       const payments = await storage.getPaymentsByInvoice(req.params.invoiceId);

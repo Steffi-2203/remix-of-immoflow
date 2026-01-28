@@ -153,8 +153,8 @@ export default function OperatingCostSettlement() {
           mietbeginn: t.mietbeginn,
           mietende: t.mietende,
           status: t.status,
-          bk_vorschuss_monatlich: Number(t.betriebskosten_vorschuss || 0),
-          hk_vorschuss_monatlich: Number(t.heizungskosten_vorschuss || 0),
+          bk_vorschuss_monatlich: Number(t.betriebskostenVorschuss || t.betriebskosten_vorschuss || 0),
+          hk_vorschuss_monatlich: Number(t.heizkostenVorschuss || t.heizungskosten_vorschuss || 0),
         }));
 
         return {
@@ -172,8 +172,8 @@ export default function OperatingCostSettlement() {
             mietbeginn: currentTenant.mietbeginn,
             mietende: currentTenant.mietende,
             status: currentTenant.status,
-            bk_vorschuss_monatlich: Number(currentTenant.betriebskosten_vorschuss || 0),
-            hk_vorschuss_monatlich: Number(currentTenant.heizungskosten_vorschuss || 0),
+            bk_vorschuss_monatlich: Number(currentTenant.betriebskostenVorschuss || currentTenant.betriebskosten_vorschuss || 0),
+            hk_vorschuss_monatlich: Number(currentTenant.heizkostenVorschuss || currentTenant.heizungskosten_vorschuss || 0),
           } : null,
           year_tenants: yearTenants,
         };
