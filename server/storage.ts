@@ -40,12 +40,14 @@ export interface IStorage {
   getContractors(): Promise<schema.Contractor[]>;
   getContractorsByOrganization(organizationId?: string): Promise<schema.Contractor[]>;
   getDistributionKeys(): Promise<schema.DistributionKey[]>;
+  getDistributionKeysByProperty(propertyId: string): Promise<schema.DistributionKey[]>;
   getDistributionKey(id: string): Promise<schema.DistributionKey | undefined>;
   createDistributionKey(data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey>;
   updateDistributionKey(id: string, data: Partial<schema.InsertDistributionKey>): Promise<schema.DistributionKey | undefined>;
   deleteDistributionKey(id: string): Promise<void>;
   getAccountCategories(organizationId: string): Promise<schema.AccountCategory[]>;
   createAccountCategory(data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory>;
+  updateAccountCategory(id: string, data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory | undefined>;
   deleteAccountCategory(id: string): Promise<void>;
   getUnitDistributionValues(unitId: string): Promise<schema.UnitDistributionValue[]>;
   getUnitDistributionValuesByProperty(propertyId: string): Promise<schema.UnitDistributionValue[]>;
@@ -421,6 +423,15 @@ class DatabaseStorage implements IStorage {
       .orderBy(asc(schema.distributionKeys.sortOrder));
   }
 
+  async getDistributionKeysByProperty(propertyId: string): Promise<schema.DistributionKey[]> {
+    return db.select().from(schema.distributionKeys)
+      .where(and(
+        eq(schema.distributionKeys.propertyId, propertyId),
+        eq(schema.distributionKeys.isActive, true)
+      ))
+      .orderBy(asc(schema.distributionKeys.sortOrder));
+  }
+
   async getDistributionKey(id: string): Promise<schema.DistributionKey | undefined> {
     const result = await db.select().from(schema.distributionKeys)
       .where(eq(schema.distributionKeys.id, id))
@@ -721,6 +732,14 @@ class DatabaseStorage implements IStorage {
 
   async createAccountCategory(data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory> {
     const result = await db.insert(schema.accountCategories).values(data as schema.InsertAccountCategory).returning();
+    return result[0];
+  }
+
+  async updateAccountCategory(id: string, data: Partial<schema.InsertAccountCategory>): Promise<schema.AccountCategory | undefined> {
+    const result = await db.update(schema.accountCategories)
+      .set(data)
+      .where(eq(schema.accountCategories.id, id))
+      .returning();
     return result[0];
   }
 

@@ -109,3 +109,57 @@ export function useDeleteDistributionKey() {
     },
   });
 }
+
+export function useDistributionKeysByProperty(propertyId: string | undefined) {
+  return useQuery<DistributionKey[]>({
+    queryKey: ['/api/properties', propertyId, 'distribution-keys'],
+    queryFn: async () => {
+      if (!propertyId) return [];
+      const response = await fetch(`/api/properties/${propertyId}/distribution-keys`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch distribution keys');
+      const data = await response.json();
+      return Array.isArray(data) ? data.map(normalizeDistributionKey) : [];
+    },
+    enabled: !!propertyId,
+  });
+}
+
+export function useCreatePropertyDistributionKey(propertyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: Partial<DistributionKeyInsert>) => {
+      const response = await apiRequest('POST', `/api/properties/${propertyId}/distribution-keys`, data);
+      const result = await response.json();
+      return normalizeDistributionKey(result);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties', propertyId, 'distribution-keys'] });
+      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
+      toast.success('Verteilerschlüssel erfolgreich angelegt');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Anlegen des Verteilerschlüssels');
+      console.error('Create distribution key error:', error);
+    },
+  });
+}
+
+export function useDeletePropertyDistributionKey(propertyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/distribution-keys/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties', propertyId, 'distribution-keys'] });
+      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
+      toast.success('Verteilerschlüssel erfolgreich gelöscht');
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Löschen des Verteilerschlüssels');
+      console.error('Delete distribution key error:', error);
+    },
+  });
+}
