@@ -497,11 +497,11 @@ export default function InvoiceList() {
                   const nextAction = getNextDunningAction(mahnstufe);
                   const isOpenOrOverdue = invoice.status === 'offen' || invoice.status === 'ueberfaellig';
                   
-                  // Calculate Vortrag
-                  const vortragMiete = (invoice as any).vortragMiete || 0;
-                  const vortragBk = (invoice as any).vortragBk || 0;
-                  const vortragHk = (invoice as any).vortragHk || 0;
-                  const vortragSonstige = (invoice as any).vortragSonstige || 0;
+                  // Calculate Vortrag - ensure numeric values
+                  const vortragMiete = Number((invoice as any).vortragMiete) || 0;
+                  const vortragBk = Number((invoice as any).vortragBk) || 0;
+                  const vortragHk = Number((invoice as any).vortragHk) || 0;
+                  const vortragSonstige = Number((invoice as any).vortragSonstige) || 0;
                   const vortragGesamt = vortragMiete + vortragBk + vortragHk + vortragSonstige;
 
                   return (
