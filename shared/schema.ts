@@ -143,6 +143,7 @@ export const units = pgTable("units", {
   zimmer: integer("zimmer"),
   nutzwert: numeric("nutzwert", { precision: 10, scale: 4 }),
   stockwerk: integer("stockwerk"),
+  vsPersonen: integer("vs_personen").default(0),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

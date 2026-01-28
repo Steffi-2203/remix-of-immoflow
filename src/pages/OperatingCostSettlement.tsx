@@ -18,7 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw, RefreshCcw } from 'lucide-react';
+import { Loader2, Calculator, Download, Euro, Home, FileText, Flame, TrendingUp, TrendingDown, CheckCircle, AlertCircle, Users, FileDown, Files, Save, Mail, RefreshCw, RefreshCcw, Eye } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useProperties } from '@/hooks/useProperties';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useQuery } from '@tanstack/react-query';
@@ -104,6 +111,7 @@ export default function OperatingCostSettlement() {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // null = ganzes Jahr (Standard für Jahresabrechnung)
   const [sendEmails, setSendEmails] = useState<boolean>(true);
   const [isAdvanceDialogOpen, setIsAdvanceDialogOpen] = useState(false);
+  const [selectedUnitDetail, setSelectedUnitDetail] = useState<any>(null);
 
   const { data: properties, isLoading: isLoadingProperties } = useProperties();
   const { data: expenses, isLoading: isLoadingExpenses } = useExpenses(
@@ -381,6 +389,30 @@ export default function OperatingCostSettlement() {
     };
   }, [unitDistribution, totalBkKosten, totalHeizkosten]);
 
+  // Validate units for incomplete data (missing MEA, qm, or Personen)
+  const unitValidationWarnings = useMemo(() => {
+    if (!units?.length) return [];
+    
+    const warnings: { unitId: string; topNummer: string; issues: string[] }[] = [];
+    
+    units.forEach((unit: any) => {
+      const issues: string[] = [];
+      const mea = Number(unit.mea || unit.nutzwert || 0);
+      const qm = Number(unit.qm || unit.flaeche || 0);
+      const personen = unit.vs_personen ?? unit.vsPersonen ?? 0;
+      
+      if (mea <= 0) issues.push('MEA/Nutzwert fehlt');
+      if (qm <= 0) issues.push('Fläche fehlt');
+      if (personen <= 0) issues.push('Personenzahl fehlt');
+      
+      if (issues.length > 0) {
+        warnings.push({ unitId: unit.id, topNummer: unit.top_nummer, issues });
+      }
+    });
+    
+    return warnings;
+  }, [units]);
+
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
   const isLoading = isLoadingProperties || isLoadingExpenses || isLoadingUnits;
@@ -630,6 +662,34 @@ export default function OperatingCostSettlement() {
               )}
             </CardContent>
           </Card>
+
+          {/* Warnung bei unvollständigen Einheitendaten */}
+          {unitValidationWarnings.length > 0 && (
+            <Card className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
+                  <AlertCircle className="h-4 w-4" />
+                  Warnung: Unvollständige Einheitendaten
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-sm text-yellow-700 dark:text-yellow-500 mb-2">
+                  Folgende Einheiten haben fehlende Daten, die zu einer unvollständigen Kostenverteilung führen können:
+                </p>
+                <div className="space-y-1">
+                  {unitValidationWarnings.map(w => (
+                    <div key={w.unitId} className="text-sm flex items-center gap-2">
+                      <Badge variant="outline" className="text-yellow-700 border-yellow-500">{w.topNummer}</Badge>
+                      <span className="text-yellow-600">{w.issues.join(', ')}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-yellow-600 mt-2">
+                  Bitte korrigieren Sie die Einheitendaten unter Liegenschaften → Einheiten bearbeiten.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Kontrollrechnung - Gesamtübersicht */}
           {verificationSums && (
@@ -1101,35 +1161,47 @@ export default function OperatingCostSettlement() {
                               </span>
                             )}
                           </TableCell>
-                          {/* PDF Button */}
+                          {/* Details + PDF Button */}
                           <TableCell className="text-right">
-                            {(!unit.isLeerstandBK || !unit.isLeerstandHK) && selectedProperty && (
+                            <div className="flex items-center justify-end gap-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                  generateTenantSettlementPdf(
-                                    {
-                                      name: selectedProperty.name,
-                                      address: selectedProperty.address,
-                                      city: selectedProperty.city,
-                                      postal_code: selectedProperty.postalCode,
-                                    },
-                                    unit,
-                                    selectedYear,
-                                    expensesByType,
-                                    totalBkKosten,
-                                    totalHeizkosten,
-                                    totals,
-                                    expenseDistributionKeys
-                                  );
-                                  toast.success(`PDF für Top ${unit.top_nummer} erstellt`);
-                                }}
-                                title={`PDF für Top ${unit.top_nummer}`}
+                                onClick={() => setSelectedUnitDetail(unit)}
+                                title={`Details für Top ${unit.top_nummer}`}
+                                data-testid={`button-unit-detail-${unit.id}`}
                               >
-                                <FileDown className="h-4 w-4" />
+                                <Eye className="h-4 w-4" />
                               </Button>
-                            )}
+                              {(!unit.isLeerstandBK || !unit.isLeerstandHK) && selectedProperty && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    generateTenantSettlementPdf(
+                                      {
+                                        name: selectedProperty.name,
+                                        address: selectedProperty.address,
+                                        city: selectedProperty.city,
+                                        postal_code: selectedProperty.postalCode,
+                                      },
+                                      unit,
+                                      selectedYear,
+                                      expensesByType,
+                                      totalBkKosten,
+                                      totalHeizkosten,
+                                      totals,
+                                      expenseDistributionKeys
+                                    );
+                                    toast.success(`PDF für Top ${unit.top_nummer} erstellt`);
+                                  }}
+                                  title={`PDF für Top ${unit.top_nummer}`}
+                                  data-testid={`button-unit-pdf-${unit.id}`}
+                                >
+                                  <FileDown className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1243,6 +1315,214 @@ export default function OperatingCostSettlement() {
           isPending={updateNewAdvances.isPending}
         />
       )}
+
+      {/* Einzelabrechnungs-Detail Dialog */}
+      <Dialog open={!!selectedUnitDetail} onOpenChange={(open) => !open && setSelectedUnitDetail(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Einzelabrechnung {selectedUnitDetail?.top_nummer} - {selectedYear}
+            </DialogTitle>
+            <DialogDescription>
+              Detaillierte Kostenaufschlüsselung nach Kostenart und Verteilerschlüssel
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedUnitDetail && (
+            <div className="space-y-6">
+              {/* Mieter-Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-blue-700">BK-Zahler</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-medium">{selectedUnitDetail.bkMieter || 'Eigentümer (Leerstand)'}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-orange-700">HK-Zahler</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-medium">{selectedUnitDetail.hkMieter || 'Eigentümer (Leerstand)'}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Einheitsdaten */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Verteilungsgrundlagen</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Fläche (qm):</span>
+                      <p className="font-medium">{Number(selectedUnitDetail.qm).toLocaleString('de-AT')} m² 
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({totals.qm > 0 ? ((Number(selectedUnitDetail.qm) / totals.qm) * 100).toFixed(2) : 0}%)
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">MEA (Nutzwert):</span>
+                      <p className="font-medium">{Number(selectedUnitDetail.mea).toLocaleString('de-AT', { minimumFractionDigits: 4 })}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({totals.mea > 0 ? ((Number(selectedUnitDetail.mea) / totals.mea) * 100).toFixed(2) : 0}%)
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Personen:</span>
+                      <p className="font-medium">{selectedUnitDetail.vs_personen || 0}
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({totals.personen > 0 ? ((selectedUnitDetail.vs_personen / totals.personen) * 100).toFixed(2) : 0}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Betriebskosten Aufschlüsselung */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-blue-700 flex items-center gap-2">
+                    <Euro className="h-4 w-4" />
+                    Betriebskosten nach Kostenart
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Kostenart</TableHead>
+                        <TableHead>Schlüssel</TableHead>
+                        <TableHead className="text-right">Gesamt</TableHead>
+                        <TableHead className="text-right">Anteil</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(selectedUnitDetail.costs || {}).map(([type, amount]: [string, any]) => {
+                        const totalAmount = expensesByType[type] || 0;
+                        const key = expenseDistributionKeys[type] || 'qm';
+                        return (
+                          <TableRow key={type}>
+                            <TableCell>{expenseTypeLabels[type] || type}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {distributionKeyLabels[key]}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              € {totalAmount.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              € {Number(amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      <TableRow className="border-t-2 font-bold">
+                        <TableCell colSpan={3}>Summe Betriebskosten</TableCell>
+                        <TableCell className="text-right">
+                          € {selectedUnitDetail.totalBkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Heizkosten */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-orange-700 flex items-center gap-2">
+                    <Flame className="h-4 w-4" />
+                    Heizkosten
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-muted-foreground text-sm">Verteilung nach m² (beheizt)</span>
+                      <p className="text-xs text-muted-foreground">
+                        {Number(selectedUnitDetail.qm).toLocaleString('de-AT')} m² von {totals.qmBeheizt.toLocaleString('de-AT')} m² = 
+                        {totals.qmBeheizt > 0 ? ((Number(selectedUnitDetail.qm) / totals.qmBeheizt) * 100).toFixed(2) : 0}%
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-muted-foreground text-sm">
+                        Gesamt: € {totalHeizkosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="font-bold text-lg">
+                        € {selectedUnitDetail.hkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Saldo Zusammenfassung */}
+              <Card className="border-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Saldo Übersicht</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>BK Kosten</TableCell>
+                        <TableCell className="text-right">€ {selectedUnitDetail.totalBkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>BK Vorschuss bezahlt</TableCell>
+                        <TableCell className="text-right">€ {selectedUnitDetail.bkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow className="font-bold">
+                        <TableCell>BK Saldo</TableCell>
+                        <TableCell className={`text-right ${selectedUnitDetail.bkSaldo > 0 ? 'text-destructive' : 'text-success'}`}>
+                          € {selectedUnitDetail.bkSaldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-xs ml-1">
+                            {selectedUnitDetail.bkSaldo > 0 ? '(Nachzahlung)' : selectedUnitDetail.bkSaldo < 0 ? '(Guthaben)' : ''}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow className="border-t">
+                        <TableCell>HK Kosten</TableCell>
+                        <TableCell className="text-right">€ {selectedUnitDetail.hkCost.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>HK Vorschuss bezahlt</TableCell>
+                        <TableCell className="text-right">€ {selectedUnitDetail.hkVorschuss.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</TableCell>
+                      </TableRow>
+                      <TableRow className="font-bold">
+                        <TableCell>HK Saldo</TableCell>
+                        <TableCell className={`text-right ${selectedUnitDetail.hkSaldo > 0 ? 'text-destructive' : 'text-success'}`}>
+                          € {selectedUnitDetail.hkSaldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-xs ml-1">
+                            {selectedUnitDetail.hkSaldo > 0 ? '(Nachzahlung)' : selectedUnitDetail.hkSaldo < 0 ? '(Guthaben)' : ''}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                      <TableRow className="border-t-2 bg-muted/50">
+                        <TableCell className="font-bold text-lg">Gesamtsaldo</TableCell>
+                        <TableCell className={`text-right font-bold text-lg ${selectedUnitDetail.gesamtSaldo > 0 ? 'text-destructive' : 'text-success'}`}>
+                          € {selectedUnitDetail.gesamtSaldo.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          <span className="text-sm ml-2">
+                            {selectedUnitDetail.gesamtSaldo > 0 ? '(Nachzahlung)' : selectedUnitDetail.gesamtSaldo < 0 ? '(Guthaben)' : ''}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

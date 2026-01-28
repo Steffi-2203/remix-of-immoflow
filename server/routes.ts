@@ -216,11 +216,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const units = await storage.getUnitsByProperty(req.params.propertyId);
       
-      // Add mea alias for nutzwert for frontend compatibility
+      // Add aliases for frontend compatibility
       const unitsWithMea = units.map(unit => ({
         ...unit,
-        mea: unit.nutzwert, // Alias for frontend compatibility
-        qm: unit.flaeche,   // Alias for frontend compatibility
+        mea: unit.nutzwert,      // Alias for frontend compatibility
+        qm: unit.flaeche,        // Alias for frontend compatibility
+        vs_personen: unit.vsPersonen, // Alias for frontend compatibility
       }));
       
       if (req.query.includeTenants === 'true') {
@@ -806,11 +807,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const units = await storage.getUnitsByOrganization(profile?.organizationId);
-      // Add mea/qm aliases for frontend compatibility
+      // Add mea/qm/vs_personen aliases for frontend compatibility
       const unitsWithAliases = units.map(unit => ({
         ...unit,
         mea: unit.nutzwert,
         qm: unit.flaeche,
+        vs_personen: unit.vsPersonen,
       }));
       res.json(unitsWithAliases);
     } catch (error) {
@@ -829,11 +831,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      // Add mea/qm aliases for frontend compatibility
+      // Add mea/qm/vs_personen aliases for frontend compatibility
       const unitWithAliases = {
         ...unit,
         mea: unit.nutzwert,
         qm: unit.flaeche,
+        vs_personen: unit.vsPersonen,
       };
       res.json(unitWithAliases);
     } catch (error) {
