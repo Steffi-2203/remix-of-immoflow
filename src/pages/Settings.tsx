@@ -12,6 +12,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
+import { AccountCategorySettings } from '@/components/settings/AccountCategorySettings';
 import { FAQSection } from '@/components/settings/FAQSection';
 import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
@@ -74,6 +75,7 @@ export default function Settings() {
             {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
+            <TabsTrigger value="categories">Kostenarten</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
             {isAdmin && <TabsTrigger value="admin">Administration</TabsTrigger>}
@@ -202,6 +204,10 @@ export default function Settings() {
 
           <TabsContent value="distribution">
             <DistributionKeySettings />
+          </TabsContent>
+
+          <TabsContent value="categories">
+            <AccountCategorySettings />
           </TabsContent>
 
           <TabsContent value="faq">
