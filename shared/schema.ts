@@ -317,9 +317,11 @@ export const settlementDetails = pgTable("settlement_details", {
 export const distributionKeys = pgTable("distribution_keys", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id),
   keyCode: text("key_code").notNull(),
   name: text("name").notNull(),
   description: text("description"),
+  formula: text("formula").default('flaeche'),
   unit: text("unit").default('m²'),
   inputType: text("input_type").default('flaeche'),
   isSystem: boolean("is_system").default(false),
@@ -417,6 +419,7 @@ export const accountCategories = pgTable("account_categories", {
   type: text("type").notNull(),
   parentId: uuid("parent_id"),
   isSystem: boolean("is_system").default(false),
+  defaultDistributionKeyId: uuid("default_distribution_key_id").references(() => distributionKeys.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

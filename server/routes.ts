@@ -777,7 +777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
       
       const normalizedBody = snakeToCamel(req.body);
-      const { name, type, parentId, isSystem } = normalizedBody;
+      const { name, type, parentId, isSystem, defaultDistributionKeyId } = normalizedBody;
       
       const category = await storage.createAccountCategory({
         organizationId: profile.organizationId,
@@ -785,11 +785,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: type,
         parentId: parentId || null,
         isSystem: isSystem || false,
+        defaultDistributionKeyId: defaultDistributionKeyId || null,
       });
       res.status(201).json(category);
     } catch (error) {
       console.error('Create account category error:', error);
       res.status(500).json({ error: "Failed to create account category" });
+    }
+  });
+
+  app.patch("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const normalizedBody = snakeToCamel(req.body);
+      const { name, type, defaultDistributionKeyId } = normalizedBody;
+      
+      const updated = await storage.updateAccountCategory(req.params.id, {
+        ...(name !== undefined && { name }),
+        ...(type !== undefined && { type }),
+        ...(defaultDistributionKeyId !== undefined && { defaultDistributionKeyId: defaultDistributionKeyId || null }),
+      });
+      
+      if (!updated) return res.status(404).json({ error: "Category not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error('Update account category error:', error);
+      res.status(500).json({ error: "Failed to update account category" });
     }
   });
 
@@ -1506,14 +1529,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
 
       const { id } = req.params;
+      
+      // Verify ownership before delete
+      const key = await storage.getDistributionKey(id);
+      if (!key) return res.status(404).json({ error: "Key not found" });
+      
+      // Check if key belongs to org (either via organizationId or via property)
+      if (key.propertyId) {
+        const property = await storage.getProperty(key.propertyId);
+        if (!property || property.organizationId !== profile.organizationId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else if (key.organizationId && key.organizationId !== profile.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
       await storage.deleteDistributionKey(id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete distribution key" });
+    }
+  });
+
+  // Property-specific distribution keys
+  app.get("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const keys = await storage.getDistributionKeysByProperty(req.params.propertyId);
+      res.json(keys);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch distribution keys" });
+    }
+  });
+
+  app.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const normalizedBody = snakeToCamel(req.body);
+      const { keyCode, name, description, formula, unit, inputType } = normalizedBody;
+      if (!keyCode || !name) {
+        return res.status(400).json({ error: "keyCode and name required" });
+      }
+
+      const newKey = await storage.createDistributionKey({
+        organizationId: profile.organizationId,
+        propertyId: req.params.propertyId,
+        keyCode,
+        name,
+        description,
+        formula: formula || 'flaeche',
+        unit: unit || 'm²',
+        inputType: inputType || 'flaeche',
+        isSystem: false,
+        isActive: true,
+      });
+      res.status(201).json(newKey);
+    } catch (error) {
+      console.error("Create distribution key error:", error);
+      res.status(500).json({ error: "Failed to create distribution key" });
     }
   });
 
@@ -1707,15 +1793,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       try {
         const { sendInviteEmail } = await import("./lib/resend");
-        await sendInviteEmail({
+        const emailResult = await sendInviteEmail({
           to: email,
           inviterName: profile.fullName || profile.email,
           organizationName: org?.name || 'ImmoflowMe',
           role,
           inviteUrl,
         });
-      } catch (emailError) {
-        console.error("Email send error:", emailError);
+        console.log("Invite email sent successfully:", { to: email, inviteUrl, result: emailResult });
+      } catch (emailError: any) {
+        console.error("Email send error:", emailError?.message || emailError);
+        console.error("Email error details:", JSON.stringify(emailError, null, 2));
       }
       
       res.json(invite);

@@ -39,6 +39,11 @@ import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { usePropertyDocuments, useUploadPropertyDocument, useDeletePropertyDocument, PROPERTY_DOCUMENT_TYPES } from '@/hooks/usePropertyDocuments';
+import { useDistributionKeysByProperty, useCreatePropertyDistributionKey, useDeletePropertyDistributionKey, inputTypeOptions } from '@/hooks/useDistributionKeys';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
@@ -88,12 +93,31 @@ export default function PropertyDetail() {
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
   const { data: units, isLoading: isLoadingUnits } = useUnits(id);
   const { data: documents, isLoading: isLoadingDocuments } = usePropertyDocuments(id);
+  const { data: distributionKeys, isLoading: isLoadingDistributionKeys } = useDistributionKeysByProperty(id);
   const deleteProperty = useDeleteProperty();
   const uploadDocument = useUploadPropertyDocument();
   const deleteDocument = useDeletePropertyDocument();
+  const createDistributionKey = useCreatePropertyDistributionKey(id || '');
+  const deleteDistributionKey = useDeletePropertyDistributionKey(id || '');
+  
+  const [newKeyDialogOpen, setNewKeyDialogOpen] = useState(false);
+  const [newKeyForm, setNewKeyForm] = useState({ keyCode: '', name: '', description: '', inputType: 'flaeche', unit: 'm²' });
   
   // Check if unit limit is reached for this property
   const canAddUnit = id ? canAddUnitToProperty(id) : false;
+  
+  const handleCreateDistributionKey = async () => {
+    if (!newKeyForm.keyCode || !newKeyForm.name) return;
+    await createDistributionKey.mutateAsync({
+      keyCode: newKeyForm.keyCode,
+      name: newKeyForm.name,
+      description: newKeyForm.description || undefined,
+      inputType: newKeyForm.inputType,
+      unit: inputTypeOptions.find(o => o.value === newKeyForm.inputType)?.unit || 'Anteil',
+    });
+    setNewKeyForm({ keyCode: '', name: '', description: '', inputType: 'flaeche', unit: 'm²' });
+    setNewKeyDialogOpen(false);
+  };
 
   const handleDelete = async () => {
     if (id) {
@@ -629,6 +653,146 @@ export default function PropertyDetail() {
                 );
               })}
             </div>
+          </div>
+          
+          {/* Eigene Verteilerschlüssel */}
+          <div className="rounded-xl border border-border bg-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-foreground">Eigene Verteilerschlüssel</h3>
+                <p className="text-sm text-muted-foreground">
+                  Definieren Sie eigene Verteilerschlüssel für diese Liegenschaft (z.B. Heizkreis A, Lift 1, etc.)
+                </p>
+              </div>
+              <Dialog open={newKeyDialogOpen} onOpenChange={setNewKeyDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="button-add-distribution-key">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Neuer Schlüssel
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Neuen Verteilerschlüssel anlegen</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="keyCode">Schlüssel-Code</Label>
+                        <Input
+                          id="keyCode"
+                          placeholder="z.B. heizkreis_a"
+                          value={newKeyForm.keyCode}
+                          onChange={(e) => setNewKeyForm(f => ({ ...f, keyCode: e.target.value }))}
+                          data-testid="input-key-code"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="keyName">Name</Label>
+                        <Input
+                          id="keyName"
+                          placeholder="z.B. Heizkreis A"
+                          value={newKeyForm.name}
+                          onChange={(e) => setNewKeyForm(f => ({ ...f, name: e.target.value }))}
+                          data-testid="input-key-name"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="keyDescription">Beschreibung (optional)</Label>
+                      <Input
+                        id="keyDescription"
+                        placeholder="z.B. Heizkreislauf für Tops 1-5"
+                        value={newKeyForm.description}
+                        onChange={(e) => setNewKeyForm(f => ({ ...f, description: e.target.value }))}
+                        data-testid="input-key-description"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="inputType">Berechnungsart</Label>
+                      <Select
+                        value={newKeyForm.inputType}
+                        onValueChange={(v) => setNewKeyForm(f => ({ ...f, inputType: v }))}
+                      >
+                        <SelectTrigger data-testid="select-input-type">
+                          <SelectValue placeholder="Berechnungsart wählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inputTypeOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label} ({opt.unit})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline">Abbrechen</Button>
+                    </DialogClose>
+                    <Button 
+                      onClick={handleCreateDistributionKey}
+                      disabled={!newKeyForm.keyCode || !newKeyForm.name || createDistributionKey.isPending}
+                      data-testid="button-save-distribution-key"
+                    >
+                      {createDistributionKey.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                      Speichern
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            {isLoadingDistributionKeys ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : distributionKeys && distributionKeys.length > 0 ? (
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Typ</TableHead>
+                      <TableHead>Einheit</TableHead>
+                      <TableHead className="text-right">Aktionen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {distributionKeys.map((key) => (
+                      <TableRow key={key.id} data-testid={`row-distribution-key-${key.id}`}>
+                        <TableCell className="font-mono text-sm">{key.keyCode}</TableCell>
+                        <TableCell>{key.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {inputTypeOptions.find(o => o.value === key.inputType)?.label || key.inputType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{key.unit}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteDistributionKey.mutate(key.id)}
+                            disabled={deleteDistributionKey.isPending}
+                            data-testid={`button-delete-key-${key.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Noch keine eigenen Verteilerschlüssel definiert.</p>
+                <p className="text-sm">Klicken Sie auf "Neuer Schlüssel" um einen anzulegen.</p>
+              </div>
+            )}
           </div>
         </TabsContent>
 
