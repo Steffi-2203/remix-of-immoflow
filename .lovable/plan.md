@@ -1,75 +1,115 @@
 
-Ziel
-- Den Blank-Screen beheben, der durch den Runtime-Fehler `Uncaught Error: supabaseUrl is required.` entsteht.
-- Ursache: `createClient(SUPABASE_URL, ...)` wird mit einem leeren/undefined `SUPABASE_URL` aufgerufen, weil `import.meta.env.VITE_SUPABASE_URL` (und/oder der Key) im Build/Runtime nicht gesetzt ist. Das passiert so früh (beim Import), dass die App gar nicht erst rendert.
+# Plan: Zwei separate Einladungsfunktionen
 
-Was ich im Code gesehen habe
-- `src/integrations/supabase/client.ts` liest:
-  - `const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;`
-  - `const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;`
-  - und ruft direkt beim Modul-Load `createClient(...)` auf.
-- Viele Hooks/Komponenten importieren `@/integrations/supabase/client`, daher crasht die App schon beim initialen Bundle-Auswerten.
-- `src/integrations/supabase/client.ts` ist auto-generiert und darf nicht editiert werden, also müssen wir die Initialisierung „von außen“ robust machen.
+## Zusammenfassung
 
-Lösungsstrategie (robust + ohne Änderungen am auto-generierten Client)
-Wir machen zwei Dinge:
-1) Sicherstellen, dass die erwarteten `VITE_*` Variablen beim Build gesetzt werden, auch wenn die Umgebung evtl. eher nicht-`VITE_` Variablen bereitstellt.
-2) Zusätzliche Absicherung im App-Bootstrap, damit selbst bei fehlender Konfiguration kein Blank-Screen entsteht, sondern eine verständliche Fehlermeldung angezeigt wird (und die App nicht schon beim Import abstürzt).
+Trennung der Einladungsfunktionalität in zwei Bereiche:
 
-Implementationsschritte (konkret)
-A) Build-Time Fallback für Env-Variablen (Vite Config)
-Datei: `vite.config.ts`
-- Ergänzen von `define`, um die erwarteten Werte zu „injecten“, falls nur alternative Env-Keys verfügbar sind.
-- Logik:
-  - `supabaseUrl = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL`
-  - `supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY`
-- Dann definieren:
-  - `'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl ?? '')`
-  - `'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(supabaseKey ?? '')`
-Warum:
-- Wenn der Build-Runner die Werte nicht als `VITE_…` bereitstellt, wird der Bundle-Code sonst mit `undefined` gebacken → Crash.
-- Mit `define` bekommen wir stabile Werte im Client-Bundle.
+1. **"Benutzer einladen"** - Für interne Teammitglieder (Admin, Hausverwalter, Buchhalter, Betrachter) mit E-Mail-Versand über verifizierte Domain
+2. **"Tester einladen"** - Für externe Tester mit manuellem Link-Sharing und **30 Minuten** Zeitlimit
 
-B) Bootstrap-Guard, damit die App nicht mehr „hart“ crasht (kein Blank Screen)
-Datei: `src/main.tsx`
-- Aktuell importiert `main.tsx` `App` statisch. Dadurch werden sofort alle Seiten/Hooks mitgeladen, die wiederum den Supabase-Client importieren → Crash bevor wir überhaupt reagieren können.
-- Umbau auf:
-  1) `createRoot(...)` sofort erstellen.
-  2) Env-Check vor dem Laden der App:
-     - Prüfen: `import.meta.env.VITE_SUPABASE_URL` und `import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY`
-  3) Wenn Werte fehlen:
-     - Statt App eine kleine „Konfiguration fehlt“-Seite rendern (mit klaren Hinweisen).
-  4) Wenn Werte vorhanden:
-     - `import("./App")` dynamisch laden und dann rendern.
-- Optional: Während `import("./App")` läuft, ein kleines Loading-UI rendern.
+---
 
-C) Kleine UI-Komponente für die Fehlermeldung (optional, aber empfehlenswert)
-- Neue Komponente z.B. `src/components/ConfigMissing.tsx` (oder inline in `main.tsx`), die:
-  - „Backend-Konfiguration fehlt“ anzeigt
-  - einen Button „Seite neu laden“
-  - optional eine kurze Debug-Zeile (z.B. welche Variable fehlt), ohne sensible Werte zu zeigen
-Vorteil:
-- Selbst wenn Konfiguration kurzfristig fehlt (Build/Env/Cache), ist die App nicht „weg“, sondern erklärt sich selbst.
+## Geplante Änderungen
 
-D) Verifikation / Testplan (nach Umsetzung)
-1) Preview öffnen → es darf keinen Blank-Screen mehr geben.
-2) Browser-Konsole prüfen:
-   - Kein `supabaseUrl is required` mehr.
-3) Standard-Flows testen:
-   - Startseite (/) lädt.
-   - Login-Seite lädt.
-   - Nach Login Dashboard lädt.
-4) Einladungsfunktion end-to-end testen:
-   - Einstellungen → Team → Einladen
-   - Prüfen: UI-Feedback (Erfolg/Fehler)
-   - Optional: Eintrag in Invites-Liste sichtbar
+### 1. Zeitlimit auf 30 Minuten ändern
 
-Risiken / Edge Cases
-- Falls in der Build-Umgebung tatsächlich gar keine der erwarteten Env-Variablen existiert, wird (B) zumindest eine verständliche Fehlermeldung statt Blank-Screen liefern.
-- `define` muss Strings bekommen; deshalb sauberer Fallback auf `''` (leer) plus Guard-UI, damit nicht wieder der gleiche Crash passiert.
+**Datei:** `src/hooks/useOrganizationInvites.ts`
+- Änderung von `expiresAt.setHours(expiresAt.getHours() + 1)` zu `expiresAt.setMinutes(expiresAt.getMinutes() + 30)`
+- Aktualisierung der Labels:
+  - `tester: 'Tester (30 Min.)'`
+  - `tester: 'Zeitlich begrenzt (30 Minuten), nur Leserechte'`
 
-Scope: Was ich nicht anfasse
-- `src/integrations/supabase/client.ts` bleibt unverändert (auto-generiert).
+---
 
-Wenn du zustimmst
-- Ich setze A + B (und optional C) um. Damit ist der Crash nachhaltig abgefangen und die App wird wieder benutzbar, selbst wenn die Konfiguration mal kurz nicht verfügbar ist.
+### 2. InviteUserDialog anpassen (nur interne Rollen)
+
+**Datei:** `src/components/settings/InviteUserDialog.tsx`
+- Tester-Rolle aus der Rollenauswahl entfernen
+- Nur interne Rollen anzeigen: Admin, Hausverwalter, Buchhalter, Betrachter
+- Standard-Rolle auf `viewer` setzen
+- E-Mail wird via Resend gesendet (erfordert verifizierte Domain)
+
+---
+
+### 3. Neuen TesterInviteDialog erstellen
+
+**Neue Datei:** `src/components/settings/TesterInviteDialog.tsx`
+- Vereinfachter Dialog nur für Tester-Einladungen
+- Kein E-Mail-Versand - nur Link-Generierung
+- Nach Erstellung wird der Registrierungslink direkt angezeigt
+- Kopier-Button für manuelles Teilen (WhatsApp, SMS, etc.)
+- Titel: "Tester einladen"
+- Beschreibung: "Erstellen Sie einen zeitlich begrenzten Testzugang (30 Minuten)"
+
+---
+
+### 4. TeamManagement-Seite anpassen
+
+**Datei:** `src/pages/TeamManagement.tsx`
+- Zwei separate Buttons im Header:
+  - "Benutzer einladen" (für interne Teammitglieder)
+  - "Tester einladen" (für externe Tester mit Link)
+- Beide Dialoge einbinden
+
+---
+
+### 5. Separater Hook für Tester-Einladungen (optional)
+
+**Datei:** `src/hooks/useOrganizationInvites.ts`
+- Neuer `useCreateTesterInvite` Hook der:
+  - Automatisch `role: 'tester'` setzt
+  - Keinen E-Mail-Versand auslöst
+  - Nur den Invite-Eintrag in der Datenbank erstellt
+
+---
+
+## Technische Details
+
+```text
++---------------------------+       +---------------------------+
+|   Benutzer einladen       |       |   Tester einladen         |
++---------------------------+       +---------------------------+
+| Rollen:                   |       | Rolle: Tester (fix)       |
+| - Admin                   |       |                           |
+| - Hausverwalter           |       | Zeitlimit: 30 Minuten     |
+| - Buchhalter              |       |                           |
+| - Betrachter              |       | Kein E-Mail-Versand       |
+|                           |       |                           |
+| E-Mail via Resend         |       | Link wird angezeigt       |
+| (verifizierte Domain)     |       | zum manuellen Teilen      |
++---------------------------+       +---------------------------+
+```
+
+---
+
+## Benutzeroberfläche (Team-Seite)
+
+```text
++----------------------------------------------------------+
+|  Team-Verwaltung                                          |
+|                                                           |
+|  [Benutzer einladen]  [Tester einladen]                  |
+|                                                           |
+|  +------------------------------------------------------+ |
+|  | Teammitglieder                                       | |
+|  | ...                                                  | |
+|  +------------------------------------------------------+ |
+|                                                           |
+|  +------------------------------------------------------+ |
+|  | Ausstehende Einladungen                              | |
+|  | (zeigt beide Typen - Benutzer und Tester)           | |
+|  +------------------------------------------------------+ |
++----------------------------------------------------------+
+```
+
+---
+
+## Dateien die geändert werden
+
+| Datei | Aktion |
+|-------|--------|
+| `src/hooks/useOrganizationInvites.ts` | Bearbeiten - 30 Min. Limit, neuer Hook |
+| `src/components/settings/InviteUserDialog.tsx` | Bearbeiten - Tester entfernen |
+| `src/components/settings/TesterInviteDialog.tsx` | Neu erstellen |
+| `src/pages/TeamManagement.tsx` | Bearbeiten - Zweiter Button |
