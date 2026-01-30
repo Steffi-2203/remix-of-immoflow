@@ -7,6 +7,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CookieConsent } from "@/components/CookieConsent";
+import { DemoDataProvider } from "@/contexts/DemoDataContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
@@ -64,36 +65,36 @@ const App = () => (
             <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="/agb" element={<AGB />} />
             
-            {/* Protected routes */}
-            <Route path="/dashboard" element={<ProtectedRoute><SimpleDashboard /></ProtectedRoute>} />
-            <Route path="/liegenschaften" element={<ProtectedRoute><PropertyList /></ProtectedRoute>} />
-            <Route path="/liegenschaften/neu" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
-            <Route path="/liegenschaften/:id" element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
-            <Route path="/liegenschaften/:id/bearbeiten" element={<ProtectedRoute><PropertyForm /></ProtectedRoute>} />
-            <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<ProtectedRoute><UnitForm /></ProtectedRoute>} />
-            <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<ProtectedRoute><UnitForm /></ProtectedRoute>} />
-            <Route path="/einheiten" element={<ProtectedRoute><UnitList /></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedRoute><UnitDetail /></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
-            <Route path="/mieter" element={<ProtectedRoute><TenantList /></ProtectedRoute>} />
-            <Route path="/mieter/neu" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
-            <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><TenantForm /></ProtectedRoute>} />
-            <Route path="/zahlungen" element={<ProtectedRoute><PaymentList /></ProtectedRoute>} />
-            <Route path="/buchhaltung" element={<ProtectedRoute><Banking /></ProtectedRoute>} />
-            <Route path="/kosten" element={<ProtectedRoute><ExpenseList /></ProtectedRoute>} />
-            <Route path="/vorschreibungen" element={<ProtectedRoute><InvoiceList /></ProtectedRoute>} />
-            <Route path="/abrechnung" element={<ProtectedRoute><OperatingCostSettlement /></ProtectedRoute>} />
-            <Route path="/dokumente" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
-            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-            <Route path="/wartungen" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
-            <Route path="/handwerker" element={<ProtectedRoute><Contractors /></ProtectedRoute>} />
-            <Route path="/mahnwesen" element={<ProtectedRoute><Dunning /></ProtectedRoute>} />
-            <Route path="/budgets" element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
-            <Route path="/rechnungsfreigabe" element={<ProtectedRoute><InvoiceApproval /></ProtectedRoute>} />
-            <Route path="/nachrichten" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-            <Route path="/team" element={<ProtectedRoute><TeamManagement /></ProtectedRoute>} />
-            <Route path="/einstellungen" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            {/* Protected routes - wrapped with DemoDataProvider */}
+            <Route path="/dashboard" element={<ProtectedRoute><DemoDataProvider><SimpleDashboard /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften" element={<ProtectedRoute><DemoDataProvider><PropertyList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften/neu" element={<ProtectedRoute><DemoDataProvider><PropertyForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften/:id" element={<ProtectedRoute><DemoDataProvider><PropertyDetail /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften/:id/bearbeiten" element={<ProtectedRoute><DemoDataProvider><PropertyForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<ProtectedRoute><DemoDataProvider><UnitForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><UnitForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/einheiten" element={<ProtectedRoute><DemoDataProvider><UnitList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedRoute><DemoDataProvider><UnitDetail /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mieter" element={<ProtectedRoute><DemoDataProvider><TenantList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><PaymentList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><ExpenseList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/vorschreibungen" element={<ProtectedRoute><DemoDataProvider><InvoiceList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><DemoDataProvider><Reports /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/wartungen" element={<ProtectedRoute><DemoDataProvider><Maintenance /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/handwerker" element={<ProtectedRoute><DemoDataProvider><Contractors /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mahnwesen" element={<ProtectedRoute><DemoDataProvider><Dunning /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/budgets" element={<ProtectedRoute><DemoDataProvider><Budgets /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/rechnungsfreigabe" element={<ProtectedRoute><DemoDataProvider><InvoiceApproval /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><DemoDataProvider><TeamManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

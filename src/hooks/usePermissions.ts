@@ -15,6 +15,7 @@ interface Permissions {
   isPropertyManager: boolean;
   isFinance: boolean;
   isViewer: boolean;
+  isTester: boolean;
   isLoading: boolean;
 }
 
@@ -41,10 +42,11 @@ export function usePermissions(): Permissions {
     enabled: !!user?.id,
   });
 
-  // Check if user is admin before the conditional hook
+  // Check if user is admin or tester before the conditional hook
   const isUserAdmin = userRole === 'admin';
+  const isUserTester = userRole === 'tester';
 
-  // Fetch permissions for the user's role (for non-admin users)
+  // Fetch permissions for the user's role (for non-admin, non-tester users)
   const { data: permissions, isLoading: permissionsLoading } = useQuery({
     queryKey: ['role-permissions', userRole],
     queryFn: async () => {
@@ -61,10 +63,10 @@ export function usePermissions(): Permissions {
       }
       return data;
     },
-    enabled: !!userRole && !isUserAdmin,
+    enabled: !!userRole && !isUserAdmin && !isUserTester,
   });
 
-  const isLoading = roleLoading || (isUserAdmin ? false : permissionsLoading);
+  const isLoading = roleLoading || (isUserAdmin || isUserTester ? false : permissionsLoading);
 
   // If user is admin, grant all permissions
   if (isUserAdmin) {
@@ -81,6 +83,27 @@ export function usePermissions(): Permissions {
       isPropertyManager: false,
       isFinance: false,
       isViewer: false,
+      isTester: false,
+      isLoading: roleLoading,
+    };
+  }
+
+  // If user is tester, grant view permissions (demo mode handles data isolation)
+  if (isUserTester) {
+    return {
+      canViewFinances: true,
+      canEditFinances: true, // Allowed in demo mode
+      canViewFullTenantData: true,
+      canManageMaintenance: true,
+      canApproveInvoices: true,
+      canSendMessages: true,
+      canManageUsers: false,
+      role: 'tester',
+      isAdmin: false,
+      isPropertyManager: false,
+      isFinance: false,
+      isViewer: false,
+      isTester: true,
       isLoading: roleLoading,
     };
   }
@@ -98,6 +121,7 @@ export function usePermissions(): Permissions {
     isPropertyManager: userRole === 'property_manager',
     isFinance: userRole === 'finance',
     isViewer: userRole === 'viewer',
+    isTester: false,
     isLoading,
   };
 }

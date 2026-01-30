@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
+export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
 
 export function useUserRole() {
   return useQuery({
@@ -29,7 +29,7 @@ export function useUserRole() {
 export function useHasFinanceAccess() {
   const { data: role, isLoading } = useUserRole();
   return {
-    hasAccess: role === 'admin' || role === 'finance',
+    hasAccess: role === 'admin' || role === 'finance' || role === 'tester',
     isLoading,
   };
 }
@@ -38,6 +38,14 @@ export function useIsAdmin() {
   const { data: role, isLoading } = useUserRole();
   return {
     isAdmin: role === 'admin',
+    isLoading,
+  };
+}
+
+export function useIsTester() {
+  const { data: role, isLoading } = useUserRole();
+  return {
+    isTester: role === 'tester',
     isLoading,
   };
 }
