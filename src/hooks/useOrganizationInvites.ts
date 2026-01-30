@@ -4,7 +4,7 @@ import { useAuth } from './useAuth';
 import { useOrganization } from './useOrganization';
 import { toast } from 'sonner';
 
-export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
+export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
 
 export interface OrganizationInvite {
   id: string;
@@ -26,6 +26,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   property_manager: 'Hausverwalter',
   finance: 'Buchhalter',
   viewer: 'Betrachter',
+  tester: 'Tester (1 Stunde)',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
@@ -33,6 +34,7 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   property_manager: 'Verwaltung von Immobilien, Einheiten und Mietern',
   finance: 'Zugriff auf Banking, SEPA, Rechnungen und Finanzdaten',
   viewer: 'Nur Leserechte, sensible Daten maskiert',
+  tester: 'Zeitlich begrenzt (1 Stunde), nur Leserechte',
 };
 
 // Fetch pending invites for the current organization
@@ -178,9 +180,20 @@ export function useAcceptInvite() {
       }
 
       // Update user's profile with organization
+      // For testers, set access_expires_at to 1 hour from now
+      const profileUpdate: Record<string, any> = { 
+        organization_id: invite.organization_id 
+      };
+      
+      if (invite.role === 'tester') {
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 1);
+        profileUpdate.access_expires_at = expiresAt.toISOString();
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ organization_id: invite.organization_id })
+        .update(profileUpdate)
         .eq('id', user.id);
 
       if (profileError) throw profileError;

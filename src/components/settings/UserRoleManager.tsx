@@ -37,7 +37,8 @@ import {
   Shield,
   Building2,
   Calculator,
-  Eye
+  Eye,
+  Timer
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
@@ -58,6 +59,7 @@ const ROLE_ICONS: Record<AppRole, typeof Shield> = {
   property_manager: Building2,
   finance: Calculator,
   viewer: Eye,
+  tester: Timer,
 };
 
 const ROLE_COLORS: Record<AppRole, string> = {
@@ -65,6 +67,7 @@ const ROLE_COLORS: Record<AppRole, string> = {
   property_manager: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   finance: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   viewer: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
+  tester: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
 };
 
 export function UserRoleManager() {
@@ -220,6 +223,12 @@ export function UserRoleManager() {
                                       <div className="flex items-center gap-2">
                                         <Eye className="h-4 w-4" />
                                         Betrachter
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="tester">
+                                      <div className="flex items-center gap-2">
+                                        <Timer className="h-4 w-4" />
+                                        Tester
                                       </div>
                                     </SelectItem>
                                     <SelectItem value="none">

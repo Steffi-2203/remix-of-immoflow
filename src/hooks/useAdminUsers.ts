@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { toast } from 'sonner';
 
-export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
+export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
 
 export interface AdminUser {
   user_id: string;
