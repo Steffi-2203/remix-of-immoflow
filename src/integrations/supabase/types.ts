@@ -1223,6 +1223,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_expires_at: string | null
           created_at: string
           email: string | null
           full_name: string | null
@@ -1231,6 +1232,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          access_expires_at?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -1239,6 +1241,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          access_expires_at?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -2783,7 +2786,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "property_manager" | "finance" | "viewer"
+      app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
       ausstattungskategorie: "A" | "B" | "C" | "D"
       expense_category:
         | "betriebskosten_umlagefaehig"
@@ -2979,7 +2982,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "property_manager", "finance", "viewer"],
+      app_role: ["admin", "property_manager", "finance", "viewer", "tester"],
       ausstattungskategorie: ["A", "B", "C", "D"],
       expense_category: [
         "betriebskosten_umlagefaehig",
