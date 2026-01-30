@@ -19,71 +19,41 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mail, Shield, Building2, Calculator, Eye, Copy, Check } from 'lucide-react';
-import { 
-  useCreateInvite, 
-  AppRole, 
-  ROLE_LABELS, 
-  ROLE_DESCRIPTIONS,
-  INTERNAL_ROLES 
-} from '@/hooks/useOrganizationInvites';
+import { Loader2, Timer, Copy, Check, ExternalLink } from 'lucide-react';
+import { useCreateTesterInvite } from '@/hooks/useOrganizationInvites';
 
-// Only internal roles (no tester)
-const inviteSchema = z.object({
+const testerSchema = z.object({
   email: z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein'),
-  role: z.enum(['admin', 'property_manager', 'finance', 'viewer'] as const),
 });
 
-type InviteFormData = z.infer<typeof inviteSchema>;
+type TesterFormData = z.infer<typeof testerSchema>;
 
-interface InviteUserDialogProps {
+interface TesterInviteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-// Role icons for internal roles only
-const ROLE_ICONS: Record<Exclude<AppRole, 'tester'>, typeof Shield> = {
-  admin: Shield,
-  property_manager: Building2,
-  finance: Calculator,
-  viewer: Eye,
-};
-
-export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) {
-  const createInvite = useCreateInvite();
+export function TesterInviteDialog({ open, onOpenChange }: TesterInviteDialogProps) {
+  const createTesterInvite = useCreateTesterInvite();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdInviteLink, setCreatedInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const form = useForm<InviteFormData>({
-    resolver: zodResolver(inviteSchema),
+  const form = useForm<TesterFormData>({
+    resolver: zodResolver(testerSchema),
     defaultValues: {
       email: '',
-      role: 'viewer',
     },
   });
 
-  const selectedRole = form.watch('role') as Exclude<AppRole, 'tester'>;
-  const RoleIcon = ROLE_ICONS[selectedRole];
-
-  const onSubmit = async (data: InviteFormData) => {
+  const onSubmit = async (data: TesterFormData) => {
     setIsSubmitting(true);
     try {
-      const invite = await createInvite.mutateAsync({
-        email: data.email,
-        role: data.role,
-      });
+      const invite = await createTesterInvite.mutateAsync(data.email);
       
-      // Generate the invite link to show to the user
+      // Generate the invite link to show to the admin for manual sharing
       const inviteLink = `${window.location.origin}/register?invite=${invite.token}`;
       setCreatedInviteLink(inviteLink);
       form.reset();
@@ -113,11 +83,11 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Benutzer einladen
+            <Timer className="h-5 w-5" />
+            Tester einladen
           </DialogTitle>
           <DialogDescription>
-            Laden Sie einen neuen Benutzer zu Ihrer Organisation ein
+            Erstellen Sie einen zeitlich begrenzten Testzugang (30 Minuten)
           </DialogDescription>
         </DialogHeader>
 
@@ -125,10 +95,10 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
           <div className="space-y-4">
             <div className="rounded-lg border bg-green-50 dark:bg-green-950 p-4">
               <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
-                ✓ Einladung erfolgreich erstellt!
+                ✓ Tester-Einladung erfolgreich erstellt!
               </p>
               <p className="text-sm text-muted-foreground mb-3">
-                Falls die E-Mail nicht ankommt, können Sie den folgenden Link manuell teilen:
+                Teilen Sie den folgenden Link manuell (z.B. per WhatsApp, SMS oder E-Mail):
               </p>
               <div className="flex items-center gap-2">
                 <Input 
@@ -146,6 +116,14 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                 </Button>
               </div>
             </div>
+            
+            <div className="rounded-lg border bg-amber-50 dark:bg-amber-950 p-4">
+              <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <Timer className="h-4 w-4" />
+                Der Tester hat nach Registrierung genau 30 Minuten Zugang.
+              </p>
+            </div>
+            
             <DialogFooter>
               <Button onClick={() => handleClose(false)}>
                 Schließen
@@ -160,7 +138,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>E-Mail-Adresse *</FormLabel>
+                    <FormLabel>E-Mail-Adresse des Testers *</FormLabel>
                     <FormControl>
                       <Input 
                         type="email"
@@ -168,54 +146,23 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                         {...field} 
                       />
                     </FormControl>
-                      <FormDescription>
-                        Der Benutzer erhält eine E-Mail mit einem Registrierungslink.
-                        Erfordert eine verifizierte Domain bei Resend.
-                      </FormDescription>
+                    <FormDescription>
+                      Kein E-Mail-Versand - Sie erhalten einen Link zum manuellen Teilen.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rolle *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Rolle auswählen" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {INTERNAL_ROLES.map((role) => {
-                          const Icon = ROLE_ICONS[role];
-                          return (
-                            <SelectItem key={role} value={role}>
-                              <div className="flex items-center gap-2">
-                                <Icon className="h-4 w-4" />
-                                {ROLE_LABELS[role]}
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Role description card */}
+              {/* Tester info card */}
               <div className="rounded-lg border bg-muted/50 p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <RoleIcon className="h-5 w-5 text-primary" />
-                  <span className="font-medium">{ROLE_LABELS[selectedRole]}</span>
+                  <Timer className="h-5 w-5 text-primary" />
+                  <span className="font-medium">Tester (30 Min.)</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {ROLE_DESCRIPTIONS[selectedRole]}
+                  Zeitlich begrenzt (30 Minuten), nur Leserechte. Der Tester kann keine 
+                  Einladungen erstellen oder Daten ändern.
                 </p>
               </div>
 
@@ -230,7 +177,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Einladung erstellen
+                  Link erstellen
                 </Button>
               </DialogFooter>
             </form>

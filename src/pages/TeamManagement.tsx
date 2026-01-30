@@ -11,11 +11,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTeamMembers, useTeamStats, useUpdateTeamMemberRole, useRemoveTeamMemberRole, TeamMember } from '@/hooks/useTeamMembers';
 import { useAuth } from '@/hooks/useAuth';
-import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X, Building2 } from 'lucide-react';
+import { Users, Shield, Briefcase, Eye, UserX, Search, AlertTriangle, UserPlus, Clock, X, Building2, Timer } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { Database } from '@/integrations/supabase/types';
 import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
+import { TesterInviteDialog } from '@/components/settings/TesterInviteDialog';
 import { PropertyAssignmentDialog } from '@/components/settings/PropertyAssignmentDialog';
 import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
@@ -64,6 +65,7 @@ export default function TeamManagement() {
   const [selectedRole, setSelectedRole] = useState<AppRole | ''>('');
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showTesterInviteDialog, setShowTesterInviteDialog] = useState(false);
   const [propertyAssignmentMember, setPropertyAssignmentMember] = useState<TeamMember | null>(null);
 
   // Permission check
@@ -119,8 +121,12 @@ export default function TeamManagement() {
   return (
     <MainLayout title="Team-Verwaltung" subtitle="Verwalten Sie die Rollen und Berechtigungen Ihres Teams">
       <div className="space-y-6">
-        {/* Header with Invite Button */}
-        <div className="flex justify-end">
+        {/* Header with Invite Buttons */}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowTesterInviteDialog(true)}>
+            <Timer className="h-4 w-4 mr-2" />
+            Tester einladen
+          </Button>
           <Button onClick={() => setShowInviteDialog(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
             Benutzer einladen
@@ -451,6 +457,12 @@ export default function TeamManagement() {
           />
         )}
 
+        {/* Tester Invite Dialog */}
+        <TesterInviteDialog
+          open={showTesterInviteDialog}
+          onOpenChange={setShowTesterInviteDialog}
+        />
+
         {/* Role Explanation */}
         <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
           <CardHeader className="pb-3">
@@ -465,6 +477,7 @@ export default function TeamManagement() {
               <li><strong>Hausverwalter:</strong> Wartungen, Aufträge, Nachrichten, Rechnungsfreigabe – KEINE Buchhaltung</li>
               <li><strong>Buchhaltung:</strong> Finanzen, Banking, Rechnungsfreigabe – KEINE Wartungen</li>
               <li><strong>Betrachter:</strong> Kann nur Daten ansehen, nichts bearbeiten oder genehmigen</li>
+              <li><strong>Tester:</strong> Zeitlich begrenzter Lesezugang (30 Minuten) für externe Tester</li>
             </ul>
           </CardContent>
         </Card>

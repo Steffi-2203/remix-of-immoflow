@@ -26,7 +26,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   property_manager: 'Hausverwalter',
   finance: 'Buchhalter',
   viewer: 'Betrachter',
-  tester: 'Tester (1 Stunde)',
+  tester: 'Tester (30 Min.)',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
@@ -34,8 +34,11 @@ export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   property_manager: 'Verwaltung von Immobilien, Einheiten und Mietern',
   finance: 'Zugriff auf Banking, SEPA, Rechnungen und Finanzdaten',
   viewer: 'Nur Leserechte, sensible Daten maskiert',
-  tester: 'Zeitlich begrenzt (1 Stunde), nur Leserechte',
+  tester: 'Zeitlich begrenzt (30 Minuten), nur Leserechte',
 };
+
+// Internal roles (for regular team invitations via email)
+export const INTERNAL_ROLES: AppRole[] = ['admin', 'property_manager', 'finance', 'viewer'];
 
 // Fetch pending invites for the current organization
 export function usePendingInvites() {
@@ -157,6 +160,59 @@ export function useCreateInvite() {
   });
 }
 
+// Create a tester invite (no email sent, link is shown to admin for manual sharing)
+export function useCreateTesterInvite() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: organization } = useOrganization();
+
+  return useMutation({
+    mutationFn: async (email: string) => {
+      if (!organization?.id || !user?.id) {
+        throw new Error('Organisation oder Benutzer nicht gefunden');
+      }
+
+      // Check if invite already exists
+      const { data: existing } = await supabase
+        .from('organization_invites')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .eq('email', email.toLowerCase())
+        .is('accepted_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error('Eine Einladung für diese E-Mail-Adresse existiert bereits');
+      }
+
+      // Create the invite with tester role - no email is sent
+      const { data: invite, error } = await supabase
+        .from('organization_invites')
+        .insert({
+          organization_id: organization.id,
+          email: email.toLowerCase(),
+          role: 'tester' as AppRole,
+          invited_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return invite;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization_invites'] });
+      toast.success('Tester-Einladung erstellt - Link kann jetzt geteilt werden');
+    },
+    onError: (error) => {
+      console.error('Create tester invite error:', error);
+      toast.error(error instanceof Error ? error.message : 'Fehler beim Erstellen der Tester-Einladung');
+    },
+  });
+}
+
 // Accept an invite (called after registration)
 export function useAcceptInvite() {
   const queryClient = useQueryClient();
@@ -180,14 +236,14 @@ export function useAcceptInvite() {
       }
 
       // Update user's profile with organization
-      // For testers, set access_expires_at to 1 hour from now
+      // For testers, set access_expires_at to 30 minutes from now
       const profileUpdate: Record<string, any> = { 
         organization_id: invite.organization_id 
       };
       
       if (invite.role === 'tester') {
         const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 1);
+        expiresAt.setMinutes(expiresAt.getMinutes() + 30);
         profileUpdate.access_expires_at = expiresAt.toISOString();
       }
 
