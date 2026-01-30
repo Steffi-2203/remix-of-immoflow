@@ -3,6 +3,8 @@ import { Header } from './Header';
 import { SidebarProvider, useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { usePermissions } from '@/hooks/usePermissions';
+import { AlertTriangle } from 'lucide-react';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -10,12 +12,23 @@ interface MainLayoutProps {
   subtitle?: string;
 }
 
+function DemoBanner() {
+  return (
+    <div className="bg-amber-500/90 text-amber-950 px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
+      <AlertTriangle className="h-4 w-4" />
+      <span>Demo-Modus – Alle Änderungen sind nur virtuell und werden nicht gespeichert</span>
+    </div>
+  );
+}
+
 function MainLayoutContent({ children, title, subtitle }: MainLayoutProps) {
   const isMobile = useIsMobile();
   const { collapsed } = useSidebarContext();
+  const { isTester } = usePermissions();
 
   return (
     <div className="min-h-screen bg-background">
+      {isTester && <DemoBanner />}
       <Sidebar />
       <div 
         className={cn(

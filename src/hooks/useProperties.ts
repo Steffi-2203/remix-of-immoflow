@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from './useAuth';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export interface PropertyInsert {
   name: string;
@@ -22,7 +23,9 @@ export interface PropertyInsert {
 }
 
 export function useProperties() {
-  return useQuery({
+  const { isDemoMode, properties: demoProperties } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['properties'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -33,11 +36,25 @@ export function useProperties() {
       if (error) throw error;
       return data;
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoProperties,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useProperty(id: string | undefined) {
-  return useQuery({
+  const { isDemoMode, properties: demoProperties } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['property', id],
     queryFn: async () => {
       if (!id) return null;
@@ -50,16 +67,51 @@ export function useProperty(id: string | undefined) {
       if (error) throw error;
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    const property = demoProperties.find(p => p.id === id) || null;
+    return {
+      data: property,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useCreateProperty() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { isDemoMode, addProperty } = useDemoData();
 
   return useMutation({
     mutationFn: async (property: PropertyInsert) => {
+      if (isDemoMode) {
+        const newProperty = addProperty({
+          name: property.name,
+          address: property.address,
+          city: property.city,
+          postal_code: property.postal_code,
+          country: property.country || 'Österreich',
+          building_year: property.building_year || null,
+          total_units: 0,
+          total_qm: property.total_qm || 0,
+          total_mea: property.total_mea || 0,
+          bk_anteil_wohnung: property.bk_anteil_wohnung || 0,
+          bk_anteil_geschaeft: property.bk_anteil_geschaeft || 0,
+          bk_anteil_garage: property.bk_anteil_garage || 0,
+          heizung_anteil_wohnung: property.heizung_anteil_wohnung || 0,
+          heizung_anteil_geschaeft: property.heizung_anteil_geschaeft || 0,
+          betriebskosten_gesamt: property.betriebskosten_gesamt || 0,
+          heizungskosten_gesamt: property.heizungskosten_gesamt || 0,
+        });
+        return newProperty;
+      }
+
       if (!user) throw new Error('Not authenticated');
 
       // Create deterministically so we can assign ownership even if INSERT can't RETURN the row
@@ -107,9 +159,15 @@ export function useCreateProperty() {
 
 export function useUpdateProperty() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updateProperty: updateDemoProperty } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: PropertyInsert & { id: string }) => {
+      if (isDemoMode) {
+        updateDemoProperty(id, updates);
+        return { id, ...updates };
+      }
+
       const { data, error } = await supabase
         .from('properties')
         .update(updates)
@@ -134,9 +192,15 @@ export function useUpdateProperty() {
 
 export function useDeleteProperty() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deleteProperty: deleteDemoProperty } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoProperty(id);
+        return;
+      }
+
       const { error } = await supabase
         .from('properties')
         .delete()
