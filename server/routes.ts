@@ -17,6 +17,8 @@ import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import crypto from "crypto";
+import multer from "multer";
+import OpenAI from "openai";
 import { 
   insertRentHistorySchema,
   insertPropertySchema,
@@ -3732,6 +3734,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Admin demo invite delete error:', error);
       res.status(500).json({ error: "Fehler beim Löschen der Einladung" });
+    }
+  });
+
+  // OCR tenant extraction route
+  const ocrUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Nur Bilder sind erlaubt (JPG, PNG)'));
+      }
+    },
+  });
+
+  const ocrClient = new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  });
+
+  app.post("/api/ocr/tenant", isAuthenticated, ocrUpload.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Keine Datei hochgeladen' });
+      }
+
+      const base64Image = req.file.buffer.toString('base64');
+      const mimeType = req.file.mimetype;
+      const imageUrl = `data:${mimeType};base64,${base64Image}`;
+
+      const extractionPrompt = `Du bist ein Experte für österreichische Immobilienverwaltung und Mietverträge.
+Analysiere dieses Dokument (Mietvertrag, Vorschreibung oder ähnliches) und extrahiere die Mieterdaten.
+
+Extrahiere folgende Informationen im JSON-Format:
+{
+  "firstName": "Vorname des Mieters",
+  "lastName": "Nachname des Mieters",
+  "email": "E-Mail-Adresse (falls vorhanden)",
+  "phone": "Telefonnummer (falls vorhanden)",
+  "mietbeginn": "Mietbeginn im Format YYYY-MM-DD",
+  "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
+  "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
+  "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
+  "kaution": Kaution als Zahl (falls angegeben),
+  "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
+  "address": "Adresse der Wohnung",
+  "notes": "Weitere relevante Informationen (kurz)"
+}
+
+Wichtige Hinweise:
+- Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten"
+- Die Gesamtmiete = Grundmiete + BK + HK (trenne diese auf)
+- Datumsformat immer als YYYY-MM-DD
+- Zahlen ohne Währungssymbol, nur numerisch
+- Wenn etwas nicht erkennbar ist, setze null oder 0
+- Bei Personen-Namen: Vorname und Nachname getrennt
+
+Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
+
+      const response = await ocrClient.chat.completions.create({
+        model: 'gpt-5.2',
+        max_completion_tokens: 2000,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: extractionPrompt },
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
+            ],
+          },
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        return res.status(500).json({ message: 'Keine Antwort von der KI erhalten' });
+      }
+
+      let extractedData;
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          extractedData = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('Kein JSON in der Antwort gefunden');
+        }
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Content:', content);
+        return res.status(500).json({ message: 'Konnte die extrahierten Daten nicht verarbeiten' });
+      }
+
+      const result = {
+        firstName: extractedData.firstName || '',
+        lastName: extractedData.lastName || '',
+        email: extractedData.email || '',
+        phone: extractedData.phone || '',
+        mietbeginn: extractedData.mietbeginn || '',
+        grundmiete: parseFloat(extractedData.grundmiete) || 0,
+        betriebskostenVorschuss: parseFloat(extractedData.betriebskostenVorschuss) || 0,
+        heizkostenVorschuss: parseFloat(extractedData.heizkostenVorschuss) || 0,
+        kaution: parseFloat(extractedData.kaution) || 0,
+        topNummer: extractedData.topNummer || '',
+        address: extractedData.address || '',
+        notes: extractedData.notes || '',
+      };
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('OCR processing error:', error);
+      res.status(500).json({ message: error.message || 'OCR-Verarbeitung fehlgeschlagen' });
     }
   });
 
