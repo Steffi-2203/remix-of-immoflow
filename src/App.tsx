@@ -113,7 +113,7 @@ const App = () => (
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
               <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
-              <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
+              <Route path="/admin/audit-logs" element={<ProtectedRoute><AdminAuditLogs /></ProtectedRoute>} />
             <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
             <Route path="*" element={<NotFound />} />
