@@ -359,6 +359,8 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           description: 'Sie haben alle Mieter übersprungen.', 
           variant: 'destructive' 
         });
+        reset();
+        onOpenChange(false);
       }
     }
   };
