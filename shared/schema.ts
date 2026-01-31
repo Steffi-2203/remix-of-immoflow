@@ -47,6 +47,11 @@ export const organizations = pgTable("organizations", {
   postalCode: text("postal_code"),
   phone: text("phone"),
   email: text("email"),
+  // White-Label Branding
+  brandName: text("brand_name"),
+  logoUrl: text("logo_url"),
+  primaryColor: text("primary_color"),
+  supportEmail: text("support_email"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

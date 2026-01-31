@@ -18,6 +18,7 @@ import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDialog';
 import { UserRoleManager } from '@/components/settings/UserRoleManager';
+import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
 import { SubscriptionSettings } from '@/components/settings/SubscriptionSettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
@@ -74,6 +75,7 @@ export default function Settings() {
             <TabsTrigger value="subscription">Abo</TabsTrigger>
             {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
+            {isAdmin && <TabsTrigger value="branding">Branding</TabsTrigger>}
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
             <TabsTrigger value="categories">Kostenarten</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
@@ -201,6 +203,12 @@ export default function Settings() {
           <TabsContent value="privacy">
             <PrivacySettings />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="branding">
+              <BrandingSettings />
+            </TabsContent>
+          )}
 
           <TabsContent value="distribution">
             <DistributionKeySettings />

@@ -54,14 +54,16 @@ import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
 import DemoRequest from "./pages/demo-request";
 import DemoActivate from "./pages/demo-activate";
+import { BrandingProvider } from "@/contexts/BrandingContext";
 
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+        <BrandingProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Landing />} />
@@ -124,6 +126,7 @@ const App = () => (
           </Routes>
           <CookieConsent />
         </BrowserRouter>
+        </BrandingProvider>
       </TooltipProvider>
     </QueryClientProvider>
   </ErrorBoundary>
