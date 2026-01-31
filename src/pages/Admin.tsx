@@ -50,6 +50,8 @@ import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/queryClient';
 import { DemoInviteManager } from '@/components/admin/DemoInviteManager';
+import { WhiteLabelInquiryManager } from '@/components/admin/WhiteLabelInquiryManager';
+import { WhiteLabelLicenseManager } from '@/components/admin/WhiteLabelLicenseManager';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -213,6 +215,12 @@ export default function Admin() {
 
         {/* Demo Invitations */}
         <DemoInviteManager />
+
+        {/* White Label Inquiries */}
+        <WhiteLabelInquiryManager />
+
+        {/* White Label Licenses */}
+        <WhiteLabelLicenseManager />
 
         {/* Organizations Table */}
         <Card>

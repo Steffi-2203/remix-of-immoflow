@@ -3956,6 +3956,368 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ========================================
+  // WHITE LABEL INQUIRY ROUTES
+  // ========================================
+
+  // Helper function to escape HTML for email templates
+  const escapeHtml = (text: string | null | undefined): string => {
+    if (!text) return '-';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  // Public: Submit White Label inquiry
+  app.post("/api/white-label/inquiry", async (req: Request, res: Response) => {
+    try {
+      const { companyName, contactPerson, email, phone, propertyCount, unitCount, message } = req.body;
+
+      if (!companyName || !contactPerson || !email) {
+        return res.status(400).json({ error: "Firmenname, Ansprechpartner und E-Mail sind erforderlich" });
+      }
+
+      // Validate string lengths
+      if (companyName.length > 200 || contactPerson.length > 200 || email.length > 200) {
+        return res.status(400).json({ error: "Eingaben sind zu lang" });
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Bitte geben Sie eine gültige E-Mail-Adresse ein" });
+      }
+
+      // Sanitize numeric values
+      const parsedPropertyCount = propertyCount ? parseInt(propertyCount, 10) : null;
+      const parsedUnitCount = unitCount ? parseInt(unitCount, 10) : null;
+      
+      if (propertyCount && (isNaN(parsedPropertyCount!) || parsedPropertyCount! < 0)) {
+        return res.status(400).json({ error: "Ungültige Anzahl Objekte" });
+      }
+      if (unitCount && (isNaN(parsedUnitCount!) || parsedUnitCount! < 0)) {
+        return res.status(400).json({ error: "Ungültige Anzahl Einheiten" });
+      }
+
+      // Create inquiry
+      const [inquiry] = await db.insert(schema.whiteLabelInquiries)
+        .values({
+          companyName: companyName.trim(),
+          contactPerson: contactPerson.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone?.trim() || null,
+          propertyCount: parsedPropertyCount,
+          unitCount: parsedUnitCount,
+          message: message?.trim() || null,
+          ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || null,
+          userAgent: req.headers['user-agent'] || null,
+        })
+        .returning();
+
+      // Send notification email to admin with escaped HTML
+      try {
+        const resendApiKey = process.env.RESEND_API_KEY;
+        if (resendApiKey) {
+          const { Resend } = await import('resend');
+          const resend = new Resend(resendApiKey);
+
+          await resend.emails.send({
+            from: 'ImmoflowMe <no-reply@immoflowme.at>',
+            to: 'office@immoflowme.at',
+            subject: `Neue White-Label Anfrage: ${escapeHtml(companyName)}`,
+            html: `
+              <h2>Neue White-Label Anfrage</h2>
+              <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Firma:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(companyName)}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Ansprechpartner:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(contactPerson)}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>E-Mail:</strong></td><td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Telefon:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(phone)}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Anzahl Objekte:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${parsedPropertyCount || '-'}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Anzahl Einheiten:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${parsedUnitCount || '-'}</td></tr>
+                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Nachricht:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${escapeHtml(message)}</td></tr>
+              </table>
+              <p style="margin-top: 20px; color: #666;">Anfrage eingegangen am ${new Date().toLocaleString('de-AT')}</p>
+            `,
+          });
+          console.log('White Label inquiry notification sent to admin');
+        }
+      } catch (emailError) {
+        console.error('Failed to send White Label notification email:', emailError);
+      }
+
+      res.json({ success: true, message: "Ihre Anfrage wurde erfolgreich übermittelt. Wir melden uns in Kürze bei Ihnen." });
+    } catch (error) {
+      console.error('White Label inquiry error:', error);
+      res.status(500).json({ error: "Fehler beim Übermitteln der Anfrage" });
+    }
+  });
+
+  // Admin: List all White Label inquiries
+  app.get("/api/admin/white-label/inquiries", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+      
+      const inquiries = await db.select()
+        .from(schema.whiteLabelInquiries)
+        .orderBy(desc(schema.whiteLabelInquiries.createdAt));
+      
+      res.json(inquiries);
+    } catch (error) {
+      console.error('Admin White Label inquiries list error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Anfragen" });
+    }
+  });
+
+  // Admin: Update White Label inquiry status
+  const validInquiryStatuses = ['neu', 'kontaktiert', 'demo_vereinbart', 'verhandlung', 'abgeschlossen', 'abgelehnt'];
+  const validLicenseStatuses = ['aktiv', 'gekuendigt', 'pausiert', 'abgelaufen'];
+
+  app.patch("/api/admin/white-label/inquiries/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      const { status, notes } = req.body;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+
+      // Validate status if provided
+      if (status && !validInquiryStatuses.includes(status)) {
+        return res.status(400).json({ error: "Ungültiger Status" });
+      }
+
+      // Validate notes length
+      if (notes && notes.length > 2000) {
+        return res.status(400).json({ error: "Notizen zu lang (max. 2000 Zeichen)" });
+      }
+
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+      if (status) updateData.status = status;
+      if (notes !== undefined) updateData.notes = notes?.trim() || null;
+      
+      const [updated] = await db.update(schema.whiteLabelInquiries)
+        .set(updateData)
+        .where(eq(schema.whiteLabelInquiries.id, id))
+        .returning();
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Admin White Label inquiry update error:', error);
+      res.status(500).json({ error: "Fehler beim Aktualisieren" });
+    }
+  });
+
+  // Admin: Delete White Label inquiry
+  app.delete("/api/admin/white-label/inquiries/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+      
+      await db.delete(schema.whiteLabelInquiries)
+        .where(eq(schema.whiteLabelInquiries.id, id));
+      
+      res.json({ message: "Anfrage gelöscht" });
+    } catch (error) {
+      console.error('Admin White Label inquiry delete error:', error);
+      res.status(500).json({ error: "Fehler beim Löschen" });
+    }
+  });
+
+  // Admin: List all White Label licenses
+  app.get("/api/admin/white-label/licenses", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+      
+      const licenses = await db.select({
+        license: schema.whiteLabelLicenses,
+        organization: schema.organizations,
+      })
+        .from(schema.whiteLabelLicenses)
+        .leftJoin(schema.organizations, eq(schema.whiteLabelLicenses.organizationId, schema.organizations.id))
+        .orderBy(desc(schema.whiteLabelLicenses.createdAt));
+      
+      res.json(licenses);
+    } catch (error) {
+      console.error('Admin White Label licenses list error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Lizenzen" });
+    }
+  });
+
+  // Admin: Create White Label license
+  app.post("/api/admin/white-label/licenses", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+
+      const { organizationId, licenseName, monthlyPrice, setupFee, contractStart, contractEnd, customDomain, maxUsers, notes } = req.body;
+
+      if (!organizationId || !licenseName || !contractStart) {
+        return res.status(400).json({ error: "Organisation, Lizenzname und Vertragsbeginn sind erforderlich" });
+      }
+
+      // Validate string lengths
+      if (licenseName.length > 100) {
+        return res.status(400).json({ error: "Lizenzname zu lang (max. 100 Zeichen)" });
+      }
+      if (customDomain && customDomain.length > 100) {
+        return res.status(400).json({ error: "Domain zu lang (max. 100 Zeichen)" });
+      }
+      if (notes && notes.length > 2000) {
+        return res.status(400).json({ error: "Notizen zu lang (max. 2000 Zeichen)" });
+      }
+
+      // Validate numeric values
+      const parsedMonthlyPrice = monthlyPrice ? parseFloat(monthlyPrice) : null;
+      const parsedSetupFee = setupFee ? parseFloat(setupFee) : null;
+      const parsedMaxUsers = maxUsers ? parseInt(maxUsers, 10) : null;
+
+      if (monthlyPrice && (isNaN(parsedMonthlyPrice!) || parsedMonthlyPrice! < 0)) {
+        return res.status(400).json({ error: "Ungültiger Monatspreis" });
+      }
+      if (setupFee && (isNaN(parsedSetupFee!) || parsedSetupFee! < 0)) {
+        return res.status(400).json({ error: "Ungültige Setup-Gebühr" });
+      }
+      if (maxUsers && (isNaN(parsedMaxUsers!) || parsedMaxUsers! < 0)) {
+        return res.status(400).json({ error: "Ungültige Benutzeranzahl" });
+      }
+
+      // Validate date format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(contractStart)) {
+        return res.status(400).json({ error: "Ungültiges Datumsformat für Vertragsbeginn" });
+      }
+      if (contractEnd && !/^\d{4}-\d{2}-\d{2}$/.test(contractEnd)) {
+        return res.status(400).json({ error: "Ungültiges Datumsformat für Vertragsende" });
+      }
+      
+      const [license] = await db.insert(schema.whiteLabelLicenses)
+        .values({
+          organizationId,
+          licenseName: licenseName.trim(),
+          monthlyPrice: parsedMonthlyPrice?.toString() || null,
+          setupFee: parsedSetupFee?.toString() || null,
+          contractStart,
+          contractEnd: contractEnd || null,
+          customDomain: customDomain?.trim() || null,
+          maxUsers: parsedMaxUsers,
+          notes: notes?.trim() || null,
+        })
+        .returning();
+      
+      res.json(license);
+    } catch (error) {
+      console.error('Admin White Label license create error:', error);
+      res.status(500).json({ error: "Fehler beim Erstellen der Lizenz" });
+    }
+  });
+
+  // Admin: Update White Label license
+  app.patch("/api/admin/white-label/licenses/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+
+      const { status, monthlyPrice, contractEnd, customDomain, maxUsers, notes } = req.body;
+
+      // Validate status
+      if (status && !validLicenseStatuses.includes(status)) {
+        return res.status(400).json({ error: "Ungültiger Status" });
+      }
+
+      // Validate numeric values if provided
+      if (monthlyPrice !== undefined && monthlyPrice !== '' && monthlyPrice !== null) {
+        const parsed = parseFloat(monthlyPrice);
+        if (isNaN(parsed) || parsed < 0) {
+          return res.status(400).json({ error: "Ungültiger Monatspreis" });
+        }
+      }
+      if (maxUsers !== undefined && maxUsers !== '' && maxUsers !== null) {
+        const parsed = parseInt(maxUsers, 10);
+        if (isNaN(parsed) || parsed < 0) {
+          return res.status(400).json({ error: "Ungültige Benutzeranzahl" });
+        }
+      }
+
+      // Validate string lengths
+      if (customDomain && customDomain.length > 100) {
+        return res.status(400).json({ error: "Domain zu lang" });
+      }
+      if (notes && notes.length > 2000) {
+        return res.status(400).json({ error: "Notizen zu lang" });
+      }
+
+      const updateData: Record<string, any> = { updatedAt: new Date() };
+      if (status) updateData.status = status;
+      if (monthlyPrice !== undefined) updateData.monthlyPrice = monthlyPrice || null;
+      if (contractEnd !== undefined) updateData.contractEnd = contractEnd || null;
+      if (customDomain !== undefined) updateData.customDomain = customDomain?.trim() || null;
+      if (maxUsers !== undefined) updateData.maxUsers = maxUsers ? parseInt(maxUsers) : null;
+      if (notes !== undefined) updateData.notes = notes;
+      
+      const [updated] = await db.update(schema.whiteLabelLicenses)
+        .set(updateData)
+        .where(eq(schema.whiteLabelLicenses.id, id))
+        .returning();
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Admin White Label license update error:', error);
+      res.status(500).json({ error: "Fehler beim Aktualisieren" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
