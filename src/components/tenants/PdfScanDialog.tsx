@@ -15,37 +15,45 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-async function convertPdfToImage(file: File): Promise<Blob> {
+async function convertPdfToImages(file: File): Promise<Blob[]> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1);
+    const numPages = pdf.numPages;
+    const blobs: Blob[] = [];
     
-    const scale = 2;
-    const viewport = page.getViewport({ scale });
-    
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('Canvas context konnte nicht erstellt werden');
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      
+      const scale = 2;
+      const viewport = page.getViewport({ scale });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('Canvas context konnte nicht erstellt werden');
+      }
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+      
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) {
+            resolve(b);
+          } else {
+            reject(new Error(`PDF-Seite ${pageNum} konnte nicht konvertiert werden`));
+          }
+        }, 'image/png', 0.95);
+      });
+      blobs.push(blob);
     }
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
     
-    await page.render({
-      canvasContext: context,
-      viewport: viewport,
-    }).promise;
-    
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('PDF-Seite konnte nicht in Bild konvertiert werden'));
-        }
-      }, 'image/png', 0.95);
-    });
+    return blobs;
   } catch (error: any) {
     console.error('PDF conversion error:', error);
     throw new Error(`PDF-Konvertierung fehlgeschlagen: ${error.message || 'Unbekannter Fehler'}`);
@@ -90,23 +98,32 @@ const defaultExtractedData: ExtractedTenantData = {
   notes: '',
 };
 
+interface TenantWithUnit extends ExtractedTenantData {
+  selectedUnitId: string;
+  saved: boolean;
+}
+
 export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess }: PdfScanDialogProps) {
   const [step, setStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'done'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [extractedData, setExtractedData] = useState<ExtractedTenantData>(defaultExtractedData);
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [extractedTenants, setExtractedTenants] = useState<TenantWithUnit[]>([]);
+  const [currentTenantIndex, setCurrentTenantIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const currentTenant = extractedTenants[currentTenantIndex];
 
   const reset = useCallback(() => {
     setStep('upload');
     setFile(null);
     setPreviewUrl(null);
-    setExtractedData(defaultExtractedData);
-    setSelectedUnitId('');
+    setExtractedTenants([]);
+    setCurrentTenantIndex(0);
+    setSavedCount(0);
     setError(null);
     setIsDragging(false);
   }, []);
@@ -129,53 +146,84 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
     setError(null);
 
     try {
-      let fileToUpload: Blob = selectedFile;
+      let imagesToProcess: Blob[] = [];
       let previewBlob: Blob = selectedFile;
 
       if (isPdf) {
         toast({ 
           title: 'PDF wird konvertiert...', 
-          description: 'Die erste Seite wird in ein Bild umgewandelt.' 
+          description: 'Alle Seiten werden verarbeitet.' 
         });
         try {
-          const imageBlob = await convertPdfToImage(selectedFile);
-          fileToUpload = imageBlob;
-          previewBlob = imageBlob;
+          imagesToProcess = await convertPdfToImages(selectedFile);
+          previewBlob = imagesToProcess[0];
         } catch (pdfError: any) {
           setError(`PDF-Konvertierung fehlgeschlagen: ${pdfError.message}. Bitte laden Sie stattdessen einen Screenshot hoch.`);
           setStep('upload');
           return;
         }
+      } else {
+        imagesToProcess = [selectedFile];
       }
 
       const previewUrl = URL.createObjectURL(previewBlob);
       setPreviewUrl(previewUrl);
 
-      const formData = new FormData();
-      formData.append('file', fileToUpload, isPdf ? 'converted.png' : selectedFile.name);
-      formData.append('propertyId', propertyId);
+      const allTenants: TenantWithUnit[] = [];
 
-      const response = await fetch('/api/ocr/tenant', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
+      for (let i = 0; i < imagesToProcess.length; i++) {
+        const imageBlob = imagesToProcess[i];
+        
+        if (isPdf && imagesToProcess.length > 1) {
+          toast({ 
+            title: `Verarbeite Seite ${i + 1} von ${imagesToProcess.length}...`
+          });
+        }
+
+        const formData = new FormData();
+        formData.append('file', imageBlob, 'page.png');
+        formData.append('propertyId', propertyId);
+
+        const response = await fetch('/api/ocr/tenant', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error(`Seite ${i + 1} Fehler:`, errorData.message);
+          continue;
+        }
+
+        const data = await response.json();
+        
+        if (data.tenants && Array.isArray(data.tenants)) {
+          for (const t of data.tenants) {
+            const matchedUnit = units.find(u => 
+              u.top_nummer.toLowerCase() === t.topNummer?.toLowerCase()
+            );
+            allTenants.push({
+              ...t,
+              selectedUnitId: matchedUnit?.id || '',
+              saved: false,
+            });
+          }
+        }
+      }
+
+      if (allTenants.length === 0) {
+        setError('Keine Mieter im Dokument gefunden.');
+        setStep('upload');
+        return;
+      }
+
+      setExtractedTenants(allTenants);
+      setCurrentTenantIndex(0);
+      toast({ 
+        title: `${allTenants.length} Mieter gefunden`, 
+        description: 'Überprüfen Sie die Daten vor dem Speichern.' 
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'OCR-Verarbeitung fehlgeschlagen');
-      }
-
-      const data = await response.json();
-      setExtractedData(data);
-
-      const matchedUnit = units.find(u => 
-        u.top_nummer.toLowerCase() === data.topNummer?.toLowerCase()
-      );
-      if (matchedUnit) {
-        setSelectedUnitId(matchedUnit.id);
-      }
-
       setStep('review');
     } catch (err: any) {
       setError(err.message || 'Ein Fehler ist aufgetreten');
@@ -210,29 +258,39 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
     }
   }, [handleFileSelect]);
 
-  const updateField = useCallback((field: keyof ExtractedTenantData, value: string | number) => {
-    setExtractedData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  const updateField = useCallback((field: keyof TenantWithUnit, value: string | number) => {
+    setExtractedTenants(prev => prev.map((t, idx) => 
+      idx === currentTenantIndex ? { ...t, [field]: value } : t
+    ));
+  }, [currentTenantIndex]);
 
-  const handleSave = async () => {
+  const setSelectedUnitId = useCallback((unitId: string) => {
+    setExtractedTenants(prev => prev.map((t, idx) => 
+      idx === currentTenantIndex ? { ...t, selectedUnitId: unitId } : t
+    ));
+  }, [currentTenantIndex]);
+
+  const handleSaveCurrent = async () => {
+    if (!currentTenant) return;
+
     const validationErrors: string[] = [];
 
-    if (!extractedData.firstName?.trim()) {
+    if (!currentTenant.firstName?.trim()) {
       validationErrors.push('Vorname ist erforderlich');
     }
-    if (!extractedData.lastName?.trim()) {
+    if (!currentTenant.lastName?.trim()) {
       validationErrors.push('Nachname ist erforderlich');
     }
-    if (!selectedUnitId) {
+    if (!currentTenant.selectedUnitId) {
       validationErrors.push('Einheit ist erforderlich');
     }
-    if (extractedData.grundmiete < 0) {
+    if (currentTenant.grundmiete < 0) {
       validationErrors.push('Grundmiete kann nicht negativ sein');
     }
-    if (extractedData.betriebskostenVorschuss < 0) {
+    if (currentTenant.betriebskostenVorschuss < 0) {
       validationErrors.push('Betriebskosten können nicht negativ sein');
     }
-    if (extractedData.heizkostenVorschuss < 0) {
+    if (currentTenant.heizkostenVorschuss < 0) {
       validationErrors.push('Heizkosten können nicht negativ sein');
     }
 
@@ -249,29 +307,59 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
 
     try {
       await apiRequest('POST', '/api/tenants', {
-        unit_id: selectedUnitId,
-        first_name: extractedData.firstName,
-        last_name: extractedData.lastName,
-        email: extractedData.email || null,
-        phone: extractedData.phone || null,
-        mietbeginn: extractedData.mietbeginn || new Date().toISOString().split('T')[0],
-        grundmiete: extractedData.grundmiete,
-        betriebskosten_vorschuss: extractedData.betriebskostenVorschuss,
-        heizungskosten_vorschuss: extractedData.heizkostenVorschuss,
-        kaution: extractedData.kaution || null,
-        notes: extractedData.notes || null,
+        unit_id: currentTenant.selectedUnitId,
+        first_name: currentTenant.firstName,
+        last_name: currentTenant.lastName,
+        email: currentTenant.email || null,
+        phone: currentTenant.phone || null,
+        mietbeginn: currentTenant.mietbeginn || new Date().toISOString().split('T')[0],
+        grundmiete: currentTenant.grundmiete,
+        betriebskosten_vorschuss: currentTenant.betriebskostenVorschuss,
+        heizungskosten_vorschuss: currentTenant.heizkostenVorschuss,
+        kaution: currentTenant.kaution || null,
+        notes: currentTenant.notes || null,
         status: 'aktiv',
       });
 
-      setStep('done');
+      setExtractedTenants(prev => prev.map((t, idx) => 
+        idx === currentTenantIndex ? { ...t, saved: true } : t
+      ));
+      setSavedCount(prev => prev + 1);
+
       toast({ 
         title: 'Mieter erstellt', 
-        description: `${extractedData.firstName} ${extractedData.lastName} wurde erfolgreich angelegt.` 
+        description: `${currentTenant.firstName} ${currentTenant.lastName} wurde erfolgreich angelegt.` 
       });
-      onSuccess();
+
+      const nextUnsaved = extractedTenants.findIndex((t, idx) => idx > currentTenantIndex && !t.saved);
+      if (nextUnsaved !== -1) {
+        setCurrentTenantIndex(nextUnsaved);
+        setStep('review');
+      } else {
+        setStep('done');
+        onSuccess();
+      }
     } catch (err: any) {
       setError(err.message || 'Mieter konnte nicht erstellt werden');
       setStep('review');
+    }
+  };
+
+  const handleSkipCurrent = () => {
+    const nextUnsaved = extractedTenants.findIndex((t, idx) => idx > currentTenantIndex && !t.saved);
+    if (nextUnsaved !== -1) {
+      setCurrentTenantIndex(nextUnsaved);
+    } else {
+      if (savedCount > 0) {
+        setStep('done');
+        onSuccess();
+      } else {
+        toast({ 
+          title: 'Keine Mieter gespeichert', 
+          description: 'Sie haben alle Mieter übersprungen.', 
+          variant: 'destructive' 
+        });
+      }
     }
   };
 
@@ -349,7 +437,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           </div>
         )}
 
-        {step === 'review' && (
+        {step === 'review' && currentTenant && (
           <div className="space-y-6">
             <div className="flex items-start gap-4">
               {previewUrl && (
@@ -365,7 +453,9 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                 <Alert className="bg-success/10 border-success/30">
                   <CheckCircle className="h-4 w-4 text-success" />
                   <AlertDescription className="text-success">
-                    Daten erfolgreich extrahiert! Bitte überprüfen und korrigieren Sie die Werte.
+                    {extractedTenants.length > 1 
+                      ? `${extractedTenants.length} Mieter gefunden! Mieter ${currentTenantIndex + 1} von ${extractedTenants.length}` 
+                      : 'Daten erfolgreich extrahiert! Bitte überprüfen und korrigieren Sie die Werte.'}
                   </AlertDescription>
                 </Alert>
               </div>
@@ -377,7 +467,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                   <div>
                     <Label>Vorname *</Label>
                     <Input
-                      value={extractedData.firstName}
+                      value={currentTenant.firstName}
                       onChange={(e) => updateField('firstName', e.target.value)}
                       data-testid="input-ocr-firstname"
                     />
@@ -385,14 +475,14 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                   <div>
                     <Label>Nachname *</Label>
                     <Input
-                      value={extractedData.lastName}
+                      value={currentTenant.lastName}
                       onChange={(e) => updateField('lastName', e.target.value)}
                       data-testid="input-ocr-lastname"
                     />
                   </div>
                   <div>
                     <Label>Einheit *</Label>
-                    <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
+                    <Select value={currentTenant.selectedUnitId} onValueChange={setSelectedUnitId}>
                       <SelectTrigger data-testid="select-ocr-unit">
                         <SelectValue placeholder="Einheit wählen" />
                       </SelectTrigger>
@@ -402,9 +492,9 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                         ))}
                       </SelectContent>
                     </Select>
-                    {extractedData.topNummer && (
+                    {currentTenant.topNummer && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Erkannt: {extractedData.topNummer}
+                        Erkannt: {currentTenant.topNummer}
                       </p>
                     )}
                   </div>
@@ -412,7 +502,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Label>Mietbeginn</Label>
                     <Input
                       type="date"
-                      value={extractedData.mietbeginn}
+                      value={currentTenant.mietbeginn}
                       onChange={(e) => updateField('mietbeginn', e.target.value)}
                       data-testid="input-ocr-mietbeginn"
                     />
@@ -422,7 +512,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Input
                       type="number"
                       step="0.01"
-                      value={extractedData.grundmiete}
+                      value={currentTenant.grundmiete}
                       onChange={(e) => updateField('grundmiete', parseFloat(e.target.value) || 0)}
                       data-testid="input-ocr-grundmiete"
                     />
@@ -432,7 +522,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Input
                       type="number"
                       step="0.01"
-                      value={extractedData.betriebskostenVorschuss}
+                      value={currentTenant.betriebskostenVorschuss}
                       onChange={(e) => updateField('betriebskostenVorschuss', parseFloat(e.target.value) || 0)}
                       data-testid="input-ocr-bk"
                     />
@@ -442,7 +532,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Input
                       type="number"
                       step="0.01"
-                      value={extractedData.heizkostenVorschuss}
+                      value={currentTenant.heizkostenVorschuss}
                       onChange={(e) => updateField('heizkostenVorschuss', parseFloat(e.target.value) || 0)}
                       data-testid="input-ocr-hk"
                     />
@@ -452,7 +542,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Input
                       type="number"
                       step="0.01"
-                      value={extractedData.kaution}
+                      value={currentTenant.kaution}
                       onChange={(e) => updateField('kaution', parseFloat(e.target.value) || 0)}
                       data-testid="input-ocr-kaution"
                     />
@@ -461,7 +551,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Label>E-Mail</Label>
                     <Input
                       type="email"
-                      value={extractedData.email}
+                      value={currentTenant.email}
                       onChange={(e) => updateField('email', e.target.value)}
                       data-testid="input-ocr-email"
                     />
@@ -469,18 +559,18 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                   <div>
                     <Label>Telefon</Label>
                     <Input
-                      value={extractedData.phone}
+                      value={currentTenant.phone}
                       onChange={(e) => updateField('phone', e.target.value)}
                       data-testid="input-ocr-phone"
                     />
                   </div>
                 </div>
 
-                {extractedData.notes && (
+                {currentTenant.notes && (
                   <div className="mt-4">
                     <Label>Zusätzliche erkannte Informationen</Label>
                     <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted/50 rounded-lg">
-                      {extractedData.notes}
+                      {currentTenant.notes}
                     </p>
                   </div>
                 )}
@@ -494,17 +584,24 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
               </Alert>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex-wrap gap-2">
               <Button variant="outline" onClick={reset}>
                 Abbrechen
               </Button>
+              {extractedTenants.length > 1 && (
+                <Button variant="ghost" onClick={handleSkipCurrent}>
+                  Überspringen
+                </Button>
+              )}
               <Button 
-                onClick={handleSave}
-                disabled={!extractedData.firstName || !extractedData.lastName || !selectedUnitId}
+                onClick={handleSaveCurrent}
+                disabled={!currentTenant.firstName || !currentTenant.lastName || !currentTenant.selectedUnitId}
                 data-testid="button-ocr-save"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Mieter anlegen
+                {extractedTenants.length > 1 
+                  ? `Mieter ${currentTenantIndex + 1}/${extractedTenants.length} speichern` 
+                  : 'Mieter anlegen'}
               </Button>
             </DialogFooter>
           </div>
@@ -520,9 +617,11 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
         {step === 'done' && (
           <div className="py-8 text-center">
             <CheckCircle className="h-16 w-16 text-success mx-auto mb-4" />
-            <p className="text-xl font-semibold mb-2">Mieter erfolgreich angelegt!</p>
+            <p className="text-xl font-semibold mb-2">
+              {savedCount > 1 ? `${savedCount} Mieter erfolgreich angelegt!` : 'Mieter erfolgreich angelegt!'}
+            </p>
             <p className="text-muted-foreground mb-6">
-              {extractedData.firstName} {extractedData.lastName}
+              Die Mieterdaten wurden gespeichert.
             </p>
             <DialogFooter className="justify-center">
               <Button variant="outline" onClick={reset}>
