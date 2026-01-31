@@ -164,7 +164,7 @@ export default function DemoRequestPage() {
               </p>
               <div className="text-center text-sm">
                 <span className="text-muted-foreground">Bereits registriert? </span>
-                <Link href="/login" className="text-blue-600 hover:underline">
+                <Link to="/login" className="text-blue-600 hover:underline">
                   Anmelden
                 </Link>
               </div>
