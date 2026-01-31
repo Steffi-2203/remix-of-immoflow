@@ -413,6 +413,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const normalizedBody = snakeToCamel(req.body);
+      const rawUnits = normalizedBody.einheitenAnzahl ?? normalizedBody.numberOfUnits ?? 0;
+      const numberOfUnits = typeof rawUnits === 'number' ? rawUnits : parseInt(rawUnits, 10);
+      
+      if (rawUnits !== 0 && isNaN(numberOfUnits)) {
+        return res.status(400).json({ error: "Ungültige Anzahl Einheiten" });
+      }
+      const validUnits = numberOfUnits > 0 ? Math.min(numberOfUnits, 100) : 0;
+      
       const validationResult = insertPropertySchema.safeParse({
         ...normalizedBody,
         organizationId: profile.organizationId,
@@ -431,6 +439,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: profile.id,
         propertyId: property.id,
       });
+      
+      if (validUnits > 0) {
+        const unitData = [];
+        for (let i = 1; i <= validUnits; i++) {
+          unitData.push({
+            propertyId: property.id,
+            topNummer: `Top ${i}`,
+            type: 'wohnung' as const,
+            status: 'leerstand' as const,
+            flaeche: '0',
+            stockwerk: i,
+          });
+        }
+        await db.insert(schema.units).values(unitData);
+      }
       
       res.json(property);
     } catch (error) {
