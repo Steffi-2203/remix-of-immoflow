@@ -60,6 +60,9 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Button variant="outline" asChild>
+              <Link to="/demo">Demo testen</Link>
+            </Button>
             <Button asChild>
               <Link to="/login">Anmelden</Link>
             </Button>
@@ -81,9 +84,14 @@ export default function Landing() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild className="text-lg px-8">
+              <Link to="/demo">
+                Kostenlos testen
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild className="text-lg px-8">
               <Link to="/login">
                 Anmelden
-                <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
           </div>
