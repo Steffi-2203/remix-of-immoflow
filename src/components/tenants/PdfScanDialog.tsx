@@ -6,10 +6,51 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { FileImage, Upload, Loader2, AlertCircle, CheckCircle, Sparkles, X } from 'lucide-react';
+import { FileImage, Upload, Loader2, AlertCircle, CheckCircle, Sparkles, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+async function convertPdfToImage(file: File): Promise<Blob> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+    
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Canvas context konnte nicht erstellt werden');
+    }
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport,
+    }).promise;
+    
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('PDF-Seite konnte nicht in Bild konvertiert werden'));
+        }
+      }, 'image/png', 0.95);
+    });
+  } catch (error: any) {
+    console.error('PDF conversion error:', error);
+    throw new Error(`PDF-Konvertierung fehlgeschlagen: ${error.message || 'Unbekannter Fehler'}`);
+  }
+}
 
 interface PdfScanDialogProps {
   open: boolean;
@@ -71,25 +112,47 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
   }, []);
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
-    if (!selectedFile.type.startsWith('image/')) {
+    const isImage = selectedFile.type.startsWith('image/');
+    const isPdf = selectedFile.type === 'application/pdf';
+
+    if (!isImage && !isPdf) {
       toast({ 
         title: 'Ungültiges Format', 
-        description: 'Bitte laden Sie ein Bild (JPG, PNG) hoch. Screenshots von Mietverträgen oder Vorschreibungen funktionieren am besten.', 
+        description: 'Bitte laden Sie ein Bild (JPG, PNG) oder PDF hoch.', 
         variant: 'destructive' 
       });
       return;
     }
 
     setFile(selectedFile);
-    const url = URL.createObjectURL(selectedFile);
-    setPreviewUrl(url);
-
     setStep('processing');
     setError(null);
 
     try {
+      let fileToUpload: Blob = selectedFile;
+      let previewBlob: Blob = selectedFile;
+
+      if (isPdf) {
+        toast({ 
+          title: 'PDF wird konvertiert...', 
+          description: 'Die erste Seite wird in ein Bild umgewandelt.' 
+        });
+        try {
+          const imageBlob = await convertPdfToImage(selectedFile);
+          fileToUpload = imageBlob;
+          previewBlob = imageBlob;
+        } catch (pdfError: any) {
+          setError(`PDF-Konvertierung fehlgeschlagen: ${pdfError.message}. Bitte laden Sie stattdessen einen Screenshot hoch.`);
+          setStep('upload');
+          return;
+        }
+      }
+
+      const previewUrl = URL.createObjectURL(previewBlob);
+      setPreviewUrl(previewUrl);
+
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append('file', fileToUpload, isPdf ? 'converted.png' : selectedFile.name);
       formData.append('propertyId', propertyId);
 
       const response = await fetch('/api/ocr/tenant', {
@@ -253,13 +316,13 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                 Ziehen Sie eine Datei hierher oder klicken Sie zum Auswählen
               </p>
               <p className="text-xs text-muted-foreground">
-                Unterstützt: Bilder (JPG, PNG) - Screenshots von Mietverträgen oder Vorschreibungen
+                Unterstützt: Bilder (JPG, PNG) und PDF-Dokumente
               </p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf,application/pdf"
               className="hidden"
               onChange={handleFileChange}
               data-testid="input-pdf-scan"
