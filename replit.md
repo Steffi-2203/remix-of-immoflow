@@ -54,6 +54,12 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **OCR Functionality**: Integration of GPT-4o via Replit AI for vision-based OCR to extract structured data from invoices and bank statements, supporting Austrian-specific categories.
 - **Subscription Management**: Two parallel systems: a legacy organization-based system (Stripe integrated) and a newer user-based system with `profiles.subscriptionTier` tracking, feature gating, and Stripe checkout integration.
 - **Role-Based Access Control**: Five distinct roles (admin, property_manager, finance, viewer, tester) with varying permissions and a "tester" mode for data masking of personal information.
+- **Demo Access System**: Time-limited 30-minute trial access for prospects via email invitation. Includes:
+    - Email-based demo request flow with token validation (24-hour expiry)
+    - Automatic demo data generation (Vienna Altbau + Graz Neubau properties, 8 tenants, invoices, expenses)
+    - Countdown timer banner showing remaining demo time
+    - Modal blocking access upon demo expiration with upgrade/contact options
+    - Routes: `/demo` (request), `/demo/activate` (activation), `/api/demo/*` (backend)
 
 **System Design Choices:**
 - **Modular Structure**: The project is organized into `server/`, `shared/`, and `src/` directories for clear separation of backend, shared schemas, and frontend concerns.

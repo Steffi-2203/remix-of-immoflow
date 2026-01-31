@@ -8,6 +8,7 @@ import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { runSimulation } from "./seed-2025-simulation";
 import { sepaExportService } from "./services/sepaExportService";
+import { demoService } from "./services/demoService";
 import { settlementPdfService } from "./services/settlementPdfService";
 import { automatedDunningService } from "./services/automatedDunningService";
 import { vpiAutomationService } from "./services/vpiAutomationService";
@@ -3543,6 +3544,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Sync transactions to payments error:', error);
       res.status(500).json({ error: "Synchronisierung fehlgeschlagen" });
+    }
+  });
+
+  // Demo Access Routes (public - no auth required)
+  app.post("/api/demo/request", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: "Gültige E-Mail-Adresse erforderlich" });
+      }
+      
+      const ipAddress = req.headers['x-forwarded-for']?.toString() || req.ip;
+      const userAgent = req.headers['user-agent'];
+      
+      const result = await demoService.requestDemoAccess(email, ipAddress, userAgent);
+      
+      if (result.success) {
+        res.json({ message: result.message });
+      } else {
+        res.status(400).json({ error: result.message });
+      }
+    } catch (error) {
+      console.error('Demo request error:', error);
+      res.status(500).json({ error: "Fehler beim Erstellen der Demo-Anfrage" });
+    }
+  });
+
+  app.get("/api/demo/validate", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ valid: false, error: "Token fehlt" });
+      }
+      
+      const [invite] = await db.select()
+        .from(schema.demoInvites)
+        .where(eq(schema.demoInvites.token, token))
+        .limit(1);
+      
+      if (!invite) {
+        return res.json({ valid: false, error: "Ungültiger Demo-Link" });
+      }
+      
+      if (invite.status !== 'pending') {
+        return res.json({ valid: false, error: "Dieser Demo-Link wurde bereits verwendet" });
+      }
+      
+      if (new Date() > invite.expiresAt) {
+        return res.json({ valid: false, error: "Dieser Demo-Link ist abgelaufen" });
+      }
+      
+      res.json({ valid: true, email: invite.email });
+    } catch (error) {
+      console.error('Demo validate error:', error);
+      res.status(500).json({ valid: false, error: "Validierungsfehler" });
+    }
+  });
+
+  app.post("/api/demo/activate", async (req: Request, res: Response) => {
+    try {
+      const { token, fullName, password } = req.body;
+      
+      if (!token || !fullName || !password) {
+        return res.status(400).json({ error: "Alle Felder sind erforderlich" });
+      }
+      
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Passwort muss mindestens 6 Zeichen haben" });
+      }
+      
+      const result = await demoService.activateDemo(token, fullName, password);
+      
+      if (result.success && result.userId) {
+        // Auto-login the user
+        req.session.userId = result.userId;
+        req.session.save((err) => {
+          if (err) {
+            console.error('Session save error:', err);
+          }
+        });
+        res.json({ success: true, message: result.message });
+      } else {
+        res.status(400).json({ error: result.message });
+      }
+    } catch (error) {
+      console.error('Demo activate error:', error);
+      res.status(500).json({ error: "Fehler beim Aktivieren der Demo" });
+    }
+  });
+
+  app.get("/api/demo/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const status = await demoService.getDemoStatus(userId);
+      res.json(status);
+    } catch (error) {
+      console.error('Demo status error:', error);
+      res.status(500).json({ error: "Fehler beim Abrufen des Demo-Status" });
     }
   });
 
