@@ -3740,12 +3740,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // OCR tenant extraction route
   const ocrUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 15 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-      if (file.mimetype.startsWith('image/')) {
+      if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
         cb(null, true);
       } else {
-        cb(new Error('Nur Bilder sind erlaubt (JPG, PNG)'));
+        cb(new Error('Nur Bilder (JPG, PNG) und PDFs sind erlaubt'));
       }
     },
   });
@@ -3759,6 +3759,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'Keine Datei hochgeladen' });
+      }
+
+      if (req.file.mimetype === 'application/pdf') {
+        return res.status(400).json({ 
+          message: 'PDFs müssen im Browser konvertiert werden. Bitte laden Sie die Seite neu und versuchen Sie es erneut.' 
+        });
       }
 
       const base64Image = req.file.buffer.toString('base64');
