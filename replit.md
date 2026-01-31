@@ -53,6 +53,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - Distribution keys (MEA, QM, Personen, Verbrauch, Einheiten)
 - **OCR Functionality**: Integration of GPT-5.2 Vision via Replit AI Integrations for vision-based OCR:
     - **Tenant Data Import**: Extract tenant information from images of rental contracts or Vorschreibungen (first/last name, rent amounts, BK/HK, rental start date, unit number). Accessible via "PDF scannen" button in tenant list.
+    - **PDF Support**: Client-side PDF-to-image conversion using pdfjs-dist with local bundled worker. First page is converted for OCR processing.
     - **Invoice Processing**: Extract structured data from invoices and bank statements, supporting Austrian-specific categories.
 - **Subscription Management**: Two parallel systems: a legacy organization-based system (Stripe integrated) and a newer user-based system with `profiles.subscriptionTier` tracking, feature gating, and Stripe checkout integration.
 - **Role-Based Access Control**: Five distinct roles (admin, property_manager, finance, viewer, tester) with varying permissions and a "tester" mode for data masking of personal information.
