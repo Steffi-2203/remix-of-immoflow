@@ -1249,6 +1249,266 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Leerstand-Report: Identifiziert leere Einheiten und berechnet SOLL-Vorschreibung für Eigentümer
+  app.get("/api/properties/:propertyId/vacancy-report", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      
+      if (!property) {
+        return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+      }
+      if (property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+      
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = parseInt(req.query.month as string) || null;
+      
+      // Get all units for this property
+      const units = await storage.getUnitsByProperty(req.params.propertyId);
+      
+      // Get all tenants for this property
+      const tenants = await storage.getTenantsByProperty(req.params.propertyId);
+      
+      // Identify vacant units (units with status 'leerstand' or no active tenant)
+      const vacantUnits: any[] = [];
+      let totalVacancyCostBk = 0;
+      let totalVacancyCostHk = 0;
+      
+      for (const unit of units) {
+        // Check if unit has status 'leerstand'
+        const isVacant = unit.status === 'leerstand';
+        
+        // Also check if there's no active tenant for this unit
+        const activeTenant = tenants.find(t => {
+          if (t.deletedAt || t.unitId !== unit.id) return false;
+          const contractStart = t.mietvertragBeginn ? new Date(t.mietvertragBeginn) : null;
+          const contractEnd = t.mietvertragEnde ? new Date(t.mietvertragEnde) : null;
+          const checkDate = month 
+            ? new Date(year, month - 1, 15) 
+            : new Date(year, 5, 15); // Mid-year check if no month specified
+          
+          if (contractStart && checkDate < contractStart) return false;
+          if (contractEnd && checkDate > contractEnd) return false;
+          return true;
+        });
+        
+        if (isVacant || !activeTenant) {
+          // Calculate SOLL-Vorschreibung based on last tenant's actual advances
+          // Per MRG §21: Owner bears vacancy costs - use actual configured rates
+          const lastTenant = tenants
+            .filter(t => t.unitId === unit.id)
+            .sort((a, b) => {
+              const dateA = a.mietvertragEnde ? new Date(a.mietvertragEnde).getTime() : 0;
+              const dateB = b.mietvertragEnde ? new Date(b.mietvertragEnde).getTime() : 0;
+              return dateB - dateA;
+            })[0];
+          
+          // Monthly SOLL based on last tenant's actual configured advances
+          // If no last tenant exists, we cannot estimate - flag as "requires configuration"
+          const monthlyBkSoll = lastTenant 
+            ? (Number(lastTenant.betriebskostenVorschuss) || 0)
+            : 0; // Cannot estimate without data
+          
+          const monthlyHkSoll = lastTenant
+            ? (Number(lastTenant.heizkostenVorschuss) || 0)
+            : 0; // Cannot estimate without data
+          
+          const hasEstimatedData = !lastTenant;
+          
+          // Calculate actual vacancy months for this unit in the period
+          let vacancyMonths = 0;
+          if (month) {
+            // Single month mode - check if vacant in that specific month
+            vacancyMonths = 1;
+          } else {
+            // Full year mode - calculate actual vacancy months
+            for (let m = 1; m <= 12; m++) {
+              const checkDate = new Date(year, m - 1, 15);
+              const hasActiveInMonth = tenants.some(t => {
+                if (t.deletedAt || t.unitId !== unit.id) return false;
+                const contractStart = t.mietvertragBeginn ? new Date(t.mietvertragBeginn) : null;
+                const contractEnd = t.mietvertragEnde ? new Date(t.mietvertragEnde) : null;
+                if (contractStart && checkDate < contractStart) return false;
+                if (contractEnd && checkDate > contractEnd) return false;
+                return true;
+              });
+              if (!hasActiveInMonth) vacancyMonths++;
+            }
+          }
+          
+          const vacancyCostBk = monthlyBkSoll * vacancyMonths;
+          const vacancyCostHk = monthlyHkSoll * vacancyMonths;
+          
+          totalVacancyCostBk += vacancyCostBk;
+          totalVacancyCostHk += vacancyCostHk;
+          
+          vacantUnits.push({
+            unitId: unit.id,
+            topNummer: unit.topNummer,
+            type: unit.type,
+            flaeche: Number(unit.flaeche) || 0,
+            status: unit.status,
+            vacancyMonths,
+            monthlyBkSoll,
+            monthlyHkSoll,
+            vacancyCostBk,
+            vacancyCostHk,
+            totalVacancyCost: vacancyCostBk + vacancyCostHk,
+            lastTenantName: lastTenant?.name || null,
+            lastContractEnd: lastTenant?.mietvertragEnde || null,
+            requiresConfiguration: hasEstimatedData,
+          });
+        }
+      }
+      
+      // Calculate vacancy rate
+      const vacancyRate = units.length > 0 
+        ? (vacantUnits.length / units.length) * 100 
+        : 0;
+      
+      const vacantArea = vacantUnits.reduce((sum, u) => sum + u.flaeche, 0);
+      const totalArea = units.reduce((sum, u) => sum + (Number(u.flaeche) || 0), 0);
+      const areaVacancyRate = totalArea > 0 
+        ? (vacantArea / totalArea) * 100 
+        : 0;
+      
+      res.json({
+        year,
+        month: month || null,
+        propertyId: property.id,
+        propertyName: property.name,
+        totalUnits: units.length,
+        vacantUnits: vacantUnits.length,
+        vacancyRate,
+        vacantArea,
+        totalArea,
+        areaVacancyRate,
+        totalVacancyCostBk,
+        totalVacancyCostHk,
+        totalVacancyCost: totalVacancyCostBk + totalVacancyCostHk,
+        ownerResponsibility: `Leerstandskosten werden dem Eigentümer zugewiesen: BK ${totalVacancyCostBk.toFixed(2)} € + HK ${totalVacancyCostHk.toFixed(2)} € = ${(totalVacancyCostBk + totalVacancyCostHk).toFixed(2)} €`,
+        units: vacantUnits,
+      });
+    } catch (error) {
+      console.error('Vacancy report error:', error);
+      res.status(500).json({ error: "Fehler beim Erstellen des Leerstandsberichts" });
+    }
+  });
+
+  // Rendite-Berechnung: Miete netto - Instandhaltungen netto = Nettorendite
+  app.get("/api/properties/:propertyId/yield-report", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const property = await storage.getProperty(req.params.propertyId);
+      
+      if (!property) {
+        return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+      }
+      if (property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+      
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      
+      // Get units for this property
+      const units = await storage.getUnitsByProperty(req.params.propertyId);
+      
+      // Get expenses for this property in the year
+      const expenses = await storage.getExpensesByProperty(req.params.propertyId, year);
+      
+      // Get tenants for rent calculation
+      const tenants = await storage.getTenantsByProperty(req.params.propertyId);
+      
+      // Calculate annual rent income (SOLL)
+      let annualRentGross = 0;
+      let annualBetriebskostenGross = 0;
+      
+      for (const tenant of tenants) {
+        if (tenant.deletedAt) continue;
+        
+        const monthlyRent = Number(tenant.hauptmietzins) || 0;
+        const monthlyBk = Number(tenant.betriebskostenVorschuss) || 0;
+        
+        // Calculate how many months this tenant was active in the year
+        const contractStart = tenant.mietvertragBeginn ? new Date(tenant.mietvertragBeginn) : null;
+        const contractEnd = tenant.mietvertragEnde ? new Date(tenant.mietvertragEnde) : null;
+        
+        let monthsActive = 12;
+        if (contractStart) {
+          const startYear = contractStart.getFullYear();
+          const startMonth = contractStart.getMonth();
+          if (startYear === year) {
+            monthsActive = 12 - startMonth;
+          } else if (startYear > year) {
+            monthsActive = 0;
+          }
+        }
+        if (contractEnd) {
+          const endYear = contractEnd.getFullYear();
+          const endMonth = contractEnd.getMonth();
+          if (endYear === year) {
+            monthsActive = Math.min(monthsActive, endMonth + 1);
+          } else if (endYear < year) {
+            monthsActive = 0;
+          }
+        }
+        
+        annualRentGross += monthlyRent * monthsActive;
+        annualBetriebskostenGross += monthlyBk * monthsActive;
+      }
+      
+      // Calculate maintenance costs (reduce yield)
+      let instandhaltungGross = 0;
+      let betriebskostenExpenseGross = 0;
+      
+      for (const expense of expenses) {
+        const amount = Number(expense.betrag) || 0;
+        if (expense.category === 'instandhaltung') {
+          instandhaltungGross += amount;
+        } else if (expense.category === 'betriebskosten_umlagefaehig') {
+          betriebskostenExpenseGross += amount;
+        }
+      }
+      
+      // Calculate net values - Austrian MRG: residential rent is VAT-exempt (0%), 
+      // maintenance/repairs 20% VAT, BK pass-through 10% VAT
+      // Residential rent: Gross = Net (no VAT on residential rent in Austria unless opted in)
+      const annualRentNet = annualRentGross; // No VAT on residential rent (MRG §16)
+      const maintenanceVatRate = 0.20; // 20% VAT for maintenance
+      const instandhaltungNet = instandhaltungGross / (1 + maintenanceVatRate);
+      
+      // Nettorendite = Miete netto - Instandhaltungen netto
+      const netYield = annualRentNet - instandhaltungNet;
+      
+      // Calculate yield percentage if property has a purchase price
+      const purchasePrice = Number(property.purchasePrice) || 0;
+      const yieldPercentage = purchasePrice > 0 ? (netYield / purchasePrice) * 100 : null;
+      
+      res.json({
+        year,
+        propertyId: property.id,
+        propertyName: property.name,
+        unitCount: units.length,
+        tenantCount: tenants.filter(t => !t.deletedAt).length,
+        annualRentGross,
+        annualRentNet,
+        annualBetriebskostenGross,
+        instandhaltungGross,
+        instandhaltungNet,
+        betriebskostenExpenseGross,
+        netYield,
+        yieldPercentage,
+        purchasePrice: purchasePrice || null,
+        formula: `Miete netto (${annualRentNet.toFixed(2)} €) - Instandhaltungen netto (${instandhaltungNet.toFixed(2)} €) = Nettorendite (${netYield.toFixed(2)} €)`,
+      });
+    } catch (error) {
+      console.error('Yield report error:', error);
+      res.status(500).json({ error: "Fehler beim Erstellen des Renditeberichts" });
+    }
+  });
+
   app.get("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -1364,6 +1624,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // Plausibilitätsbericht: Anfangsbestand + Einnahmen - Ausgaben = Endbestand
+  app.get("/api/bank-accounts/:id/plausibility-report", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const account = await storage.getBankAccount(req.params.id);
+      
+      if (!account) {
+        return res.status(404).json({ error: "Bankkonto nicht gefunden" });
+      }
+      if (account.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+      
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+      
+      // Get all transactions for this bank account in the year
+      const allTransactions = await storage.getTransactionsByBankAccount(req.params.id);
+      const yearTransactions = allTransactions.filter(tx => {
+        const txDate = tx.transactionDate;
+        if (!txDate) return false;
+        const txDateParsed = new Date(txDate);
+        const startDateParsed = new Date(startDate);
+        const endDateParsed = new Date(endDate);
+        return txDateParsed >= startDateParsed && txDateParsed <= endDateParsed;
+      });
+      
+      // Calculate income (positive amounts) and expenses (negative amounts)
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      
+      for (const tx of yearTransactions) {
+        const amount = Number(tx.amount) || 0;
+        if (amount > 0) {
+          totalIncome += amount;
+        } else {
+          totalExpenses += Math.abs(amount);
+        }
+      }
+      
+      // Get opening balance as of 01.01.
+      const openingBalanceDate = account.openingBalanceDate;
+      let openingBalance = 0;
+      
+      // If opening balance date matches start of year, use it directly
+      if (openingBalanceDate === startDate) {
+        openingBalance = Number(account.openingBalance) || 0;
+      } else {
+        // Calculate balance as of 31.12. of previous year
+        const previousYearEnd = `${year - 1}-12-31`;
+        openingBalance = await storage.getBankAccountBalance(req.params.id, previousYearEnd);
+      }
+      
+      // Get closing balance as of 31.12.
+      const closingBalance = await storage.getBankAccountBalance(req.params.id, endDate);
+      
+      // Calculate expected closing balance
+      const expectedClosingBalance = openingBalance + totalIncome - totalExpenses;
+      
+      // Difference (should be 0 if everything matches)
+      const difference = Math.abs(closingBalance - expectedClosingBalance);
+      const isPlausible = difference < 0.01; // Allow for rounding errors
+      
+      res.json({
+        year,
+        accountName: account.accountName,
+        iban: account.iban,
+        openingBalance,
+        totalIncome,
+        totalExpenses,
+        expectedClosingBalance,
+        actualClosingBalance: closingBalance,
+        difference,
+        isPlausible,
+        transactionCount: yearTransactions.length,
+        formula: `Anfangsbestand (${openingBalance.toFixed(2)} €) + Einnahmen (${totalIncome.toFixed(2)} €) - Ausgaben (${totalExpenses.toFixed(2)} €) = ${expectedClosingBalance.toFixed(2)} €`,
+      });
+    } catch (error) {
+      console.error('Plausibility report error:', error);
+      res.status(500).json({ error: "Fehler beim Erstellen des Plausibilitätsberichts" });
     }
   });
 
