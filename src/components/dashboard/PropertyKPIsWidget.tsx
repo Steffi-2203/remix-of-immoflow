@@ -60,41 +60,48 @@ export function PropertyKPIsWidget() {
 
   // Auslaufende Verträge (in den nächsten 90 Tagen)
   const today = new Date();
-  const in90Days = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
   const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const in60Days = new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000);
+  const in90Days = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+  
+  const parseDate = (dateStr: string | null | undefined): Date | null => {
+    if (!dateStr) return null;
+    const parsed = new Date(dateStr);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
   
   const expiringContracts = tenants.filter(t => {
-    if (!t.mietvertragEnde) return false;
-    const endDate = new Date(t.mietvertragEnde);
+    const endDate = parseDate(t.mietvertragEnde);
+    if (!endDate) return false;
     return endDate >= today && endDate <= in90Days;
   });
   
   const expiringIn30Days = expiringContracts.filter(t => {
-    const endDate = new Date(t.mietvertragEnde!);
-    return endDate <= in30Days;
+    const endDate = parseDate(t.mietvertragEnde);
+    return endDate && endDate <= in30Days;
   });
   
   const expiringIn60Days = expiringContracts.filter(t => {
-    const endDate = new Date(t.mietvertragEnde!);
-    return endDate > in30Days && endDate <= new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const endDate = parseDate(t.mietvertragEnde);
+    return endDate && endDate > in30Days && endDate <= in60Days;
   });
   
   const expiringIn90Days = expiringContracts.filter(t => {
-    const endDate = new Date(t.mietvertragEnde!);
-    return endDate > new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000) && endDate <= in90Days;
+    const endDate = parseDate(t.mietvertragEnde);
+    return endDate && endDate > in60Days && endDate <= in90Days;
   });
 
   const getVacancyColor = () => {
-    if (vacancyRate === 0) return 'text-green-600';
-    if (vacancyRate < 5) return 'text-blue-600';
-    if (vacancyRate < 10) return 'text-yellow-600';
-    return 'text-red-600';
+    if (vacancyRate === 0) return 'text-success';
+    if (vacancyRate < 5) return 'text-primary';
+    if (vacancyRate < 10) return 'text-warning';
+    return 'text-destructive';
   };
 
   const getVacancyBadge = () => {
-    if (vacancyRate === 0) return <Badge variant="secondary" className="bg-green-100 text-green-800">Vollvermietung</Badge>;
-    if (vacancyRate < 5) return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Gering</Badge>;
-    if (vacancyRate < 10) return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Mittel</Badge>;
+    if (vacancyRate === 0) return <Badge className="bg-success text-success-foreground">Vollvermietung</Badge>;
+    if (vacancyRate < 5) return <Badge className="bg-primary text-primary-foreground">Gering</Badge>;
+    if (vacancyRate < 10) return <Badge className="bg-warning text-warning-foreground">Mittel</Badge>;
     return <Badge variant="destructive">Hoch</Badge>;
   };
 
@@ -141,14 +148,14 @@ export function PropertyKPIsWidget() {
               {overdueAmount > 0 ? (
                 <Badge variant="destructive">Offen</Badge>
               ) : (
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                <Badge className="bg-success text-success-foreground">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Aktuell
                 </Badge>
               )}
             </div>
             <div className="space-y-1">
-              <p className={`text-2xl font-bold ${overdueAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              <p className={`text-2xl font-bold ${overdueAmount > 0 ? 'text-destructive' : 'text-success'}`}>
                 € {overdueAmount.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               <p className="text-sm text-muted-foreground">Offene Forderungen</p>
@@ -174,22 +181,22 @@ export function PropertyKPIsWidget() {
                   {invoicesWithDunning.length}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                <Badge className="bg-success text-success-foreground">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Keine
                 </Badge>
               )}
             </div>
             <div className="space-y-1">
-              <p className={`text-2xl font-bold ${invoicesWithDunning.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              <p className={`text-2xl font-bold ${invoicesWithDunning.length > 0 ? 'text-warning' : 'text-success'}`}>
                 {invoicesWithDunning.length}
               </p>
               <p className="text-sm text-muted-foreground">Im Mahnverfahren</p>
               {invoicesWithDunning.length > 0 && (
-                <div className="flex gap-2 text-xs flex-wrap">
-                  {dunningLevel1 > 0 && <span className="text-yellow-600">Stufe 1: {dunningLevel1}</span>}
-                  {dunningLevel2 > 0 && <span className="text-orange-600">Stufe 2: {dunningLevel2}</span>}
-                  {dunningLevel3 > 0 && <span className="text-red-600">Stufe 3+: {dunningLevel3}</span>}
+                <div className="flex gap-2 text-xs flex-wrap text-muted-foreground">
+                  {dunningLevel1 > 0 && <span>Stufe 1: {dunningLevel1}</span>}
+                  {dunningLevel2 > 0 && <span className="text-warning">Stufe 2: {dunningLevel2}</span>}
+                  {dunningLevel3 > 0 && <span className="text-destructive">Stufe 3+: {dunningLevel3}</span>}
                 </div>
               )}
             </div>
