@@ -49,6 +49,7 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { apiRequest } from '@/lib/queryClient';
+import { DemoInviteManager } from '@/components/admin/DemoInviteManager';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -209,6 +210,9 @@ export default function Admin() {
             </CardHeader>
           </Card>
         </div>
+
+        {/* Demo Invitations */}
+        <DemoInviteManager />
 
         {/* Organizations Table */}
         <Card>
