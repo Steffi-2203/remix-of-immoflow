@@ -281,7 +281,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
     if (!currentTenant.lastName?.trim()) {
       validationErrors.push('Nachname ist erforderlich');
     }
-    if (!currentTenant.selectedUnitId) {
+    if (!currentTenant.selectedUnitId && !currentTenant.topNummer?.trim()) {
       validationErrors.push('Einheit ist erforderlich');
     }
     if (currentTenant.grundmiete < 0) {
@@ -306,8 +306,41 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
     setStep('saving');
 
     try {
+      let unitId = currentTenant.selectedUnitId;
+      
+      if (!unitId && currentTenant.topNummer?.trim()) {
+        toast({ title: 'Erstelle Einheit...', description: `${currentTenant.topNummer} wird angelegt.` });
+        try {
+          const unitResponse = await apiRequest('POST', '/api/units', {
+            property_id: propertyId,
+            top_nummer: currentTenant.topNummer.trim(),
+            type: 'wohnung',
+            status: 'vermietet',
+            flaeche: '0',
+          });
+          const unitData = await unitResponse.json();
+          
+          if (!unitData?.id) {
+            throw new Error('Einheit konnte nicht erstellt werden - keine ID erhalten');
+          }
+          
+          unitId = unitData.id;
+          toast({ title: 'Einheit erstellt', description: `${currentTenant.topNummer} wurde angelegt.` });
+        } catch (unitError: any) {
+          setError(unitError.message || 'Einheit konnte nicht erstellt werden');
+          setStep('review');
+          return;
+        }
+      }
+      
+      if (!unitId) {
+        setError('Keine Einheit ausgewählt oder erkannt');
+        setStep('review');
+        return;
+      }
+      
       await apiRequest('POST', '/api/tenants', {
-        unit_id: currentTenant.selectedUnitId,
+        unit_id: unitId,
         first_name: currentTenant.firstName,
         last_name: currentTenant.lastName,
         email: currentTenant.email || null,
@@ -486,7 +519,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                     <Label>Einheit *</Label>
                     <Select value={currentTenant.selectedUnitId} onValueChange={setSelectedUnitId}>
                       <SelectTrigger data-testid="select-ocr-unit">
-                        <SelectValue placeholder="Einheit wählen" />
+                        <SelectValue placeholder={currentTenant.topNummer ? `Neu: ${currentTenant.topNummer}` : "Einheit wählen"} />
                       </SelectTrigger>
                       <SelectContent>
                         {units.map(u => (
@@ -494,7 +527,12 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
                         ))}
                       </SelectContent>
                     </Select>
-                    {currentTenant.topNummer && (
+                    {currentTenant.topNummer && !currentTenant.selectedUnitId && (
+                      <p className="text-xs text-primary mt-1">
+                        Einheit "{currentTenant.topNummer}" wird automatisch erstellt
+                      </p>
+                    )}
+                    {currentTenant.topNummer && currentTenant.selectedUnitId && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Erkannt: {currentTenant.topNummer}
                       </p>
@@ -597,7 +635,7 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
               )}
               <Button 
                 onClick={handleSaveCurrent}
-                disabled={!currentTenant.firstName || !currentTenant.lastName || !currentTenant.selectedUnitId}
+                disabled={!currentTenant.firstName || !currentTenant.lastName || (!currentTenant.selectedUnitId && !currentTenant.topNummer?.trim())}
                 data-testid="button-ocr-save"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
