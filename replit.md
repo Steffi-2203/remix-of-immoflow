@@ -51,7 +51,9 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - SEPA export validation (IBAN/BIC validation, XML escaping)
     - Dunning system (ABGB §1333 interest calculation)
     - Distribution keys (MEA, QM, Personen, Verbrauch, Einheiten)
-- **OCR Functionality**: Integration of GPT-4o via Replit AI for vision-based OCR to extract structured data from invoices and bank statements, supporting Austrian-specific categories.
+- **OCR Functionality**: Integration of GPT-5.2 Vision via Replit AI Integrations for vision-based OCR:
+    - **Tenant Data Import**: Extract tenant information from images of rental contracts or Vorschreibungen (first/last name, rent amounts, BK/HK, rental start date, unit number). Accessible via "PDF scannen" button in tenant list.
+    - **Invoice Processing**: Extract structured data from invoices and bank statements, supporting Austrian-specific categories.
 - **Subscription Management**: Two parallel systems: a legacy organization-based system (Stripe integrated) and a newer user-based system with `profiles.subscriptionTier` tracking, feature gating, and Stripe checkout integration.
 - **Role-Based Access Control**: Five distinct roles (admin, property_manager, finance, viewer, tester) with varying permissions and a "tester" mode for data masking of personal information.
 - **Demo Access System**: Time-limited 30-minute trial access for prospects via email invitation. Includes:
@@ -71,7 +73,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **Replit Auth**: Authentication service for user management.
 - **Resend**: Email API for sending notifications, invitations, and dunning letters.
 - **Stripe**: Payment processing for subscription management.
-- **OpenAI's GPT-4o (via Replit AI Integrations)**: For OCR capabilities (invoice and bank statement processing).
+- **OpenAI's GPT-5.2 (via Replit AI Integrations)**: For OCR capabilities (tenant data extraction, invoice and bank statement processing).
 - **Tailwind CSS**: Utility-first CSS framework.
 - **shadcn/ui**: Reusable UI components for React.
 - **TanStack Query**: Data fetching and state management library.
