@@ -52,6 +52,8 @@ import Datenschutz from "./pages/Datenschutz";
 import AGB from "./pages/AGB";
 import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
+import DemoRequest from "./pages/demo-request";
+import DemoActivate from "./pages/demo-activate";
 
 const App = () => (
   <ErrorBoundary>
@@ -72,6 +74,8 @@ const App = () => (
             <Route path="/agb" element={<AGB />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/demo" element={<DemoRequest />} />
+            <Route path="/demo/activate" element={<DemoActivate />} />
             
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><SimpleDashboard /></ProtectedRoute>} />

@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { PaymentStatusBanner } from './PaymentStatusBanner';
 import { TrialBanner } from '@/components/subscription/SubscriptionTeaser';
 import { UserUpgradeBanner } from '@/components/subscription/UserUpgradeBanner';
+import { DemoTimerBanner } from '@/components/DemoTimerBanner';
 import { SidebarProvider, useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,7 @@ function MainLayoutContent({ children, title, subtitle }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      <DemoTimerBanner />
       <Sidebar />
       <div 
         className={cn(

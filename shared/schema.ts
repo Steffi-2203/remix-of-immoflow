@@ -751,3 +751,27 @@ export type PropertyDocument = typeof propertyDocuments.$inferSelect;
 export const insertTenantDocumentSchema = createInsertSchema(tenantDocuments).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTenantDocument = z.infer<typeof insertTenantDocumentSchema>;
 export type TenantDocument = typeof tenantDocuments.$inferSelect;
+
+// Demo status enum
+export const demoStatusEnum = pgEnum('demo_status', ['pending', 'activated', 'expired', 'converted']);
+
+// Demo Invites table for prospect testing
+export const demoInvites = pgTable("demo_invites", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  status: demoStatusEnum("status").default('pending'),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  demoEndsAt: timestamp("demo_ends_at", { withTimezone: true }),
+  userId: uuid("user_id").references(() => profiles.id),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDemoInviteSchema = createInsertSchema(demoInvites).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDemoInvite = z.infer<typeof insertDemoInviteSchema>;
+export type DemoInvite = typeof demoInvites.$inferSelect;
