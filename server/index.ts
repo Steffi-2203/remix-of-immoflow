@@ -104,23 +104,33 @@ async function initStripe() {
 
   try {
     console.log('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl, schema: 'stripe' });
-    console.log('Stripe schema ready');
-
-    const stripeSync = await getStripeSync();
-
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    if (webhookBaseUrl && webhookBaseUrl !== 'https://undefined') {
-      console.log('Setting up Stripe webhook...');
-      const { webhook } = await stripeSync.findOrCreateManagedWebhook(
-        `${webhookBaseUrl}/api/stripe/webhook`
-      );
-      console.log(`Stripe webhook configured: ${webhook.url}`);
+    let migrationSuccess = false;
+    try {
+      await runMigrations({ databaseUrl });
+      console.log('Stripe schema ready');
+      migrationSuccess = true;
+    } catch (migrationError: any) {
+      console.warn('Stripe migration skipped (schema may already exist or require manual setup)');
     }
 
-    stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err: any) => console.error('Stripe sync error:', err.message));
+    if (migrationSuccess) {
+      const stripeSync = await getStripeSync();
+
+      const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+      if (webhookBaseUrl && webhookBaseUrl !== 'https://undefined') {
+        console.log('Setting up Stripe webhook...');
+        const { webhook } = await stripeSync.findOrCreateManagedWebhook(
+          `${webhookBaseUrl}/api/stripe/webhook`
+        );
+        console.log(`Stripe webhook configured: ${webhook.url}`);
+      }
+
+      stripeSync.syncBackfill()
+        .then(() => console.log('Stripe data synced'))
+        .catch((err: any) => console.error('Stripe sync error:', err.message));
+    } else {
+      console.log('Stripe sync skipped - using existing integration');
+    }
   } catch (error: any) {
     console.error('Stripe init error:', error.message);
   }

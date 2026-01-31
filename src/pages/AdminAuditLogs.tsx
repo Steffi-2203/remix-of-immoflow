@@ -87,9 +87,9 @@ export default function AdminAuditLogs() {
   const getActionBadge = (action: string) => {
     switch (action) {
       case 'create':
-        return <Badge className="bg-green-500"><Plus className="h-3 w-3 mr-1" />Erstellt</Badge>;
+        return <Badge className="bg-success text-success-foreground"><Plus className="h-3 w-3 mr-1" />Erstellt</Badge>;
       case 'update':
-        return <Badge className="bg-blue-500"><Pencil className="h-3 w-3 mr-1" />Aktualisiert</Badge>;
+        return <Badge className="bg-primary text-primary-foreground"><Pencil className="h-3 w-3 mr-1" />Aktualisiert</Badge>;
       case 'delete':
         return <Badge variant="destructive"><Trash2 className="h-3 w-3 mr-1" />Gelöscht</Badge>;
       default:
@@ -158,7 +158,7 @@ export default function AdminAuditLogs() {
             <CardHeader className="pb-2">
               <CardDescription>Erstellt</CardDescription>
               <CardTitle className="text-2xl flex items-center gap-2">
-                <Plus className="h-5 w-5 text-green-500" />
+                <Plus className="h-5 w-5 text-success" />
                 {stats.createCount}
               </CardTitle>
             </CardHeader>
@@ -167,7 +167,7 @@ export default function AdminAuditLogs() {
             <CardHeader className="pb-2">
               <CardDescription>Aktualisiert</CardDescription>
               <CardTitle className="text-2xl flex items-center gap-2">
-                <Pencil className="h-5 w-5 text-blue-500" />
+                <Pencil className="h-5 w-5 text-primary" />
                 {stats.updateCount}
               </CardTitle>
             </CardHeader>
@@ -176,7 +176,7 @@ export default function AdminAuditLogs() {
             <CardHeader className="pb-2">
               <CardDescription>Gelöscht</CardDescription>
               <CardTitle className="text-2xl flex items-center gap-2">
-                <Trash2 className="h-5 w-5 text-red-500" />
+                <Trash2 className="h-5 w-5 text-destructive" />
                 {stats.deleteCount}
               </CardTitle>
             </CardHeader>
@@ -337,13 +337,13 @@ export default function AdminAuditLogs() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Alte Daten</p>
-                  <pre className="text-xs font-mono bg-red-500/10 p-3 rounded overflow-x-auto max-h-60">
+                  <pre className="text-xs font-mono bg-destructive/10 p-3 rounded overflow-x-auto max-h-60">
                     {formatJson(selectedLog.old_data)}
                   </pre>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Neue Daten</p>
-                  <pre className="text-xs font-mono bg-green-500/10 p-3 rounded overflow-x-auto max-h-60">
+                  <pre className="text-xs font-mono bg-success/10 p-3 rounded overflow-x-auto max-h-60">
                     {formatJson(selectedLog.new_data)}
                   </pre>
                 </div>
