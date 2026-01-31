@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useUnits } from "@/hooks/useUnits";
 import { useTenants } from "@/hooks/useTenants";
 import { useInvoices } from "@/hooks/useInvoices";
-import { Building2, AlertCircle, Banknote, UserX, TrendingDown, CheckCircle } from "lucide-react";
+import { Building2, AlertCircle, Banknote, UserX, TrendingDown, CheckCircle, Calendar, FileWarning } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -25,8 +25,8 @@ export function PropertyKPIsWidget() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-24 w-full" />
             ))}
           </div>
@@ -58,6 +58,32 @@ export function PropertyKPIsWidget() {
   const dunningLevel2 = invoicesWithDunning.filter(i => Number(i.mahnstufe) === 2).length;
   const dunningLevel3 = invoicesWithDunning.filter(i => Number(i.mahnstufe) >= 3).length;
 
+  // Auslaufende Verträge (in den nächsten 90 Tagen)
+  const today = new Date();
+  const in90Days = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  
+  const expiringContracts = tenants.filter(t => {
+    if (!t.mietvertragEnde) return false;
+    const endDate = new Date(t.mietvertragEnde);
+    return endDate >= today && endDate <= in90Days;
+  });
+  
+  const expiringIn30Days = expiringContracts.filter(t => {
+    const endDate = new Date(t.mietvertragEnde!);
+    return endDate <= in30Days;
+  });
+  
+  const expiringIn60Days = expiringContracts.filter(t => {
+    const endDate = new Date(t.mietvertragEnde!);
+    return endDate > in30Days && endDate <= new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000);
+  });
+  
+  const expiringIn90Days = expiringContracts.filter(t => {
+    const endDate = new Date(t.mietvertragEnde!);
+    return endDate > new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000) && endDate <= in90Days;
+  });
+
   const getVacancyColor = () => {
     if (vacancyRate === 0) return 'text-green-600';
     if (vacancyRate < 5) return 'text-blue-600';
@@ -83,7 +109,7 @@ export function PropertyKPIsWidget() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 rounded-lg border bg-card" data-testid="kpi-vacancy">
             <div className="flex items-start justify-between mb-2">
               <div className="p-2 rounded-lg bg-muted">
@@ -170,6 +196,43 @@ export function PropertyKPIsWidget() {
             {invoicesWithDunning.length > 0 && (
               <Button variant="link" asChild className="p-0 h-auto mt-2">
                 <Link to="/mahnwesen">Mahnwesen öffnen</Link>
+              </Button>
+            )}
+          </div>
+
+          <div className="p-4 rounded-lg border bg-card" data-testid="kpi-expiring-contracts">
+            <div className="flex items-start justify-between mb-2">
+              <div className="p-2 rounded-lg bg-muted">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
+              </div>
+              {expiringContracts.length > 0 ? (
+                <Badge variant={expiringIn30Days.length > 0 ? 'destructive' : 'secondary'}>
+                  <FileWarning className="h-3 w-3 mr-1" />
+                  {expiringContracts.length}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Keine
+                </Badge>
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className={`text-2xl font-bold ${expiringIn30Days.length > 0 ? 'text-destructive' : expiringContracts.length > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
+                {expiringContracts.length}
+              </p>
+              <p className="text-sm text-muted-foreground">Auslaufende Verträge</p>
+              {expiringContracts.length > 0 && (
+                <div className="flex gap-2 text-xs flex-wrap text-muted-foreground">
+                  {expiringIn30Days.length > 0 && <span className="text-destructive">30 Tage: {expiringIn30Days.length}</span>}
+                  {expiringIn60Days.length > 0 && <span>60 Tage: {expiringIn60Days.length}</span>}
+                  {expiringIn90Days.length > 0 && <span>90 Tage: {expiringIn90Days.length}</span>}
+                </div>
+              )}
+            </div>
+            {expiringContracts.length > 0 && (
+              <Button variant="link" asChild className="p-0 h-auto mt-2" data-testid="link-expiring-contracts">
+                <Link to="/mieter">Verträge ansehen</Link>
               </Button>
             )}
           </div>

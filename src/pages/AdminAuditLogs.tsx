@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuditLogs, useAuditLogStats, AuditLog } from '@/hooks/useAuditLogs';
+import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
+import { useIsAdmin } from '@/hooks/useAdmin';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -62,6 +65,16 @@ export default function AdminAuditLogs() {
   const [actionFilter, setActionFilter] = useState<string>('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  
+  const { limits, isLoading: limitsLoading } = useSubscriptionLimits();
+  const isAdmin = useIsAdmin();
+  
+  // Permission check: require canManageTeam or admin role
+  const hasAccess = isAdmin || limits.canManageTeam;
+  
+  if (!limitsLoading && !hasAccess) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const { data: logs, isLoading } = useAuditLogs({
     tableName: tableFilter || undefined,

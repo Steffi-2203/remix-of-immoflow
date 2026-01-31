@@ -26,7 +26,8 @@ import {
   PiggyBank,
   Lock,
   Gauge,
-  Key
+  Key,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -220,6 +221,13 @@ const navItems: NavItem[] = [
     href: '/einstellungen',
     tourId: 'nav-settings',
     alwaysAllowed: true // Jeder darf Einstellungen sehen (für Abo-Upgrade)
+  },
+  {
+    label: 'Aktivitätsprotokoll',
+    icon: ClipboardList,
+    href: '/admin/audit-logs',
+    tourId: 'nav-audit-logs',
+    requiredFeature: 'canManageTeam' // Nur für Team-Manager und Admin sichtbar
   }
 ];
 
