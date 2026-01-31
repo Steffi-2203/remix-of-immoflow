@@ -47,7 +47,10 @@ export async function requestDemoAccess(email: string, ipAddress?: string, userA
   const demoUrl = `${baseUrl}/demo/activate?token=${token}`;
 
   try {
-    await sendEmail({
+    console.log('[Demo] Sending demo invitation email to:', email);
+    console.log('[Demo] Demo URL:', demoUrl);
+    
+    const emailResult = await sendEmail({
       to: email,
       subject: 'Ihr Demo-Zugang zu ImmoflowMe',
       html: `
@@ -93,6 +96,13 @@ Was Sie erwartet:
 Dieser Link ist 24 Stunden gültig.
       `
     });
+
+    console.log('[Demo] Email send result:', JSON.stringify(emailResult, null, 2));
+    
+    if (emailResult.error) {
+      console.error('[Demo] Resend API error:', emailResult.error);
+      return { success: false, message: 'Fehler beim Versenden der E-Mail. Bitte versuchen Sie es später erneut.' };
+    }
 
     return { success: true, message: 'Demo-Einladung wurde an Ihre E-Mail-Adresse gesendet!' };
   } catch (error) {
