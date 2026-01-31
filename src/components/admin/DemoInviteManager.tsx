@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Send, Mail, Clock, CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink } from "lucide-react";
+import { Loader2, Send, Mail, Clock, CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -52,6 +52,20 @@ export function DemoInviteManager() {
     navigator.clipboard.writeText(url);
     toast.success("Link in Zwischenablage kopiert");
   };
+
+  const deleteInvite = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/demo/invites/${id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success("Einladung gelöscht");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/demo/invites"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Fehler beim Löschen");
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,6 +183,7 @@ export function DemoInviteManager() {
                   <TableHead>Erstellt</TableHead>
                   <TableHead>Link gültig bis</TableHead>
                   <TableHead>Demo endet</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -187,6 +202,17 @@ export function DemoInviteManager() {
                         ? format(new Date(invite.demoEndsAt), "dd.MM.yyyy HH:mm", { locale: de })
                         : "-"
                       }
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteInvite.mutate(invite.id)}
+                        disabled={deleteInvite.isPending}
+                        data-testid={`button-delete-invite-${invite.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
