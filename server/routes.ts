@@ -3772,25 +3772,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const imageUrl = `data:${mimeType};base64,${base64Image}`;
 
       const extractionPrompt = `Du bist ein Experte für österreichische Immobilienverwaltung und Mietverträge.
-Analysiere dieses Dokument (Mietvertrag, Vorschreibung oder ähnliches) und extrahiere die Mieterdaten.
+Analysiere dieses Dokument (Mietvertrag, Vorschreibung, Mieterliste oder ähnliches) und extrahiere ALLE Mieterdaten.
 
-Extrahiere folgende Informationen im JSON-Format:
+WICHTIG: Extrahiere ALLE Mieter die im Dokument vorkommen, nicht nur den ersten!
+
+Antworte im JSON-Format als ARRAY von Mietern:
 {
-  "firstName": "Vorname des Mieters",
-  "lastName": "Nachname des Mieters",
-  "email": "E-Mail-Adresse (falls vorhanden)",
-  "phone": "Telefonnummer (falls vorhanden)",
-  "mietbeginn": "Mietbeginn im Format YYYY-MM-DD",
-  "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
-  "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
-  "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
-  "kaution": Kaution als Zahl (falls angegeben),
-  "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
-  "address": "Adresse der Wohnung",
-  "notes": "Weitere relevante Informationen (kurz)"
+  "tenants": [
+    {
+      "firstName": "Vorname des Mieters",
+      "lastName": "Nachname des Mieters",
+      "email": "E-Mail-Adresse (falls vorhanden)",
+      "phone": "Telefonnummer (falls vorhanden)",
+      "mietbeginn": "Mietbeginn im Format YYYY-MM-DD",
+      "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
+      "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
+      "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
+      "kaution": Kaution als Zahl (falls angegeben),
+      "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
+      "address": "Adresse der Wohnung",
+      "notes": "Weitere relevante Informationen (kurz)"
+    }
+  ]
 }
 
 Wichtige Hinweise:
+- Extrahiere JEDEN Mieter separat in das Array
 - Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten"
 - Die Gesamtmiete = Grundmiete + BK + HK (trenne diese auf)
 - Datumsformat immer als YYYY-MM-DD
@@ -3802,7 +3809,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
 
       const response = await ocrClient.chat.completions.create({
         model: 'gpt-5.2',
-        max_completion_tokens: 2000,
+        max_completion_tokens: 8000,
         messages: [
           {
             role: 'user',
@@ -3832,22 +3839,22 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
         return res.status(500).json({ message: 'Konnte die extrahierten Daten nicht verarbeiten' });
       }
 
-      const result = {
-        firstName: extractedData.firstName || '',
-        lastName: extractedData.lastName || '',
-        email: extractedData.email || '',
-        phone: extractedData.phone || '',
-        mietbeginn: extractedData.mietbeginn || '',
-        grundmiete: parseFloat(extractedData.grundmiete) || 0,
-        betriebskostenVorschuss: parseFloat(extractedData.betriebskostenVorschuss) || 0,
-        heizkostenVorschuss: parseFloat(extractedData.heizkostenVorschuss) || 0,
-        kaution: parseFloat(extractedData.kaution) || 0,
-        topNummer: extractedData.topNummer || '',
-        address: extractedData.address || '',
-        notes: extractedData.notes || '',
-      };
+      const tenants = (extractedData.tenants || [extractedData]).map((t: any) => ({
+        firstName: t.firstName || '',
+        lastName: t.lastName || '',
+        email: t.email || '',
+        phone: t.phone || '',
+        mietbeginn: t.mietbeginn || '',
+        grundmiete: parseFloat(t.grundmiete) || 0,
+        betriebskostenVorschuss: parseFloat(t.betriebskostenVorschuss) || 0,
+        heizkostenVorschuss: parseFloat(t.heizkostenVorschuss) || 0,
+        kaution: parseFloat(t.kaution) || 0,
+        topNummer: t.topNummer || '',
+        address: t.address || '',
+        notes: t.notes || '',
+      }));
 
-      res.json(result);
+      res.json({ tenants });
     } catch (error: any) {
       console.error('OCR processing error:', error);
       res.status(500).json({ message: error.message || 'OCR-Verarbeitung fehlgeschlagen' });
