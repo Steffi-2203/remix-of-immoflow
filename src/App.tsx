@@ -54,6 +54,7 @@ import Pricing from "./pages/Pricing";
 import Checkout from "./pages/Checkout";
 import DemoRequest from "./pages/demo-request";
 import DemoActivate from "./pages/demo-activate";
+import WhiteLabelRequest from "./pages/WhiteLabelRequest";
 import { BrandingProvider } from "@/contexts/BrandingContext";
 
 const App = () => (
@@ -77,6 +78,7 @@ const App = () => (
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/demo" element={<DemoRequest />} />
+            <Route path="/white-label" element={<WhiteLabelRequest />} />
             <Route path="/demo/activate" element={<DemoActivate />} />
             
             {/* Protected routes */}
