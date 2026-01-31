@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq, sql, and, inArray, desc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -3642,6 +3642,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Demo status error:', error);
       res.status(500).json({ error: "Fehler beim Abrufen des Demo-Status" });
+    }
+  });
+
+  // Admin: Send demo invitation directly
+  app.post("/api/admin/demo/invite", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      
+      // Check if user is admin
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren können Demo-Einladungen versenden" });
+      }
+      
+      const { email, name } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: "Gültige E-Mail-Adresse erforderlich" });
+      }
+      
+      const result = await demoService.requestDemoAccess(email);
+      
+      if (result.success) {
+        res.json({ message: `Demo-Einladung an ${email} gesendet` });
+      } else {
+        res.status(400).json({ error: result.message });
+      }
+    } catch (error) {
+      console.error('Admin demo invite error:', error);
+      res.status(500).json({ error: "Fehler beim Versenden der Einladung" });
+    }
+  });
+
+  // Admin: List all demo invitations
+  app.get("/api/admin/demo/invites", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren" });
+      }
+      
+      const invites = await db.select()
+        .from(schema.demoInvites)
+        .orderBy(desc(schema.demoInvites.createdAt))
+        .limit(50);
+      
+      res.json(invites);
+    } catch (error) {
+      console.error('Admin demo invites list error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Einladungen" });
     }
   });
 
