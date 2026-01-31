@@ -14,12 +14,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck, Lock } from 'lucide-react';
+import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck, Lock, FileImage } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { useUnpaidTenantFees, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
 import { useHasFinanceAccess } from '@/hooks/useUserRole';
 import { maskEmail } from '@/lib/dataMasking';
@@ -45,6 +46,7 @@ export default function TenantList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(propertyIdFromUrl || 'all');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
 
   const { data: properties = [] } = useProperties();
   const { data: allUnits = [] } = useUnits(); // All units for filtering
@@ -123,10 +125,16 @@ export default function TenantList() {
             Export
           </Button>
           {selectedPropertyId !== 'all' && (
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              CSV Import
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setPdfScanDialogOpen(true)} data-testid="button-pdf-scan">
+                <FileImage className="h-4 w-4 mr-2" />
+                PDF scannen
+              </Button>
+              <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                CSV Import
+              </Button>
+            </>
           )}
           <LimitGuard 
             type="tenant" 
@@ -304,13 +312,22 @@ export default function TenantList() {
 
       {/* Import Dialog */}
       {selectedPropertyId !== 'all' && (
-        <TenantImportDialog
-          open={importDialogOpen}
-          onOpenChange={setImportDialogOpen}
-          propertyId={selectedPropertyId}
-          units={importUnits}
-          onSuccess={() => refetch()}
-        />
+        <>
+          <TenantImportDialog
+            open={importDialogOpen}
+            onOpenChange={setImportDialogOpen}
+            propertyId={selectedPropertyId}
+            units={importUnits}
+            onSuccess={() => refetch()}
+          />
+          <PdfScanDialog
+            open={pdfScanDialogOpen}
+            onOpenChange={setPdfScanDialogOpen}
+            propertyId={selectedPropertyId}
+            units={importUnits}
+            onSuccess={() => refetch()}
+          />
+        </>
       )}
     </MainLayout>
   );
