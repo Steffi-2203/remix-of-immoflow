@@ -25,7 +25,8 @@ import {
   insertPaymentSchema,
   insertTransactionSchema,
   insertExpenseSchema,
-  insertMonthlyInvoiceSchema
+  insertMonthlyInvoiceSchema,
+  insertTenantSchema
 } from "@shared/schema";
 
 // Convert snake_case keys to camelCase for database compatibility
@@ -979,6 +980,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  app.post("/api/tenants", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const body = snakeToCamel(req.body);
+      
+      const unit = await storage.getUnit(body.unitId);
+      if (!unit) {
+        return res.status(404).json({ error: "Einheit nicht gefunden" });
+      }
+      
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+      
+      const validationResult = insertTenantSchema.safeParse(body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: "Validierung fehlgeschlagen", 
+          details: validationResult.error.flatten() 
+        });
+      }
+      
+      const [tenant] = await db.insert(schema.tenants).values(validationResult.data).returning();
+      res.json(tenant);
+    } catch (error) {
+      console.error("Create tenant error:", error);
+      res.status(500).json({ error: "Mieter konnte nicht erstellt werden" });
     }
   });
 
