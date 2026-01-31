@@ -44,6 +44,13 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - **Export Formats**: BMD NTCS CSV and DATEV ASCII export formats for accounting software integration.
     - **FinanzOnline Integration**: USt-Voranmeldung XML generation (Form U30) with Austrian tax authority compliance.
     - **Document Management**: Metadata-based document storage with category system and access control.
+- **Unit Testing Infrastructure**: Comprehensive test suite with 94+ tests covering:
+    - MRG payment allocation (BK→HK→Miete priority)
+    - Settlement calculations with vacancy logic per §21 MRG
+    - MieWeG rent indexation (Hälfteregelung, 2026/2027 caps)
+    - SEPA export validation (IBAN/BIC validation, XML escaping)
+    - Dunning system (ABGB §1333 interest calculation)
+    - Distribution keys (MEA, QM, Personen, Verbrauch, Einheiten)
 - **OCR Functionality**: Integration of GPT-4o via Replit AI for vision-based OCR to extract structured data from invoices and bank statements, supporting Austrian-specific categories.
 - **Subscription Management**: Two parallel systems: a legacy organization-based system (Stripe integrated) and a newer user-based system with `profiles.subscriptionTier` tracking, feature gating, and Stripe checkout integration.
 - **Role-Based Access Control**: Five distinct roles (admin, property_manager, finance, viewer, tester) with varying permissions and a "tester" mode for data masking of personal information.
