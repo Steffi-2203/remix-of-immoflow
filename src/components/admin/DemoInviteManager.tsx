@@ -181,6 +181,7 @@ export function DemoInviteManager() {
                   <TableHead>E-Mail</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Erstellt</TableHead>
+                  <TableHead>Aktiviert um</TableHead>
                   <TableHead>Link gültig bis</TableHead>
                   <TableHead>Demo endet</TableHead>
                   <TableHead className="w-10"></TableHead>
@@ -193,6 +194,12 @@ export function DemoInviteManager() {
                     <TableCell>{getStatusBadge(invite.status)}</TableCell>
                     <TableCell>
                       {format(new Date(invite.createdAt), "dd.MM.yyyy HH:mm", { locale: de })}
+                    </TableCell>
+                    <TableCell>
+                      {invite.activatedAt 
+                        ? format(new Date(invite.activatedAt), "dd.MM.yyyy HH:mm", { locale: de })
+                        : <span className="text-muted-foreground">-</span>
+                      }
                     </TableCell>
                     <TableCell>
                       {format(new Date(invite.expiresAt), "dd.MM.yyyy HH:mm", { locale: de })}
