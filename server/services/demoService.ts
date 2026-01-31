@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { 
   demoInvites, profiles, organizations, userRoles, properties, units, tenants,
-  monthlyInvoices, bankAccounts, expenses, distributionKeys
+  monthlyInvoices, bankAccounts, expenses, distributionKeys, meters, meterReadings, keyInventory
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { sendEmail } from "../lib/resend";
@@ -14,7 +14,77 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+async function sendDemoEmail(email: string, demoUrl: string): Promise<void> {
+  console.log('[Demo] Sending demo invitation email to:', email);
+  console.log('[Demo] Demo URL:', demoUrl);
+  
+  const emailResult = await sendEmail({
+    to: email,
+    subject: 'Ihr Demo-Zugang zu ImmoflowMe',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1 style="color: #1a365d;">Willkommen bei ImmoflowMe!</h1>
+        <p>Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.</p>
+        <p>Klicken Sie auf den Button unten, um Ihren <strong>30-Minuten Demo-Zugang</strong> zu aktivieren:</p>
+        <p style="margin: 30px 0;">
+          <a href="${demoUrl}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+            Demo starten
+          </a>
+        </p>
+        <p style="color: #666; font-size: 14px;">
+          <strong>Was Sie erwartet:</strong>
+        </p>
+        <ul style="color: #666; font-size: 14px;">
+          <li>Realistische Beispieldaten mit österreichischen Liegenschaften</li>
+          <li>Alle Funktionen der Pro-Version</li>
+          <li>30 Minuten zum Testen</li>
+        </ul>
+        <p style="color: #666; font-size: 14px;">
+          Dieser Link ist 24 Stunden gültig.
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+        <p style="color: #999; font-size: 12px;">
+          ImmoflowMe - Professionelle Hausverwaltung für Österreich
+        </p>
+      </div>
+    `,
+    text: `
+Willkommen bei ImmoflowMe!
+
+Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.
+
+Klicken Sie auf diesen Link, um Ihren 30-Minuten Demo-Zugang zu aktivieren:
+${demoUrl}
+
+Was Sie erwartet:
+- Realistische Beispieldaten mit österreichischen Liegenschaften
+- Alle Funktionen der Pro-Version
+- 30 Minuten zum Testen
+
+Dieser Link ist 24 Stunden gültig.
+    `
+  });
+
+  console.log('[Demo] Email send result:', JSON.stringify(emailResult, null, 2));
+  
+  if (emailResult.error) {
+    console.error('[Demo] Resend API error:', emailResult.error);
+    throw new Error('Email send failed');
+  }
+}
+
 export async function requestDemoAccess(email: string, ipAddress?: string, userAgent?: string): Promise<{ success: boolean; message: string; activationUrl?: string }> {
+  // Check if user is already registered in profiles
+  const existingProfile = await db.select()
+    .from(profiles)
+    .where(eq(profiles.email, email))
+    .limit(1);
+
+  if (existingProfile.length > 0) {
+    return { success: false, message: 'Diese E-Mail-Adresse ist bereits registriert. Bitte melden Sie sich an oder verwenden Sie eine andere E-Mail.' };
+  }
+
+  // Check for existing pending invite - update it instead of failing
   const existingInvite = await db.select()
     .from(demoInvites)
     .where(and(
@@ -23,8 +93,35 @@ export async function requestDemoAccess(email: string, ipAddress?: string, userA
     ))
     .limit(1);
 
+  // If pending invite exists, update it with new token
   if (existingInvite.length > 0) {
-    return { success: false, message: 'Sie haben bereits eine Demo-Einladung angefordert. Bitte prüfen Sie Ihre E-Mails.' };
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    await db.update(demoInvites)
+      .set({ token, expiresAt, ipAddress, userAgent })
+      .where(eq(demoInvites.id, existingInvite[0].id));
+    
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.REPLIT_DOMAINS 
+      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+      : 'http://localhost:5000';
+
+    const demoUrl = `${baseUrl}/demo/activate?token=${token}`;
+    
+    // Send email with new token
+    try {
+      await sendDemoEmail(email, demoUrl);
+    } catch (error) {
+      console.error('Failed to resend demo email:', error);
+    }
+    
+    return { 
+      success: true, 
+      message: 'Neuer Demo-Link wurde gesendet!',
+      activationUrl: demoUrl
+    };
   }
 
   const token = generateToken();
@@ -47,68 +144,7 @@ export async function requestDemoAccess(email: string, ipAddress?: string, userA
   const demoUrl = `${baseUrl}/demo/activate?token=${token}`;
 
   try {
-    console.log('[Demo] Sending demo invitation email to:', email);
-    console.log('[Demo] Demo URL:', demoUrl);
-    
-    const emailResult = await sendEmail({
-      to: email,
-      subject: 'Ihr Demo-Zugang zu ImmoflowMe',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #1a365d;">Willkommen bei ImmoflowMe!</h1>
-          <p>Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.</p>
-          <p>Klicken Sie auf den Button unten, um Ihren <strong>30-Minuten Demo-Zugang</strong> zu aktivieren:</p>
-          <p style="margin: 30px 0;">
-            <a href="${demoUrl}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-              Demo starten
-            </a>
-          </p>
-          <p style="color: #666; font-size: 14px;">
-            <strong>Was Sie erwartet:</strong>
-          </p>
-          <ul style="color: #666; font-size: 14px;">
-            <li>Realistische Beispieldaten mit österreichischen Liegenschaften</li>
-            <li>Alle Funktionen der Pro-Version</li>
-            <li>30 Minuten zum Testen</li>
-          </ul>
-          <p style="color: #666; font-size: 14px;">
-            Dieser Link ist 24 Stunden gültig.
-          </p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="color: #999; font-size: 12px;">
-            ImmoflowMe - Professionelle Hausverwaltung für Österreich
-          </p>
-        </div>
-      `,
-      text: `
-Willkommen bei ImmoflowMe!
-
-Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.
-
-Klicken Sie auf diesen Link, um Ihren 30-Minuten Demo-Zugang zu aktivieren:
-${demoUrl}
-
-Was Sie erwartet:
-- Realistische Beispieldaten mit österreichischen Liegenschaften
-- Alle Funktionen der Pro-Version
-- 30 Minuten zum Testen
-
-Dieser Link ist 24 Stunden gültig.
-      `
-    });
-
-    console.log('[Demo] Email send result:', JSON.stringify(emailResult, null, 2));
-    
-    if (emailResult.error) {
-      console.error('[Demo] Resend API error:', emailResult.error);
-      // Still return success with activation URL even if email fails
-      return { 
-        success: true, 
-        message: 'E-Mail konnte nicht gesendet werden, aber Sie können den Link unten verwenden.',
-        activationUrl: demoUrl
-      };
-    }
-
+    await sendDemoEmail(email, demoUrl);
     return { 
       success: true, 
       message: 'Demo-Einladung wurde an Ihre E-Mail-Adresse gesendet!',
@@ -116,7 +152,6 @@ Dieser Link ist 24 Stunden gültig.
     };
   } catch (error) {
     console.error('Failed to send demo email:', error);
-    // Still return the activation URL so user can proceed
     return { 
       success: true, 
       message: 'E-Mail konnte nicht gesendet werden, aber Sie können den Link unten verwenden.',
@@ -336,6 +371,40 @@ async function createDemoData(organizationId: string): Promise<void> {
     { propertyId: prop1.id, expenseType: 'muellabfuhr', category: 'betriebskosten_umlagefaehig', bezeichnung: 'Müllabfuhr Q1', betrag: '680.00', datum: `${currentYear}-03-15`, year: currentYear, month: 3 },
     { propertyId: prop2.id, expenseType: 'versicherung', category: 'betriebskosten_umlagefaehig', bezeichnung: 'Gebäudeversicherung 2025', betrag: '2400.00', datum: `${currentYear}-01-20`, year: currentYear, month: 1 },
     { propertyId: prop2.id, expenseType: 'heizung', category: 'betriebskosten_umlagefaehig', bezeichnung: 'Fernwärme Q1', betrag: '3200.00', datum: `${currentYear}-03-31`, year: currentYear, month: 3 },
+  ]);
+
+  // Demo Zähler (Meters) für Wien
+  const wienMeters = await db.insert(meters).values([
+    { unitId: wienUnits[0].id, propertyId: prop1.id, meterNumber: 'W-ST-001', meterType: 'strom', location: 'Zählerkasten Keller' },
+    { unitId: wienUnits[0].id, propertyId: prop1.id, meterNumber: 'W-WA-001', meterType: 'wasser', location: 'Badezimmer' },
+    { unitId: wienUnits[1].id, propertyId: prop1.id, meterNumber: 'W-ST-002', meterType: 'strom', location: 'Zählerkasten Keller' },
+    { unitId: wienUnits[1].id, propertyId: prop1.id, meterNumber: 'W-HZ-002', meterType: 'heizung', location: 'Wohnzimmer' },
+    { unitId: wienUnits[2].id, propertyId: prop1.id, meterNumber: 'W-ST-003', meterType: 'strom', location: 'Zählerkasten Keller' },
+    { unitId: wienUnits[3].id, propertyId: prop1.id, meterNumber: 'W-ST-004', meterType: 'strom', location: 'Zählerkasten Keller' },
+  ]).returning();
+
+  // Demo Zählerstand-Ablesungen
+  const lastMonth = new Date(now);
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+  const lastMonthStr = lastMonth.toISOString().split('T')[0];
+  
+  await db.insert(meterReadings).values([
+    { meterId: wienMeters[0].id, readingDate: lastMonthStr, readingValue: '4523.500', readBy: 'Demo Ableser' },
+    { meterId: wienMeters[1].id, readingDate: lastMonthStr, readingValue: '125.300', readBy: 'Demo Ableser' },
+    { meterId: wienMeters[2].id, readingDate: lastMonthStr, readingValue: '6782.100', readBy: 'Demo Ableser' },
+    { meterId: wienMeters[3].id, readingDate: lastMonthStr, readingValue: '3456.000', readBy: 'Demo Ableser' },
+  ]);
+
+  // Demo Schlüssel (Key Inventory) für Wien
+  await db.insert(keyInventory).values([
+    { propertyId: prop1.id, unitId: null, keyType: 'hauptschluessel', keyNumber: 'HS-001', description: 'Hauptschlüssel Hauseingang', totalCount: 3, availableCount: 1 },
+    { propertyId: prop1.id, unitId: wienUnits[0].id, keyType: 'wohnungsschluessel', keyNumber: 'WS-T1-001', description: 'Wohnungsschlüssel Top 1', totalCount: 3, availableCount: 1 },
+    { propertyId: prop1.id, unitId: wienUnits[0].id, keyType: 'kellerschluessel', keyNumber: 'KS-T1-001', description: 'Kellerschlüssel Top 1', totalCount: 2, availableCount: 0 },
+    { propertyId: prop1.id, unitId: wienUnits[1].id, keyType: 'wohnungsschluessel', keyNumber: 'WS-T2-001', description: 'Wohnungsschlüssel Top 2', totalCount: 3, availableCount: 1 },
+    { propertyId: prop1.id, unitId: wienUnits[2].id, keyType: 'wohnungsschluessel', keyNumber: 'WS-T3-001', description: 'Wohnungsschlüssel Top 3', totalCount: 3, availableCount: 1 },
+    { propertyId: prop1.id, unitId: wienUnits[5].id, keyType: 'wohnungsschluessel', keyNumber: 'WS-GE-001', description: 'Geschäftsschlüssel EG', totalCount: 4, availableCount: 2 },
+    { propertyId: prop2.id, unitId: null, keyType: 'hauptschluessel', keyNumber: 'HS-G-001', description: 'Hauptschlüssel Graz', totalCount: 2, availableCount: 1 },
+    { propertyId: prop2.id, unitId: grazUnits[0].id, keyType: 'wohnungsschluessel', keyNumber: 'WS-G-T1', description: 'Wohnungsschlüssel Graz Top 1', totalCount: 3, availableCount: 1 },
   ]);
 
   console.log(`Demo data created for organization ${organizationId}`);
