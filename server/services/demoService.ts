@@ -14,7 +14,7 @@ function generateToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-export async function requestDemoAccess(email: string, ipAddress?: string, userAgent?: string): Promise<{ success: boolean; message: string }> {
+export async function requestDemoAccess(email: string, ipAddress?: string, userAgent?: string): Promise<{ success: boolean; message: string; activationUrl?: string }> {
   const existingInvite = await db.select()
     .from(demoInvites)
     .where(and(
@@ -101,13 +101,27 @@ Dieser Link ist 24 Stunden gültig.
     
     if (emailResult.error) {
       console.error('[Demo] Resend API error:', emailResult.error);
-      return { success: false, message: 'Fehler beim Versenden der E-Mail. Bitte versuchen Sie es später erneut.' };
+      // Still return success with activation URL even if email fails
+      return { 
+        success: true, 
+        message: 'E-Mail konnte nicht gesendet werden, aber Sie können den Link unten verwenden.',
+        activationUrl: demoUrl
+      };
     }
 
-    return { success: true, message: 'Demo-Einladung wurde an Ihre E-Mail-Adresse gesendet!' };
+    return { 
+      success: true, 
+      message: 'Demo-Einladung wurde an Ihre E-Mail-Adresse gesendet!',
+      activationUrl: demoUrl
+    };
   } catch (error) {
     console.error('Failed to send demo email:', error);
-    return { success: false, message: 'Fehler beim Versenden der E-Mail. Bitte versuchen Sie es später erneut.' };
+    // Still return the activation URL so user can proceed
+    return { 
+      success: true, 
+      message: 'E-Mail konnte nicht gesendet werden, aber Sie können den Link unten verwenden.',
+      activationUrl: demoUrl
+    };
   }
 }
 
