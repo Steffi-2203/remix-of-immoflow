@@ -156,6 +156,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/organizations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const profile = await getProfileFromSession(req);
+      
+      // Only allow updating own organization
+      if (profile?.organizationId !== id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Only admins can update organization
+      const roles = await getUserRoles(req);
+      if (!roles.some((r: any) => r.role === 'admin')) {
+        return res.status(403).json({ error: "Admin required" });
+      }
+      
+      const { name, iban, bic, sepa_creditor_id, brandName, logoUrl, primaryColor, supportEmail } = req.body;
+      
+      const updated = await db.update(schema.organizations)
+        .set({
+          ...(name !== undefined && { name }),
+          ...(iban !== undefined && { iban }),
+          ...(bic !== undefined && { bic }),
+          ...(sepa_creditor_id !== undefined && { sepaCreditorId: sepa_creditor_id }),
+          ...(brandName !== undefined && { brandName }),
+          ...(logoUrl !== undefined && { logoUrl }),
+          ...(primaryColor !== undefined && { primaryColor }),
+          ...(supportEmail !== undefined && { supportEmail }),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.organizations.id, id))
+        .returning();
+      
+      res.json(updated[0]);
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      res.status(500).json({ error: "Failed to update organization" });
+    }
+  });
+
   app.get("/api/properties", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);

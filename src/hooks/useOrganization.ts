@@ -19,6 +19,11 @@ export interface Organization {
   iban: string | null;
   bic: string | null;
   sepa_creditor_id: string | null;
+  // White-Label Branding
+  brandName: string | null;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  supportEmail: string | null;
 }
 
 export const TIER_LIMITS = {
@@ -165,9 +170,13 @@ export function useUpdateOrganization() {
     mutationFn: async (data: {
       id: string;
       name?: string;
-      iban?: string;
-      bic?: string;
-      sepa_creditor_id?: string;
+      iban?: string | null;
+      bic?: string | null;
+      sepa_creditor_id?: string | null;
+      brandName?: string | null;
+      logoUrl?: string | null;
+      primaryColor?: string | null;
+      supportEmail?: string | null;
     }) => {
       const response = await apiRequest('PATCH', `/api/organizations/${data.id}`, data);
       const result = await response.json();

@@ -36,6 +36,7 @@ import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSubscription, SubscriptionTier } from '@/hooks/useSubscription';
 import { useSubscriptionLimits } from '@/hooks/useSubscriptionLimits';
+import { useBranding } from '@/contexts/BrandingContext';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -239,6 +240,7 @@ export function Sidebar() {
   const permissions = usePermissions();
   const { tier, canAccessFullFeatures, isLoading: isSubscriptionLoading } = useSubscription();
   const { limits, isLoading: isLimitsLoading } = useSubscriptionLimits();
+  const branding = useBranding();
 
   const tierOrder: SubscriptionTier[] = ['starter', 'professional', 'enterprise'];
   const currentTierIndex = tierOrder.indexOf(tier);
@@ -306,10 +308,14 @@ export function Sidebar() {
           {/* Header with close button */}
           <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
             <div className="flex items-center gap-3">
-              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+              {branding.logoUrl ? (
+                <img src={branding.logoUrl} alt={`${branding.brandName} Logo`} className="h-12 w-auto max-w-[120px] object-contain" />
+              ) : (
+                <img src={immoflowLogo} alt={`${branding.brandName} Logo`} className="h-12 w-auto" />
+              )}
               <div className="flex flex-col">
-                <span className="font-bold text-white text-lg leading-tight">ImmoflowMe</span>
-                <span className="text-xs text-white/60">by ImmoPepper</span>
+                <span className="font-bold text-white text-lg leading-tight">{branding.brandName}</span>
+                {!branding.logoUrl && <span className="text-xs text-white/60">by ImmoPepper</span>}
               </div>
             </div>
             <Button 
@@ -373,7 +379,7 @@ export function Sidebar() {
           {/* Footer - fixed at bottom */}
           <div className="shrink-0 p-4 border-t border-sidebar-border">
             <div className="rounded-lg bg-sidebar-accent p-3">
-              <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
+              <p className="text-xs text-sidebar-foreground/50">© 2026 {branding.brandName}</p>
             </div>
           </div>
         </aside>
@@ -394,15 +400,23 @@ export function Sidebar() {
       <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={`${branding.brandName} Logo`} className="h-12 w-auto max-w-[120px] object-contain" />
+            ) : (
+              <img src={immoflowLogo} alt={`${branding.brandName} Logo`} className="h-12 w-auto" />
+            )}
             <div className="flex flex-col">
-              <span className="font-bold text-white text-lg leading-tight">ImmoflowMe</span>
-              <span className="text-xs text-white/60">by ImmoPepper</span>
+              <span className="font-bold text-white text-lg leading-tight">{branding.brandName}</span>
+              {!branding.logoUrl && <span className="text-xs text-white/60">by ImmoPepper</span>}
             </div>
           </div>
         )}
         {collapsed && (
-          <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-10 w-10 object-contain" />
+          branding.logoUrl ? (
+            <img src={branding.logoUrl} alt={`${branding.brandName} Logo`} className="h-10 w-10 object-contain" />
+          ) : (
+            <img src={immoflowLogo} alt={`${branding.brandName} Logo`} className="h-10 w-10 object-contain" />
+          )
         )}
         <Button 
           variant="ghost" 
@@ -470,7 +484,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="shrink-0 p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent p-3">
-            <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
+            <p className="text-xs text-sidebar-foreground/50">© 2026 {branding.brandName}</p>
           </div>
         </div>
       )}
