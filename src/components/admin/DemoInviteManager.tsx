@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Send, Mail, Clock, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Loader2, Send, Mail, Clock, CheckCircle, XCircle, AlertTriangle, Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -24,6 +24,7 @@ interface DemoInvite {
 
 export function DemoInviteManager() {
   const [email, setEmail] = useState("");
+  const [lastActivationUrl, setLastActivationUrl] = useState("");
 
   const { data: invites, isLoading } = useQuery<DemoInvite[]>({
     queryKey: ["/api/admin/demo/invites"],
@@ -37,12 +38,20 @@ export function DemoInviteManager() {
     onSuccess: (data) => {
       toast.success(data.message || "Demo-Einladung gesendet");
       setEmail("");
+      if (data.activationUrl) {
+        setLastActivationUrl(data.activationUrl);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/demo/invites"] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Fehler beim Versenden");
     },
   });
+
+  const copyToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast.success("Link in Zwischenablage kopiert");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +110,41 @@ export function DemoInviteManager() {
               )}
             </Button>
           </form>
+          
+          {lastActivationUrl && (
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
+                Aktivierungslink (zum Teilen kopieren):
+              </p>
+              <div className="flex gap-2">
+                <Input 
+                  value={lastActivationUrl} 
+                  readOnly 
+                  className="flex-1 text-xs bg-white dark:bg-gray-800"
+                  data-testid="input-admin-activation-url"
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => copyToClipboard(lastActivationUrl)}
+                  data-testid="button-copy-admin-link"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => window.open(lastActivationUrl, '_blank')}
+                  data-testid="button-open-admin-link"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Senden Sie diesen Link direkt an den Interessenten (z.B. per WhatsApp, Slack, etc.)
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

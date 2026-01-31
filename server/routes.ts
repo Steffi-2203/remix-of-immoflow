@@ -3561,7 +3561,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await demoService.requestDemoAccess(email, ipAddress, userAgent);
       
       if (result.success) {
-        res.json({ message: result.message });
+        res.json({ 
+          message: result.message,
+          activationUrl: result.activationUrl
+        });
       } else {
         res.status(400).json({ error: result.message });
       }
@@ -3668,7 +3671,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await demoService.requestDemoAccess(email);
       
       if (result.success) {
-        res.json({ message: `Demo-Einladung an ${email} gesendet` });
+        res.json({ 
+          message: `Demo-Einladung an ${email} gesendet`,
+          activationUrl: result.activationUrl
+        });
       } else {
         res.status(400).json({ error: result.message });
       }

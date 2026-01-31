@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Building2, Clock, CheckCircle2, Loader2, Mail } from "lucide-react";
+import { Building2, Clock, CheckCircle2, Loader2, Mail, Copy, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DemoRequestPage() {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [activationUrl, setActivationUrl] = useState("");
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +32,9 @@ export default function DemoRequestPage() {
 
       if (response.ok) {
         setSuccess(true);
+        if (data.activationUrl) {
+          setActivationUrl(data.activationUrl);
+        }
       } else {
         setError(data.error || "Fehler beim Anfordern der Demo");
       }
@@ -39,6 +45,14 @@ export default function DemoRequestPage() {
     }
   };
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(activationUrl);
+    toast({
+      title: "Link kopiert!",
+      description: "Der Aktivierungslink wurde in die Zwischenablage kopiert.",
+    });
+  };
+
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
@@ -47,18 +61,48 @@ export default function DemoRequestPage() {
             <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
-            <CardTitle className="text-2xl">E-Mail gesendet!</CardTitle>
+            <CardTitle className="text-2xl">Demo bereit!</CardTitle>
             <CardDescription>
-              Wir haben Ihnen eine E-Mail an <strong>{email}</strong> gesendet.
+              Ihr Demo-Zugang für <strong>{email}</strong> wurde erstellt.
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <p className="text-muted-foreground">
-              Klicken Sie auf den Link in der E-Mail, um Ihren 30-Minuten Demo-Zugang zu aktivieren.
-            </p>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <CardContent className="space-y-4">
+            {activationUrl && (
+              <div className="space-y-3">
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => window.location.href = activationUrl}
+                  data-testid="button-start-demo"
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Demo jetzt starten
+                </Button>
+                <div className="relative">
+                  <Input 
+                    value={activationUrl} 
+                    readOnly 
+                    className="pr-10 text-xs"
+                    data-testid="input-activation-url"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                    onClick={copyToClipboard}
+                    data-testid="button-copy-link"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Kopieren Sie den Link oder teilen Sie ihn direkt.
+                </p>
+              </div>
+            )}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground pt-2">
               <Mail className="w-4 h-4" />
-              <span>Prüfen Sie auch Ihren Spam-Ordner</span>
+              <span>Falls eine E-Mail gesendet wurde, prüfen Sie auch den Spam-Ordner</span>
             </div>
           </CardContent>
         </Card>
