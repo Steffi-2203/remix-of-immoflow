@@ -148,7 +148,7 @@ export default function Login() {
           </form>
           <CardFooter className="flex flex-col gap-4 text-center text-sm text-muted-foreground">
             <p>
-              Noch kein Konto? <Link to="/register" className="text-primary hover:underline">Registrieren</Link>
+              Noch kein Konto? <Link to="/demo" className="text-primary hover:underline">Kostenlos testen</Link>
             </p>
             <div className="flex gap-4 justify-center text-xs">
               <Link to="/impressum" className="hover:underline">Impressum</Link>
