@@ -89,7 +89,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     hasFullAccess: false,
   },
   starter: {
-    maxProperties: 50,
+    maxProperties: 10,
     maxUnits: Infinity,
     maxTenants: Infinity,
     maxOcrInvoices: Infinity,
