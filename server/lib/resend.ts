@@ -3,6 +3,17 @@ import { Resend } from 'resend';
 let connectionSettings: any;
 
 async function getCredentials() {
+  // First check for direct RESEND_API_KEY environment variable
+  if (process.env.RESEND_API_KEY) {
+    console.log('[Resend] Using RESEND_API_KEY from environment');
+    return {
+      apiKey: process.env.RESEND_API_KEY,
+      // Use Resend's test domain for development, or verified domain
+      fromEmail: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+    };
+  }
+
+  // Fallback to Replit connector
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
