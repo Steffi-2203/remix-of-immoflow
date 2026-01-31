@@ -3710,6 +3710,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Delete a demo invitation
+  app.delete("/api/admin/demo/invites/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { id } = req.params;
+      
+      const [userRole] = await db.select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId))
+        .limit(1);
+      
+      if (!userRole || userRole.role !== 'admin') {
+        return res.status(403).json({ error: "Nur Administratoren können Demo-Einladungen löschen" });
+      }
+      
+      await db.delete(schema.demoInvites)
+        .where(eq(schema.demoInvites.id, id));
+      
+      res.json({ message: "Einladung gelöscht" });
+    } catch (error) {
+      console.error('Admin demo invite delete error:', error);
+      res.status(500).json({ error: "Fehler beim Löschen der Einladung" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
