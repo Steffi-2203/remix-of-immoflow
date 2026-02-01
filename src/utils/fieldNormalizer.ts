@@ -395,3 +395,81 @@ export function getField<T = any>(obj: Record<string, any>, camelKey: string): T
   const snakeKey = fieldMappings[camelKey];
   return obj[camelKey] ?? obj[snakeKey];
 }
+
+/**
+ * SonstigeKosten cost item structure from OCR extraction
+ */
+export interface SonstigeKostenItem {
+  betrag: number;
+  ust: number;
+  schluessel?: string;
+}
+
+export type SonstigeKosten = Record<string, SonstigeKostenItem>;
+
+/**
+ * Calculate total costs from sonstigeKosten JSONB field
+ * Returns sum of all betrag values (NET amounts)
+ * Handles both numeric and string values from JSONB
+ */
+export function calculateSonstigeKostenTotal(sonstigeKosten: SonstigeKosten | null | undefined): number {
+  if (!sonstigeKosten || typeof sonstigeKosten !== 'object') return 0;
+  return Object.values(sonstigeKosten).reduce((sum, item) => {
+    if (item && item.betrag !== undefined && item.betrag !== null) {
+      const betrag = typeof item.betrag === 'string' ? parseFloat(item.betrag) : Number(item.betrag);
+      if (!isNaN(betrag)) {
+        return sum + betrag;
+      }
+    }
+    return sum;
+  }, 0);
+}
+
+/**
+ * Check if sonstigeKosten has any cost items
+ */
+export function hasSonstigeKosten(sonstigeKosten: SonstigeKosten | null | undefined): boolean {
+  if (!sonstigeKosten || typeof sonstigeKosten !== 'object') return false;
+  return Object.keys(sonstigeKosten).length > 0;
+}
+
+/**
+ * Calculate total rent including grundmiete and all sonstigeKosten items
+ */
+export function calculateTotalRent(tenant: {
+  grundmiete?: number | string | null;
+  betriebskostenVorschuss?: number | string | null;
+  heizungskostenVorschuss?: number | string | null;
+  wasserkostenVorschuss?: number | string | null;
+  warmwasserkostenVorschuss?: number | string | null;
+  sonstigeKosten?: SonstigeKosten | null;
+}): number {
+  const grundmiete = Number(tenant.grundmiete) || 0;
+  
+  // If sonstigeKosten has data (keys present), use it; otherwise fall back to legacy fields
+  if (hasSonstigeKosten(tenant.sonstigeKosten)) {
+    const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstigeKosten);
+    return grundmiete + sonstigeTotal;
+  }
+  
+  // Legacy fallback for old data
+  const bk = Number(tenant.betriebskostenVorschuss) || 0;
+  const hk = Number(tenant.heizungskostenVorschuss) || 0;
+  const wk = Number(tenant.wasserkostenVorschuss) || 0;
+  const wwk = Number(tenant.warmwasserkostenVorschuss) || 0;
+  
+  return grundmiete + bk + hk + wk + wwk;
+}
+
+/**
+ * Format sonstigeKosten as breakdown string for display
+ */
+export function formatSonstigeKostenBreakdown(sonstigeKosten: SonstigeKosten | null | undefined): string {
+  if (!sonstigeKosten || typeof sonstigeKosten !== 'object') return '';
+  
+  const items = Object.entries(sonstigeKosten)
+    .filter(([_, item]) => item && typeof item.betrag === 'number')
+    .map(([name, item]) => `${name}: €${item.betrag.toFixed(2)}`);
+  
+  return items.join(', ');
+}

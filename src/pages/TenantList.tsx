@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck, Lock, FileImage } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
+import { calculateTotalRent, calculateSonstigeKostenTotal, hasSonstigeKosten as checkHasSonstigeKosten, formatSonstigeKostenBreakdown } from '@/utils/fieldNormalizer';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
@@ -207,7 +208,9 @@ export default function TenantList() {
               {filteredTenants.map((tenant) => {
                 const unit = getUnit(tenant.unitId);
                 const property = getProperty(tenant.unitId);
-                const totalRent = (Number(tenant.grundmiete) || 0) + (Number(tenant.betriebskostenVorschuss) || 0) + (Number(tenant.heizungskostenVorschuss) || 0);
+                const totalRent = calculateTotalRent(tenant);
+                const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstigeKosten);
+                const hasSonstige = checkHasSonstigeKosten(tenant.sonstigeKosten);
 
                 return (
                   <TableRow 
@@ -280,7 +283,11 @@ export default function TenantList() {
                           €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          (€{tenant.grundmiete} + €{tenant.betriebskostenVorschuss} BK + €{tenant.heizungskostenVorschuss} HK)
+                          {hasSonstige ? (
+                            <>Miete €{Number(tenant.grundmiete || 0).toFixed(2)} + Nebenkosten €{sonstigeTotal.toFixed(2)}</>
+                          ) : (
+                            <>(€{tenant.grundmiete} + €{tenant.betriebskostenVorschuss} BK + €{tenant.heizungskostenVorschuss} HK)</>
+                          )}
                         </p>
                       </div>
                     </TableCell>
