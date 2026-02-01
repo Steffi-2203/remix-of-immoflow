@@ -74,6 +74,7 @@ export class PaymentService {
 
     const allocations: PaymentAllocation[] = [];
     let remainingAmount = amount;
+    let firstInvoiceId: string | null = null;
 
     for (const invoice of openInvoices) {
       if (remainingAmount <= 0) break;
@@ -85,6 +86,11 @@ export class PaymentService {
       if (stillOwed <= 0) continue;
 
       const allocated = Math.min(remainingAmount, stillOwed);
+      
+      // Track first invoice for payment linkage
+      if (!firstInvoiceId) {
+        firstInvoiceId = invoice.id;
+      }
       
       allocations.push({
         invoiceId: invoice.id,
@@ -98,6 +104,17 @@ export class PaymentService {
       await db.update(monthlyInvoices)
         .set({ status: newStatus })
         .where(eq(monthlyInvoices.id, invoice.id));
+    }
+
+    // Persist payment-to-invoice linkage (link to first allocated invoice)
+    if (firstInvoiceId && paymentId) {
+      try {
+        await db.update(payments)
+          .set({ invoiceId: firstInvoiceId })
+          .where(eq(payments.id, paymentId));
+      } catch (error) {
+        console.error('Failed to update payment invoiceId:', error);
+      }
     }
 
     return allocations;

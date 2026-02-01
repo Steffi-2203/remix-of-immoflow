@@ -16,6 +16,7 @@ import { maintenanceReminderService } from "./services/maintenanceReminderServic
 import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
+import { paymentService } from "./services/paymentService";
 import crypto from "crypto";
 import multer from "multer";
 import OpenAI from "openai";
@@ -603,6 +604,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       const payment = await storage.createPayment(validationResult.data);
+      
+      // Automatically allocate payment to open invoices and update their status
+      try {
+        await paymentService.allocatePayment(
+          payment.id,
+          Number(payment.betrag),
+          payment.tenantId
+        );
+      } catch (allocError) {
+        console.error("Payment allocation error (non-critical):", allocError);
+        // Don't fail the payment creation if allocation fails
+      }
+      
       res.json(payment);
     } catch (error) {
       console.error("Create payment error:", error);
@@ -3622,7 +3636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         try {
-          await db.insert(schema.payments).values({
+          const [newPayment] = await db.insert(schema.payments).values({
             tenantId,
             betrag: String(transaction.amount),
             buchungsDatum: transaction.transactionDate || new Date().toISOString().split('T')[0],
@@ -3630,7 +3644,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             verwendungszweck: transaction.description || 'Mietzahlung',
             paymentType: 'ueberweisung',
             transactionId: transaction.id,
-          });
+          }).returning();
+          
+          // Also allocate payment to invoices
+          if (newPayment) {
+            try {
+              await paymentService.allocatePayment(
+                newPayment.id,
+                Number(newPayment.betrag),
+                newPayment.tenantId
+              );
+            } catch (allocError) {
+              console.error('Payment allocation error (non-critical):', allocError);
+            }
+          }
+          
           synced++;
         } catch (error) {
           console.error('Failed to sync transaction to payment:', transaction.id, error);
@@ -3641,6 +3669,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Sync transactions to payments error:', error);
       res.status(500).json({ error: "Synchronisierung fehlgeschlagen" });
+    }
+  });
+
+  // Endpoint to reallocate all existing payments to invoices (update invoice status)
+  app.post("/api/sync/payments-to-invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const orgId = req.session.organizationId;
+      
+      // Get properties for this organization
+      const orgProperties = await db.select()
+        .from(schema.properties)
+        .where(eq(schema.properties.organizationId, orgId));
+      const orgPropertyIds = orgProperties.map(p => p.id);
+      
+      if (orgPropertyIds.length === 0) {
+        return res.json({ allocated: 0, message: "Keine Liegenschaften gefunden" });
+      }
+      
+      // Get units for org properties
+      const allUnits = await db.select().from(schema.units);
+      const units = allUnits.filter(u => orgPropertyIds.includes(u.propertyId!));
+      const orgUnitIds = units.map(u => u.id);
+      
+      // Get tenants for org units
+      const allTenants = await db.select().from(schema.tenants);
+      const tenants = allTenants.filter(t => orgUnitIds.includes(t.unitId!));
+      const tenantIds = tenants.map(t => t.id);
+      
+      if (tenantIds.length === 0) {
+        return res.json({ allocated: 0, message: "Keine Mieter gefunden" });
+      }
+      
+      // Get all payments for org tenants
+      const payments = await db.select()
+        .from(schema.payments)
+        .where(inArray(schema.payments.tenantId, tenantIds));
+      
+      let allocated = 0;
+      
+      // Group payments by tenant and process each
+      const paymentsByTenant = new Map<string, typeof payments>();
+      for (const payment of payments) {
+        if (!payment.tenantId) continue;
+        const existing = paymentsByTenant.get(payment.tenantId) || [];
+        existing.push(payment);
+        paymentsByTenant.set(payment.tenantId, existing);
+      }
+      
+      for (const [tenantId, tenantPayments] of paymentsByTenant) {
+        // Sort by date
+        tenantPayments.sort((a, b) => 
+          new Date(a.buchungsDatum || '').getTime() - new Date(b.buchungsDatum || '').getTime()
+        );
+        
+        for (const payment of tenantPayments) {
+          try {
+            await paymentService.allocatePayment(
+              payment.id,
+              Number(payment.betrag),
+              payment.tenantId
+            );
+            allocated++;
+          } catch (error) {
+            console.error('Failed to allocate payment:', payment.id, error);
+          }
+        }
+      }
+      
+      res.json({ 
+        allocated, 
+        total: payments.length,
+        message: `${allocated} Zahlungen wurden Rechnungen zugeordnet` 
+      });
+    } catch (error) {
+      console.error('Sync payments to invoices error:', error);
+      res.status(500).json({ error: "Zuordnung fehlgeschlagen" });
     }
   });
 
