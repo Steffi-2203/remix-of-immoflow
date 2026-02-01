@@ -948,6 +948,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/units", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const body = snakeToCamel(req.body);
+      
+      // Validate property access
+      const property = await storage.getProperty(body.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const unitData = {
+        propertyId: body.propertyId,
+        topNummer: body.topNummer,
+        type: body.type || 'wohnung',
+        flaeche: body.flaeche || '0',
+        nutzwert: body.nutzwert || null,
+        status: body.status || 'leer',
+        vsPersonen: body.vsPersonen || null,
+        geschoss: body.geschoss || null,
+        stiege: body.stiege || null,
+        lage: body.lage || null,
+      };
+
+      const unit = await storage.createUnit(unitData);
+      res.json(unit);
+    } catch (error: any) {
+      console.error('Error creating unit:', error);
+      res.status(500).json({ error: error.message || "Failed to create unit" });
+    }
+  });
+
   app.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
