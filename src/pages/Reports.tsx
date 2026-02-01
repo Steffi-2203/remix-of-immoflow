@@ -756,9 +756,10 @@ export default function Reports() {
       const unitId = (inv as any).unitId ?? (inv as any).unit_id;
       if (!unitId) return;
       
-      // Filter by property if selected
+      // Filter by property if selected (support both camelCase and snake_case)
       const unit = allUnits?.find(u => u.id === unitId);
-      if (selectedPropertyId !== 'all' && unit?.propertyId !== selectedPropertyId) return;
+      const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+      if (selectedPropertyId !== 'all' && unitPropertyId !== selectedPropertyId) return;
       
       if (!vacancyByUnit.has(unitId)) {
         vacancyByUnit.set(unitId, []);
@@ -769,7 +770,8 @@ export default function Reports() {
     // Erstelle Leerstand-Einträge
     vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
       const unit = allUnits?.find(u => u.id === unitId);
-      const property = properties?.find(p => p.id === unit?.propertyId);
+      const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+      const property = properties?.find(p => p.id === unitPropertyId);
       
       // SOLL aus Vorschreibungen
       const sollBk = unitVacancyInvoices.reduce((sum, inv) => 
