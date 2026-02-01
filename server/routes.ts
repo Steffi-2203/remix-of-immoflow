@@ -1082,8 +1082,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Zugriff verweigert" });
       }
       
-      const validationResult = insertTenantSchema.safeParse(body);
+      // Filter to only valid tenant fields (OCR data may include extra fields like topNummer, address)
+      const tenantData = {
+        unitId: body.unitId,
+        firstName: body.firstName || 'Unbekannt',
+        lastName: body.lastName || 'Unbekannt',
+        email: body.email || null,
+        phone: body.phone || null,
+        mobilePhone: body.mobilePhone || null,
+        status: body.status || 'aktiv',
+        mietbeginn: body.mietbeginn || null,
+        mietende: body.mietende || null,
+        grundmiete: body.grundmiete?.toString() || '0',
+        betriebskostenVorschuss: body.betriebskostenVorschuss?.toString() || '0',
+        heizkostenVorschuss: body.heizkostenVorschuss?.toString() || '0',
+        wasserkostenVorschuss: body.wasserkostenVorschuss?.toString() || '0',
+        kaution: body.kaution?.toString() || null,
+        kautionBezahlt: body.kautionBezahlt || false,
+        iban: body.iban || null,
+        bic: body.bic || null,
+        sepaMandat: body.sepaMandat || false,
+        sepaMandatDatum: body.sepaMandatDatum || null,
+        notes: body.notes || null,
+      };
+      
+      const validationResult = insertTenantSchema.safeParse(tenantData);
       if (!validationResult.success) {
+        console.error("Tenant validation error:", validationResult.error.flatten());
         return res.status(400).json({ 
           error: "Validierung fehlgeschlagen", 
           details: validationResult.error.flatten() 
