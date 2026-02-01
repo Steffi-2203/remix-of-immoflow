@@ -190,13 +190,30 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           credentials: 'include',
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error(`Seite ${i + 1} Fehler:`, errorData.message);
+        const responseText = await response.text();
+        
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error(`Seite ${i + 1} JSON-Parse-Fehler:`, responseText.substring(0, 200));
+          if (imagesToProcess.length === 1) {
+            setError('Server-Fehler: Ungültige Antwort erhalten. Bitte versuchen Sie es erneut.');
+            setStep('upload');
+            return;
+          }
           continue;
         }
 
-        const data = await response.json();
+        if (!response.ok) {
+          console.error(`Seite ${i + 1} Fehler:`, data.message);
+          if (imagesToProcess.length === 1) {
+            setError(data.message || 'OCR-Verarbeitung fehlgeschlagen');
+            setStep('upload');
+            return;
+          }
+          continue;
+        }
         
         if (data.tenants && Array.isArray(data.tenants)) {
           for (const t of data.tenants) {

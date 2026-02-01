@@ -3954,7 +3954,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   });
 
-  app.post("/api/ocr/tenant", isAuthenticated, ocrUpload.single('file'), async (req: Request, res: Response) => {
+  app.post("/api/ocr/tenant", isAuthenticated, (req: Request, res: Response, next: any) => {
+    ocrUpload.single('file')(req, res, (err: any) => {
+      if (err) {
+        console.error('Multer upload error:', err);
+        return res.status(400).json({ message: err.message || 'Datei-Upload fehlgeschlagen' });
+      }
+      next();
+    });
+  }, async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: 'Keine Datei hochgeladen' });
