@@ -399,7 +399,7 @@ export const generateLeerstandReport = (
       const property = properties.find(p => p.id === unit.property_id);
       return [
         property?.name || '-',
-        `Top ${unit.top_nummer}`,
+        `${unit.top_nummer}`,
         unitTypeLabels[unit.type] || unit.type,
         `${Number(unit.qm).toLocaleString('de-AT')} m²`,
         `${Number(unit.mea).toLocaleString('de-AT')}`,
@@ -1320,6 +1320,79 @@ export const generateOffenePostenReport = (
     });
   });
 
+  // ====== LEERSTAND (Vacancy) SUPPORT ======
+  // Finde Leerstand-Vorschreibungen für den Zeitraum
+  const vacancyInvoices = (monthlyInvoices || []).filter(inv => 
+    (inv as any).isVacancy === true || (inv as any).is_vacancy === true
+  );
+  
+  const periodVacancyInvoices = vacancyInvoices.filter(inv =>
+    inv.year === selectedYear &&
+    inv.month >= periodStartMonth && inv.month <= periodEndMonth
+  );
+  
+  // Gruppiere nach Unit
+  const vacancyByUnit = new Map<string, typeof periodVacancyInvoices>();
+  periodVacancyInvoices.forEach(inv => {
+    const unitId = (inv as any).unitId ?? (inv as any).unit_id;
+    if (!unitId) return;
+    
+    // Filter by property if selected
+    const unit = targetUnits.find(u => u.id === unitId);
+    if (!unit) return;
+    
+    if (!vacancyByUnit.has(unitId)) {
+      vacancyByUnit.set(unitId, []);
+    }
+    vacancyByUnit.get(unitId)!.push(inv);
+  });
+  
+  // Erstelle Leerstand-Einträge
+  vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
+    const unit = targetUnits.find(u => u.id === unitId);
+    const property = properties.find(p => p.id === unit?.property_id);
+    
+    // SOLL aus Vorschreibungen
+    const sollBk = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).betriebskosten ?? 0), 0);
+    const sollHk = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).heizungskosten ?? 0), 0);
+    const sollMiete = 0;
+    const sollBetrag = sollBk + sollHk;
+    
+    // IST aus paid_amount
+    const habenBetrag = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
+    
+    // Proportionale Verteilung
+    const sollTotal = sollBk + sollHk;
+    const istBk = sollTotal > 0 ? (sollBk / sollTotal) * habenBetrag : 0;
+    const istHk = sollTotal > 0 ? (sollHk / sollTotal) * habenBetrag : 0;
+    const istMiete = 0;
+    
+    const saldo = sollBetrag - habenBetrag;
+    
+    tenantBalances.push({
+      tenantId: `vacancy-${unitId}`,
+      tenantName: `Leerstand (${unitVacancyInvoices.length} Mon.)`,
+      unitId: unitId,
+      unitNummer: unit?.top_nummer || '-',
+      propertyName: property?.name || '-',
+      sollBk,
+      sollHk,
+      sollMiete,
+      sollBetrag,
+      istBk,
+      istHk,
+      istMiete,
+      habenBetrag,
+      saldo,
+      ueberzahlung: 0,
+      paymentCount: 0,
+      daysOverdue: 0,
+    });
+  });
+
   // Sort: Positive saldo (Unterzahlung) first, then by amount descending
   tenantBalances.sort((a, b) => {
     // First: underpayments (positive saldo)
@@ -1361,7 +1434,7 @@ export const generateOffenePostenReport = (
     
     return [
       tb.propertyName,
-      `Top ${tb.unitNummer}`,
+      `${tb.unitNummer}`,
       tb.tenantName,
       // BK Soll/Ist
       formatCurrency(tb.sollBk),
@@ -2082,7 +2155,7 @@ export const generateDetailReport = ({
       .map(unitData => {
         const saldo = unitData.income - unitData.expenses;
         return [
-          `Top ${unitData.unit.top_nummer}`,
+          `${unitData.unit.top_nummer}`,
           unitData.tenant ? `${unitData.tenant.first_name} ${unitData.tenant.last_name}` : 'Leerstand',
           formatCurrency(unitData.income),
           formatCurrency(unitData.expenses),
