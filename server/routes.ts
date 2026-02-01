@@ -3995,6 +3995,7 @@ Antworte im JSON-Format als ARRAY von Mietern:
       "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
       "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
       "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
+      "wasserkostenVorschuss": Wasserkostenvorschuss als Zahl (falls separat ausgewiesen),
       "kaution": Kaution als Zahl (falls angegeben),
       "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
       "address": "Adresse der Wohnung",
@@ -4005,8 +4006,8 @@ Antworte im JSON-Format als ARRAY von Mietern:
 
 Wichtige Hinweise:
 - Extrahiere JEDEN Mieter separat in das Array
-- Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten"
-- Die Gesamtmiete = Grundmiete + BK + HK (trenne diese auf)
+- Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten", "Wasser", "WK"
+- Die Gesamtmiete = Grundmiete + BK + HK + Wasserkosten (trenne diese auf)
 - Datumsformat immer als YYYY-MM-DD
 - Zahlen ohne Währungssymbol, nur numerisch
 - Wenn etwas nicht erkennbar ist, setze null oder 0
@@ -4055,6 +4056,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
         grundmiete: parseFloat(t.grundmiete) || 0,
         betriebskostenVorschuss: parseFloat(t.betriebskostenVorschuss) || 0,
         heizkostenVorschuss: parseFloat(t.heizkostenVorschuss) || 0,
+        wasserkostenVorschuss: parseFloat(t.wasserkostenVorschuss) || 0,
         kaution: parseFloat(t.kaution) || 0,
         topNummer: t.topNummer || '',
         address: t.address || '',
