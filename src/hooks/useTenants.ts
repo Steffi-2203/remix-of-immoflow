@@ -22,6 +22,7 @@ export interface Tenant {
   betriebskosten_vorschuss: string;
   heizungskostenVorschuss: string;
   heizungskosten_vorschuss: string;
+  heizkostenVorschuss: string;
   kaution: string | null;
   kautionBezahlt: boolean;
   kaution_bezahlt: boolean;
@@ -70,8 +71,9 @@ function normalizeTenant(t: any): Tenant {
     mietEnde: t.mietende ?? t.mietEnde ?? null,
     betriebskostenVorschuss: t.betriebskostenVorschuss ?? t.betriebskosten_vorschuss ?? '0',
     betriebskosten_vorschuss: t.betriebskostenVorschuss ?? t.betriebskosten_vorschuss ?? '0',
-    heizungskostenVorschuss: t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
-    heizungskosten_vorschuss: t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
+    heizungskostenVorschuss: t.heizkostenVorschuss ?? t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
+    heizungskosten_vorschuss: t.heizkostenVorschuss ?? t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
+    heizkostenVorschuss: t.heizkostenVorschuss ?? t.heizungskostenVorschuss ?? t.heizungskosten_vorschuss ?? '0',
     kautionBezahlt: t.kautionBezahlt ?? t.kaution_bezahlt ?? false,
     kaution_bezahlt: t.kautionBezahlt ?? t.kaution_bezahlt ?? false,
     sepaMandat: t.sepaMandat ?? t.sepa_mandat ?? false,
