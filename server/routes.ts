@@ -1340,6 +1340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const keys = Object.keys(positions);
             hasSonstigeKosten = keys.length > 0;
             
+            console.log(`[INVOICE-GEN] Mieter ${tenant.firstName} ${tenant.lastName}: sonstigeKosten gefunden mit ${keys.length} Positionen:`, JSON.stringify(positions));
+            
             // Expanded synonym lists for categorization
             const heizungKeywords = ['heiz', 'hk', 'zentralheizung', 'fernwärme', 'wärme', 'heizung', 'heizk'];
             const wasserKeywords = ['wasser', 'kaltwasser', 'warmwasser', 'ww', 'kw', 'abwasser', 'kanal'];
@@ -1399,6 +1401,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const heizungskosten = hasSonstigeKosten ? heizungskostenTotal : Number(tenant.heizkostenVorschuss || 0);
           const wasserkosten = hasSonstigeKosten ? wasserkostenTotal : Number(tenant.wasserkostenVorschuss || 0);
           
+          console.log(`[INVOICE-GEN] Mieter ${tenant.firstName} ${tenant.lastName}: Kategorisiert -> BK=${betriebskosten}, HK=${heizungskosten}, Wasser=${wasserkosten}, USt10=${ust10Total.toFixed(2)}, USt20=${ust20Total.toFixed(2)}`);
+          
           // Legacy USt calculation for fallback (when no sonstigeKosten)
           if (!hasSonstigeKosten) {
             ust10Total = (grundmiete + betriebskosten + wasserkosten) * 0.10;
@@ -1431,6 +1435,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             vortragHk: '0',
           };
 
+          console.log(`[INVOICE-GEN] Erstelle Vorschreibung für ${tenant.firstName} ${tenant.lastName}: Miete=${grundmiete}, BK=${betriebskosten}, HK=${heizungskosten}, Wasser=${wasserkosten}, USt=${totalUst.toFixed(2)}, Gesamt=${gesamtbetrag.toFixed(2)}`);
+          
           const newInvoice = await storage.createInvoice(invoiceData);
           createdInvoices.push(newInvoice);
         } catch (err) {
