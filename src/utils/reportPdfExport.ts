@@ -1474,22 +1474,38 @@ export const generateOffenePostenReport = (
     const unit = targetUnits.find(u => u.id === unitId);
     const property = properties.find(p => p.id === unit?.property_id);
     
-    // SOLL aus Vorschreibungen
-    const sollBk = unitVacancyInvoices.reduce((sum, inv) => 
-      sum + Number((inv as any).betriebskosten ?? 0), 0);
-    const sollHk = unitVacancyInvoices.reduce((sum, inv) => 
-      sum + Number((inv as any).heizungskosten ?? 0), 0);
+    // SOLL BRUTTO aus gesamtbetrag (konsistent mit normalen Mietern)
+    const sollBetrag = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).gesamtbetrag ?? 0), 0);
+    
+    // SOLL Komponenten mit BRUTTO (NETTO + USt)
+    let sollBk = unitVacancyInvoices.reduce((sum, inv) => {
+      const netto = Number((inv as any).betriebskosten ?? 0);
+      const ustSatz = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+      return sum + netto * (1 + ustSatz / 100);
+    }, 0);
+    let sollHk = unitVacancyInvoices.reduce((sum, inv) => {
+      const netto = Number((inv as any).heizungskosten ?? 0);
+      const ustSatz = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+      return sum + netto * (1 + ustSatz / 100);
+    }, 0);
     const sollMiete = 0;
-    const sollBetrag = sollBk + sollHk;
+    
+    // Reconciliation: Komponenten an gesamtbetrag anpassen
+    const komponentenSumme = sollBk + sollHk;
+    if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollBetrag) > 0.01) {
+      const factor = sollBetrag / komponentenSumme;
+      sollBk *= factor;
+      sollHk *= factor;
+    }
     
     // IST aus paid_amount
     const habenBetrag = unitVacancyInvoices.reduce((sum, inv) => 
       sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
     
-    // Proportionale Verteilung
-    const sollTotal = sollBk + sollHk;
-    const istBk = sollTotal > 0 ? (sollBk / sollTotal) * habenBetrag : 0;
-    const istHk = sollTotal > 0 ? (sollHk / sollTotal) * habenBetrag : 0;
+    // Proportionale Verteilung auf Komponenten
+    const istBk = sollBetrag > 0 ? (sollBk / sollBetrag) * habenBetrag : 0;
+    const istHk = sollBetrag > 0 ? (sollHk / sollBetrag) * habenBetrag : 0;
     const istMiete = 0;
     
     const saldo = sollBetrag - habenBetrag;

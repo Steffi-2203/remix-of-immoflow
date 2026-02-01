@@ -764,21 +764,48 @@ export default function Reports() {
       let sollMiete = 0;
       let sollBk = 0;
       let sollHk = 0;
+      let sollGesamt = 0;
       
       if (tenantInvoices.length > 0) {
-        // Summiere Vorschreibungen für den Zeitraum
+        // BRUTTO-Werte: Summiere gesamtbetrag für konsistente BRUTTO-Anzeige
+        // Für Komponenten-Breakdown verwenden wir die Einzel-Felder + USt
         tenantInvoices.forEach(inv => {
-          sollMiete += Number(inv.grundmiete || 0);
-          sollBk += Number(inv.betriebskosten || 0);
-          sollHk += Number(inv.heizungskosten || 0);
+          // Komponenten (NETTO aus DB)
+          const mieteNetto = Number(inv.grundmiete || 0);
+          const bkNetto = Number(inv.betriebskosten || 0);
+          const hkNetto = Number(inv.heizungskosten || 0);
+          
+          // USt-Sätze aus Invoice oder Defaults (BK 10%, HK 20%, Miete je nach Nutzungsart)
+          const ustSatzBk = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+          const ustSatzHk = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+          const ustSatzMiete = Number((inv as any).ustSatzMiete ?? (inv as any).ust_satz_miete ?? 10);
+          
+          // BRUTTO-Komponenten
+          sollMiete += mieteNetto * (1 + ustSatzMiete / 100);
+          sollBk += bkNetto * (1 + ustSatzBk / 100);
+          sollHk += hkNetto * (1 + ustSatzHk / 100);
         });
+        // BRUTTO-Gesamt aus gesamtbetrag (konsistent mit PDF)
+        sollGesamt = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
+        
+        // Reconciliation: Falls Komponenten-Summe != gesamtbetrag, proportional anpassen
+        const komponentenSumme = sollMiete + sollBk + sollHk;
+        if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollGesamt) > 0.01) {
+          const factor = sollGesamt / komponentenSumme;
+          sollMiete *= factor;
+          sollBk *= factor;
+          sollHk *= factor;
+        }
       } else {
-        // Fallback: Mieterdaten * monthMultiplier
-        sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-        sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-        sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+        // Fallback: Mieterdaten * monthMultiplier (NETTO → BRUTTO mit Default-USt)
+        const mieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
+        const bkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+        const hkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+        sollMiete = mieteNetto * 1.10; // 10% USt für Wohnung
+        sollBk = bkNetto * 1.10; // 10% USt
+        sollHk = hkNetto * 1.20; // 20% USt
+        sollGesamt = sollMiete + sollBk + sollHk;
       }
-      const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
       const tenantPayments = periodCombinedPayments.filter(p => p.tenant_id === tenant.id);
@@ -869,21 +896,38 @@ export default function Reports() {
       const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
       const property = properties?.find(p => p.id === unitPropertyId);
       
-      // SOLL aus Vorschreibungen
-      const sollBk = unitVacancyInvoices.reduce((sum, inv) => 
-        sum + Number((inv as any).betriebskosten ?? 0), 0);
-      const sollHk = unitVacancyInvoices.reduce((sum, inv) => 
-        sum + Number((inv as any).heizungskosten ?? 0), 0);
+      // SOLL BRUTTO aus gesamtbetrag
+      const sollGesamt = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).gesamtbetrag ?? 0), 0);
+      
+      // SOLL Komponenten mit BRUTTO (NETTO + USt)
+      let sollBk = unitVacancyInvoices.reduce((sum, inv) => {
+        const netto = Number((inv as any).betriebskosten ?? 0);
+        const ustSatz = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+        return sum + netto * (1 + ustSatz / 100);
+      }, 0);
+      let sollHk = unitVacancyInvoices.reduce((sum, inv) => {
+        const netto = Number((inv as any).heizungskosten ?? 0);
+        const ustSatz = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+        return sum + netto * (1 + ustSatz / 100);
+      }, 0);
       const sollMiete = 0;
-      const sollGesamt = sollBk + sollHk;
+      
+      // Reconciliation: Komponenten an gesamtbetrag anpassen
+      const komponentenSumme = sollBk + sollHk;
+      if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollGesamt) > 0.01) {
+        const factor = sollGesamt / komponentenSumme;
+        sollBk *= factor;
+        sollHk *= factor;
+      }
       
       // IST aus paid_amount
       const totalPaid = unitVacancyInvoices.reduce((sum, inv) => 
         sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
       
-      const sollTotal = sollBk + sollHk;
-      const istBk = sollTotal > 0 ? (sollBk / sollTotal) * totalPaid : 0;
-      const istHk = sollTotal > 0 ? (sollHk / sollTotal) * totalPaid : 0;
+      // Proportionale Verteilung der Zahlung auf Komponenten
+      const istBk = sollGesamt > 0 ? (sollBk / sollGesamt) * totalPaid : 0;
+      const istHk = sollGesamt > 0 ? (sollHk / sollGesamt) * totalPaid : 0;
       const istMiete = 0;
       const istGesamt = istBk + istHk;
       
