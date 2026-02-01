@@ -41,20 +41,20 @@ interface InvoiceData {
   unitId: string | null;
   year: number;
   month: number;
-  grundmiete: string;
-  betriebskosten: string;
-  heizungskosten: string;
-  gesamtbetrag: string;
-  ust: string;
+  grundmiete: number;
+  betriebskosten: number;
+  heizungskosten: number;
+  gesamtbetrag: number;
+  ust: number;
   ustSatzMiete: number;
   ustSatzBk: number;
   ustSatzHeizung: number;
   status: "offen" | "bezahlt" | "teilbezahlt" | "ueberfaellig";
   faelligAm: string;
-  vortragMiete: string;
-  vortragBk: string;
-  vortragHk: string;
-  vortragSonstige: string;
+  vortragMiete: number;
+  vortragBk: number;
+  vortragHk: number;
+  vortragSonstige: number;
 }
 
 interface GenerateInvoicesResult {
