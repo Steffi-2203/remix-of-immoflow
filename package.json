@@ -11,7 +11,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "npx vitest run tests/unit/",
+    "test:watch": "npx vitest tests/unit/",
+    "test:all": "npx vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
