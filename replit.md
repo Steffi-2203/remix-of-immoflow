@@ -32,6 +32,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - **Wasserkosten**: Water costs (Wasserkosten) are tracked as a separate invoice line item with 10% VAT, supporting properties where water is billed separately from BK.
     - **§ 21 MRG Legal Warnings**: Automatic warnings for settlement deadlines (Abs 3: after 30.06. of following year) and statute of limitations (Abs 4: expires 01.01. of 4th following year).
     - **Offene Posten**: SOLL values sourced from Vorschreibung (monthly_invoices) with fallback to tenant fields.
+    - **Leerstand (Vacancy)**: Vacant units generate Vorschreibungen with BK+HK but no rent (Miete=0). Owner pays these costs. Units have `leerstandBk` and `leerstandHk` fields to define vacancy costs. Vacancy invoices are created automatically during invoice generation and marked with `isVacancy=true`.
     - **Bank Account Year-End Carry-Over**: API route `/api/bank-accounts/:id/carry-over` transfers 31.12. closing balance to 01.01. opening balance with conflict detection.
 - **Professional Accountant Features**:
     - **SEPA Export**: Generation of `pain.008.001.02` (Direct Debit) and `pain.001.001.03` (Credit Transfer) XML files compliant with Austrian banking standards.
