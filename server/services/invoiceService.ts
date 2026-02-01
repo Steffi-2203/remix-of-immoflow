@@ -405,16 +405,21 @@ export class InvoiceService {
         createdCount: inserted.length,
         month,
         year,
+        invoiceIds: inserted.map(inv => inv.id),
       });
 
       return inserted;
     });
 
+    const attemptedCount = invoicesToCreate.length;
+    const conflictSkipped = attemptedCount - createdInvoices.length;
+    const totalSkipped = existingTenantIds.size + conflictSkipped;
+
     return { 
       success: true, 
       message: `Successfully created ${createdInvoices.length} invoices for ${month}/${year}`,
       created: createdInvoices.length,
-      skipped: existingTenantIds.size,
+      skipped: totalSkipped,
       carryForwardsCalculated: isJanuary ? carryForwardMap.size : 0,
       invoices: createdInvoices
     };
