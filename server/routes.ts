@@ -1097,6 +1097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         betriebskostenVorschuss: body.betriebskostenVorschuss?.toString() || '0',
         heizkostenVorschuss: body.heizkostenVorschuss?.toString() || '0',
         wasserkostenVorschuss: body.wasserkostenVorschuss?.toString() || '0',
+        warmwasserkostenVorschuss: body.warmwasserkostenVorschuss?.toString() || '0',
         sonstigeKosten: body.sonstigeKosten && typeof body.sonstigeKosten === 'object' ? body.sonstigeKosten : null,
         kaution: body.kaution?.toString() || null,
         kautionBezahlt: body.kautionBezahlt || false,
@@ -4049,9 +4050,10 @@ Antworte im JSON-Format als ARRAY von Mietern:
       "phone": "Telefonnummer (falls vorhanden)",
       "mietbeginn": "Mietbeginn im Format YYYY-MM-DD",
       "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
-      "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
-      "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
-      "wasserkostenVorschuss": Wasserkostenvorschuss als Zahl (falls separat ausgewiesen),
+      "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl (alle BK-Positionen summieren),
+      "heizkostenVorschuss": Heizkostenvorschuss/Zentralheizung als Zahl,
+      "wasserkostenVorschuss": Kaltwasser-Vorschuss als Zahl (falls separat ausgewiesen),
+      "warmwasserkostenVorschuss": Warmwasser-Vorschuss als Zahl (falls separat von Heizung),
       "sonstigeKosten": { "Bezeichnung": Betrag als Zahl, ... },
       "kaution": Kaution als Zahl (falls angegeben),
       "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
@@ -4063,10 +4065,13 @@ Antworte im JSON-Format als ARRAY von Mietern:
 
 Wichtige Hinweise:
 - Extrahiere JEDEN Mieter separat in das Array
-- Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten", "Wasser", "WK"
-- Die Gesamtmiete = Grundmiete + BK + HK + Wasserkosten (trenne diese auf)
+- Bei österreichischen Vorschreibungen: Suche nach "Miete", "Hauptmietzins", "BK", "HK", "Heizung", "Zentralheizung", "Betriebskosten", "Kaltwasser", "Warmwasser", "WK"
+- WICHTIG: Mehrere Betriebskosten-Positionen (z.B. "Betriebskosten", "Betriebskosten2") SUMMIEREN
+- Kaltwasser → wasserkostenVorschuss
+- Warmwasser → warmwasserkostenVorschuss (getrennt von Heizung erfassen!)
+- Zentralheizung/Heizung → heizkostenVorschuss
 - sonstigeKosten: Erfasse ALLE weiteren Kostenpositionen die nicht in die Standardfelder passen, z.B.:
-  * Lift/Aufzug/Liftkosten
+  * Lift/Aufzug/Betriebskosten Lift
   * Garage/Stellplatz/Parkplatz
   * Müll/Müllabfuhr
   * Kabel-TV/Fernsehen
@@ -4075,8 +4080,9 @@ Wichtige Hinweise:
   * Versicherung
   * Garten/Grünflächen
   * Reinigung/Hausbetreuung
+  * Mahnkosten/Mahngebühren
   * Sonstige Nebenkosten
-  Beispiel: { "Lift": 15.50, "Garage": 85.00, "Müll": 8.20 }
+  Beispiel: { "Lift": 15.50, "Garage": 85.00, "Mahnkosten": 15.00 }
 - Datumsformat immer als YYYY-MM-DD
 - Zahlen ohne Währungssymbol, nur numerisch
 - Wenn etwas nicht erkennbar ist, setze null oder 0
