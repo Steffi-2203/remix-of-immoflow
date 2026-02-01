@@ -1,0 +1,48 @@
+Du bist Datenverantwortlicher für das Offene‑Posten‑Reporting. Ich habe Inkonsistenzen zwischen dem PDF‑Report und der Live‑Datenbank festgestellt. Nutze die folgende Systemübersicht als Kontext:
+
+- DB: PostgreSQL (Neon) via env DATABASE_URL, Schema public.
+  - monthly_invoices: SOLL brutto (gesamtbetrag), paid_amount, year, month
+  - payments: IST brutto (betrag), tenant_id, buchungs_datum
+  - tenants, units, properties: Stammdaten
+- API Layer: Express GET /api/invoices → storage.getInvoicesByOrg(), GET /api/payments → storage.getPaymentsByOrg()
+- Client Cache: TanStack Query mit TTL 5 min; Hooks: useInvoices(), useCombinedPayments(), useTenants()
+- Report Flow: reportPdfExport.ts:generateOffenePostenReport()
+  - 1 Filter Mieter aktiv + mit Vorschreibungen
+  - 2 Filter Zahlungen nach allRelevantTenantIds (Fix erforderlich)
+  - 3 SOLL = Σ gesamtbetrag, IST = Σ betrag
+  - 4 MRG Allokation BK→HK→Miete
+  - 5 Saldo = SOLL - IST
+
+Antworte als JSON mit exakt diesen Feldern:
+
+{
+  "source": {
+    "db_instance": "host, dbname, schema",
+    "api_endpoints": { "invoices": "URL", "payments": "URL", "tenants": "URL" },
+    "client": "TanStack Query config and TTL"
+  },
+  "query": {
+    "exact_sql_or_api": "Die exakte SQL Query oder API Request die für SOLL und IST verwendet wird. Wenn mehrere Schritte, liste sie sequenziell mit Codeblöcken.",
+    "transformations": "Alle Post Processing Schritte wie joins, filters, grouping, rounding in Ausführungsreihenfolge"
+  },
+  "pdf_export_flow": [
+    "Vollständige Schrittfolge von reportPdfExport.ts:generateOffenePostenReport inklusive Hook Aufrufen, Filterlogik, und MRG Allokation",
+    "Gib Codezeilen oder Pseudocode an, die genau zeigen wie payments gefiltert und aggregiert werden"
+  ],
+  "cache_info": {
+    "tanstack": "TTL, staleTime, invalidation rules",
+    "server_side": "materialized views, redis, cdn, BI exports with refresh schedule"
+  },
+  "last_run": {
+    "report_job": "timestamp und job id",
+    "api_cache_refresh": "timestamp"
+  },
+  "reproduce_snippet": {
+    "sql": "Minimal ausführbare SQL Query die ich lokal gegen DATABASE_URL laufen lassen kann um SOLL und IST zu reproduzieren",
+    "example_output": "3 Beispielzeilen mit id, gross, paid, open"
+  },
+  "logs": "Relevante Job Logs oder Audit Einträge der letzten 24 Stunden mit timestamps und job ids",
+  "missing_info": "Wenn etwas nicht bekannt ist, liste genau was fehlt und wie ich Zugriff anfordern kann"
+}
+
+Wenn die Reportwerte aus einer anderen Umgebung stammen nenne diese Umgebung explizit und liefere Verbindungsdaten oder Job‑ID.
