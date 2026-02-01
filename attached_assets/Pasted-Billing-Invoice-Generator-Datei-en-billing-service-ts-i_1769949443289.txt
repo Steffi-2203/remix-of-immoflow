@@ -1,0 +1,67 @@
+Billing / Invoice Generator
+
+Datei(en): billing.service.ts, invoice.generator.ts, settlementService.ts (voller Code, nicht nur Signaturen).
+
+Warum: Hier steht die eigentliche Logik (Verteilerschlüssel, Rundung, HeizKG‑Berechnung, Reihenfolge der Allokation).
+
+Payment Allocation Logic
+
+Datei: paymentService.ts (vollständige Implementierung von allocatePayment, getTenantBalance, getDunningLevel).
+
+Warum: Prüfen muss ich, wie Zahlungen auf invoice_lines/monthly_invoices gebucht und Salden berechnet werden.
+
+Drizzle Schema Komplett
+
+Datei: shared/schema.ts (ganze Datei mit alle pgTable‑Definitionen, Enums, Index‑Deklarationen).
+
+Warum: Ich brauche die exakten Spaltentypen, Constraints und Enums, um Migrations‑ und Konsistenzchecks zu machen.
+
+API, Repositories und Middleware (zweite Priorität)
+Route‑Handler / Controller
+
+Dateien: server/routes.ts, controllers/invoices.controller.ts, controllers/payments.controller.ts (oder wie eure Struktur heißt).
+
+Warum: So sehe ich Request→Service→DB‑Flow, Fehlerbehandlung und Statusübergänge (draft → issued → paid).
+
+Repository / DB‑Layer
+
+Dateien: repositories/* oder db/* (CRUD‑Funktionen, Transaktionsnutzung, Beispiel für db.transaction-Aufrufe).
+
+Warum: Wichtig für atomare Generierung von invoice_lines + expense_allocations.
+
+Audit Middleware
+
+Datei: Middleware, die auditLogs schreibt (z. B. audit.middleware.ts) oder Beispiel‑Repository‑Aufrufe, die writeAudit verwenden.
+
+Warum: Prüfen, ob Audit konsistent und performant implementiert ist.
+
+Infrastruktur, Migrations, Seeds, Env (dritte Priorität)
+Drizzle Migrations (aktueller migrations‑Ordner)
+
+Warum: Prüfen, ob DB‑Änderungen reproduzierbar sind.
+
+.env.example mit benötigten ENV‑VARS (DB_URL, JWT_SECRET, STRIPE_SECRET, SEPA keys).
+
+Seed / Sample Data (kleine JSON/SQL mit 5–10 Einträgen: Units, Tenants, Expenses, MeterReadings, MonthlyInvoices).
+
+Warum: Ermöglicht mir, Logik lokal mit realistischen Daten zu simulieren.
+
+Tests, Beispiel‑Requests, Logs (niedrige Priorität)
+Unit/Integration Tests für Abrechnung (falls vorhanden).
+
+Beispiel HTTP Requests (cURL/Postman) für: POST /api/invoices/dry-run, POST /api/invoices/generate, POST /api/payments.
+
+Fehlerlogs oder bekannte Problemfälle (z. B. Rundungsabweichungen, Race Conditions).
+
+Was ich konkret prüfe und liefere, sobald ich die Dateien habe
+Datenmodell‑Audit: fehlende Tabellen/Constraints, Index‑Optimierung, Not‑Null/Check‑Rules.
+
+Abrechnungslogik‑Audit: Verteilerschlüssel, Rundungsreihenfolge, HeizKG‑Konformität, Reproduzierbarkeit (dry‑run → generate).
+
+Transaktionssicherheit: atomare Generierung von invoice_lines + expense_allocations + monthly_invoices.
+
+Payment Allocation Audit: Reihenfolge, Teilschuldzuweisung, Mahnwesen‑Trigger.
+
+Konkrete Code‑Patches: Drizzle‑Migrationen, Middleware‑Snippets (Audit, rate limiting hardening), Test‑Templates (Vitest/Jest) für 3 Abrechnungsfälle.
+
+Priorisierte To‑Do‑Liste mit Aufwandsschätzung.
