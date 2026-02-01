@@ -33,6 +33,17 @@ async function run() {
       const content = await readFile(path.join(seedDir, file), "utf8");
       const json = JSON.parse(content);
 
+      if (Array.isArray(json.organizations)) {
+        for (const o of json.organizations) {
+          await client.query(
+            `INSERT INTO organizations (id, name, created_at)
+             VALUES ($1,$2,$3)
+             ON CONFLICT (id) DO NOTHING`,
+            [o.id, o.name, o.createdAt || new Date()]
+          );
+        }
+      }
+
       if (Array.isArray(json.properties)) {
         for (const p of json.properties) {
           await client.query(
@@ -58,10 +69,10 @@ async function run() {
       if (Array.isArray(json.tenants)) {
         for (const t of json.tenants) {
           await client.query(
-            `INSERT INTO tenants (id, unit_id, first_name, last_name, grundmiete, betriebskosten_vorschuss, heizkosten_vorschuss, status, created_at)
+            `INSERT INTO tenants (id, unit_id, first_name, last_name, grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss, status, created_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
              ON CONFLICT (id) DO NOTHING`,
-            [t.id, t.unitId, t.firstName, t.lastName, t.grundmiete, t.betriebskostenVorschuss || t.betriebskosten_vorschuss, t.heizkostenVorschuss || t.heizkosten_vorschuss, t.status || "aktiv", t.createdAt || new Date()]
+            [t.id, t.unitId, t.firstName, t.lastName, t.grundmiete, t.betriebskostenVorschuss || t.betriebskosten_vorschuss, t.heizkostenVorschuss || t.heizungskosten_vorschuss, t.status || "aktiv", t.createdAt || new Date()]
           );
         }
       }
