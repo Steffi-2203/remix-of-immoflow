@@ -151,10 +151,11 @@ export function useTransactionIncome(propertyId?: string | null) {
   const income = useMemo(() => {
     return (transactions || []).filter(t => {
       // Only positive amounts (income)
-      if (t.amount <= 0) return false;
+      if (Number(t.amount) <= 0) return false;
       
       // Exclude transactions that have tenant_id (those are rent, handled by payments) - support both field names
-      const tenantId = t.tenantId ?? t.tenant_id;
+      const tAny = t as any;
+      const tenantId = tAny.tenantId ?? t.tenant_id;
       if (tenantId) return false;
       
       // Property filter if specified - support both field names
