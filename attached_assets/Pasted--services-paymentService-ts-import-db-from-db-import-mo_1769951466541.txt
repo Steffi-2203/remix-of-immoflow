@@ -1,0 +1,127 @@
+// services/paymentService.ts
+import { db } from "../db";
+import { monthlyInvoices, payments, auditLogs, transactions } from "@shared/schema";
+import { sql } from "drizzle-orm";
+import { roundMoney } from "@shared/utils";
+
+export class PaymentService {
+  async allocatePayment(params: {
+    paymentId: string;
+    tenantId: string;
+    amount: number;
+    bookingDate?: string; // YYYY-MM-DD
+    paymentType?: string;
+    reference?: string;
+    userId?: string;
+  }) {
+    const { paymentId, tenantId, amount, bookingDate, paymentType = "ueberweisung", reference, userId } = params;
+    const roundedAmount = roundMoney(amount);
+
+    return await db.transaction(async (tx) => {
+      // 1. Insert payment record (idempotent if paymentId exists)
+      await tx.execute(sql`
+        INSERT INTO payments (id, tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck, created_at)
+        VALUES (${paymentId}, ${tenantId}, NULL, ${roundedAmount}, ${bookingDate ?? sql`now()::date`}, ${paymentType}, ${reference}, now())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // 2. Lock open invoices for tenant ordered oldest first
+      const invoices = await tx.execute(sql`
+        SELECT id, gesamtbetrag, COALESCE(paid_amount, 0) AS paid_amount
+        FROM monthly_invoices
+        WHERE tenant_id = ${tenantId} AND status IN ('offen','teilbezahlt')
+        ORDER BY year, month
+        FOR UPDATE
+      `).then(r => r.rows);
+
+      let remaining = roundedAmount;
+      let appliedTotal = 0;
+
+      for (const inv of invoices) {
+        if (remaining <= 0) break;
+
+        const total = roundMoney(Number(inv.gesamtbetrag || 0));
+        const paid = roundMoney(Number(inv.paid_amount || 0));
+        const due = roundMoney(total - paid);
+        if (due <= 0) continue;
+
+        const apply = roundMoney(Math.min(remaining, due));
+        const newPaid = roundMoney(paid + apply);
+        remaining = roundMoney(remaining - apply);
+        appliedTotal = roundMoney(appliedTotal + apply);
+
+        // Update invoice paid_amount and status
+        await tx.execute(sql`
+          UPDATE monthly_invoices
+          SET paid_amount = ${newPaid},
+              status = CASE WHEN ${newPaid} >= ${total} THEN 'bezahlt' WHEN ${newPaid} > 0 THEN 'teilbezahlt' ELSE status END,
+              version = COALESCE(version, 1) + 1,
+              updated_at = now()
+          WHERE id = ${inv.id}
+        `);
+
+        // Audit per allocation (lightweight). Detailed per-line audit can be enqueued.
+        await tx.execute(sql`
+          INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+          VALUES (${userId}, 'monthly_invoices', ${inv.id}, 'payment_allocated', ${JSON.stringify({ paymentId, applied: apply })}::jsonb, now())
+        `);
+      }
+
+      // 3. Handle remaining amount (overpayment)
+      let unapplied = remaining;
+      if (unapplied > 0) {
+        // Option A: create a credit transaction record
+        await tx.execute(sql`
+          INSERT INTO transactions (id, organization_id, bank_account_id, amount, transaction_date, booking_text, created_at)
+          VALUES (gen_random_uuid(), NULL, NULL, ${unapplied}, now()::date, 'Überzahlung / Gutschrift für Tenant ${tenantId}', now())
+        `);
+
+        // Optionally mark payment as having unapplied amount (add column payments.unapplied_amount if desired)
+        await tx.execute(sql`
+          UPDATE payments SET notizen = COALESCE(notizen, '') || ${` Überzahlung ${unapplied.toFixed(2)} €`} WHERE id = ${paymentId}
+        `);
+      }
+
+      // 4. Summary audit for the payment
+      await tx.execute(sql`
+        INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+        VALUES (${userId}, 'payments', ${paymentId}, 'allocated', ${JSON.stringify({
+          tenantId,
+          paymentId,
+          amount: roundedAmount,
+          applied: appliedTotal,
+          unapplied
+        })}::jsonb, now())
+      `);
+
+      return {
+        success: true,
+        paymentId,
+        applied: appliedTotal,
+        unapplied,
+      };
+    });
+  }
+
+  async getTenantBalance(tenantId: string, year?: number) {
+    const whereYear = year ? sql`AND year = ${year}` : sql``;
+    const invoices = await db.execute(sql`
+      SELECT COALESCE(SUM(gesamtbetrag),0) AS total_soll, COALESCE(SUM(paid_amount),0) AS total_ist
+      FROM monthly_invoices
+      WHERE tenant_id = ${tenantId} ${whereYear}
+    `).then(r => r.rows[0]);
+
+    const totalSoll = roundMoney(Number(invoices.total_soll || 0));
+    const totalIst = roundMoney(Number(invoices.total_ist || 0));
+    return { totalSoll, totalIst, saldo: roundMoney(totalSoll - totalIst) };
+  }
+
+  getDunningLevel(daysOverdue: number) {
+    if (daysOverdue >= 45) return 3;
+    if (daysOverdue >= 30) return 2;
+    if (daysOverdue >= 14) return 1;
+    return 0;
+  }
+
+  async recordDunningAction(params: { tenantId: string; level: number; userId?: string; note?: string }) {
+    const { tenant
