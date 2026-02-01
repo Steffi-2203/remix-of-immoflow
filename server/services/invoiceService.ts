@@ -3,10 +3,23 @@ import {
   tenants, 
   units, 
   monthlyInvoices, 
+  invoiceLines,
   payments, 
   propertyManagers 
 } from "@shared/schema";
 import { eq, and, inArray, gte, lte } from "drizzle-orm";
+import { writeAudit } from "../lib/auditLog";
+import type { Tenant } from "@shared/schema";
+
+interface InvoiceLine {
+  invoiceId: string;
+  expenseType: string;
+  description: string;
+  netAmount: string;
+  vatRate: number;
+  grossAmount: string;
+  allocationReference: string;
+}
 
 interface CarryForward {
   vortragMiete: number;
@@ -163,6 +176,96 @@ export class InvoiceService {
     };
   }
 
+  buildInvoiceLines(
+    invoiceId: string,
+    tenant: Tenant,
+    vatRates: VatRates,
+    month: number,
+    year: number
+  ): InvoiceLine[] {
+    const lines: InvoiceLine[] = [];
+    const monthName = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][month - 1];
+
+    const grundmiete = Number(tenant.grundmiete) || 0;
+    if (grundmiete > 0) {
+      const netMiete = grundmiete / (1 + vatRates.ustSatzMiete / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'grundmiete',
+        description: `Nettomiete ${monthName} ${year}`,
+        netAmount: (Math.round(netMiete * 100) / 100).toString(),
+        vatRate: vatRates.ustSatzMiete,
+        grossAmount: grundmiete.toString(),
+        allocationReference: 'MRG §15',
+      });
+    }
+
+    const bk = Number(tenant.betriebskostenVorschuss) || 0;
+    if (bk > 0) {
+      const netBk = bk / (1 + vatRates.ustSatzBk / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'betriebskosten',
+        description: `BK-Vorschuss ${monthName} ${year}`,
+        netAmount: (Math.round(netBk * 100) / 100).toString(),
+        vatRate: vatRates.ustSatzBk,
+        grossAmount: bk.toString(),
+        allocationReference: 'MRG §21',
+      });
+    }
+
+    const hk = Number(tenant.heizkostenVorschuss) || 0;
+    if (hk > 0) {
+      const netHk = hk / (1 + vatRates.ustSatzHeizung / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'heizkosten',
+        description: `HK-Vorschuss ${monthName} ${year}`,
+        netAmount: (Math.round(netHk * 100) / 100).toString(),
+        vatRate: vatRates.ustSatzHeizung,
+        grossAmount: hk.toString(),
+        allocationReference: 'HeizKG',
+      });
+    }
+
+    const wasser = Number(tenant.wasserkostenVorschuss) || 0;
+    if (wasser > 0) {
+      const netWasser = wasser / (1 + 10 / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'wasserkosten',
+        description: `Wasserkosten-Vorschuss ${monthName} ${year}`,
+        netAmount: (Math.round(netWasser * 100) / 100).toString(),
+        vatRate: 10,
+        grossAmount: wasser.toString(),
+        allocationReference: 'MRG §21',
+      });
+    }
+
+    const sonstigeKosten = tenant.sonstigeKosten as Record<string, { betrag: number; ust: number; schluessel?: string }> | null;
+    if (sonstigeKosten && typeof sonstigeKosten === 'object') {
+      for (const [key, value] of Object.entries(sonstigeKosten)) {
+        if (value && value.betrag > 0) {
+          const betrag = Number(value.betrag);
+          const ust = Number(value.ust) || 10;
+          const netBetrag = betrag / (1 + ust / 100);
+          lines.push({
+            invoiceId,
+            expenseType: 'sonstige',
+            description: `${key} ${monthName} ${year}`,
+            netAmount: (Math.round(netBetrag * 100) / 100).toString(),
+            vatRate: ust,
+            grossAmount: betrag.toString(),
+            allocationReference: value.schluessel || 'Vereinbarung',
+          });
+        }
+      }
+    }
+
+    return lines;
+  }
+
   async generateMonthlyInvoices(
     userId: string, 
     year: number, 
@@ -255,6 +358,7 @@ export class InvoiceService {
       }
     }
 
+    const tenantMap = new Map(tenantsToInvoice.map(t => [t.id, t]));
     const invoicesToCreate = tenantsToInvoice.map(tenant => {
       const unitType = unitTypeMap.get(tenant.unitId || '') || 'wohnung';
       const carryForward = carryForwardMap.get(tenant.id) || {
@@ -264,9 +368,33 @@ export class InvoiceService {
     });
 
     const createdInvoices = await db.transaction(async (tx) => {
-      return tx.insert(monthlyInvoices)
+      const inserted = await tx.insert(monthlyInvoices)
         .values(invoicesToCreate)
         .returning();
+
+      let totalLinesCreated = 0;
+      for (const invoice of inserted) {
+        const tenant = tenantMap.get(invoice.tenantId);
+        const unitType = unitTypeMap.get(invoice.unitId || '') || 'wohnung';
+        const vatRates = this.getVatRates(unitType);
+
+        const lines = this.buildInvoiceLines(invoice.id, tenant!, vatRates, month, year);
+        if (lines.length > 0) {
+          await tx.insert(invoiceLines).values(lines);
+          totalLinesCreated += lines.length;
+        }
+
+        await writeAudit(tx, userId, 'monthly_invoices', invoice.id, 'create', null, {
+          invoiceId: invoice.id,
+          tenantId: invoice.tenantId,
+          year: invoice.year,
+          month: invoice.month,
+          gesamtbetrag: invoice.gesamtbetrag,
+          countLines: lines.length,
+        });
+      }
+
+      return inserted;
     });
 
     return { 
