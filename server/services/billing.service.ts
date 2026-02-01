@@ -90,10 +90,13 @@ export class BillingService {
 
       for (let i = 0; i < allLines.length; i += 500) {
         const batch = allLines.slice(i, i + 500);
-        for (const line of batch) {
+        if (batch.length > 0) {
+          const values = batch.map(line => 
+            sql`(${line.invoiceId}, ${line.expenseType}, ${line.description}, ${line.netAmount}, ${line.vatRate}, ${line.grossAmount}, ${line.allocationReference}, now())`
+          );
           await tx.execute(sql`
             INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, ust_satz, gross_amount, allocation_reference, created_at)
-            VALUES (${line.invoiceId}, ${line.expenseType}, ${line.description}, ${line.netAmount}, ${line.vatRate}, ${line.grossAmount}, ${line.allocationReference}, now())
+            VALUES ${sql.join(values, sql`, `)}
           `);
         }
       }

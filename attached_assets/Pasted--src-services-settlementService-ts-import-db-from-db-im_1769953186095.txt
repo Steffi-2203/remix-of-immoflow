@@ -1,0 +1,116 @@
+// src/services/settlementService.ts
+import { db } from "../db";
+import { roundMoney } from "@shared/utils";
+import {
+  settlements,
+  settlementDetails,
+  expenses,
+  distributionKeys,
+  unitDistributionValues,
+  units,
+  tenants,
+  auditLogs
+} from "@shared/schema";
+
+/**
+ * SettlementService
+ * - calculatePropertyExpenses: sums expenses for property/year
+ * - getDistributionValue: reads unitDistributionValues or computes formula
+ * - createSettlement: creates settlement + settlementDetails with allocationDetail JSON
+ */
+
+export class SettlementService {
+  async calculatePropertyExpenses(propertyId: string, year: number) {
+    const res = await db.execute(sql`
+      SELECT COALESCE(SUM(betrag),0) AS total
+      FROM expenses
+      WHERE property_id = ${propertyId} AND year = ${year}
+    `);
+    return roundMoney(Number(res.rows[0]?.total || 0));
+  }
+
+  async getDistributionValue(keyId: string, unitId: string) {
+    // read unit_distribution_values
+    const row = await db.select().from(unitDistributionValues).where(unitDistributionValues.keyId.eq(keyId).and(unitDistributionValues.unitId.eq(unitId))).then(r => r[0]);
+    if (row) return Number(row.value || 0);
+    // fallback: read unit attribute (e.g., flaeche)
+    const unit = await db.select().from(units).where(units.id.eq(unitId)).then(r => r[0]);
+    if (unit && unit.flaeche) return Number(unit.flaeche || 0);
+    return 0;
+  }
+
+  async createSettlement(params: {
+    propertyId: string;
+    year: number;
+    createdBy?: string;
+    distributionKeyId: string;
+  }) {
+    const { propertyId, year, createdBy, distributionKeyId } = params;
+    // gather expenses
+    const totalExpenses = await this.calculatePropertyExpenses(propertyId, year);
+
+    // gather units and distribution values
+    const unitsList = await db.select().from(units).where(units.propertyId.eq(propertyId));
+    const values: { unitId: string; value: number }[] = [];
+    let totalKeyValue = 0;
+    for (const u of unitsList) {
+      const v = await this.getDistributionValue(distributionKeyId, u.id);
+      values.push({ unitId: u.id, value: roundMoney(v) });
+      totalKeyValue = roundMoney(totalKeyValue + roundMoney(v));
+    }
+
+    if (totalKeyValue <= 0) throw new Error("Distribution key total is zero");
+
+    // create settlement and details in transaction
+    const created = await db.transaction(async (tx) => {
+      const settlementRes = await tx.execute(sql`
+        INSERT INTO settlements (id, property_id, year, status, gesamtausgaben, created_by, created_at)
+        VALUES (gen_random_uuid(), ${propertyId}, ${year}, 'entwurf', ${totalExpenses}, ${createdBy}, now())
+        RETURNING *
+      `);
+      const settlementRow = settlementRes.rows[0];
+
+      // create details
+      for (const v of values) {
+        const anteil = roundMoney(v.value / totalKeyValue);
+        const ausgabenAnteil = roundMoney(totalExpenses * anteil);
+        const detailAllocation = {
+          formula: 'proportional',
+          inputs: { distributionKeyId, unitValue: v.value, totalKeyValue },
+          roundingSteps: { anteil, ausgabenAnteil },
+          generatedAt: new Date().toISOString()
+        };
+
+        await tx.insert(settlementDetails).values({
+          id: undefined,
+          settlementId: settlementRow.id,
+          tenantId: null,
+          unitId: v.unitId,
+          anteil,
+          ausgabenAnteil,
+          vorschuss: 0,
+          differenz: 0,
+          createdAt: new Date()
+        });
+
+        // store allocation detail as audit log per detail (lightweight)
+        await tx.execute(sql`
+          INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+          VALUES (${createdBy}, 'settlement_details', NULL, 'create_detail', ${JSON.stringify({ unitId: v.unitId, detailAllocation })}::jsonb, now())
+        `);
+      }
+
+      // summary audit
+      await tx.execute(sql`
+        INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+        VALUES (${createdBy}, 'settlements', ${settlementRow.id}, 'create_settlement', ${JSON.stringify({ totalExpenses, unitCount: values.length })}::jsonb, now())
+      `);
+
+      return settlementRow;
+    });
+
+    return created;
+  }
+}
+
+export const settlementService = new SettlementService();
