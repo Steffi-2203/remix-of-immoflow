@@ -965,11 +965,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: body.type || 'wohnung',
         flaeche: body.flaeche || '0',
         nutzwert: body.nutzwert || null,
-        status: body.status || 'leer',
+        status: body.status === 'vermietet' ? 'aktiv' : (body.status || 'leerstand'),
         vsPersonen: body.vsPersonen || null,
-        geschoss: body.geschoss || null,
-        stiege: body.stiege || null,
-        lage: body.lage || null,
+        stockwerk: body.stockwerk || null,
       };
 
       const unit = await storage.createUnit(unitData);
