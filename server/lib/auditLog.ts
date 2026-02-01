@@ -1,7 +1,13 @@
 import { db } from "../db";
 import { auditLogs } from "@shared/schema";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import * as schema from "@shared/schema";
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'soft_delete' | 'restore';
+
+type TransactionType = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
 interface AuditLogParams {
   userId?: string;
@@ -14,9 +20,10 @@ interface AuditLogParams {
   userAgent?: string;
 }
 
-export async function createAuditLog(params: AuditLogParams): Promise<void> {
+export async function createAuditLog(params: AuditLogParams, tx?: TransactionType): Promise<void> {
   try {
-    await db.insert(auditLogs).values({
+    const executor = tx || db;
+    await executor.insert(auditLogs).values({
       userId: params.userId || null,
       tableName: params.tableName,
       recordId: params.recordId,
@@ -29,6 +36,25 @@ export async function createAuditLog(params: AuditLogParams): Promise<void> {
   } catch (error) {
     console.error('Audit log error:', error);
   }
+}
+
+export async function writeAudit(
+  tx: TransactionType,
+  userId: string | undefined,
+  tableName: string,
+  recordId: string,
+  action: AuditAction,
+  oldData: Record<string, unknown> | null,
+  newData: Record<string, unknown> | null
+): Promise<void> {
+  return createAuditLog({
+    userId,
+    tableName,
+    recordId,
+    action,
+    oldData: oldData ? sanitizeForAudit(oldData) : null,
+    newData: newData ? sanitizeForAudit(newData) : null,
+  }, tx);
 }
 
 export function getClientInfo(req: any): { ipAddress: string; userAgent: string } {
