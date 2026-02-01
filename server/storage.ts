@@ -53,6 +53,7 @@ export interface IStorage {
   getUnitDistributionValuesByProperty(propertyId: string): Promise<schema.UnitDistributionValue[]>;
   upsertUnitDistributionValue(data: schema.InsertUnitDistributionValue): Promise<schema.UnitDistributionValue>;
   deleteUnitDistributionValue(unitId: string, keyId: string): Promise<void>;
+  createUnit(data: Partial<schema.InsertUnit>): Promise<schema.Unit>;
   softDeleteUnit(id: string): Promise<void>;
   softDeleteTenant(id: string): Promise<void>;
   getRentHistoryByTenant(tenantId: string): Promise<schema.RentHistory[]>;
@@ -632,6 +633,11 @@ class DatabaseStorage implements IStorage {
     await db.update(schema.properties)
       .set({ deletedAt: new Date() })
       .where(eq(schema.properties.id, id));
+  }
+
+  async createUnit(data: Partial<schema.InsertUnit>): Promise<schema.Unit> {
+    const result = await db.insert(schema.units).values(data as schema.InsertUnit).returning();
+    return result[0];
   }
 
   async softDeleteUnit(id: string): Promise<void> {
