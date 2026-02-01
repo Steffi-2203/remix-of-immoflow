@@ -1290,43 +1290,64 @@ export const generateOffenePostenReport = (
     });
     
     let sollBkNetto: number, sollHkNetto: number, sollMieteNetto: number, sollBetrag: number;
+    let sollBk: number, sollHk: number, sollMiete: number; // BRUTTO-Werte
     
     if (tenantInvoices.length > 0) {
-      // SOLL aus Vorschreibungen (Summe aller Monate im Zeitraum) - NETTO Werte
+      // SOLL aus Vorschreibungen - akkumuliere NETTO und gesamtbetrag
       sollBkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
       sollHkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
       sollMieteNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-      // WICHTIG: Verwende gesamtbetrag (brutto inkl. USt) für Saldo
       sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
+      
+      // BRUTTO-Werte: Proportionale Aufteilung von gesamtbetrag basierend auf NETTO-Verhältnissen
+      // Dies stellt sicher, dass Komponenten-Summe = gesamtbetrag (keine Rundungsfehler)
+      const nettoGesamt = sollBkNetto + sollHkNetto + sollMieteNetto;
+      if (nettoGesamt > 0 && sollBetrag > 0) {
+        sollBk = (sollBkNetto / nettoGesamt) * sollBetrag;
+        sollHk = (sollHkNetto / nettoGesamt) * sollBetrag;
+        sollMiete = (sollMieteNetto / nettoGesamt) * sollBetrag;
+      } else {
+        sollBk = 0; sollHk = 0; sollMiete = 0;
+      }
     } else {
       // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
       sollBkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
       sollHkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
       sollMieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
-      // Fallback: Berechne Brutto mit österreichischen USt-Sätzen
-      sollBetrag = sollBkNetto * 1.1 + sollHkNetto * 1.2 + sollMieteNetto * 1.1;
+      // Berechne BRUTTO mit österreichischen Standard-USt-Sätzen (BK/Miete 10%, HK 20%)
+      sollBk = sollBkNetto * 1.1;
+      sollHk = sollHkNetto * 1.2;
+      sollMiete = sollMieteNetto * 1.1;
+      sollBetrag = sollBk + sollHk + sollMiete;
     }
-    
-    // BRUTTO-Werte für Anzeige (österreichische USt-Sätze)
-    // BK: 10% USt, HK: 20% USt, Miete: 10% USt
-    const sollBk = sollBkNetto * 1.1;
-    const sollHk = sollHkNetto * 1.2;
-    const sollMiete = sollMieteNetto * 1.1;
     
     const sollBetragNetto = sollBkNetto + sollHkNetto + sollMieteNetto;
     
     // IST from combined payments (uses 'amount' field)
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     
-    // MRG-konforme Aufteilung: BK → HK → Miete (gegen BRUTTO-Werte)
-    // Die Allokation erfolgt proportional zu den Brutto-SOLL-Werten
+    // MRG-konforme Aufteilung: BK → HK → Miete (gegen NETTO-Werte intern)
+    // Die Allokation erfolgt proportional zu den Netto-SOLL-Werten
     let remaining = habenBetrag;
-    const istBk = Math.min(remaining, sollBk);
-    remaining -= istBk;
-    const istHk = Math.min(remaining, sollHk);
-    remaining -= istHk;
-    const istMiete = Math.min(remaining, sollMiete);
-    remaining -= istMiete;
+    const istBkNetto = Math.min(remaining, sollBkNetto);
+    remaining -= istBkNetto;
+    const istHkNetto = Math.min(remaining, sollHkNetto);
+    remaining -= istHkNetto;
+    const istMieteNetto = Math.min(remaining, sollMieteNetto);
+    remaining -= istMieteNetto;
+    
+    // IST BRUTTO für Anzeige: Proportionale Aufteilung von habenBetrag basierend auf NETTO-Allokation
+    // Dies stellt sicher, dass IST-Komponenten-Summe = habenBetrag
+    const istNettoGesamt = istBkNetto + istHkNetto + istMieteNetto;
+    let istBk: number, istHk: number, istMiete: number;
+    if (istNettoGesamt > 0 && habenBetrag > 0) {
+      // Proportionale Aufteilung der tatsächlichen Zahlung auf die Komponenten
+      istBk = (istBkNetto / istNettoGesamt) * habenBetrag;
+      istHk = (istHkNetto / istNettoGesamt) * habenBetrag;
+      istMiete = (istMieteNetto / istNettoGesamt) * habenBetrag;
+    } else {
+      istBk = 0; istHk = 0; istMiete = 0;
+    }
     
     // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL, nicht auf NETTO
     // Damit wird der USt-Anteil nicht fälschlicherweise als Überzahlung gezählt
