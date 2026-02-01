@@ -15,8 +15,7 @@ export async function up(db: any) {
     DO $$
     BEGIN
       IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'monthly_invoices_unique_tenant_period'
+        SELECT 1 FROM pg_constraint WHERE conname = 'monthly_invoices_unique_tenant_period'
       ) THEN
         ALTER TABLE monthly_invoices
         ADD CONSTRAINT monthly_invoices_unique_tenant_period UNIQUE (tenant_id, year, month);
@@ -28,8 +27,7 @@ export async function up(db: any) {
     DO $$
     BEGIN
       IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'monthly_invoices_vat_check'
+        SELECT 1 FROM pg_constraint WHERE conname = 'monthly_invoices_vat_check'
       ) THEN
         ALTER TABLE monthly_invoices
         ADD CONSTRAINT monthly_invoices_vat_check CHECK (
@@ -51,27 +49,10 @@ export async function up(db: any) {
 }
 
 export async function down(db: any) {
-  await db.execute(sql`
-    DROP INDEX IF EXISTS idx_invoice_lines_invoice_id;
-  `);
-
-  await db.execute(sql`
-    DROP INDEX IF EXISTS idx_invoices_tenant_period;
-  `);
-
-  await db.execute(sql`
-    ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_vat_check;
-  `);
-
-  await db.execute(sql`
-    ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_unique_tenant_period;
-  `);
-
-  await db.execute(sql`
-    ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS paid_amount;
-  `);
-
-  await db.execute(sql`
-    ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS version;
-  `);
+  await db.execute(sql`DROP INDEX IF EXISTS idx_invoice_lines_invoice_id;`);
+  await db.execute(sql`DROP INDEX IF EXISTS idx_invoices_tenant_period;`);
+  await db.execute(sql`ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_vat_check;`);
+  await db.execute(sql`ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_unique_tenant_period;`);
+  await db.execute(sql`ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS paid_amount;`);
+  await db.execute(sql`ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS version;`);
 }
