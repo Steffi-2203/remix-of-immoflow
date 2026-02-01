@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getActiveTenantsForPeriod } from './tenantFilterUtils';
+import { calculateTenantSollIst, calculateSollIstTotals, type TenantSollIstResult } from './sollIstCalculation';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
