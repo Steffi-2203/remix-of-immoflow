@@ -4038,7 +4038,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const extractionPrompt = `Du bist ein Experte für österreichische Immobilienverwaltung und Mietverträge.
 Analysiere dieses Dokument (Mietvertrag, Vorschreibung, Mieterliste oder ähnliches) und extrahiere ALLE Mieterdaten.
 
-WICHTIG: Extrahiere ALLE Mieter die im Dokument vorkommen, nicht nur den ersten!
+WICHTIG: 
+- Extrahiere ALLE Mieter die im Dokument vorkommen, nicht nur den ersten!
+- ALLE Beträge sind NETTOBETRÄGE (ohne USt)!
+- JEDE Kostenposition EINZELN erfassen (NICHT zusammenfassen!) - wegen unterschiedlicher Verteilerschlüssel
+- USt-Satz pro Position erfassen: Heizung = 20%, Wohnungen BK = 10%, Geschäftslokale = 20%
 
 Antworte im JSON-Format als ARRAY von Mietern:
 {
@@ -4049,42 +4053,45 @@ Antworte im JSON-Format als ARRAY von Mietern:
       "email": "E-Mail-Adresse (falls vorhanden)",
       "phone": "Telefonnummer (falls vorhanden)",
       "mietbeginn": "Mietbeginn im Format YYYY-MM-DD",
-      "grundmiete": Grundmiete als Zahl (nur Nettomiete ohne BK/HK),
-      "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl (alle BK-Positionen summieren),
-      "heizkostenVorschuss": Heizkostenvorschuss/Zentralheizung als Zahl,
-      "wasserkostenVorschuss": Kaltwasser-Vorschuss als Zahl (falls separat ausgewiesen),
-      "warmwasserkostenVorschuss": Warmwasser-Vorschuss als Zahl (falls separat von Heizung),
-      "sonstigeKosten": { "Bezeichnung": Betrag als Zahl, ... },
+      "grundmiete": Hauptmietzins NETTO als Zahl,
+      "grundmieteUst": USt-Satz als Zahl (10 für Wohnung, 20 für Geschäft),
+      "betriebskostenVorschuss": 0,
+      "heizkostenVorschuss": 0,
+      "wasserkostenVorschuss": 0,
+      "warmwasserkostenVorschuss": 0,
+      "sonstigeKosten": {
+        "Positionsname": { "betrag": NETTO-Betrag, "ust": USt-Satz },
+        ...
+      },
       "kaution": Kaution als Zahl (falls angegeben),
-      "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
+      "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, GE01, 001)",
       "address": "Adresse der Wohnung",
+      "nutzungsart": "Wohnung" oder "Geschäftslokal",
       "notes": "Weitere relevante Informationen (kurz)"
     }
   ]
 }
 
-Wichtige Hinweise:
-- Extrahiere JEDEN Mieter separat in das Array
-- Bei österreichischen Vorschreibungen: Suche nach "Miete", "Hauptmietzins", "BK", "HK", "Heizung", "Zentralheizung", "Betriebskosten", "Kaltwasser", "Warmwasser", "WK"
-- WICHTIG: Mehrere Betriebskosten-Positionen (z.B. "Betriebskosten", "Betriebskosten2") SUMMIEREN
-- Kaltwasser → wasserkostenVorschuss
-- Warmwasser → warmwasserkostenVorschuss (getrennt von Heizung erfassen!)
-- Zentralheizung/Heizung → heizkostenVorschuss
-- sonstigeKosten: Erfasse ALLE weiteren Kostenpositionen die nicht in die Standardfelder passen, z.B.:
-  * Lift/Aufzug/Betriebskosten Lift
-  * Garage/Stellplatz/Parkplatz
-  * Müll/Müllabfuhr
-  * Kabel-TV/Fernsehen
-  * Internet
-  * Strom (Allgemeinstrom)
-  * Versicherung
-  * Garten/Grünflächen
-  * Reinigung/Hausbetreuung
-  * Mahnkosten/Mahngebühren
-  * Sonstige Nebenkosten
-  Beispiel: { "Lift": 15.50, "Garage": 85.00, "Mahnkosten": 15.00 }
+KRITISCH - JEDE Kostenposition EINZELN in sonstigeKosten erfassen:
+- "Betriebskosten": { "betrag": 73.42, "ust": 10 }
+- "Betriebskosten2": { "betrag": 65.89, "ust": 10 }  (NICHT mit Betriebskosten zusammenfassen!)
+- "Kaltwasser": { "betrag": 43.93, "ust": 10 }
+- "Warmwasser": { "betrag": 12.01, "ust": 10 }
+- "Zentralheizung": { "betrag": 44.79, "ust": 20 }  (IMMER 20% USt!)
+- "Lift": { "betrag": 13.81, "ust": 10 }
+- "Garage": { "betrag": 85.00, "ust": 20 }
+- "Mahnkosten": { "betrag": 15.00, "ust": 0 }
+
+Weitere mögliche Positionen: Müll, Kabel-TV, Internet, Strom, Versicherung, Garten, Reinigung, Stellplatz
+
+USt-Sätze Österreich:
+- Wohnungsmiete/BK: 10%
+- Geschäftslokalmiete/BK: 20%
+- Heizung/Zentralheizung: IMMER 20%
+- Mahnkosten: 0%
+
 - Datumsformat immer als YYYY-MM-DD
-- Zahlen ohne Währungssymbol, nur numerisch
+- Zahlen ohne Währungssymbol, nur numerisch (NETTO!)
 - Wenn etwas nicht erkennbar ist, setze null oder 0
 - Bei Personen-Namen: Vorname und Nachname getrennt
 
