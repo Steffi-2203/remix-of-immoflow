@@ -27,6 +27,7 @@ interface CarryForward {
   vortragBk: number;
   vortragHk: number;
   vortragSonstige: number;
+  credit?: number;
 }
 
 interface VatRates {
@@ -80,7 +81,7 @@ export class InvoiceService {
     return grossAmount - (grossAmount / (1 + vatRate / 100));
   }
 
-  async calculateTenantCarryForward(tenantId: string, year: number): Promise<CarryForward> {
+  async calculateTenantCarryForward(tenantId: string, year: number): Promise<CarryForward & { credit?: number }> {
     const previousYear = year - 1;
     
     const prevYearInvoices = await db.select()
@@ -101,27 +102,25 @@ export class InvoiceService {
         lte(payments.buchungsDatum, endDate)
       ));
 
-    const sollMiete = prevYearInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-    const sollBk = prevYearInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-    const sollHk = prevYearInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
-    const sollGesamt = sollMiete + sollBk + sollHk;
+    const sollMiete = prevYearInvoices.reduce((s, inv) => s + Number(inv.grundmiete || 0), 0);
+    const sollBk = prevYearInvoices.reduce((s, inv) => s + Number(inv.betriebskosten || 0), 0);
+    const sollHk = prevYearInvoices.reduce((s, inv) => s + Number(inv.heizungskosten || 0), 0);
+    const sollGesamt = roundMoney(sollMiete + sollBk + sollHk);
 
-    const istGesamt = prevYearPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-    const differenz = sollGesamt - istGesamt;
+    const istGesamt = roundMoney(prevYearPayments.reduce((s, p) => s + Number(p.betrag || 0), 0));
+    const diff = roundMoney(istGesamt - sollGesamt);
 
-    if (differenz <= 0) {
-      if (differenz < 0) {
-        return { vortragMiete: differenz, vortragBk: 0, vortragHk: 0, vortragSonstige: 0 };
-      }
-      return { vortragMiete: 0, vortragBk: 0, vortragHk: 0, vortragSonstige: 0 };
+    if (diff > 0) {
+      return { vortragMiete: 0, vortragBk: 0, vortragHk: 0, vortragSonstige: 0, credit: diff };
     }
 
-    let remaining = istGesamt;
-    const paidBk = Math.min(remaining, sollBk);
-    remaining -= paidBk;
-    const paidHk = Math.min(remaining, sollHk);
-    remaining -= paidHk;
-    const paidMiete = Math.min(remaining, sollMiete);
+    let remainingPayment = istGesamt;
+    const paidBk = Math.min(remainingPayment, sollBk);
+    remainingPayment = roundMoney(remainingPayment - paidBk);
+    const paidHk = Math.min(remainingPayment, sollHk);
+    remainingPayment = roundMoney(remainingPayment - paidHk);
+    const paidMiete = Math.min(remainingPayment, sollMiete);
+    remainingPayment = roundMoney(remainingPayment - paidMiete);
 
     return {
       vortragMiete: roundMoney(Math.max(0, sollMiete - paidMiete)),
