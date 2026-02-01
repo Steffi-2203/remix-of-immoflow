@@ -75,7 +75,7 @@ interface ExtractedTenantData {
   heizkostenVorschuss: number;
   wasserkostenVorschuss: number;
   warmwasserkostenVorschuss: number;
-  sonstigeKosten?: Record<string, { betrag: number; ust: number }>;
+  sonstigeKosten?: Record<string, { betrag: number; ust: number; schluessel?: string }>;
   kaution: number;
   topNummer: string;
   address: string;
