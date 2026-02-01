@@ -699,8 +699,57 @@ export default function Reports() {
   const periodSollGesamt = periodSollGrundmiete + periodSollBk + periodSollHk;
   
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
+  // Erweitert: Inkludiert ALLE Mieter mit Vorschreibungen im Zeitraum (auch ehemalige)
   const tenantSollIstDetails = useMemo(() => {
-    const details = relevantTenants.map(tenant => {
+    // Sammle alle Mieter-IDs die Vorschreibungen im Zeitraum haben
+    const tenantsWithInvoices = new Set<string>();
+    allInvoices?.forEach(inv => {
+      if (inv.year === selectedYear && 
+          inv.month >= periodStartMonth && inv.month <= periodEndMonth &&
+          inv.tenantId &&
+          !(inv as any).isVacancy && !(inv as any).is_vacancy) {
+        // Prüfe Property-Filter
+        const tenant = allTenants?.find(t => t.id === inv.tenantId);
+        const unit = allUnits?.find(u => u.id === tenant?.unitId);
+        const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+        if (selectedPropertyId === 'all' || unitPropertyId === selectedPropertyId) {
+          tenantsWithInvoices.add(inv.tenantId);
+        }
+      }
+    });
+    
+    // Kombiniere relevantTenants mit Mietern die Vorschreibungen haben
+    const allRelevantTenantIds = new Set([
+      ...relevantTenants.map(t => t.id),
+      ...tenantsWithInvoices
+    ]);
+    
+    // Finde die vollständigen Mieter-Objekte
+    const tenantsToProcess = Array.from(allRelevantTenantIds).map(tenantId => {
+      // Bevorzuge relevantTenants (haben korrektes Format)
+      const fromRelevant = relevantTenants.find(t => t.id === tenantId);
+      if (fromRelevant) return fromRelevant;
+      
+      // Fallback: Suche in allTenants
+      const fromAll = allTenants?.find(t => t.id === tenantId);
+      if (fromAll) {
+        return {
+          id: fromAll.id,
+          unit_id: fromAll.unitId,
+          status: fromAll.status,
+          mietbeginn: fromAll.mietbeginn,
+          mietende: fromAll.mietende,
+          grundmiete: Number(fromAll.grundmiete || 0),
+          betriebskosten_vorschuss: Number(fromAll.betriebskostenVorschuss || 0),
+          heizungskosten_vorschuss: Number(fromAll.heizkostenVorschuss || 0),
+          first_name: fromAll.firstName,
+          last_name: fromAll.lastName,
+        };
+      }
+      return null;
+    }).filter((t): t is NonNullable<typeof t> => t !== null);
+    
+    const details = tenantsToProcess.map(tenant => {
       const unit = allUnits?.find(u => u.id === tenant.unit_id);
       const property = properties?.find(p => p.id === unit?.propertyId);
       
@@ -852,7 +901,7 @@ export default function Reports() {
     });
     
     return details;
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, periodStartMonth, periodEndMonth, selectedPropertyId]);
+  }, [relevantTenants, allUnits, allTenants, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, periodStartMonth, periodEndMonth, selectedPropertyId]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {

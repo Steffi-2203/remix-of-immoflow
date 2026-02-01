@@ -1246,7 +1246,37 @@ export const generateOffenePostenReport = (
     : new Date(selectedYear, 0, 1);
   const daysSincePeriodStart = Math.max(0, Math.floor((today.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)));
 
-  relevantTenants.forEach(tenant => {
+  // Erweitert: Sammle ALLE Mieter mit Vorschreibungen im Zeitraum (inkl. ehemalige)
+  const tenantsWithInvoicesIds = new Set<string>();
+  (monthlyInvoices || []).forEach(inv => {
+    const invTenantId = inv.tenantId || inv.tenant_id;
+    if (invTenantId && 
+        inv.year === selectedYear && 
+        inv.month >= periodStartMonth && inv.month <= periodEndMonth &&
+        !(inv as any).isVacancy && !(inv as any).is_vacancy) {
+      // Prüfe Property-Filter
+      const tenant = tenants.find(t => t.id === invTenantId);
+      const unit = targetUnits.find(u => u.id === tenant?.unit_id);
+      if (unit) {
+        tenantsWithInvoicesIds.add(invTenantId);
+      }
+    }
+  });
+  
+  // Kombiniere relevantTenants mit Mietern die Vorschreibungen haben
+  const allRelevantTenantIds = new Set([
+    ...relevantTenants.map(t => t.id),
+    ...tenantsWithInvoicesIds
+  ]);
+  
+  // Finde alle zu verarbeitenden Mieter
+  const tenantsToProcess = Array.from(allRelevantTenantIds).map(tenantId => {
+    const fromRelevant = relevantTenants.find(t => t.id === tenantId);
+    if (fromRelevant) return fromRelevant;
+    return tenants.find(t => t.id === tenantId) || null;
+  }).filter((t): t is TenantData => t !== null);
+
+  tenantsToProcess.forEach(tenant => {
     const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
     
     // SOLL aus Vorschreibung (monthly_invoices) - bevorzugt über Mieter-Stammdaten
