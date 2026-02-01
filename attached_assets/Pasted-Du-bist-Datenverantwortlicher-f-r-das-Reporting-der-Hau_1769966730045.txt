@@ -1,0 +1,29 @@
+Du bist Datenverantwortlicher für das Reporting der Hausverwaltung. Ich habe Inkonsistenzen zwischen Report‑Werten und der Live‑Datenbank festgestellt. Nutze die folgenden bekannten Quellen und erkläre vollständig, präzise und reproduzierbar, wie die Report‑Zahlen entstehen.
+
+Bekannte Quellen
+- Datenbank: PostgreSQL (Neon) über env DATABASE_URL, Schema public.
+  - monthly_invoices: SOLL (gesamtbetrag brutto), grundmiete/betriebskosten/heizungskosten (netto), paid_amount, year, month
+  - payments: IST (betrag, tenant_id, buchungs_datum)
+  - tenants, units, properties
+- API Endpoints
+  - GET /api/invoices → storage.getInvoicesByOrg()
+  - GET /api/payments → storage.getPaymentsByOrg()
+  - GET /api/tenants → storage.getTenantsByOrg()
+- PDF Export Flow (bekanntes Fragment)
+  1. useCombinedPayments() → Hook lädt payments aus /api/payments
+  2. [Bitte vollständig beschreiben]
+  3. [Bitte vollständig beschreiben]
+
+Antwortstruktur (liefere alle Punkte, antworte als JSON)
+1. source: exakte Quelle(n) inkl. DB Host, DB Name, Schema, Tabelle(n) oder API Endpoint.
+2. query: die exakte SQL‑Query, API‑Request oder ETL‑Transformation, die die Report‑Kennzahl erzeugt. Wenn mehrere Schritte, liste sie sequenziell mit Code‑Beispielen.
+3. pdf_export_flow: vollständige, sequenzielle Beschreibung des PDF/Export‑Flows inkl. Hooks, Services, Caches.
+4. last_run: Zeitpunkt der letzten Ausführung und Frequenz (cron, scheduler).
+5. cache_info: alle Caches, Materialized Views, BI‑Layer, Storage‑Blobs zwischen Quelle und Report; TTL und Invalidation‑Regeln.
+6. aggregation: alle Aggregationen, Filter, Gruppierungen, Rundungsregeln; zeige die exakte Reihenfolge der Operationen.
+7. error_handling: wie fehlgeschlagene Jobs, doppelte Events und teilweise Transaktionen behandelt werden.
+8. reproduce_snippet: ein minimal ausführbares SQL‑Snippet oder API‑Call, das ich lokal gegen die genannte DB ausführen kann, um die Report‑Zahl zu reproduzieren. Liefere Beispiel‑Output (3 Zeilen).
+9. logs: relevante Job‑Logs oder Audit‑Einträge der letzten 24 Stunden mit Timestamps und Job‑IDs.
+10. missing_info: falls etwas nicht bekannt ist, liste genau, was fehlt und wie ich Zugriff/Logs anfordern kann.
+
+Zusätzlich: Wenn die Report‑Werte von einer anderen Umgebung (z. B. BI‑DB, Snapshot, Staging) stammen, nenne die Umgebung explizit und liefere die Verbindung/Job‑ID.
