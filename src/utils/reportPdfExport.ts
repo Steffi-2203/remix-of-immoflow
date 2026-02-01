@@ -1289,30 +1289,37 @@ export const generateOffenePostenReport = (
       return matchesTenant && matchesYear && matchesPeriod;
     });
     
-    let sollBk: number, sollHk: number, sollMiete: number, sollBetrag: number;
+    let sollBkNetto: number, sollHkNetto: number, sollMieteNetto: number, sollBetrag: number;
     
     if (tenantInvoices.length > 0) {
-      // SOLL aus Vorschreibungen (Summe aller Monate im Zeitraum)
-      sollBk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-      sollHk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
-      sollMiete = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+      // SOLL aus Vorschreibungen (Summe aller Monate im Zeitraum) - NETTO Werte
+      sollBkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
+      sollHkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
+      sollMieteNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
       // WICHTIG: Verwende gesamtbetrag (brutto inkl. USt) für Saldo
       sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
     } else {
       // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
-      sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-      sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
-      sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-      // Fallback: Berechne Brutto mit geschätztem USt-Satz (10% auf alles)
-      sollBetrag = (sollBk + sollHk + sollMiete) * 1.1;
+      sollBkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+      sollHkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      sollMieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
+      // Fallback: Berechne Brutto mit österreichischen USt-Sätzen
+      sollBetrag = sollBkNetto * 1.1 + sollHkNetto * 1.2 + sollMieteNetto * 1.1;
     }
     
-    const sollBetragNetto = sollBk + sollHk + sollMiete;
+    // BRUTTO-Werte für Anzeige (österreichische USt-Sätze)
+    // BK: 10% USt, HK: 20% USt, Miete: 10% USt
+    const sollBk = sollBkNetto * 1.1;
+    const sollHk = sollHkNetto * 1.2;
+    const sollMiete = sollMieteNetto * 1.1;
+    
+    const sollBetragNetto = sollBkNetto + sollHkNetto + sollMieteNetto;
     
     // IST from combined payments (uses 'amount' field)
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     
-    // MRG-konforme Aufteilung: BK → HK → Miete
+    // MRG-konforme Aufteilung: BK → HK → Miete (gegen BRUTTO-Werte)
+    // Die Allokation erfolgt proportional zu den Brutto-SOLL-Werten
     let remaining = habenBetrag;
     const istBk = Math.min(remaining, sollBk);
     remaining -= istBk;
@@ -1321,8 +1328,9 @@ export const generateOffenePostenReport = (
     const istMiete = Math.min(remaining, sollMiete);
     remaining -= istMiete;
     
-    // Überzahlung (wenn mehr gezahlt als SOLL)
-    const ueberzahlung = remaining > 0 ? remaining : 0;
+    // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL, nicht auf NETTO
+    // Damit wird der USt-Anteil nicht fälschlicherweise als Überzahlung gezählt
+    const ueberzahlung = habenBetrag > sollBetrag ? habenBetrag - sollBetrag : 0;
     
     // WICHTIG: Saldo = SOLL (brutto) - IST, positiv = Unterzahlung, negativ = Überzahlung
     const saldo = sollBetrag - habenBetrag;
@@ -1460,10 +1468,12 @@ export const generateOffenePostenReport = (
 
   // Table data with MRG-konform allocation
   const tableData = tenantBalances.map(tb => {
+    // Status basiert NUR auf Saldo (nicht auf dem separaten ueberzahlung-Feld)
+    // Saldo = BRUTTO-SOLL - IST: positiv = Unterzahlung, negativ = Überzahlung
     let statusLabel = 'Bezahlt';
     if (tb.saldo > 0.01) {
       statusLabel = 'Unterzahlung';
-    } else if (tb.saldo < -0.01 || tb.ueberzahlung > 0.01) {
+    } else if (tb.saldo < -0.01) {
       statusLabel = 'Überzahlung';
     }
     
