@@ -5,16 +5,12 @@ import {
   tenants,
   units,
   properties,
-  messages 
+  messages,
+  transactions,
+  auditLogs
 } from "@shared/schema";
 import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
-import { writeAudit } from "../lib/auditLog";
-
-interface PaymentAllocation {
-  invoiceId: string;
-  allocatedAmount: number;
-}
 
 interface DunningLevel {
   level: 1 | 2 | 3;
@@ -45,281 +41,282 @@ const DUNNING_LEVELS: DunningLevel[] = [
 ];
 
 export class PaymentService {
-  async allocatePayment(
-    paymentId: string,
-    amount: number,
-    tenantId: string,
-    userId?: string
-  ): Promise<PaymentAllocation[]> {
-    return db.transaction(async (tx) => {
-      const openInvoices = await tx.select()
-        .from(monthlyInvoices)
-        .where(and(
-          eq(monthlyInvoices.tenantId, tenantId),
-          or(
-            eq(monthlyInvoices.status, 'offen'),
-            eq(monthlyInvoices.status, 'teilbezahlt'),
-            eq(monthlyInvoices.status, 'ueberfaellig')
-          )
-        ))
-        .orderBy(monthlyInvoices.year, monthlyInvoices.month)
-        .for('update');
+  async allocatePayment(params: {
+    paymentId: string;
+    tenantId: string;
+    amount: number;
+    bookingDate?: string;
+    paymentType?: string;
+    reference?: string;
+    userId?: string;
+  }) {
+    const { paymentId, tenantId, amount, bookingDate, paymentType = "ueberweisung", reference, userId } = params;
+    const roundedAmount = roundMoney(amount);
 
-      const tenantPayments = await tx.select()
-        .from(payments)
-        .where(eq(payments.tenantId, tenantId));
-      
-      const paidByInvoice = new Map<string, number>();
-      for (const payment of tenantPayments) {
-        if (payment.invoiceId) {
-          const current = paidByInvoice.get(payment.invoiceId) || 0;
-          paidByInvoice.set(payment.invoiceId, current + Number(payment.betrag || 0));
-        }
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        INSERT INTO payments (id, tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck, created_at)
+        VALUES (${paymentId}, ${tenantId}, NULL, ${roundedAmount}, ${bookingDate ?? sql`now()::date`}, ${paymentType}, ${reference}, now())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      const invoices = await tx.execute(sql`
+        SELECT id, gesamtbetrag, COALESCE(paid_amount, 0) AS paid_amount
+        FROM monthly_invoices
+        WHERE tenant_id = ${tenantId} AND status IN ('offen','teilbezahlt')
+        ORDER BY year, month
+        FOR UPDATE
+      `).then(r => r.rows);
+
+      let remaining = roundedAmount;
+      let appliedTotal = 0;
+
+      for (const inv of invoices) {
+        if (remaining <= 0) break;
+
+        const total = roundMoney(Number(inv.gesamtbetrag || 0));
+        const paid = roundMoney(Number(inv.paid_amount || 0));
+        const due = roundMoney(total - paid);
+        if (due <= 0) continue;
+
+        const apply = roundMoney(Math.min(remaining, due));
+        const newPaid = roundMoney(paid + apply);
+        remaining = roundMoney(remaining - apply);
+        appliedTotal = roundMoney(appliedTotal + apply);
+
+        await tx.execute(sql`
+          UPDATE monthly_invoices
+          SET paid_amount = ${newPaid},
+              status = CASE WHEN ${newPaid} >= ${total} THEN 'bezahlt' WHEN ${newPaid} > 0 THEN 'teilbezahlt' ELSE status END,
+              version = COALESCE(version, 1) + 1,
+              updated_at = now()
+          WHERE id = ${inv.id}
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+          VALUES (${userId}, 'monthly_invoices', ${inv.id}, 'update', ${JSON.stringify({ paymentId, applied: apply })}::jsonb, now())
+        `);
       }
 
-      const allocations: PaymentAllocation[] = [];
-      let remainingAmount = amount;
-      let firstInvoiceId: string | null = null;
+      let unapplied = remaining;
+      if (unapplied > 0) {
+        await tx.execute(sql`
+          INSERT INTO transactions (id, organization_id, bank_account_id, amount, transaction_date, booking_text, created_at)
+          VALUES (gen_random_uuid(), NULL, NULL, ${unapplied}, now()::date, ${'Überzahlung / Gutschrift für Tenant ' + tenantId}, now())
+        `);
 
-      for (const invoice of openInvoices) {
-        if (remainingAmount <= 0) break;
-
-        const invoiceTotal = Number(invoice.gesamtbetrag) || 0;
-        const alreadyPaid = paidByInvoice.get(invoice.id) || 0;
-        const stillOwed = roundMoney(invoiceTotal - alreadyPaid);
-        
-        if (stillOwed <= 0) continue;
-
-        const bk = Number(invoice.betriebskosten) || 0;
-        const wasser = Number(invoice.wasserkosten) || 0;
-        const hk = Number(invoice.heizungskosten) || 0;
-        const miete = Number(invoice.grundmiete) || 0;
-
-        let toAllocate = Math.min(remainingAmount, stillOwed);
-        let allocatedBk = 0, allocatedWasser = 0, allocatedHk = 0, allocatedMiete = 0;
-
-        const allocBk = Math.min(toAllocate, bk);
-        allocatedBk = roundMoney(allocBk);
-        toAllocate -= allocBk;
-
-        const allocWasser = Math.min(toAllocate, wasser);
-        allocatedWasser = roundMoney(allocWasser);
-        toAllocate -= allocWasser;
-
-        const allocHk = Math.min(toAllocate, hk);
-        allocatedHk = roundMoney(allocHk);
-        toAllocate -= allocHk;
-
-        const allocMiete = Math.min(toAllocate, miete);
-        allocatedMiete = roundMoney(allocMiete);
-
-        const allocated = roundMoney(allocatedBk + allocatedWasser + allocatedHk + allocatedMiete);
-        
-        if (!firstInvoiceId) {
-          firstInvoiceId = invoice.id;
-        }
-        
-        allocations.push({
-          invoiceId: invoice.id,
-          allocatedAmount: allocated
-        });
-
-        remainingAmount = roundMoney(remainingAmount - allocated);
-
-        const totalPaidAfter = roundMoney(alreadyPaid + allocated);
-        const newStatus = totalPaidAfter >= invoiceTotal ? 'bezahlt' : 'teilbezahlt';
-        await tx.update(monthlyInvoices)
-          .set({ status: newStatus, updatedAt: new Date() })
-          .where(eq(monthlyInvoices.id, invoice.id));
+        await tx.execute(sql`
+          UPDATE payments SET notizen = COALESCE(notizen, '') || ${' Überzahlung ' + unapplied.toFixed(2) + ' €'} WHERE id = ${paymentId}
+        `);
       }
 
-      if (firstInvoiceId && paymentId) {
-        await tx.update(payments)
-          .set({ invoiceId: firstInvoiceId })
-          .where(eq(payments.id, paymentId));
-      }
-
-      if (userId && allocations.length > 0) {
-        await writeAudit(tx, userId, 'payments', paymentId, 'update', null, {
-          paymentId,
+      await tx.execute(sql`
+        INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+        VALUES (${userId}, 'payments', ${paymentId}, 'create', ${JSON.stringify({
           tenantId,
-          amount,
-          allocatedTo: allocations.map(a => a.invoiceId),
-          totalAllocated: allocations.reduce((sum, a) => sum + a.allocatedAmount, 0),
-        });
-      }
+          paymentId,
+          amount: roundedAmount,
+          applied: appliedTotal,
+          unapplied
+        })}::jsonb, now())
+      `);
 
-      return allocations;
+      return {
+        success: true,
+        paymentId,
+        applied: appliedTotal,
+        unapplied,
+      };
     });
   }
 
-  async getTenantBalance(tenantId: string, year?: number): Promise<{
-    sollGesamt: number;
-    istGesamt: number;
-    saldo: number;
-    openInvoices: number;
-  }> {
-    let invoiceQuery = db.select().from(monthlyInvoices)
-      .where(eq(monthlyInvoices.tenantId, tenantId));
-    
-    if (year) {
-      invoiceQuery = db.select().from(monthlyInvoices)
-        .where(and(
-          eq(monthlyInvoices.tenantId, tenantId),
-          eq(monthlyInvoices.year, year)
-        ));
-    }
+  async getTenantBalance(tenantId: string, year?: number) {
+    const whereYear = year ? sql`AND year = ${year}` : sql``;
+    const result = await db.execute(sql`
+      SELECT COALESCE(SUM(gesamtbetrag),0) AS total_soll, COALESCE(SUM(paid_amount),0) AS total_ist
+      FROM monthly_invoices
+      WHERE tenant_id = ${tenantId} ${whereYear}
+    `).then(r => r.rows[0]);
 
-    const invoices = await invoiceQuery;
-    
-    let paymentQuery;
-    if (year) {
-      const startDate = `${year}-01-01`;
-      const endDate = `${year}-12-31`;
-      paymentQuery = db.select().from(payments)
-        .where(and(
-          eq(payments.tenantId, tenantId),
-          gte(payments.buchungsDatum, startDate),
-          lte(payments.buchungsDatum, endDate)
-        ));
-    } else {
-      paymentQuery = db.select().from(payments)
-        .where(eq(payments.tenantId, tenantId));
-    }
-
-    const tenantPayments = await paymentQuery;
-
-    const sollGesamt = invoices.reduce((sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0);
-    const istGesamt = tenantPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
-    const openInvoices = invoices.filter(inv => inv.status === 'offen' || inv.status === 'teilbezahlt').length;
-
-    return {
-      sollGesamt: roundMoney(sollGesamt),
-      istGesamt: roundMoney(istGesamt),
-      saldo: roundMoney(sollGesamt - istGesamt),
-      openInvoices
+    const totalSoll = roundMoney(Number(result?.total_soll || 0));
+    const totalIst = roundMoney(Number(result?.total_ist || 0));
+    return { 
+      totalSoll, 
+      totalIst, 
+      saldo: roundMoney(totalSoll - totalIst),
+      sollGesamt: totalSoll,
+      istGesamt: totalIst,
     };
   }
 
-  getDunningLevel(daysOverdue: number): DunningLevel | null {
-    for (let i = DUNNING_LEVELS.length - 1; i >= 0; i--) {
-      if (daysOverdue >= DUNNING_LEVELS[i].daysOverdue) {
-        return DUNNING_LEVELS[i];
-      }
-    }
-    return null;
+  getDunningLevel(daysOverdue: number): number {
+    if (daysOverdue >= 45) return 3;
+    if (daysOverdue >= 30) return 2;
+    if (daysOverdue >= 14) return 1;
+    return 0;
   }
 
-  async getTenantsForDunning(organizationId: string): Promise<DunningResult[]> {
+  async recordDunningAction(params: { 
+    tenantId: string; 
+    level: number; 
+    userId?: string; 
+    note?: string 
+  }) {
+    const { tenantId, level, userId, note } = params;
+    
+    await db.execute(sql`
+      INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+      VALUES (${userId}, 'dunning', ${tenantId}, 'create', ${JSON.stringify({ level, note })}::jsonb, now())
+    `);
+    
+    return { success: true, level };
+  }
+
+  async getTenantsForDunning(organizationId: string, minDaysOverdue: number = 14): Promise<DunningResult[]> {
     const today = new Date();
     const results: DunningResult[] = [];
 
-    const orgProperties = await db.select({ id: properties.id })
-      .from(properties)
-      .where(eq(properties.organizationId, organizationId));
-    
-    if (!orgProperties.length) return [];
-    
-    const propertyIds = orgProperties.map(p => p.id);
-    
-    const orgUnits = await db.select({ id: units.id })
-      .from(units)
-      .where(inArray(units.propertyId, propertyIds));
-    
-    if (!orgUnits.length) return [];
-    
-    const unitIds = orgUnits.map(u => u.id);
-    
-    const orgTenants = await db.select()
+    const orgTenants = await db
+      .select({
+        tenant: tenants,
+        unit: units,
+        property: properties,
+      })
       .from(tenants)
-      .where(inArray(tenants.unitId, unitIds));
-    
-    if (!orgTenants.length) return [];
-    
-    const orgTenantIds = orgTenants.map(t => t.id);
-    const tenantMap = new Map(orgTenants.map(t => [t.id, t]));
+      .leftJoin(units, eq(tenants.unitId, units.id))
+      .leftJoin(properties, eq(units.propertyId, properties.id))
+      .where(eq(properties.organizationId, organizationId));
 
-    const overdueInvoices = await db.select()
-      .from(monthlyInvoices)
-      .where(and(
-        inArray(monthlyInvoices.tenantId, orgTenantIds),
-        or(
-          eq(monthlyInvoices.status, 'offen'),
-          eq(monthlyInvoices.status, 'teilbezahlt'),
-          eq(monthlyInvoices.status, 'ueberfaellig')
-        ),
-        lte(monthlyInvoices.faelligAm, today.toISOString().split('T')[0])
-      ));
-
-    const tenantIds = [...new Set(overdueInvoices.map(inv => inv.tenantId))];
-    
-    for (const tenantId of tenantIds) {
-      const tenant = tenantMap.get(tenantId);
+    for (const { tenant, unit, property } of orgTenants) {
       if (!tenant) continue;
 
-      const tenantInvoices = overdueInvoices.filter(inv => inv.tenantId === tenantId);
-      
-      const oldestInvoice = tenantInvoices.reduce((oldest, inv) => {
-        const invDate = new Date(inv.faelligAm!);
-        const oldestDate = new Date(oldest.faelligAm!);
-        return invDate < oldestDate ? inv : oldest;
-      }, tenantInvoices[0]);
+      const overdueInvoices = await db
+        .select()
+        .from(monthlyInvoices)
+        .where(
+          and(
+            eq(monthlyInvoices.tenantId, tenant.id),
+            or(
+              eq(monthlyInvoices.status, "offen"),
+              eq(monthlyInvoices.status, "teilbezahlt"),
+              eq(monthlyInvoices.status, "ueberfaellig")
+            )
+          )
+        )
+        .orderBy(monthlyInvoices.year, monthlyInvoices.month);
 
-      const daysOverdue = Math.floor(
-        (today.getTime() - new Date(oldestInvoice.faelligAm!).getTime()) / (1000 * 60 * 60 * 24)
-      );
+      const overdueDetails: DunningResult["overdueInvoices"] = [];
+      let maxDaysOverdue = 0;
+      let totalOutstanding = 0;
 
-      const dunningLevel = this.getDunningLevel(daysOverdue);
-      if (!dunningLevel) continue;
+      for (const invoice of overdueInvoices) {
+        if (!invoice.faelligAm) continue;
 
-      const outstandingAmount = tenantInvoices.reduce(
-        (sum, inv) => sum + Number(inv.gesamtbetrag || 0), 0
-      );
+        const dueDate = new Date(invoice.faelligAm);
+        const daysOverdue = Math.floor(
+          (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
 
-      results.push({
-        tenantId,
-        tenantName: `${tenant.firstName} ${tenant.lastName}`,
-        email: tenant.email,
-        outstandingAmount: roundMoney(outstandingAmount),
-        dunningLevel,
-        overdueInvoices: tenantInvoices.map(inv => ({
-          id: inv.id,
-          month: inv.month,
-          year: inv.year,
-          amount: Number(inv.gesamtbetrag || 0),
-          dueDate: inv.faelligAm!
-        }))
-      });
+        if (daysOverdue >= minDaysOverdue) {
+          const invoiceTotal = Number(invoice.gesamtbetrag) || 0;
+          const paidAmount = Number((invoice as any).paidAmount ?? 0);
+          const outstanding = roundMoney(invoiceTotal - paidAmount);
+
+          if (outstanding > 0) {
+            overdueDetails.push({
+              id: invoice.id,
+              month: invoice.month,
+              year: invoice.year,
+              amount: outstanding,
+              dueDate: invoice.faelligAm,
+            });
+            totalOutstanding = roundMoney(totalOutstanding + outstanding);
+            maxDaysOverdue = Math.max(maxDaysOverdue, daysOverdue);
+          }
+        }
+      }
+
+      if (overdueDetails.length > 0) {
+        const dunningLevel =
+          DUNNING_LEVELS.find((l) => maxDaysOverdue >= l.daysOverdue) ||
+          DUNNING_LEVELS[0];
+
+        results.push({
+          tenantId: tenant.id,
+          tenantName: `${tenant.firstName || ""} ${tenant.lastName || ""}`.trim(),
+          email: tenant.email,
+          outstandingAmount: totalOutstanding,
+          dunningLevel,
+          overdueInvoices: overdueDetails,
+        });
+      }
     }
 
-    return results.sort((a, b) => b.dunningLevel.level - a.dunningLevel.level);
+    return results.sort((a, b) => b.outstandingAmount - a.outstandingAmount);
   }
 
-  async recordDunningAction(
+  async sendDunningReminder(
     tenantId: string,
-    dunningLevel: number,
-    organizationId: string
-  ): Promise<void> {
-    await db.insert(messages).values({
-      organizationId,
-      messageType: 'dunning',
-      recipientType: 'tenant',
-      subject: `Mahnstufe ${dunningLevel} gesendet`,
-      messageBody: `Automatische Mahnung (Stufe ${dunningLevel}) wurde an den Mieter gesendet. Mieter-ID: ${tenantId}`,
-      status: 'sent',
-      sentAt: new Date(),
+    dunningLevel: DunningLevel,
+    userId: string
+  ): Promise<{ success: boolean; messageId?: string }> {
+    const tenant = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .then((r) => r[0]);
+
+    if (!tenant || !tenant.email) {
+      return { success: false };
+    }
+
+    const balance = await this.getTenantBalance(tenantId);
+    const subject = `${dunningLevel.name} - Offener Betrag: €${balance.saldo.toFixed(2)}`;
+
+    const body = `
+Sehr geehrte/r ${tenant.firstName} ${tenant.lastName},
+
+wir möchten Sie daran erinnern, dass folgende Beträge noch offen sind:
+
+Offener Gesamtbetrag: €${balance.saldo.toFixed(2)}
+${dunningLevel.fee > 0 ? `Mahngebühr: €${dunningLevel.fee.toFixed(2)}` : ""}
+
+Bitte überweisen Sie den offenen Betrag innerhalb von 7 Tagen.
+
+Mit freundlichen Grüßen,
+Ihre Hausverwaltung
+    `.trim();
+
+    const [message] = await db
+      .insert(messages)
+      .values({
+        recipientEmail: tenant.email,
+        recipientType: "tenant",
+        subject,
+        messageBody: body,
+        messageType: "dunning",
+        status: "pending",
+      })
+      .returning();
+
+    await this.recordDunningAction({
+      tenantId,
+      level: dunningLevel.level,
+      userId,
+      note: `${dunningLevel.name} versendet`,
     });
+
+    return { success: true, messageId: message.id };
   }
 
-  async getPaymentHistory(
-    tenantId: string,
-    limit: number = 12
-  ): Promise<Array<typeof payments.$inferSelect>> {
-    return db.select()
-      .from(payments)
-      .where(eq(payments.tenantId, tenantId))
-      .orderBy(desc(payments.buchungsDatum))
-      .limit(limit);
+  calculateInterest(
+    principal: number,
+    daysOverdue: number,
+    annualRate: number = 4
+  ): number {
+    const dailyRate = annualRate / 365 / 100;
+    return roundMoney(principal * dailyRate * daysOverdue);
   }
 }
 
