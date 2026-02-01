@@ -197,8 +197,9 @@ export function useMrgAllocation(
         sollMiete = Number(inv.grundmiete || 0);
       } else {
         // Fallback auf Mieter-Stammdaten (support both camelCase and snake_case)
+        // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
         sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
-        sollHk = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
+        sollHk = Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
         sollMiete = Number(tenant.grundmiete || 0);
       }
       
@@ -256,7 +257,7 @@ export function useMrgAllocation(
           unit_id: tenantUnitId,
           grundmiete: Number(tenant.grundmiete || 0),
           betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0),
-          heizungskosten_vorschuss: Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0),
+          heizungskosten_vorschuss: Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0),
           status: tenant.status,
           mietbeginn: tenant.mietbeginn,
           mietende: tenant.mietende,
