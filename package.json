@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "test": "npx vitest run tests/unit/",
     "test:watch": "npx vitest tests/unit/",
-    "test:all": "npx vitest run"
+    "test:all": "npx vitest run",
+    "seed": "tsx scripts/load-seed.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
