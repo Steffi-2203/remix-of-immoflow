@@ -1230,7 +1230,7 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Kumulierte Einnahmen-Übersicht (IST aus Transaktionen) */}
+      {/* Kumulierte Einnahmen-Übersicht (IST aus MRG-Allokation) */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -1238,7 +1238,7 @@ export default function Reports() {
             <CardTitle className="text-lg">Kumulierte Einnahmen (IST) - {periodLabel}</CardTitle>
           </div>
           <CardDescription>
-            Tatsächliche Zahlungseingänge aus importierten Mieteinnahmen ({periodTransactions.filter(t => Number(t.amount) > 0).length} Transaktionen)
+            Tatsächliche Zahlungseingänge nach MRG-Allokation (BK→HK→Miete) aus {periodCombinedPayments.length} Zahlungen
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1246,34 +1246,34 @@ export default function Reports() {
             <div className="rounded-lg border border-success/30 bg-success/5 p-4">
               <p className="text-xs text-muted-foreground font-medium">Miete (IST)</p>
               <p className="text-xl font-bold text-success mt-1">
-                €{mieteFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Kategorie: Mieteinnahmen
+                Eigentümerrelevant
               </p>
             </div>
             <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
               <p className="text-xs text-muted-foreground font-medium">Betriebskosten (IST)</p>
               <p className="text-xl font-bold text-blue-600 mt-1">
-                €{bkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Kategorie: BK-Vorauszahlung
+                Durchlaufposten
               </p>
             </div>
             <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
               <p className="text-xs text-muted-foreground font-medium">Heizkosten (IST)</p>
               <p className="text-xl font-bold text-orange-600 mt-1">
-                €{hkFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Kategorie: HK-Vorauszahlung
+                Durchlaufposten
               </p>
             </div>
             <div className="rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
               <p className="text-xs text-muted-foreground font-medium">Gesamt IST</p>
               <p className="text-xl font-bold text-primary mt-1">
-                €{(mieteFromTransactions + bkFromTransactions + hkFromTransactions).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Alle Zahlungseingänge

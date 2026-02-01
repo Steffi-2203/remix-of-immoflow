@@ -963,11 +963,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         propertyId: body.propertyId,
         topNummer: body.topNummer,
         type: body.type || 'wohnung',
-        flaeche: body.flaeche || '0',
-        nutzwert: body.nutzwert || null,
+        flaeche: body.flaeche || body.qm || '0',
+        nutzwert: body.nutzwert || body.mea || null,
         status: body.status === 'vermietet' ? 'aktiv' : (body.status || 'leerstand'),
         vsPersonen: body.vsPersonen || null,
-        stockwerk: body.stockwerk || null,
+        stockwerk: body.stockwerk || body.floor || null,
+        leerstandBk: body.leerstandBk || '0',
+        leerstandHk: body.leerstandHk || '0',
       };
 
       const unit = await storage.createUnit(unitData);
@@ -975,6 +977,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error creating unit:', error);
       res.status(500).json({ error: error.message || "Failed to create unit" });
+    }
+  });
+
+  app.patch("/api/units/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const unit = await storage.getUnit(req.params.id);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const body = snakeToCamel(req.body);
+      const updateData: any = {};
+
+      // Basic fields
+      if (body.topNummer !== undefined) updateData.topNummer = body.topNummer;
+      if (body.type !== undefined) updateData.type = body.type;
+      if (body.status !== undefined) updateData.status = body.status;
+      if (body.flaeche !== undefined) updateData.flaeche = String(body.flaeche);
+      if (body.qm !== undefined) updateData.flaeche = String(body.qm);
+      if (body.nutzwert !== undefined) updateData.nutzwert = String(body.nutzwert);
+      if (body.mea !== undefined) updateData.nutzwert = String(body.mea);
+      if (body.stockwerk !== undefined) updateData.stockwerk = body.stockwerk;
+      if (body.floor !== undefined) updateData.stockwerk = body.floor;
+      if (body.vsPersonen !== undefined) updateData.vsPersonen = body.vsPersonen;
+      if (body.notes !== undefined) updateData.notes = body.notes;
+
+      // Leerstand fields
+      if (body.leerstandBk !== undefined) updateData.leerstandBk = String(body.leerstandBk);
+      if (body.leerstandHk !== undefined) updateData.leerstandHk = String(body.leerstandHk);
+
+      const updated = await storage.updateUnit(req.params.id, updateData);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating unit:', error);
+      res.status(500).json({ error: error.message || "Failed to update unit" });
     }
   });
 

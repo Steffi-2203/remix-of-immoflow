@@ -266,6 +266,88 @@ export class InvoiceService {
     return lines;
   }
 
+  buildVacancyInvoiceData(
+    unit: typeof units.$inferSelect,
+    year: number,
+    month: number,
+    dueDate: string
+  ): Omit<InvoiceData, 'tenantId'> & { tenantId: null; isVacancy: boolean } {
+    const vatRates = this.getVatRates(unit.type || 'wohnung');
+    
+    const betriebskosten = roundMoney(Number(unit.leerstandBk) || 0);
+    const heizungskosten = roundMoney(Number(unit.leerstandHk) || 0);
+    
+    const ustBk = roundMoney(this.calculateVatFromGross(betriebskosten, vatRates.ustSatzBk));
+    const ustHeizung = roundMoney(this.calculateVatFromGross(heizungskosten, vatRates.ustSatzHeizung));
+    const ust = roundMoney(ustBk + ustHeizung);
+    
+    const gesamtbetrag = roundMoney(betriebskosten + heizungskosten);
+
+    return {
+      tenantId: null,
+      unitId: unit.id,
+      year,
+      month,
+      grundmiete: 0,
+      betriebskosten,
+      heizungskosten,
+      gesamtbetrag,
+      ust,
+      ustSatzMiete: vatRates.ustSatzMiete,
+      ustSatzBk: vatRates.ustSatzBk,
+      ustSatzHeizung: vatRates.ustSatzHeizung,
+      status: "offen",
+      faelligAm: dueDate,
+      isVacancy: true,
+      vortragMiete: 0,
+      vortragBk: 0,
+      vortragHk: 0,
+      vortragSonstige: 0,
+    };
+  }
+
+  buildVacancyInvoiceLines(
+    invoiceId: string,
+    unit: typeof units.$inferSelect,
+    month: number,
+    year: number
+  ): InvoiceLine[] {
+    const lines: InvoiceLine[] = [];
+    const monthName = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][month - 1];
+    const vatRates = this.getVatRates(unit.type || 'wohnung');
+
+    const bk = Number(unit.leerstandBk) || 0;
+    if (bk > 0) {
+      const netBk = bk / (1 + vatRates.ustSatzBk / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'betriebskosten',
+        description: `BK Leerstand ${unit.topNummer} ${monthName} ${year}`,
+        netAmount: roundMoney(netBk).toString(),
+        vatRate: vatRates.ustSatzBk,
+        grossAmount: bk.toString(),
+        allocationReference: 'MRG §21 Leerstand',
+      });
+    }
+
+    const hk = Number(unit.leerstandHk) || 0;
+    if (hk > 0) {
+      const netHk = hk / (1 + vatRates.ustSatzHeizung / 100);
+      lines.push({
+        invoiceId,
+        expenseType: 'heizkosten',
+        description: `HK Leerstand ${unit.topNummer} ${monthName} ${year}`,
+        netAmount: roundMoney(netHk).toString(),
+        vatRate: vatRates.ustSatzHeizung,
+        grossAmount: hk.toString(),
+        allocationReference: 'HeizKG Leerstand',
+      });
+    }
+
+    return lines;
+  }
+
   async generateMonthlyInvoices(
     userId: string, 
     year: number, 
@@ -307,6 +389,7 @@ export class InvoiceService {
 
     const unitIds = unitsData.map(u => u.id);
     const unitTypeMap = new Map(unitsData.map(u => [u.id, u.type || 'wohnung']));
+    const unitMap = new Map(unitsData.map(u => [u.id, u]));
 
     const tenantsData = await db.select()
       .from(tenants)
@@ -315,40 +398,45 @@ export class InvoiceService {
         eq(tenants.status, 'aktiv')
       ));
 
-    if (!tenantsData.length) {
-      return { 
-        success: true, 
-        message: "No active tenants found", 
-        created: 0, 
-        skipped: 0, 
-        carryForwardsCalculated: 0, 
-        invoices: [] 
-      };
-    }
+    const dueDate = new Date(year, month - 1, 5);
+    const dueDateStr = dueDate.toISOString().split('T')[0];
 
-    const existingInvoices = await db.select({ tenantId: monthlyInvoices.tenantId })
+    // Find existing invoices for this month (both tenant and vacancy)
+    const existingInvoices = await db.select({ 
+      tenantId: monthlyInvoices.tenantId,
+      unitId: monthlyInvoices.unitId,
+      isVacancy: monthlyInvoices.isVacancy
+    })
       .from(monthlyInvoices)
       .where(and(
         eq(monthlyInvoices.year, year),
         eq(monthlyInvoices.month, month)
       ));
 
-    const existingTenantIds = new Set(existingInvoices.map(inv => inv.tenantId));
+    const existingTenantIds = new Set(existingInvoices.filter(inv => inv.tenantId).map(inv => inv.tenantId));
+    const existingVacancyUnitIds = new Set(existingInvoices.filter(inv => inv.isVacancy).map(inv => inv.unitId));
+    
     const tenantsToInvoice = tenantsData.filter(t => !existingTenantIds.has(t.id));
+    const occupiedUnitIds = new Set(tenantsData.map(t => t.unitId));
+    
+    // Find vacant units with leerstand costs that need invoices
+    const vacantUnitsToInvoice = unitsData.filter(u => 
+      u.status === 'leerstand' && 
+      !occupiedUnitIds.has(u.id) &&
+      !existingVacancyUnitIds.has(u.id) &&
+      ((Number(u.leerstandBk) || 0) > 0 || (Number(u.leerstandHk) || 0) > 0)
+    );
 
-    if (!tenantsToInvoice.length) {
+    if (!tenantsToInvoice.length && !vacantUnitsToInvoice.length) {
       return { 
         success: true, 
-        message: `All ${tenantsData.length} tenants already have invoices for ${month}/${year}`,
+        message: `All invoices already exist for ${month}/${year}`,
         created: 0,
-        skipped: tenantsData.length,
+        skipped: tenantsData.length + vacantUnitsToInvoice.length,
         carryForwardsCalculated: 0,
         invoices: []
       };
     }
-
-    const dueDate = new Date(year, month - 1, 5);
-    const dueDateStr = dueDate.toISOString().split('T')[0];
 
     const carryForwardMap = new Map<string, CarryForward>();
     if (isJanuary) {
@@ -359,12 +447,32 @@ export class InvoiceService {
     }
 
     const tenantMap = new Map(tenantsToInvoice.map(t => [t.id, t]));
-    const invoicesToCreate = tenantsToInvoice.map(tenant => {
+    
+    // Build tenant invoices
+    const tenantInvoicesToCreate = tenantsToInvoice.map(tenant => {
       const unitType = unitTypeMap.get(tenant.unitId || '') || 'wohnung';
       const carryForward = carryForwardMap.get(tenant.id) || {
         vortragMiete: 0, vortragBk: 0, vortragHk: 0, vortragSonstige: 0,
       };
       const data = this.buildInvoiceData(tenant, unitType, year, month, dueDateStr, carryForward);
+      return {
+        ...data,
+        isVacancy: false,
+        grundmiete: String(data.grundmiete),
+        betriebskosten: String(data.betriebskosten),
+        heizungskosten: String(data.heizungskosten),
+        gesamtbetrag: String(data.gesamtbetrag),
+        ust: String(data.ust),
+        vortragMiete: String(data.vortragMiete),
+        vortragBk: String(data.vortragBk),
+        vortragHk: String(data.vortragHk),
+        vortragSonstige: String(data.vortragSonstige),
+      };
+    });
+
+    // Build vacancy invoices
+    const vacancyInvoicesToCreate = vacantUnitsToInvoice.map(unit => {
+      const data = this.buildVacancyInvoiceData(unit, year, month, dueDateStr);
       return {
         ...data,
         grundmiete: String(data.grundmiete),
@@ -380,18 +488,43 @@ export class InvoiceService {
     });
 
     const createdInvoices = await db.transaction(async (tx) => {
-      const inserted = await tx.insert(monthlyInvoices)
-        .values(invoicesToCreate)
-        .onConflictDoNothing({ target: [monthlyInvoices.tenantId, monthlyInvoices.year, monthlyInvoices.month] })
-        .returning();
+      const allInserted: (typeof monthlyInvoices.$inferSelect)[] = [];
 
+      // Insert tenant invoices
+      if (tenantInvoicesToCreate.length > 0) {
+        const inserted = await tx.insert(monthlyInvoices)
+          .values(tenantInvoicesToCreate)
+          .onConflictDoNothing()
+          .returning();
+        allInserted.push(...inserted);
+      }
+
+      // Insert vacancy invoices
+      if (vacancyInvoicesToCreate.length > 0) {
+        const inserted = await tx.insert(monthlyInvoices)
+          .values(vacancyInvoicesToCreate)
+          .onConflictDoNothing()
+          .returning();
+        allInserted.push(...inserted);
+      }
+
+      // Build invoice lines
       const allLines: typeof invoiceLines.$inferInsert[] = [];
-      for (const invoice of inserted) {
-        const tenant = tenantMap.get(invoice.tenantId)!;
-        const unitType = unitTypeMap.get(invoice.unitId || '') || 'wohnung';
-        const vatRates = this.getVatRates(unitType);
-        const lines = this.buildInvoiceLines(invoice.id, tenant, vatRates, month, year);
-        allLines.push(...lines);
+      
+      for (const invoice of allInserted) {
+        if (invoice.isVacancy) {
+          // Vacancy invoice lines
+          const unit = unitMap.get(invoice.unitId)!;
+          const lines = this.buildVacancyInvoiceLines(invoice.id, unit, month, year);
+          allLines.push(...lines);
+        } else if (invoice.tenantId) {
+          // Tenant invoice lines
+          const tenant = tenantMap.get(invoice.tenantId)!;
+          const unitType = unitTypeMap.get(invoice.unitId || '') || 'wohnung';
+          const vatRates = this.getVatRates(unitType);
+          const lines = this.buildInvoiceLines(invoice.id, tenant, vatRates, month, year);
+          allLines.push(...lines);
+        }
       }
 
       for (let i = 0; i < allLines.length; i += 500) {
@@ -402,22 +535,24 @@ export class InvoiceService {
       }
 
       await writeAudit(tx, userId, 'monthly_invoices', 'bulk', 'bulk_create', null, {
-        createdCount: inserted.length,
+        createdCount: allInserted.length,
+        tenantInvoices: tenantInvoicesToCreate.length,
+        vacancyInvoices: vacancyInvoicesToCreate.length,
         month,
         year,
-        invoiceIds: inserted.map(inv => inv.id),
+        invoiceIds: allInserted.map(inv => inv.id),
       });
 
-      return inserted;
+      return allInserted;
     });
 
-    const attemptedCount = invoicesToCreate.length;
-    const conflictSkipped = attemptedCount - createdInvoices.length;
-    const totalSkipped = existingTenantIds.size + conflictSkipped;
+    const tenantCount = createdInvoices.filter(inv => !inv.isVacancy).length;
+    const vacancyCount = createdInvoices.filter(inv => inv.isVacancy).length;
+    const totalSkipped = existingTenantIds.size + existingVacancyUnitIds.size;
 
     return { 
       success: true, 
-      message: `Successfully created ${createdInvoices.length} invoices for ${month}/${year}`,
+      message: `Erstellt: ${tenantCount} Mieter-Vorschreibungen, ${vacancyCount} Leerstand-Vorschreibungen für ${month}/${year}`,
       created: createdInvoices.length,
       skipped: totalSkipped,
       carryForwardsCalculated: isJanuary ? carryForwardMap.size : 0,

@@ -149,6 +149,8 @@ export const units = pgTable("units", {
   nutzwert: numeric("nutzwert", { precision: 10, scale: 4 }),
   stockwerk: integer("stockwerk"),
   vsPersonen: integer("vs_personen").default(0),
+  leerstandBk: numeric("leerstand_bk", { precision: 10, scale: 2 }).default('0'),
+  leerstandHk: numeric("leerstand_hk", { precision: 10, scale: 2 }).default('0'),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -204,7 +206,7 @@ export type InsertRentHistory = typeof rentHistory.$inferInsert;
 
 export const monthlyInvoices = pgTable("monthly_invoices", {
   id: uuid("id").defaultRandom().primaryKey(),
-  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
   unitId: uuid("unit_id").references(() => units.id).notNull(),
   year: integer("year").notNull(),
   month: integer("month").notNull(),
@@ -221,6 +223,7 @@ export const monthlyInvoices = pgTable("monthly_invoices", {
   status: invoiceStatusEnum("status").default('offen'),
   faelligAm: date("faellig_am"),
   pdfUrl: text("pdf_url"),
+  isVacancy: boolean("is_vacancy").default(false),
   vortragMiete: numeric("vortrag_miete", { precision: 10, scale: 2 }).default('0'),
   vortragBk: numeric("vortrag_bk", { precision: 10, scale: 2 }).default('0'),
   vortragHk: numeric("vortrag_hk", { precision: 10, scale: 2 }).default('0'),
