@@ -288,6 +288,110 @@ export function useMrgAllocation(
       };
     });
 
+    // ====== LEERSTAND (Vacancy) SUPPORT ======
+    // Finde Einheiten mit Leerstand-Vorschreibungen für diesen Monat
+    const vacancyInvoices = invoices?.filter(inv => 
+      (inv as any).isVacancy === true || (inv as any).is_vacancy === true
+    ) || [];
+    
+    // Filter für diesen Monat
+    const monthVacancyInvoices = vacancyInvoices.filter(inv => 
+      inv.year === year && inv.month === month
+    );
+    
+    // Gruppiere nach Unit
+    const vacancyByUnit = new Map<string, typeof monthVacancyInvoices>();
+    monthVacancyInvoices.forEach(inv => {
+      const unitId = (inv as any).unitId ?? (inv as any).unit_id;
+      if (!unitId) return;
+      
+      // Filter by property if selected
+      if (propertyUnitIds && !propertyUnitIds.includes(unitId)) return;
+      
+      if (!vacancyByUnit.has(unitId)) {
+        vacancyByUnit.set(unitId, []);
+      }
+      vacancyByUnit.get(unitId)!.push(inv);
+    });
+    
+    // Erstelle Leerstand-Allocations
+    const vacancyAllocations: TenantAllocation[] = [];
+    vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
+      const unit = units.find(u => u.id === unitId);
+      if (!unit) return;
+      
+      // SOLL aus Leerstand-Vorschreibungen
+      const sollBk = unitVacancyInvoices.reduce((sum, inv) => {
+        const invAny = inv as any;
+        return sum + Number(invAny.betriebskosten ?? invAny.betriebskostenVorschuss ?? 0);
+      }, 0);
+      const sollHk = unitVacancyInvoices.reduce((sum, inv) => {
+        const invAny = inv as any;
+        return sum + Number(invAny.heizungskosten ?? invAny.heizkostenVorschuss ?? invAny.heizkosten ?? 0);
+      }, 0);
+      const sollMiete = 0;
+      const totalSoll = sollBk + sollHk;
+      
+      // IST: Nutze paid_amount aus Vorschreibungen
+      const totalPaid = unitVacancyInvoices.reduce((sum, inv) => {
+        const paid = Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0);
+        return sum + paid;
+      }, 0);
+      
+      // Proportionale Verteilung
+      const sollTotal = sollBk + sollHk;
+      const istBk = sollTotal > 0 ? (sollBk / sollTotal) * totalPaid : 0;
+      const istHk = sollTotal > 0 ? (sollHk / sollTotal) * totalPaid : 0;
+      const istMiete = 0;
+      const totalIst = istBk + istHk;
+      
+      const diffBk = sollBk - istBk;
+      const diffHk = sollHk - istHk;
+      const diffMiete = 0;
+      const saldo = totalSoll - totalIst;
+      
+      vacancyAllocations.push({
+        tenant: {
+          id: `vacancy-${unitId}-${year}-${month}`,
+          first_name: 'Leerstand',
+          last_name: `(${unit.topNummer ?? unit.top_nummer})`,
+          unit_id: unitId,
+          grundmiete: 0,
+          betriebskosten_vorschuss: sollBk,
+          heizungskosten_vorschuss: sollHk,
+          status: 'leerstand',
+          mietbeginn: '',
+          mietende: null,
+        },
+        unit: {
+          id: unit.id,
+          top_nummer: (unit as any).topNummer ?? (unit as any).top_nummer,
+          type: (unit as any).type,
+          property_id: (unit as any).propertyId ?? (unit as any).property_id,
+        },
+        sollBk,
+        sollHk,
+        sollMiete,
+        totalSoll,
+        istBk,
+        istHk,
+        istMiete,
+        totalIst,
+        diffBk,
+        diffHk,
+        diffMiete,
+        ueberzahlung: 0,
+        unterzahlung: saldo > 0 ? saldo : 0,
+        saldo,
+        oldestOverdueDays: 0,
+        mahnstatus: 'aktuell',
+        status: saldo > 0 ? 'offen' : 'vollstaendig',
+      });
+    });
+    
+    // Füge Leerstand-Allocations hinzu
+    allocations.push(...vacancyAllocations);
+
     // Sort by saldo ascending (most debt first)
     allocations.sort((a, b) => a.saldo - b.saldo);
 
