@@ -128,7 +128,7 @@ export default function TenantForm() {
       kaution_bezahlt: tenant.kautionBezahlt || false,
       grundmiete: Number(tenant.grundmiete || 0),
       betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss || 0),
-      heizungskosten_vorschuss: Number(tenant.heizungskostenVorschuss || 0),
+      heizungskosten_vorschuss: Number(tenant.heizkostenVorschuss || 0),
       wasserkosten_vorschuss: Number((tenant as any).wasserkostenVorschuss || 0),
       sepa_mandat: tenant.sepaMandat || false,
       iban: tenant.iban || '',
@@ -173,7 +173,7 @@ export default function TenantForm() {
         sonstigeKostenObj[pos.name] = {
           betrag: pos.betrag,
           ust: pos.ust,
-          schluessel: pos.schluessel,
+          schluessel: pos.schluessel || 'Nutzfläche', // Default to Nutzfläche if not set
         };
       }
     }
