@@ -159,9 +159,9 @@ export function useMrgAllocationYearly(
       const tenantPayments = yearPayments.filter(p => (p.tenantId ?? p.tenant_id) === tenant.id);
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // MRG-konforme Aufteilung über das Jahr
+      // MRG-konforme Aufteilung über das Jahr (mit Brutto-SOLL für korrekte Überzahlungsberechnung)
       const { istBk, istHk, istMiete, ueberzahlung, unterzahlung } = 
-        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst);
+        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst, totalSollBrutto);
 
       // Differenzen
       const diffBk = sollBk - istBk;

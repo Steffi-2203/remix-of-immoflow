@@ -75,12 +75,19 @@ export interface MrgAllocationResult {
 /**
  * Berechnet MRG-konforme Zahlungsaufteilung für einen Mieter
  * Priorität: BK → HK → Miete
+ * 
+ * @param sollBk - Betriebskosten SOLL (netto)
+ * @param sollHk - Heizkosten SOLL (netto)
+ * @param sollMiete - Miete SOLL (netto)
+ * @param totalIst - Tatsächliche Zahlung (brutto)
+ * @param totalSollBrutto - Gesamtbetrag inkl. USt (optional, für korrekte Überzahlungsberechnung)
  */
 export function calculateMrgAllocation(
   sollBk: number,
   sollHk: number,
   sollMiete: number,
-  totalIst: number
+  totalIst: number,
+  totalSollBrutto?: number
 ): {
   istBk: number;
   istHk: number;
@@ -100,14 +107,16 @@ export function calculateMrgAllocation(
   const istMiete = Math.min(remaining, sollMiete);
   remaining -= istMiete;
   
-  // Überzahlung (wenn mehr gezahlt als Gesamt-SOLL)
-  const ueberzahlung = remaining > 0 ? remaining : 0;
+  // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL (gesamtbetrag inkl. USt)
+  // Wenn totalSollBrutto übergeben wird, verwende diesen für die Berechnung
+  // Sonst verwende die Summe der Netto-Werte (Fallback)
+  const sollGesamt = totalSollBrutto ?? (sollBk + sollHk + sollMiete);
   
-  // Unterzahlung pro Komponente
-  const diffBk = sollBk - istBk;
-  const diffHk = sollHk - istHk;
-  const diffMiete = sollMiete - istMiete;
-  const unterzahlung = diffBk + diffHk + diffMiete;
+  // Überzahlung = Zahlung > Brutto-SOLL (echte Überzahlung, nicht nur USt-Anteil)
+  const ueberzahlung = totalIst > sollGesamt ? totalIst - sollGesamt : 0;
+  
+  // Unterzahlung = Brutto-SOLL > Zahlung
+  const unterzahlung = sollGesamt > totalIst ? sollGesamt - totalIst : 0;
   
   return { istBk, istHk, istMiete, ueberzahlung, unterzahlung };
 }
@@ -214,9 +223,9 @@ export function useMrgAllocation(
       const tenantPayments = periodPayments.filter(p => (p.tenantId ?? p.tenant_id) === tenant.id);
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // MRG-konforme Aufteilung
+      // MRG-konforme Aufteilung (mit Brutto-SOLL für korrekte Überzahlungsberechnung)
       const { istBk, istHk, istMiete, ueberzahlung, unterzahlung } = 
-        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst);
+        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst, totalSollBrutto);
 
       // Differenzen
       const diffBk = sollBk - istBk;
@@ -466,18 +475,20 @@ export function calculateMrgAllocationsFromData(
     const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
     const sollMiete = Number(tenant.grundmiete || 0);
     const totalSoll = sollBk + sollHk + sollMiete;
+    // Brutto = Netto + geschätzte USt (10% auf alles)
+    const totalSollBrutto = totalSoll * 1.1;
 
     const tenantPayments = payments.filter(p => p.tenant_id === tenant.id);
     const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     const { istBk, istHk, istMiete, ueberzahlung, unterzahlung } = 
-      calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst);
+      calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst, totalSollBrutto);
 
     const diffBk = sollBk - istBk;
     const diffHk = sollHk - istHk;
     const diffMiete = sollMiete - istMiete;
-    // Saldo: positiv = Unterzahlung (offene Forderung), negativ = Überzahlung
-    const saldo = totalSoll - totalIst;
+    // Saldo: SOLL (brutto) - IST = positiv = Unterzahlung, negativ = Überzahlung
+    const saldo = totalSollBrutto - totalIst;
 
     const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
     const daysOverdue = isCurrentMonth && saldo > 0 && dayOfMonth > 5 ? dayOfMonth - 5 : 0;
