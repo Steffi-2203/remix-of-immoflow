@@ -29,9 +29,11 @@ import {
   Users,
   AlertTriangle,
   Wrench,
+  FileImage,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
 import { MaintenanceContractsTab } from '@/components/property/MaintenanceContractsTab';
 import { useQueryClient } from '@tanstack/react-query';
@@ -87,6 +89,7 @@ export default function PropertyDetail() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [unitImportDialogOpen, setUnitImportDialogOpen] = useState(false);
   const [tenantImportDialogOpen, setTenantImportDialogOpen] = useState(false);
+  const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
@@ -376,7 +379,11 @@ export default function PropertyDetail() {
               </Button>
               <Button variant="outline" onClick={() => setTenantImportDialogOpen(true)}>
                 <Users className="h-4 w-4 mr-2" />
-                Mieter importieren
+                Mieter CSV Import
+              </Button>
+              <Button onClick={() => setPdfScanDialogOpen(true)} data-testid="button-pdf-scan-property">
+                <FileImage className="h-4 w-4 mr-2" />
+                PDF scannen
               </Button>
               {canAddUnit ? (
                 <Link to={`/liegenschaften/${id}/einheiten/neu`}>
@@ -905,6 +912,17 @@ export default function PropertyDetail() {
           <TenantImportDialog
             open={tenantImportDialogOpen}
             onOpenChange={setTenantImportDialogOpen}
+            propertyId={id}
+            units={units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['units', id] });
+              queryClient.invalidateQueries({ queryKey: ['tenants'] });
+            }}
+          />
+
+          <PdfScanDialog
+            open={pdfScanDialogOpen}
+            onOpenChange={setPdfScanDialogOpen}
             propertyId={id}
             units={units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))}
             onSuccess={() => {

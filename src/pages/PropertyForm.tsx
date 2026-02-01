@@ -94,10 +94,15 @@ export default function PropertyForm() {
     try {
       if (isEditing && id) {
         await updateProperty.mutateAsync({ id, ...propertyData });
+        navigate('/liegenschaften');
       } else {
-        await createProperty.mutateAsync(propertyData);
+        const newProperty = await createProperty.mutateAsync(propertyData);
+        if (newProperty?.id) {
+          navigate(`/liegenschaften/${newProperty.id}`);
+        } else {
+          navigate('/liegenschaften');
+        }
       }
-      navigate('/liegenschaften');
     } catch (error) {
       // Error handling is done in the hooks
     }

@@ -42,6 +42,7 @@ const tenantSchema = z.object({
   grundmiete: z.coerce.number().min(0, 'Grundmiete muss positiv sein'),
   betriebskosten_vorschuss: z.coerce.number().min(0, 'BK-Vorschuss muss positiv sein'),
   heizungskosten_vorschuss: z.coerce.number().min(0, 'Heizungskosten-Vorschuss muss positiv sein'),
+  wasserkosten_vorschuss: z.coerce.number().min(0, 'Wasserkosten-Vorschuss muss positiv sein'),
   sepa_mandat: z.boolean(),
   iban: z.string().trim().max(34).optional().or(z.literal('')),
   bic: z.string().trim().max(11).optional().or(z.literal('')),
@@ -76,6 +77,7 @@ export default function TenantForm() {
       grundmiete: 0,
       betriebskosten_vorschuss: 0,
       heizungskosten_vorschuss: 0,
+      wasserkosten_vorschuss: 0,
       sepa_mandat: false,
       iban: '',
       bic: '',
@@ -93,7 +95,8 @@ export default function TenantForm() {
       kaution_bezahlt: tenant.kautionBezahlt,
       grundmiete: Number(tenant.grundmiete),
       betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss),
-      heizungskosten_vorschuss: Number(tenant.heizungskostenVorschuss),
+      heizungskosten_vorschuss: Number(tenant.heizkostenVorschuss),
+      wasserkosten_vorschuss: Number(tenant.wasserkostenVorschuss || 0),
       sepa_mandat: tenant.sepaMandat,
       iban: tenant.iban || '',
       bic: tenant.bic || '',
@@ -106,7 +109,8 @@ export default function TenantForm() {
   const watchGrundmiete = form.watch('grundmiete');
   const watchBK = form.watch('betriebskosten_vorschuss');
   const watchHeizung = form.watch('heizungskosten_vorschuss');
-  const totalRent = (watchGrundmiete || 0) + (watchBK || 0) + (watchHeizung || 0);
+  const watchWasser = form.watch('wasserkosten_vorschuss');
+  const totalRent = (watchGrundmiete || 0) + (watchBK || 0) + (watchHeizung || 0) + (watchWasser || 0);
 
   const onSubmit = async (data: TenantFormData) => {
     // Convert form data (snake_case) to API format (camelCase)
@@ -120,7 +124,8 @@ export default function TenantForm() {
       kautionBezahlt: data.kaution_bezahlt,
       grundmiete: String(data.grundmiete),
       betriebskostenVorschuss: String(data.betriebskosten_vorschuss),
-      heizungskostenVorschuss: String(data.heizungskosten_vorschuss),
+      heizkostenVorschuss: String(data.heizungskosten_vorschuss),
+      wasserkostenVorschuss: String(data.wasserkosten_vorschuss),
       sepaMandat: data.sepa_mandat,
       sepaMandatDatum: null,
       status: data.status,
@@ -401,6 +406,23 @@ export default function TenantForm() {
                       <FormLabel className="flex items-center">
                         Heizungskosten-Vorschuss (€) *
                         <InfoTooltip text="heizkosten" />
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="wasserkosten_vorschuss"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        Wasserkosten-Vorschuss (€)
+                        <InfoTooltip text="Monatlicher Vorschuss für Wasserkosten (falls separat abgerechnet)" />
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" {...field} />

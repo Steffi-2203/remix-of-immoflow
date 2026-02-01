@@ -28,7 +28,8 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **MRG Compliance**:
     - Six standard MRG-compliant distribution keys (Nutzfläche, Einheiten, Personen, Pauschal, Verbrauch, Sondernutzung) are managed for operating cost allocation.
     - Rent history is tracked in a `rent_history` table with `validFrom`/`validUntil` fields.
-    - Austrian VAT rates are applied consistently (e.g., 10% for residential rent/BK, 20% for heating/commercial).
+    - Austrian VAT rates are applied consistently (e.g., 10% for residential rent/BK/Wasser, 20% for heating/commercial).
+    - **Wasserkosten**: Water costs (Wasserkosten) are tracked as a separate invoice line item with 10% VAT, supporting properties where water is billed separately from BK.
     - **§ 21 MRG Legal Warnings**: Automatic warnings for settlement deadlines (Abs 3: after 30.06. of following year) and statute of limitations (Abs 4: expires 01.01. of 4th following year).
     - **Offene Posten**: SOLL values sourced from Vorschreibung (monthly_invoices) with fallback to tenant fields.
     - **Bank Account Year-End Carry-Over**: API route `/api/bank-accounts/:id/carry-over` transfers 31.12. closing balance to 01.01. opening balance with conflict detection.
