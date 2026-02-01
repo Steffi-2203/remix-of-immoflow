@@ -170,6 +170,7 @@ export const tenants = pgTable("tenants", {
   betriebskostenVorschuss: numeric("betriebskosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
   heizkostenVorschuss: numeric("heizungskosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
   wasserkostenVorschuss: numeric("wasserkosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
+  sonstigeKosten: jsonb("sonstige_kosten").$type<Record<string, number>>(),
   kaution: numeric("kaution", { precision: 10, scale: 2 }),
   kautionBezahlt: boolean("kaution_bezahlt").default(false),
   iban: text("iban"),

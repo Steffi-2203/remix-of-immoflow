@@ -1097,6 +1097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         betriebskostenVorschuss: body.betriebskostenVorschuss?.toString() || '0',
         heizkostenVorschuss: body.heizkostenVorschuss?.toString() || '0',
         wasserkostenVorschuss: body.wasserkostenVorschuss?.toString() || '0',
+        sonstigeKosten: body.sonstigeKosten && typeof body.sonstigeKosten === 'object' ? body.sonstigeKosten : null,
         kaution: body.kaution?.toString() || null,
         kautionBezahlt: body.kautionBezahlt || false,
         iban: body.iban || null,
@@ -4051,6 +4052,7 @@ Antworte im JSON-Format als ARRAY von Mietern:
       "betriebskostenVorschuss": Betriebskostenvorschuss als Zahl,
       "heizkostenVorschuss": Heizkostenvorschuss als Zahl,
       "wasserkostenVorschuss": Wasserkostenvorschuss als Zahl (falls separat ausgewiesen),
+      "sonstigeKosten": { "Bezeichnung": Betrag als Zahl, ... },
       "kaution": Kaution als Zahl (falls angegeben),
       "topNummer": "Wohnungs-/Einheitsnummer (z.B. Top 1, Wohnung 2)",
       "address": "Adresse der Wohnung",
@@ -4063,6 +4065,18 @@ Wichtige Hinweise:
 - Extrahiere JEDEN Mieter separat in das Array
 - Bei österreichischen Vorschreibungen: Suche nach "Miete", "BK", "HK", "Heizung", "Betriebskosten", "Wasser", "WK"
 - Die Gesamtmiete = Grundmiete + BK + HK + Wasserkosten (trenne diese auf)
+- sonstigeKosten: Erfasse ALLE weiteren Kostenpositionen die nicht in die Standardfelder passen, z.B.:
+  * Lift/Aufzug/Liftkosten
+  * Garage/Stellplatz/Parkplatz
+  * Müll/Müllabfuhr
+  * Kabel-TV/Fernsehen
+  * Internet
+  * Strom (Allgemeinstrom)
+  * Versicherung
+  * Garten/Grünflächen
+  * Reinigung/Hausbetreuung
+  * Sonstige Nebenkosten
+  Beispiel: { "Lift": 15.50, "Garage": 85.00, "Müll": 8.20 }
 - Datumsformat immer als YYYY-MM-DD
 - Zahlen ohne Währungssymbol, nur numerisch
 - Wenn etwas nicht erkennbar ist, setze null oder 0
