@@ -133,16 +133,16 @@ export class FinanzOnlineService {
 
           for (const row of invoicesData) {
             const isWohnen = row.unit.nutzungsart === 'wohnung';
-            const hauptmiete = Number(row.invoice.hauptmiete) || 0;
+            const grundmiete = Number(row.invoice.grundmiete) || 0;
             const bk = Number(row.invoice.betriebskosten) || 0;
-            const heiz = Number(row.invoice.heizkosten) || 0;
+            const heiz = Number(row.invoice.heizungskosten) || 0;
 
             if (isWohnen) {
-              einnahmen.mieteinnahmenWohnen += hauptmiete;
+              einnahmen.mieteinnahmenWohnen += grundmiete;
               einnahmen.betriebskostenWohnen += bk;
               einnahmen.heizkostenWohnen += heiz;
             } else {
-              einnahmen.mieteinnahmenGewerbe += hauptmiete;
+              einnahmen.mieteinnahmenGewerbe += grundmiete;
               einnahmen.betriebskostenGewerbe += bk;
               einnahmen.heizkostenGewerbe += heiz;
             }
