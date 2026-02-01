@@ -10,6 +10,7 @@ import {
 import { eq, and, inArray, gte, lte } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
 import type { Tenant } from "@shared/schema";
+import { roundMoney } from "@shared/utils";
 
 interface InvoiceLine {
   invoiceId: string;
@@ -123,9 +124,9 @@ export class InvoiceService {
     const paidMiete = Math.min(remaining, sollMiete);
 
     return {
-      vortragMiete: Math.round(Math.max(0, sollMiete - paidMiete) * 100) / 100,
-      vortragBk: Math.round(Math.max(0, sollBk - paidBk) * 100) / 100,
-      vortragHk: Math.round(Math.max(0, sollHk - paidHk) * 100) / 100,
+      vortragMiete: roundMoney(Math.max(0, sollMiete - paidMiete)),
+      vortragBk: roundMoney(Math.max(0, sollBk - paidBk)),
+      vortragHk: roundMoney(Math.max(0, sollHk - paidHk)),
       vortragSonstige: 0,
     };
   }
@@ -163,7 +164,7 @@ export class InvoiceService {
       betriebskosten: betriebskosten.toString(),
       heizungskosten: heizungskosten.toString(),
       gesamtbetrag: gesamtbetrag.toString(),
-      ust: (Math.round(ust * 100) / 100).toString(),
+      ust: roundMoney(ust).toString(),
       ustSatzMiete: vatRates.ustSatzMiete,
       ustSatzBk: vatRates.ustSatzBk,
       ustSatzHeizung: vatRates.ustSatzHeizung,
@@ -194,7 +195,7 @@ export class InvoiceService {
         invoiceId,
         expenseType: 'grundmiete',
         description: `Nettomiete ${monthName} ${year}`,
-        netAmount: (Math.round(netMiete * 100) / 100).toString(),
+        netAmount: roundMoney(netMiete).toString(),
         vatRate: vatRates.ustSatzMiete,
         grossAmount: grundmiete.toString(),
         allocationReference: 'MRG §15',
@@ -208,7 +209,7 @@ export class InvoiceService {
         invoiceId,
         expenseType: 'betriebskosten',
         description: `BK-Vorschuss ${monthName} ${year}`,
-        netAmount: (Math.round(netBk * 100) / 100).toString(),
+        netAmount: roundMoney(netBk).toString(),
         vatRate: vatRates.ustSatzBk,
         grossAmount: bk.toString(),
         allocationReference: 'MRG §21',
@@ -222,7 +223,7 @@ export class InvoiceService {
         invoiceId,
         expenseType: 'heizkosten',
         description: `HK-Vorschuss ${monthName} ${year}`,
-        netAmount: (Math.round(netHk * 100) / 100).toString(),
+        netAmount: roundMoney(netHk).toString(),
         vatRate: vatRates.ustSatzHeizung,
         grossAmount: hk.toString(),
         allocationReference: 'HeizKG',
@@ -236,7 +237,7 @@ export class InvoiceService {
         invoiceId,
         expenseType: 'wasserkosten',
         description: `Wasserkosten-Vorschuss ${monthName} ${year}`,
-        netAmount: (Math.round(netWasser * 100) / 100).toString(),
+        netAmount: roundMoney(netWasser).toString(),
         vatRate: 10,
         grossAmount: wasser.toString(),
         allocationReference: 'MRG §21',
@@ -254,7 +255,7 @@ export class InvoiceService {
             invoiceId,
             expenseType: 'sonstige',
             description: `${key} ${monthName} ${year}`,
-            netAmount: (Math.round(netBetrag * 100) / 100).toString(),
+            netAmount: roundMoney(netBetrag).toString(),
             vatRate: ust,
             grossAmount: betrag.toString(),
             allocationReference: value.schluessel || 'Vereinbarung',
@@ -435,9 +436,9 @@ export class InvoiceService {
     const totalIst = yearPayments.reduce((sum, p) => sum + Number(p.betrag || 0), 0);
 
     return {
-      totalSoll: Math.round(totalSoll * 100) / 100,
-      totalIst: Math.round(totalIst * 100) / 100,
-      saldo: Math.round((totalSoll - totalIst) * 100) / 100,
+      totalSoll: roundMoney(totalSoll),
+      totalIst: roundMoney(totalIst),
+      saldo: roundMoney(totalSoll - totalIst),
       invoiceCount: yearInvoices.length
     };
   }

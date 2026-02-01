@@ -12,6 +12,7 @@ import {
 } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
+import { roundMoney } from "@shared/utils";
 
 interface TenantSettlementResult {
   tenantId: string;
@@ -84,7 +85,7 @@ export class SettlementService {
     }
 
     return {
-      totalExpenses: Math.round(totalExpenses * 100) / 100,
+      totalExpenses: roundMoney(totalExpenses),
       byCategory,
       byDistributionKey,
       expenses: propertyExpenses
@@ -103,7 +104,7 @@ export class SettlementService {
       return sum + Number(inv.betriebskosten || 0) + Number(inv.heizungskosten || 0);
     }, 0);
 
-    return Math.round(totalPrepayments * 100) / 100;
+    return roundMoney(totalPrepayments);
   }
 
   async getDistributionValue(
@@ -192,8 +193,8 @@ export class SettlementService {
       details.push({
         category,
         description: `Anteil an ${category}`,
-        totalCost: Math.round(totalCost * 100) / 100,
-        tenantShare: Math.round(categoryShare * 100) / 100,
+        totalCost: roundMoney(totalCost),
+        tenantShare: roundMoney(categoryShare),
         distributionKey: keyName || 'Fläche'
       });
     }
@@ -204,9 +205,9 @@ export class SettlementService {
       unitId: unit.id,
       unitName: unit.topNummer || `Einheit`,
       anteil: Math.round(anteil * 10000) / 10000,
-      sollBetrag: Math.round(totalShare * 100) / 100,
+      sollBetrag: roundMoney(totalShare),
       istBetrag: prepayments,
-      differenz: Math.round((prepayments - totalShare) * 100) / 100,
+      differenz: roundMoney(prepayments - totalShare),
       details
     };
   }
@@ -323,8 +324,8 @@ export class SettlementService {
         propertyId,
         year,
         totalExpenses,
-        totalPrepayments: Math.round(totalPrepayments * 100) / 100,
-        totalDifference: Math.round(totalDifference * 100) / 100,
+        totalPrepayments: roundMoney(totalPrepayments),
+        totalDifference: roundMoney(totalDifference),
         tenantCount: tenantResults.length,
         unitCount: propertyUnits.length
       }

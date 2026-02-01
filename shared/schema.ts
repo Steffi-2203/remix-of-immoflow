@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, numeric, date, uuid, pgEnum, jsonb, varchar, inet } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, numeric, date, uuid, pgEnum, jsonb, varchar, inet, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -153,7 +153,9 @@ export const units = pgTable("units", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (table) => [
+  uniqueIndex("units_property_top_unique").on(table.propertyId, table.topNummer),
+]);
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -225,7 +227,9 @@ export const monthlyInvoices = pgTable("monthly_invoices", {
   vortragSonstige: numeric("vortrag_sonstige", { precision: 10, scale: 2 }).default('0'),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index("idx_invoices_unit_status_year_month").on(table.unitId, table.status, table.year, table.month),
+]);
 
 export const invoiceLines = pgTable("invoice_lines", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -601,7 +605,9 @@ export const meterReadings = pgTable("meter_readings", {
   imageUrl: text("image_url"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index("idx_meter_readings_date").on(table.meterId, table.readingDate),
+]);
 
 // ====== SCHLÜSSELVERWALTUNG (KEY MANAGEMENT) ======
 export const keyTypeEnum = pgEnum('key_type', ['hauptschluessel', 'wohnungsschluessel', 'kellerschluessel', 'garagenschluessel', 'briefkastenschluessel', 'sonstiges']);
