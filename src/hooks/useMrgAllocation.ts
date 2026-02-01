@@ -187,6 +187,7 @@ export function useMrgAllocation(
       );
       
       let sollBk: number, sollHk: number, sollMiete: number;
+      let totalSollBrutto: number; // Gesamtbetrag inkl. USt für Saldo
       
       if (tenantInvoice) {
         // Vorschreibung vorhanden - verwende diese (inkl. aller Änderungen)
@@ -195,12 +196,16 @@ export function useMrgAllocation(
         sollBk = Number(inv.betriebskosten ?? inv.betriebskostenVorschuss ?? inv.betriebskosten_vorschuss ?? 0);
         sollHk = Number(inv.heizkosten ?? inv.heizkostenVorschuss ?? inv.heizkosten_vorschuss ?? inv.heizungskosten ?? inv.heizungskosten_vorschuss ?? 0);
         sollMiete = Number(inv.grundmiete || 0);
+        // WICHTIG: Verwende gesamtbetrag (brutto) für Saldo, da Zahlungen brutto sind
+        totalSollBrutto = Number(inv.gesamtbetrag ?? 0);
       } else {
         // Fallback auf Mieter-Stammdaten (support both camelCase and snake_case)
         // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
         sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
         sollHk = Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
         sollMiete = Number(tenant.grundmiete || 0);
+        // Fallback: Berechne Brutto mit geschätztem USt-Satz (10% auf alles)
+        totalSollBrutto = (sollBk + sollHk + sollMiete) * 1.1;
       }
       
       const totalSoll = sollBk + sollHk + sollMiete;
@@ -218,9 +223,9 @@ export function useMrgAllocation(
       const diffHk = sollHk - istHk;
       const diffMiete = sollMiete - istMiete;
 
-      // Saldo: positiv = Unterzahlung (offene Forderung), negativ = Überzahlung (Guthaben)
-      // Standard österreichische Buchhaltung: Saldo = SOLL - IST
-      const saldo = totalSoll - totalIst;
+      // Saldo: SOLL (brutto) - IST = positiv = Unterzahlung, negativ = Überzahlung
+      // WICHTIG: Verwende totalSollBrutto (gesamtbetrag inkl. USt), da Zahlungen brutto sind
+      const saldo = totalSollBrutto - totalIst;
 
       // Days overdue: if we're past the 5th of the month and saldo is positive (underpayment)
       const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
