@@ -319,17 +319,26 @@ class DatabaseStorage implements IStorage {
       .orderBy(desc(schema.transactions.transactionDate));
   }
 
-  async getTransactionsByOrganization(organizationId?: string): Promise<schema.Transaction[]> {
+  async getTransactionsByOrganization(organizationId?: string): Promise<(schema.Transaction & { property_id?: string })[]> {
     if (!organizationId) return [];
     const bankAccounts = await this.getBankAccountsByOrganization(organizationId);
     if (bankAccounts.length === 0) return [];
+    
+    // Create a map of bankAccountId -> propertyId for enrichment
+    const bankAccountPropertyMap = new Map(bankAccounts.map(ba => [ba.id, ba.propertyId]));
+    
     const bankAccountIds = bankAccounts.map(ba => ba.id);
-    const allTransactions: schema.Transaction[] = [];
+    const allTransactions: (schema.Transaction & { property_id?: string })[] = [];
     for (const baId of bankAccountIds) {
       const txns = await db.select().from(schema.transactions)
         .where(eq(schema.transactions.bankAccountId, baId))
         .orderBy(desc(schema.transactions.transactionDate));
-      allTransactions.push(...txns);
+      // Enrich each transaction with property_id from its bank account
+      const enrichedTxns = txns.map(t => ({
+        ...t,
+        property_id: bankAccountPropertyMap.get(t.bankAccountId) || undefined
+      }));
+      allTransactions.push(...enrichedTxns);
     }
     return allTransactions.sort((a, b) => 
       new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
