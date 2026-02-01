@@ -4144,12 +4144,16 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
         phone: t.phone || '',
         mietbeginn: t.mietbeginn || '',
         grundmiete: parseFloat(t.grundmiete) || 0,
+        grundmieteUst: parseFloat(t.grundmieteUst) || 10,
         betriebskostenVorschuss: parseFloat(t.betriebskostenVorschuss) || 0,
         heizkostenVorschuss: parseFloat(t.heizkostenVorschuss) || 0,
         wasserkostenVorschuss: parseFloat(t.wasserkostenVorschuss) || 0,
+        warmwasserkostenVorschuss: parseFloat(t.warmwasserkostenVorschuss) || 0,
+        sonstigeKosten: t.sonstigeKosten || null,
         kaution: parseFloat(t.kaution) || 0,
         topNummer: t.topNummer || '',
         address: t.address || '',
+        nutzungsart: t.nutzungsart || 'Wohnung',
         notes: t.notes || '',
       }));
 
