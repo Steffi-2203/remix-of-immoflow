@@ -1571,21 +1571,18 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* Nettoertrag - Sonstige Kosten sind NICHT enthalten */}
+          {/* Rendite = Miete - Instandhaltung */}
           <div className="mt-6 p-4 rounded-lg border-2 border-primary bg-primary/5">
             <div className="flex justify-between items-center">
               <div>
-                <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
+                <span className="font-semibold text-lg">Rendite</span>
                 <p className="text-sm text-muted-foreground">
-                  IST-Mieteinnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
-                  - Instandhaltung (€{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
-                  {combinedSonstigeKosten > 0 && (
-                    <span className="text-purple-600"> • Sonstige Kosten (€{combinedSonstigeKosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) nicht in Rendite</span>
-                  )}
+                  Miete (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
+                  - Instandhaltung (€{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
                 </p>
               </div>
               <span className="font-bold text-primary text-2xl">
-                €{(mieteFromTransactions - instandhaltungFromExpenses).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{(totalIstEinnahmen - combinedInstandhaltung).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
