@@ -1225,6 +1225,7 @@ export default function Reports() {
             source: p.source,
           }));
           // Vorschreibungen für SOLL-Berechnung (statt Mieter-Stammdaten)
+          // WICHTIG: Alle Felder inkl. USt-Sätze übergeben für konsistente Berechnung
           const invoicesData = (allInvoices || []).map(inv => ({
             id: inv.id,
             tenantId: inv.tenantId,
@@ -1237,6 +1238,10 @@ export default function Reports() {
             betriebskosten: inv.betriebskosten,
             heizungskosten: inv.heizungskosten,
             gesamtbetrag: inv.gesamtbetrag,
+            isVacancy: (inv as any).isVacancy || (inv as any).is_vacancy,
+            ustSatzMiete: (inv as any).ustSatzMiete ?? (inv as any).ust_satz_miete,
+            ustSatzBk: (inv as any).ustSatzBk ?? (inv as any).ust_satz_bk,
+            ustSatzHeizung: (inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung,
           }));
           generateOffenePostenReport(
             properties,
