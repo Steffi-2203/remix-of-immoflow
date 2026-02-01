@@ -1,0 +1,84 @@
+// migrations/20260201_add_paid_amount_version_unique_invoices.ts
+import { sql } from "drizzle-orm";
+
+export async function up(db: any) {
+  // Add columns
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices
+    ADD COLUMN IF NOT EXISTS paid_amount numeric(12,2) DEFAULT 0;
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices
+    ADD COLUMN IF NOT EXISTS version integer DEFAULT 1 NOT NULL;
+  `);
+
+  // Unique constraint to prevent duplicate invoices per tenant period
+  await db.execute(sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'monthly_invoices_unique_tenant_period'
+      ) THEN
+        ALTER TABLE monthly_invoices
+        ADD CONSTRAINT monthly_invoices_unique_tenant_period UNIQUE (tenant_id, year, month);
+      END IF;
+    END$$;
+  `);
+
+  // VAT check constraint (adjust allowed rates if needed)
+  await db.execute(sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'monthly_invoices_vat_check'
+      ) THEN
+        ALTER TABLE monthly_invoices
+        ADD CONSTRAINT monthly_invoices_vat_check CHECK (
+          ust_satz_miete IN (0,10,13,20)
+          AND ust_satz_bk IN (0,10,13,20)
+          AND ust_satz_heizung IN (0,10,13,20)
+        );
+      END IF;
+    END$$;
+  `);
+
+  // Indices
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_invoices_tenant_period ON monthly_invoices (tenant_id, year, month);
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS idx_invoice_lines_invoice_id ON invoice_lines (invoice_id);
+  `);
+}
+
+export async function down(db: any) {
+  // Remove indices and constraints carefully
+  await db.execute(sql`
+    DROP INDEX IF EXISTS idx_invoice_lines_invoice_id;
+  `);
+
+  await db.execute(sql`
+    DROP INDEX IF EXISTS idx_invoices_tenant_period;
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_vat_check;
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices DROP CONSTRAINT IF EXISTS monthly_invoices_unique_tenant_period;
+  `);
+
+  // Drop columns (be careful in production; export data first)
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS paid_amount;
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE monthly_invoices DROP COLUMN IF EXISTS version;
+  `);
+}
