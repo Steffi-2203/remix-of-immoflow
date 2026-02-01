@@ -661,7 +661,7 @@ export default function Reports() {
   
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
   const tenantSollIstDetails = useMemo(() => {
-    return relevantTenants.map(tenant => {
+    const details = relevantTenants.map(tenant => {
       const unit = allUnits?.find(u => u.id === tenant.unit_id);
       const property = properties?.find(p => p.id === unit?.propertyId);
       
@@ -738,7 +738,80 @@ export default function Reports() {
         paymentCount: tenantPayments.length
       };
     });
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, selectedMonth, reportPeriod]);
+    
+    // ====== LEERSTAND (Vacancy) für SOLL/IST Vergleich ======
+    // Finde Leerstand-Vorschreibungen für den Zeitraum
+    const vacancyInvoices = allInvoices?.filter(inv => 
+      (inv as any).isVacancy === true || (inv as any).is_vacancy === true
+    ) || [];
+    
+    const periodVacancyInvoices = vacancyInvoices.filter(inv =>
+      inv.year === selectedYear &&
+      (reportPeriod === 'yearly' || inv.month === selectedMonth)
+    );
+    
+    // Gruppiere nach Unit
+    const vacancyByUnit = new Map<string, typeof periodVacancyInvoices>();
+    periodVacancyInvoices.forEach(inv => {
+      const unitId = (inv as any).unitId ?? (inv as any).unit_id;
+      if (!unitId) return;
+      
+      // Filter by property if selected
+      const unit = allUnits?.find(u => u.id === unitId);
+      if (selectedPropertyId !== 'all' && unit?.propertyId !== selectedPropertyId) return;
+      
+      if (!vacancyByUnit.has(unitId)) {
+        vacancyByUnit.set(unitId, []);
+      }
+      vacancyByUnit.get(unitId)!.push(inv);
+    });
+    
+    // Erstelle Leerstand-Einträge
+    vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
+      const unit = allUnits?.find(u => u.id === unitId);
+      const property = properties?.find(p => p.id === unit?.propertyId);
+      
+      // SOLL aus Vorschreibungen
+      const sollBk = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).betriebskosten ?? 0), 0);
+      const sollHk = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).heizungskosten ?? 0), 0);
+      const sollMiete = 0;
+      const sollGesamt = sollBk + sollHk;
+      
+      // IST aus paid_amount
+      const totalPaid = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
+      
+      const sollTotal = sollBk + sollHk;
+      const istBk = sollTotal > 0 ? (sollBk / sollTotal) * totalPaid : 0;
+      const istHk = sollTotal > 0 ? (sollHk / sollTotal) * totalPaid : 0;
+      const istMiete = 0;
+      const istGesamt = istBk + istHk;
+      
+      details.push({
+        tenantId: `vacancy-${unitId}`,
+        tenantName: `Leerstand (${unitVacancyInvoices.length} Mon.)`,
+        unitName: unit?.top_nummer || 'N/A',
+        propertyName: property?.name || 'N/A',
+        sollMiete,
+        sollBk,
+        sollHk,
+        sollGesamt,
+        istMiete,
+        istBk,
+        istHk,
+        istGesamt,
+        diffMiete: sollMiete - istMiete,
+        diffBk: sollBk - istBk,
+        diffHk: sollHk - istHk,
+        diffGesamt: sollGesamt - istGesamt,
+        paymentCount: 0
+      });
+    });
+    
+    return details;
+  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, selectedMonth, reportPeriod, selectedPropertyId]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
