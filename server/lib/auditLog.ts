@@ -5,7 +5,7 @@ import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
-export type AuditAction = 'create' | 'update' | 'delete' | 'soft_delete' | 'restore';
+export type AuditAction = 'create' | 'update' | 'delete' | 'soft_delete' | 'restore' | 'bulk_create';
 
 type TransactionType = PgTransaction<PostgresJsQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 

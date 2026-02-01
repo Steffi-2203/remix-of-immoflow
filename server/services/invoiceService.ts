@@ -140,39 +140,39 @@ export class InvoiceService {
   ): InvoiceData {
     const vatRates = this.getVatRates(unitType);
     
-    const grundmiete = Number(tenant.grundmiete) || 0;
-    const betriebskosten = Number(tenant.betriebskostenVorschuss) || 0;
-    const heizungskosten = Number(tenant.heizkostenVorschuss) || 0;
+    const grundmiete = roundMoney(Number(tenant.grundmiete) || 0);
+    const betriebskosten = roundMoney(Number(tenant.betriebskostenVorschuss) || 0);
+    const heizungskosten = roundMoney(Number(tenant.heizkostenVorschuss) || 0);
     
-    const ustMiete = this.calculateVatFromGross(grundmiete, vatRates.ustSatzMiete);
-    const ustBk = this.calculateVatFromGross(betriebskosten, vatRates.ustSatzBk);
-    const ustHeizung = this.calculateVatFromGross(heizungskosten, vatRates.ustSatzHeizung);
-    const ust = ustMiete + ustBk + ustHeizung;
+    const ustMiete = roundMoney(this.calculateVatFromGross(grundmiete, vatRates.ustSatzMiete));
+    const ustBk = roundMoney(this.calculateVatFromGross(betriebskosten, vatRates.ustSatzBk));
+    const ustHeizung = roundMoney(this.calculateVatFromGross(heizungskosten, vatRates.ustSatzHeizung));
+    const ust = roundMoney(ustMiete + ustBk + ustHeizung);
 
-    const vortragGesamt = carryForward.vortragMiete + carryForward.vortragBk + 
-                         carryForward.vortragHk + carryForward.vortragSonstige;
+    const vortragGesamt = roundMoney(carryForward.vortragMiete + carryForward.vortragBk + 
+                         carryForward.vortragHk + carryForward.vortragSonstige);
     
-    const gesamtbetrag = grundmiete + betriebskosten + heizungskosten + vortragGesamt;
+    const gesamtbetrag = roundMoney(grundmiete + betriebskosten + heizungskosten + vortragGesamt);
 
     return {
       tenantId: tenant.id,
       unitId: tenant.unitId,
       year,
       month,
-      grundmiete: grundmiete.toString(),
-      betriebskosten: betriebskosten.toString(),
-      heizungskosten: heizungskosten.toString(),
-      gesamtbetrag: gesamtbetrag.toString(),
-      ust: roundMoney(ust).toString(),
+      grundmiete,
+      betriebskosten,
+      heizungskosten,
+      gesamtbetrag,
+      ust,
       ustSatzMiete: vatRates.ustSatzMiete,
       ustSatzBk: vatRates.ustSatzBk,
       ustSatzHeizung: vatRates.ustSatzHeizung,
       status: "offen",
       faelligAm: dueDate,
-      vortragMiete: carryForward.vortragMiete.toString(),
-      vortragBk: carryForward.vortragBk.toString(),
-      vortragHk: carryForward.vortragHk.toString(),
-      vortragSonstige: carryForward.vortragSonstige.toString(),
+      vortragMiete: roundMoney(carryForward.vortragMiete),
+      vortragBk: roundMoney(carryForward.vortragBk),
+      vortragHk: roundMoney(carryForward.vortragHk),
+      vortragSonstige: roundMoney(carryForward.vortragSonstige),
     };
   }
 
@@ -364,35 +364,48 @@ export class InvoiceService {
       const carryForward = carryForwardMap.get(tenant.id) || {
         vortragMiete: 0, vortragBk: 0, vortragHk: 0, vortragSonstige: 0,
       };
-      return this.buildInvoiceData(tenant, unitType, year, month, dueDateStr, carryForward);
+      const data = this.buildInvoiceData(tenant, unitType, year, month, dueDateStr, carryForward);
+      return {
+        ...data,
+        grundmiete: String(data.grundmiete),
+        betriebskosten: String(data.betriebskosten),
+        heizungskosten: String(data.heizungskosten),
+        gesamtbetrag: String(data.gesamtbetrag),
+        ust: String(data.ust),
+        vortragMiete: String(data.vortragMiete),
+        vortragBk: String(data.vortragBk),
+        vortragHk: String(data.vortragHk),
+        vortragSonstige: String(data.vortragSonstige),
+      };
     });
 
     const createdInvoices = await db.transaction(async (tx) => {
       const inserted = await tx.insert(monthlyInvoices)
         .values(invoicesToCreate)
+        .onConflictDoNothing({ target: [monthlyInvoices.tenantId, monthlyInvoices.year, monthlyInvoices.month] })
         .returning();
 
-      let totalLinesCreated = 0;
+      const allLines: typeof invoiceLines.$inferInsert[] = [];
       for (const invoice of inserted) {
-        const tenant = tenantMap.get(invoice.tenantId);
+        const tenant = tenantMap.get(invoice.tenantId)!;
         const unitType = unitTypeMap.get(invoice.unitId || '') || 'wohnung';
         const vatRates = this.getVatRates(unitType);
-
-        const lines = this.buildInvoiceLines(invoice.id, tenant!, vatRates, month, year);
-        if (lines.length > 0) {
-          await tx.insert(invoiceLines).values(lines);
-          totalLinesCreated += lines.length;
-        }
-
-        await writeAudit(tx, userId, 'monthly_invoices', invoice.id, 'create', null, {
-          invoiceId: invoice.id,
-          tenantId: invoice.tenantId,
-          year: invoice.year,
-          month: invoice.month,
-          gesamtbetrag: invoice.gesamtbetrag,
-          countLines: lines.length,
-        });
+        const lines = this.buildInvoiceLines(invoice.id, tenant, vatRates, month, year);
+        allLines.push(...lines);
       }
+
+      for (let i = 0; i < allLines.length; i += 500) {
+        const batch = allLines.slice(i, i + 500);
+        if (batch.length > 0) {
+          await tx.insert(invoiceLines).values(batch);
+        }
+      }
+
+      await writeAudit(tx, userId, 'monthly_invoices', 'bulk', 'bulk_create', null, {
+        createdCount: inserted.length,
+        month,
+        year,
+      });
 
       return inserted;
     });
