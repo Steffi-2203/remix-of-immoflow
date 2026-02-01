@@ -1372,28 +1372,39 @@ export const generateOffenePostenReport = (
     
     // MRG-konforme Aufteilung: BK → HK → Miete (gegen NETTO-Werte intern)
     // Die Allokation erfolgt proportional zu den Netto-SOLL-Werten
-    let remaining = habenBetrag;
-    const istBkNetto = Math.min(remaining, sollBkNetto);
-    remaining -= istBkNetto;
-    const istHkNetto = Math.min(remaining, sollHkNetto);
-    remaining -= istHkNetto;
-    const istMieteNetto = Math.min(remaining, sollMieteNetto);
-    remaining -= istMieteNetto;
+    // BUCHHALTÄRISCH KORREKT: Wenn voll bezahlt (habenBetrag >= sollBetrag), 
+    // dann IST = SOLL für jede Komponente (keine MRG-Allokation nötig)
+    let istBk: number;
+    let istHk: number;
+    let istMiete: number;
     
-    // IST BRUTTO für Anzeige: Anwendung der korrekten USt-Sätze auf die allozierten NETTO-Werte
-    // BK 10%, HK 20%, Miete je nach Nutzungsart (Wohnung 10%, Gewerbe 20%)
-    let istBk = istBkNetto * (1 + ustSatzBk / 100);
-    let istHk = istHkNetto * (1 + ustSatzHk / 100);
-    let istMiete = istMieteNetto * (1 + ustSatzMiete / 100);
-    
-    // Reconciliation: IST-Komponenten-Summe sollte = habenBetrag sein
-    // Falls Abweichung, proportional anpassen
-    const istKomponentenSumme = istBk + istHk + istMiete;
-    if (istKomponentenSumme > 0 && Math.abs(istKomponentenSumme - habenBetrag) > 0.01) {
-      const factor = habenBetrag / istKomponentenSumme;
-      istBk *= factor;
-      istHk *= factor;
-      istMiete *= factor;
+    if (habenBetrag >= sollBetrag - 0.01) {
+      // Voll bezahlt: IST = SOLL für alle Komponenten
+      istBk = sollBk;
+      istHk = sollHk;
+      istMiete = sollMiete;
+    } else {
+      // Unterzahlung: MRG-Allokation BK → HK → Miete auf NETTO-Basis
+      let remaining = habenBetrag;
+      const istBkNetto = Math.min(remaining, sollBkNetto);
+      remaining -= istBkNetto;
+      const istHkNetto = Math.min(remaining, sollHkNetto);
+      remaining -= istHkNetto;
+      const istMieteNetto = Math.min(remaining, sollMieteNetto);
+      
+      // IST BRUTTO für Anzeige: Anwendung der korrekten USt-Sätze auf die allozierten NETTO-Werte
+      istBk = istBkNetto * (1 + ustSatzBk / 100);
+      istHk = istHkNetto * (1 + ustSatzHk / 100);
+      istMiete = istMieteNetto * (1 + ustSatzMiete / 100);
+      
+      // Reconciliation: IST-Komponenten-Summe sollte = habenBetrag sein
+      const istKomponentenSumme = istBk + istHk + istMiete;
+      if (istKomponentenSumme > 0 && Math.abs(istKomponentenSumme - habenBetrag) > 0.01) {
+        const factor = habenBetrag / istKomponentenSumme;
+        istBk *= factor;
+        istHk *= factor;
+        istMiete *= factor;
+      }
     }
     
     // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL, nicht auf NETTO
@@ -1612,22 +1623,40 @@ export const generateOffenePostenReport = (
           data.cell.styles.textColor = [22, 163, 74];
         }
       }
-      // Color IST columns based on diff (red if less than SOLL)
+      // Color IST columns: grün wenn IST = SOLL (bezahlt), rot wenn IST < SOLL (Unterzahlung)
       if (data.section === 'body') {
         const row = data.row.index;
         const tb = tenantBalances[row];
         if (tb) {
+          const isBezahlt = tb.saldo <= 0.01; // Voll bezahlt oder Überzahlung
+          
           // BK Ist
-          if (data.column.index === 4 && tb.sollBk - tb.istBk > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 4) {
+            if (Math.abs(tb.sollBk - tb.istBk) <= 0.01 && tb.sollBk > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollBk - tb.istBk > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
           }
           // HK Ist
-          if (data.column.index === 6 && tb.sollHk - tb.istHk > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 6) {
+            if (Math.abs(tb.sollHk - tb.istHk) <= 0.01 && tb.sollHk > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollHk - tb.istHk > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
           }
           // Miete Ist
-          if (data.column.index === 8 && tb.sollMiete - tb.istMiete > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 8) {
+            if (Math.abs(tb.sollMiete - tb.istMiete) <= 0.01 && tb.sollMiete > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollMiete - tb.istMiete > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
+          }
+          // Saldo bei Bezahlt auch grün
+          if (data.column.index === 10 && isBezahlt) {
+            data.cell.styles.textColor = [22, 163, 74]; // Grün
           }
         }
       }
