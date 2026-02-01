@@ -1378,11 +1378,19 @@ export const generateOffenePostenReport = (
     let istHk: number;
     let istMiete: number;
     
-    if (habenBetrag >= sollBetrag - 0.01) {
+    // WICHTIG: Nur als "voll bezahlt" behandeln wenn:
+    // 1. Es gibt einen positiven SOLL-Betrag (sollBetrag > 0.01)
+    // 2. Die Zahlung deckt mindestens den SOLL-Betrag
+    if (sollBetrag > 0.01 && habenBetrag >= sollBetrag - 0.01) {
       // Voll bezahlt: IST = SOLL für alle Komponenten
       istBk = sollBk;
       istHk = sollHk;
       istMiete = sollMiete;
+    } else if (habenBetrag < 0.01) {
+      // KEINE Zahlung erfolgt: IST = 0 für alle Komponenten
+      istBk = 0;
+      istHk = 0;
+      istMiete = 0;
     } else {
       // Unterzahlung: MRG-Allokation BK → HK → Miete auf NETTO-Basis
       let remaining = habenBetrag;
