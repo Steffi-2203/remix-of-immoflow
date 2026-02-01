@@ -1291,33 +1291,70 @@ export const generateOffenePostenReport = (
     
     let sollBkNetto: number, sollHkNetto: number, sollMieteNetto: number, sollBetrag: number;
     let sollBk: number, sollHk: number, sollMiete: number; // BRUTTO-Werte
+    // Österreichische USt-Sätze: BK 10%, HK 20%, Miete Wohnung 10%, Geschäft/Lager/Stellplatz 20%
+    let ustSatzBk = 10, ustSatzHk = 20, ustSatzMiete = 10;
+    
+    // Ermittle Nutzungsart für Miete-USt (Wohnung=10%, Geschäft/Lager/Stellplatz=20%)
+    const unit = targetUnits.find(u => u.id === tenant.unit_id);
+    const nutzungsart = (unit as any)?.nutzungsart || (unit as any)?.usage_type || 'wohnung';
+    const isGewerbe = ['geschaeft', 'gewerbe', 'lager', 'stellplatz', 'parkplatz', 'garage'].includes(nutzungsart.toLowerCase());
+    const defaultMieteUst = isGewerbe ? 20 : 10;
     
     if (tenantInvoices.length > 0) {
-      // SOLL aus Vorschreibungen - akkumuliere NETTO und gesamtbetrag
-      sollBkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
-      sollHkNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
-      sollMieteNetto = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
-      sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
+      // SOLL aus Vorschreibungen - akkumuliere mit korrekten USt-Sätzen pro Rechnung
+      sollBkNetto = 0; sollHkNetto = 0; sollMieteNetto = 0;
+      sollBk = 0; sollHk = 0; sollMiete = 0;
+      sollBetrag = 0;
       
-      // BRUTTO-Werte: Proportionale Aufteilung von gesamtbetrag basierend auf NETTO-Verhältnissen
-      // Dies stellt sicher, dass Komponenten-Summe = gesamtbetrag (keine Rundungsfehler)
-      const nettoGesamt = sollBkNetto + sollHkNetto + sollMieteNetto;
-      if (nettoGesamt > 0 && sollBetrag > 0) {
-        sollBk = (sollBkNetto / nettoGesamt) * sollBetrag;
-        sollHk = (sollHkNetto / nettoGesamt) * sollBetrag;
-        sollMiete = (sollMieteNetto / nettoGesamt) * sollBetrag;
-      } else {
-        sollBk = 0; sollHk = 0; sollMiete = 0;
+      tenantInvoices.forEach(invoice => {
+        const inv = invoice as any;
+        // NETTO-Werte aus Rechnung
+        const bkNetto = Number(inv.betriebskosten || 0);
+        const hkNetto = Number(inv.heizungskosten || 0);
+        const mieteNetto = Number(inv.grundmiete || 0);
+        
+        // USt-Sätze aus Rechnung (mit korrekten Defaults)
+        const invUstBk = Number(inv.ustSatzBk ?? inv.ust_satz_bk ?? 10);
+        const invUstHk = Number(inv.ustSatzHeizung ?? inv.ust_satz_heizung ?? 20);
+        const invUstMiete = Number(inv.ustSatzMiete ?? inv.ust_satz_miete ?? defaultMieteUst);
+        
+        // Akkumuliere NETTO
+        sollBkNetto += bkNetto;
+        sollHkNetto += hkNetto;
+        sollMieteNetto += mieteNetto;
+        
+        // Akkumuliere BRUTTO mit korrekten USt-Sätzen
+        sollBk += bkNetto * (1 + invUstBk / 100);
+        sollHk += hkNetto * (1 + invUstHk / 100);
+        sollMiete += mieteNetto * (1 + invUstMiete / 100);
+        
+        // Merke USt-Sätze für IST-Berechnung (letzte Rechnung)
+        ustSatzBk = invUstBk;
+        ustSatzHk = invUstHk;
+        ustSatzMiete = invUstMiete;
+        
+        sollBetrag += Number(inv.gesamtbetrag || 0);
+      });
+      
+      // Reconciliation: Wenn Summe der Komponenten-BRUTTO von gesamtbetrag abweicht,
+      // proportional anpassen (kann durch Rundung oder Sonderposten passieren)
+      const komponentenSumme = sollBk + sollHk + sollMiete;
+      if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollBetrag) > 0.01) {
+        const factor = sollBetrag / komponentenSumme;
+        sollBk *= factor;
+        sollHk *= factor;
+        sollMiete *= factor;
       }
     } else {
       // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
       sollBkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
       sollHkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
       sollMieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
-      // Berechne BRUTTO mit österreichischen Standard-USt-Sätzen (BK/Miete 10%, HK 20%)
-      sollBk = sollBkNetto * 1.1;
-      sollHk = sollHkNetto * 1.2;
-      sollMiete = sollMieteNetto * 1.1;
+      // Berechne BRUTTO mit österreichischen USt-Sätzen
+      ustSatzMiete = defaultMieteUst; // Wohnung 10%, Gewerbe 20%
+      sollBk = sollBkNetto * (1 + ustSatzBk / 100);  // 10%
+      sollHk = sollHkNetto * (1 + ustSatzHk / 100);  // 20%
+      sollMiete = sollMieteNetto * (1 + ustSatzMiete / 100);
       sollBetrag = sollBk + sollHk + sollMiete;
     }
     
@@ -1336,17 +1373,20 @@ export const generateOffenePostenReport = (
     const istMieteNetto = Math.min(remaining, sollMieteNetto);
     remaining -= istMieteNetto;
     
-    // IST BRUTTO für Anzeige: Proportionale Aufteilung von habenBetrag basierend auf NETTO-Allokation
-    // Dies stellt sicher, dass IST-Komponenten-Summe = habenBetrag
-    const istNettoGesamt = istBkNetto + istHkNetto + istMieteNetto;
-    let istBk: number, istHk: number, istMiete: number;
-    if (istNettoGesamt > 0 && habenBetrag > 0) {
-      // Proportionale Aufteilung der tatsächlichen Zahlung auf die Komponenten
-      istBk = (istBkNetto / istNettoGesamt) * habenBetrag;
-      istHk = (istHkNetto / istNettoGesamt) * habenBetrag;
-      istMiete = (istMieteNetto / istNettoGesamt) * habenBetrag;
-    } else {
-      istBk = 0; istHk = 0; istMiete = 0;
+    // IST BRUTTO für Anzeige: Anwendung der korrekten USt-Sätze auf die allozierten NETTO-Werte
+    // BK 10%, HK 20%, Miete je nach Nutzungsart (Wohnung 10%, Gewerbe 20%)
+    let istBk = istBkNetto * (1 + ustSatzBk / 100);
+    let istHk = istHkNetto * (1 + ustSatzHk / 100);
+    let istMiete = istMieteNetto * (1 + ustSatzMiete / 100);
+    
+    // Reconciliation: IST-Komponenten-Summe sollte = habenBetrag sein
+    // Falls Abweichung, proportional anpassen
+    const istKomponentenSumme = istBk + istHk + istMiete;
+    if (istKomponentenSumme > 0 && Math.abs(istKomponentenSumme - habenBetrag) > 0.01) {
+      const factor = habenBetrag / istKomponentenSumme;
+      istBk *= factor;
+      istHk *= factor;
+      istMiete *= factor;
     }
     
     // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL, nicht auf NETTO
@@ -1359,7 +1399,7 @@ export const generateOffenePostenReport = (
     // Days overdue: only if there's unpaid amount and we're past the period start
     const daysOverdue = saldo > 0 && daysSincePeriodStart > 0 ? daysSincePeriodStart : 0;
 
-    const unit = targetUnits.find(u => u.id === tenant.unit_id);
+    // unit bereits oben ermittelt für Nutzungsart/USt
     const property = properties.find(p => p.id === unit?.property_id);
 
     // Include all tenants (not just those with SOLL > 0)
