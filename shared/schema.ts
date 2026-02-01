@@ -335,6 +335,7 @@ export const distributionKeys = pgTable("distribution_keys", {
   formula: text("formula").default('flaeche'),
   unit: text("unit").default('m²'),
   inputType: text("input_type").default('flaeche'),
+  includedUnitTypes: text("included_unit_types").array(),
   isSystem: boolean("is_system").default(false),
   isActive: boolean("is_active").default(true),
   mrgKonform: boolean("mrg_konform").default(true),
