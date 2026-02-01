@@ -89,13 +89,28 @@ export function useDataConsistencyCheck(): ConsistencyCheckResult {
       Number(t.amount) > 0
     );
 
+    // Helper: Check if dates match (considering both eingangs_datum and buchungs_datum)
+    const datesMatch = (paymentDate1: string | undefined, paymentDate2: string | undefined, transactionDate: string | undefined) => {
+      if (!transactionDate) return false;
+      return paymentDate1 === transactionDate || paymentDate2 === transactionDate;
+    };
+
     // Prüfung 1: Payments ohne Transactions
     payments.forEach(payment => {
-      const matchingTransaction = rentIncomeTransactions.find(t =>
-        t.tenant_id === payment.tenant_id &&
-        t.transaction_date === payment.eingangs_datum &&
-        Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01
-      );
+      // Find matching transaction by: direct link (validated) OR tenant + date + amount match
+      const matchingTransaction = rentIncomeTransactions.find(t => {
+        const transactionIdMatch = t.id === payment.transactionId || t.id === payment.transaction_id;
+        const tenantMatch = t.tenant_id === payment.tenant_id;
+        const amountMatch = Math.abs(Number(t.amount) - Number(payment.betrag)) < 0.01;
+        const dateMatch = datesMatch(payment.eingangs_datum, payment.buchungs_datum, t.transaction_date);
+        
+        // Direct link must also validate tenant and amount to catch mismatches
+        if (transactionIdMatch) {
+          return tenantMatch && amountMatch;
+        }
+        // Otherwise require full match: tenant + date + amount
+        return tenantMatch && dateMatch && amountMatch;
+      });
 
       if (matchingTransaction) {
         syncedPayments++;
@@ -108,8 +123,8 @@ export function useDataConsistencyCheck(): ConsistencyCheckResult {
           tenantId: payment.tenant_id,
           tenantName: getTenantName(payment.tenant_id),
           amount: Number(payment.betrag),
-          date: payment.eingangs_datum,
-          details: `Zahlung nicht in Banking-Übersicht: ${getTenantName(payment.tenant_id)} - €${Number(payment.betrag).toFixed(2)} (${payment.eingangs_datum})`,
+          date: payment.eingangs_datum || payment.buchungs_datum,
+          details: `Zahlung nicht in Banking-Übersicht: ${getTenantName(payment.tenant_id)} - €${Number(payment.betrag).toFixed(2)} (${payment.eingangs_datum || payment.buchungs_datum})`,
         });
       }
     });
@@ -118,11 +133,19 @@ export function useDataConsistencyCheck(): ConsistencyCheckResult {
     rentIncomeTransactions.forEach(transaction => {
       if (!transaction.tenant_id) return;
 
-      const matchingPayment = payments.find(p =>
-        p.tenant_id === transaction.tenant_id &&
-        p.eingangs_datum === transaction.transaction_date &&
-        Math.abs(Number(p.betrag) - Number(transaction.amount)) < 0.01
-      );
+      const matchingPayment = payments.find(p => {
+        const transactionIdMatch = p.transactionId === transaction.id || p.transaction_id === transaction.id;
+        const tenantMatch = p.tenant_id === transaction.tenant_id;
+        const amountMatch = Math.abs(Number(p.betrag) - Number(transaction.amount)) < 0.01;
+        const dateMatch = datesMatch(p.eingangs_datum, p.buchungs_datum, transaction.transaction_date);
+        
+        // Direct link must also validate tenant and amount to catch mismatches
+        if (transactionIdMatch) {
+          return tenantMatch && amountMatch;
+        }
+        // Otherwise require full match: tenant + date + amount
+        return tenantMatch && dateMatch && amountMatch;
+      });
 
       if (!matchingPayment) {
         orphanedTransactions++;

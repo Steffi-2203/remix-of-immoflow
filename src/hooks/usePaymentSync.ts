@@ -363,6 +363,27 @@ export function usePaymentSync() {
     },
   });
 
+  // Sync payments to invoices (update invoice status based on payments)
+  const syncPaymentsToInvoices = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/sync/payments-to-invoices');
+      return response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      if (result.allocated > 0) {
+        toast.success(`${result.allocated} Zahlungen wurden Rechnungen zugeordnet`);
+      } else {
+        toast.info('Alle Zahlungen bereits zugeordnet');
+      }
+    },
+    onError: (error) => {
+      toast.error('Fehler beim Zuordnen der Zahlungen zu Rechnungen');
+      console.error('Sync payments to invoices error:', error);
+    },
+  });
+
   return {
     createPaymentWithSync,
     createTransactionWithSync,
@@ -371,6 +392,7 @@ export function usePaymentSync() {
     syncExistingTransactionsToExpenses,
     syncExistingPaymentsToTransactions,
     syncTransactionsToPayments,
+    syncPaymentsToInvoices,
     getMieteinnahmenCategory,
     getCategoryNameById,
     CATEGORY_TO_EXPENSE_MAPPING,
