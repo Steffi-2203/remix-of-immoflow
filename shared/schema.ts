@@ -227,6 +227,22 @@ export const monthlyInvoices = pgTable("monthly_invoices", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const invoiceLines = pgTable("invoice_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").notNull().references(() => monthlyInvoices.id),
+  expenseType: varchar("expense_type", { length: 50 }).notNull(),
+  description: text("description"),
+  netAmount: numeric("net_amount", { precision: 12, scale: 2 }).notNull(),
+  vatRate: integer("vat_rate").notNull(),
+  grossAmount: numeric("gross_amount", { precision: 12, scale: 2 }).notNull(),
+  allocationReference: varchar("allocation_reference", { length: 100 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true });
+export type InvoiceLine = typeof invoiceLines.$inferSelect;
+export type InsertInvoiceLine = typeof invoiceLines.$inferInsert;
+
 export const payments = pgTable("payments", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
