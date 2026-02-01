@@ -312,6 +312,20 @@ export const expenses = pgTable("expenses", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const expenseAllocations = pgTable("expense_allocations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  expenseId: uuid("expense_id").notNull().references(() => expenses.id),
+  unitId: uuid("unit_id").notNull().references(() => units.id),
+  allocatedNet: numeric("allocated_net", { precision: 12, scale: 2 }).notNull(),
+  allocationBasis: varchar("allocation_basis", { length: 50 }).notNull(),
+  allocationDetail: text("allocation_detail"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertExpenseAllocationSchema = createInsertSchema(expenseAllocations).omit({ id: true, createdAt: true });
+export type ExpenseAllocation = typeof expenseAllocations.$inferSelect;
+export type InsertExpenseAllocation = typeof expenseAllocations.$inferInsert;
+
 export const settlements = pgTable("settlements", {
   id: uuid("id").defaultRandom().primaryKey(),
   propertyId: uuid("property_id").references(() => properties.id).notNull(),
