@@ -57,7 +57,7 @@ export class PaymentService {
     return await db.transaction(async (tx) => {
       await tx.execute(sql`
         INSERT INTO payments (id, tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck, created_at)
-        VALUES (${paymentId}, ${tenantId}, NULL, ${roundedAmount}, ${bookingDate ?? sql`now()::date`}, ${paymentType}, ${reference}, now())
+        VALUES (${paymentId}, ${tenantId}, NULL, ${roundedAmount}, ${bookingDate ?? sql`now()::date`}, ${paymentType}, ${reference || null}, now())
         ON CONFLICT (id) DO NOTHING
       `);
 
