@@ -4060,7 +4060,7 @@ Antworte im JSON-Format als ARRAY von Mietern:
       "wasserkostenVorschuss": 0,
       "warmwasserkostenVorschuss": 0,
       "sonstigeKosten": {
-        "Positionsname": { "betrag": NETTO-Betrag, "ust": USt-Satz },
+        "Positionsname": { "betrag": NETTO-Betrag, "ust": USt-Satz, "schluessel": "Verteilerschlüssel" },
         ...
       },
       "kaution": Kaution als Zahl (falls angegeben),
@@ -4072,15 +4072,23 @@ Antworte im JSON-Format als ARRAY von Mietern:
   ]
 }
 
-KRITISCH - JEDE Kostenposition EINZELN in sonstigeKosten erfassen:
-- "Betriebskosten": { "betrag": 73.42, "ust": 10 }
-- "Betriebskosten2": { "betrag": 65.89, "ust": 10 }  (NICHT mit Betriebskosten zusammenfassen!)
-- "Kaltwasser": { "betrag": 43.93, "ust": 10 }
-- "Warmwasser": { "betrag": 12.01, "ust": 10 }
-- "Zentralheizung": { "betrag": 44.79, "ust": 20 }  (IMMER 20% USt!)
-- "Lift": { "betrag": 13.81, "ust": 10 }
-- "Garage": { "betrag": 85.00, "ust": 20 }
-- "Mahnkosten": { "betrag": 15.00, "ust": 0 }
+KRITISCH - JEDE Kostenposition EINZELN in sonstigeKosten erfassen MIT Verteilerschlüssel:
+- "Betriebskosten": { "betrag": 73.42, "ust": 10, "schluessel": "Betriebskosten 01" }
+- "Betriebskosten2": { "betrag": 65.89, "ust": 10, "schluessel": "Betriebskosten inkl Stellplätze" }
+- "Kaltwasser": { "betrag": 43.93, "ust": 10, "schluessel": "Betriebskosten 01" }
+- "Warmwasser": { "betrag": 12.01, "ust": 10, "schluessel": "Direktwert" }
+- "Zentralheizung": { "betrag": 44.79, "ust": 20, "schluessel": "Zentralheizung" }
+- "Lift": { "betrag": 13.81, "ust": 10, "schluessel": "BK Lift" }
+- "Garage": { "betrag": 85.00, "ust": 20, "schluessel": "Direktwert" }
+- "Mahnkosten": { "betrag": 15.00, "ust": 0, "schluessel": "Direktwert" }
+
+Typische Verteilerschlüssel in österreichischen Vorschreibungen:
+- "Direktwert" = fixer Betrag pro Mieter
+- "Betriebskosten 01", "Betriebskosten 02" = nach Nutzfläche/Einheiten
+- "Betriebskosten inkl Stellplätze" = inkl. Stellplätze nach Einheiten
+- "Zentralheizung" = nach Heizungsverbrauch
+- "BK Lift" = Liftkosten nach m²
+- "Einheiten" = nach Anzahl Einheiten
 
 Weitere mögliche Positionen: Müll, Kabel-TV, Internet, Strom, Versicherung, Garten, Reinigung, Stellplatz
 
