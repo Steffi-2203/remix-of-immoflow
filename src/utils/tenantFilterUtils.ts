@@ -18,6 +18,7 @@ export interface TenantForFilter {
   betriebskostenVorschuss?: number | string;
   heizungskosten_vorschuss?: number | string;
   heizungskostenVorschuss?: number | string;
+  heizkostenVorschuss?: number | string;
   first_name?: string;
   firstName?: string;
   last_name?: string;
@@ -162,7 +163,8 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
 export function calculateMonthlyRent(tenant: TenantForFilter): number {
   const grundmiete = Number(tenant.grundmiete || 0);
   const bk = Number(tenant.betriebskosten_vorschuss ?? tenant.betriebskostenVorschuss ?? 0);
-  const hk = Number(tenant.heizungskosten_vorschuss ?? tenant.heizungskostenVorschuss ?? 0);
+  // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
+  const hk = Number(tenant.heizkostenVorschuss ?? tenant.heizungskosten_vorschuss ?? tenant.heizungskostenVorschuss ?? 0);
   return grundmiete + bk + hk;
 }
 

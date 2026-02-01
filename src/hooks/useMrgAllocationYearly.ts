@@ -136,7 +136,8 @@ export function useMrgAllocationYearly(
       } else {
         // Fallback auf Mieter-Stammdaten × aktive Monate (support both camelCase and snake_case)
         const sollBkMonthly = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
-        const sollHkMonthly = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
+        // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
+        const sollHkMonthly = Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
         const sollMieteMonthly = Number(tenant.grundmiete || 0);
         
         sollBk = sollBkMonthly * activeMonths;
