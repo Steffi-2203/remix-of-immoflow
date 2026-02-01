@@ -111,7 +111,7 @@ export function useMrgAllocationYearly(
 
     const allocations: TenantAllocation[] = Array.from(tenantMonthMap.values()).map(({ tenant, activeMonths }) => {
       // SOLL: Summiere Vorschreibungen (monthlyInvoices) für den Mieter im gesamten Zeitraum
-      // Fallback auf Mieter-Stammdaten × aktive Monate nur wenn keine Vorschreibungen existieren
+      // Verwende gesamtbetrag (brutto inkl. USt) für Saldo-Berechnung, da Mieter brutto zahlt
       const tenantInvoices = invoices?.filter(inv => 
         (inv.tenantId ?? inv.tenant_id) === tenant.id && 
         inv.year === year && 
@@ -119,6 +119,7 @@ export function useMrgAllocationYearly(
       ) || [];
       
       let sollBk: number, sollHk: number, sollMiete: number;
+      let totalSollBrutto: number; // Gesamtbetrag inkl. USt für Saldo
       
       if (tenantInvoices.length > 0) {
         // Summiere alle Vorschreibungen für den Zeitraum
@@ -133,6 +134,11 @@ export function useMrgAllocationYearly(
         }, 0);
         sollMiete = tenantInvoices.reduce((sum, invoice) => 
           sum + Number((invoice as any).grundmiete || 0), 0);
+        // WICHTIG: Verwende gesamtbetrag (brutto) für Saldo, da Zahlungen brutto sind
+        totalSollBrutto = tenantInvoices.reduce((sum, invoice) => {
+          const inv = invoice as any;
+          return sum + Number(inv.gesamtbetrag ?? 0);
+        }, 0);
       } else {
         // Fallback auf Mieter-Stammdaten × aktive Monate (support both camelCase and snake_case)
         const sollBkMonthly = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
@@ -143,6 +149,8 @@ export function useMrgAllocationYearly(
         sollBk = sollBkMonthly * activeMonths;
         sollHk = sollHkMonthly * activeMonths;
         sollMiete = sollMieteMonthly * activeMonths;
+        // Fallback: Berechne Brutto mit geschätztem USt-Satz (10% auf alles)
+        totalSollBrutto = (sollBk + sollHk + sollMiete) * 1.1;
       }
       
       const totalSoll = sollBk + sollHk + sollMiete;
@@ -160,8 +168,9 @@ export function useMrgAllocationYearly(
       const diffHk = sollHk - istHk;
       const diffMiete = sollMiete - istMiete;
 
-      // Saldo: positiv = Unterzahlung (offene Forderung), negativ = Überzahlung (Guthaben)
-      const saldo = totalSoll - totalIst;
+      // Saldo: SOLL (brutto) - IST = positiv = Unterzahlung, negativ = Überzahlung
+      // WICHTIG: Verwende totalSollBrutto (gesamtbetrag inkl. USt), da Zahlungen brutto sind
+      const saldo = totalSollBrutto - totalIst;
 
       // Days overdue: nur wenn wir im aktuellen Jahr sind
       const isCurrentYear = year === now.getFullYear();

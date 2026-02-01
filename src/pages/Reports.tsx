@@ -2292,18 +2292,21 @@ export default function Reports() {
                   </TableHeader>
                   <TableBody>
                     {mrgAllocations.slice(0, 15).map((alloc) => {
+                      // Saldo = SOLL - IST: positiv = Unterzahlung, negativ = Überzahlung
                       let statusLabel = 'Ausgeglichen';
                       let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
-                      if (alloc.status === 'offen') {
+                      if (alloc.status === 'offen' && alloc.saldo === 0) {
                         statusLabel = 'Offen';
                         statusVariant = 'secondary';
-                      } else if (alloc.saldo < 0) {
+                      } else if (alloc.saldo > 0.01) {
+                        // Positiver Saldo = SOLL > IST = Unterzahlung
                         statusLabel = 'Unterzahlung';
                         statusVariant = 'destructive';
-                      } else if (alloc.saldo > 0) {
+                      } else if (alloc.saldo < -0.01) {
+                        // Negativer Saldo = SOLL < IST = Überzahlung
                         statusLabel = 'Überzahlung';
                         statusVariant = 'default';
-                      } else if (alloc.status === 'vollstaendig') {
+                      } else if (Math.abs(alloc.saldo) <= 0.01) {
                         statusLabel = 'Bezahlt';
                         statusVariant = 'outline';
                       }

@@ -1289,21 +1289,25 @@ export const generateOffenePostenReport = (
       return matchesTenant && matchesYear && matchesPeriod;
     });
     
-    let sollBk: number, sollHk: number, sollMiete: number;
+    let sollBk: number, sollHk: number, sollMiete: number, sollBetrag: number;
     
     if (tenantInvoices.length > 0) {
       // SOLL aus Vorschreibungen (Summe aller Monate im Zeitraum)
       sollBk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.betriebskosten || 0), 0);
       sollHk = tenantInvoices.reduce((sum, inv) => sum + Number(inv.heizungskosten || 0), 0);
       sollMiete = tenantInvoices.reduce((sum, inv) => sum + Number(inv.grundmiete || 0), 0);
+      // WICHTIG: Verwende gesamtbetrag (brutto inkl. USt) für Saldo
+      sollBetrag = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
     } else {
       // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
       sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
       sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
       sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
+      // Fallback: Berechne Brutto mit geschätztem USt-Satz (10% auf alles)
+      sollBetrag = (sollBk + sollHk + sollMiete) * 1.1;
     }
     
-    const sollBetrag = sollBk + sollHk + sollMiete;
+    const sollBetragNetto = sollBk + sollHk + sollMiete;
     
     // IST from combined payments (uses 'amount' field)
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -1320,6 +1324,7 @@ export const generateOffenePostenReport = (
     // Überzahlung (wenn mehr gezahlt als SOLL)
     const ueberzahlung = remaining > 0 ? remaining : 0;
     
+    // WICHTIG: Saldo = SOLL (brutto) - IST, positiv = Unterzahlung, negativ = Überzahlung
     const saldo = sollBetrag - habenBetrag;
 
     // Days overdue: only if there's unpaid amount and we're past the period start
