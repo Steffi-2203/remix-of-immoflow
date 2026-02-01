@@ -2,6 +2,7 @@ import { db } from "../db";
 import { 
   settlements, 
   settlementDetails,
+  expenseAllocations,
   expenses,
   tenants,
   units,
@@ -10,6 +11,7 @@ import {
   unitDistributionValues
 } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { writeAudit } from "../lib/auditLog";
 
 interface TenantSettlementResult {
   tenantId: string;
@@ -246,6 +248,15 @@ export class SettlementService {
     const totalPrepayments = tenantResults.reduce((sum, r) => sum + r.istBetrag, 0);
     const totalDifference = tenantResults.reduce((sum, r) => sum + r.differenz, 0);
 
+    const { expenses: propertyExpenses } = await db.select()
+      .from(expenses)
+      .where(and(
+        eq(expenses.propertyId, propertyId),
+        eq(expenses.year, year),
+        eq(expenses.istUmlagefaehig, true)
+      ))
+      .then(result => ({ expenses: result }));
+    
     const [settlement] = await db.transaction(async (tx) => {
       const [newSettlement] = await tx.insert(settlements).values({
         propertyId,
@@ -259,7 +270,7 @@ export class SettlementService {
       }).returning();
 
       for (const result of tenantResults) {
-        await tx.insert(settlementDetails).values({
+        const [detail] = await tx.insert(settlementDetails).values({
           settlementId: newSettlement.id,
           tenantId: result.tenantId,
           unitId: result.unitId,
@@ -267,8 +278,40 @@ export class SettlementService {
           ausgabenAnteil: result.sollBetrag.toString(),
           vorschuss: result.istBetrag.toString(),
           differenz: result.differenz.toString(),
-        });
+        }).returning();
+
+        for (const d of result.details) {
+          const matchingExpense = propertyExpenses.find(e => 
+            (e.mrgKategorie || e.category) === d.category
+          );
+          
+          if (matchingExpense) {
+            await tx.insert(expenseAllocations).values({
+              expenseId: matchingExpense.id,
+              unitId: result.unitId,
+              allocatedNet: d.tenantShare.toString(),
+              allocationBasis: d.distributionKey,
+              allocationDetail: JSON.stringify({
+                settlementDetailId: detail.id,
+                tenantId: result.tenantId,
+                category: d.category,
+                anteil: result.anteil,
+                totalCost: d.totalCost,
+              }),
+            });
+          }
+        }
       }
+
+      await writeAudit(tx, createdBy, 'settlements', newSettlement.id, 'create', null, {
+        settlementId: newSettlement.id,
+        propertyId,
+        year,
+        totalExpenses,
+        totalPrepayments,
+        totalDifference,
+        tenantCount: tenantResults.length,
+      });
 
       return [newSettlement];
     });
