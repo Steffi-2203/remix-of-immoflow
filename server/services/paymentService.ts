@@ -7,7 +7,8 @@ import {
   properties,
   messages,
   transactions,
-  auditLogs
+  auditLogs,
+  paymentAllocations
 } from "@shared/schema";
 import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
@@ -113,6 +114,12 @@ export class PaymentService {
             WHERE id = ${inv.id}
           `);
         }
+
+        // Record payment allocation in payment_allocations table
+        await tx.execute(sql`
+          INSERT INTO payment_allocations (id, payment_id, invoice_id, applied_amount, allocation_type, created_at)
+          VALUES (gen_random_uuid(), ${paymentId}, ${inv.id}, ${apply}, 'auto', now())
+        `);
 
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
