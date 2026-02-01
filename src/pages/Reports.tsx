@@ -796,7 +796,15 @@ export default function Reports() {
       let istHk = 0;
       let istMiete = 0;
       
-      if (totalPaid > 0) {
+      // BUCHHALTÄRISCH KORREKT: Wenn voll bezahlt (totalPaid >= sollGesamt), 
+      // dann IST = SOLL für jede Komponente (keine MRG-Allokation nötig)
+      if (totalPaid >= sollGesamt - 0.01 && sollGesamt > 0) {
+        // Voll bezahlt: IST = SOLL für alle Komponenten
+        istBk = sollBk;
+        istHk = sollHk;
+        istMiete = sollMiete;
+      } else if (totalPaid > 0) {
+        // Unterzahlung: MRG-Allokation BK → HK → Miete
         const allocation = allocatePayment(totalPaid, invoiceAmounts, false);
         istBk = allocation.allocation.betriebskosten_anteil;
         istHk = allocation.allocation.heizung_anteil;
@@ -902,6 +910,30 @@ export default function Reports() {
     
     return details;
   }, [relevantTenants, allUnits, allTenants, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, periodStartMonth, periodEndMonth, selectedPropertyId]);
+
+  // ====== KONSISTENTE SUMMEN aus tenantSollIstDetails ======
+  // Diese Werte werden für die Gesamt-Zeile verwendet, damit die Summe der Einzelzeilen stimmt
+  const tenantSollIstTotals = useMemo(() => {
+    const totals = tenantSollIstDetails.reduce((acc, detail) => ({
+      sollBk: acc.sollBk + detail.sollBk,
+      sollHk: acc.sollHk + detail.sollHk,
+      sollMiete: acc.sollMiete + detail.sollMiete,
+      sollGesamt: acc.sollGesamt + detail.sollGesamt,
+      istBk: acc.istBk + detail.istBk,
+      istHk: acc.istHk + detail.istHk,
+      istMiete: acc.istMiete + detail.istMiete,
+      istGesamt: acc.istGesamt + detail.istGesamt,
+      diffBk: acc.diffBk + detail.diffBk,
+      diffHk: acc.diffHk + detail.diffHk,
+      diffMiete: acc.diffMiete + detail.diffMiete,
+      diffGesamt: acc.diffGesamt + detail.diffGesamt,
+    }), {
+      sollBk: 0, sollHk: 0, sollMiete: 0, sollGesamt: 0,
+      istBk: 0, istHk: 0, istMiete: 0, istGesamt: 0,
+      diffBk: 0, diffHk: 0, diffMiete: 0, diffGesamt: 0,
+    });
+    return totals;
+  }, [tenantSollIstDetails]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
@@ -1872,36 +1904,45 @@ export default function Reports() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Summenzeile */}
+                  {/* Summenzeile - verwendet tenantSollIstTotals für konsistente Summen */}
                   <TableRow className="bg-muted/50 font-semibold">
                     <TableCell colSpan={2}>Gesamt</TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{mrgTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffBk > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffBk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffBk > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffBk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{mrgTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffHk > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffHk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffHk > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffHk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{mrgTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffMiete > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffMiete < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffMiete > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffMiete).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{mrgTotals.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className={`font-bold ${mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : mrgTotals.totalSoll - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
-                        {mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(mrgTotals.totalSoll - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      <div className={`font-bold ${tenantSollIstTotals.diffGesamt > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffGesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                        {tenantSollIstTotals.diffGesamt > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffGesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </div>
                     </TableCell>
                   </TableRow>
