@@ -7,7 +7,9 @@ import {
   properties,
   messages 
 } from "@shared/schema";
-import { eq, and, gte, lte, desc, or, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
+import { roundMoney } from "@shared/utils";
+import { writeAudit } from "../lib/auditLog";
 
 interface PaymentAllocation {
   invoiceId: string;
@@ -46,78 +48,109 @@ export class PaymentService {
   async allocatePayment(
     paymentId: string,
     amount: number,
-    tenantId: string
+    tenantId: string,
+    userId?: string
   ): Promise<PaymentAllocation[]> {
-    const openInvoices = await db.select()
-      .from(monthlyInvoices)
-      .where(and(
-        eq(monthlyInvoices.tenantId, tenantId),
-        or(
-          eq(monthlyInvoices.status, 'offen'),
-          eq(monthlyInvoices.status, 'teilbezahlt'),
-          eq(monthlyInvoices.status, 'ueberfaellig')
-        )
-      ))
-      .orderBy(monthlyInvoices.year, monthlyInvoices.month);
+    return db.transaction(async (tx) => {
+      const openInvoices = await tx.select()
+        .from(monthlyInvoices)
+        .where(and(
+          eq(monthlyInvoices.tenantId, tenantId),
+          or(
+            eq(monthlyInvoices.status, 'offen'),
+            eq(monthlyInvoices.status, 'teilbezahlt'),
+            eq(monthlyInvoices.status, 'ueberfaellig')
+          )
+        ))
+        .orderBy(monthlyInvoices.year, monthlyInvoices.month)
+        .for('update');
 
-    const tenantPayments = await db.select()
-      .from(payments)
-      .where(eq(payments.tenantId, tenantId));
-    
-    const paidByInvoice = new Map<string, number>();
-    for (const payment of tenantPayments) {
-      if (payment.invoiceId) {
-        const current = paidByInvoice.get(payment.invoiceId) || 0;
-        paidByInvoice.set(payment.invoiceId, current + Number(payment.betrag || 0));
+      const tenantPayments = await tx.select()
+        .from(payments)
+        .where(eq(payments.tenantId, tenantId));
+      
+      const paidByInvoice = new Map<string, number>();
+      for (const payment of tenantPayments) {
+        if (payment.invoiceId) {
+          const current = paidByInvoice.get(payment.invoiceId) || 0;
+          paidByInvoice.set(payment.invoiceId, current + Number(payment.betrag || 0));
+        }
       }
-    }
 
-    const allocations: PaymentAllocation[] = [];
-    let remainingAmount = amount;
-    let firstInvoiceId: string | null = null;
+      const allocations: PaymentAllocation[] = [];
+      let remainingAmount = amount;
+      let firstInvoiceId: string | null = null;
 
-    for (const invoice of openInvoices) {
-      if (remainingAmount <= 0) break;
+      for (const invoice of openInvoices) {
+        if (remainingAmount <= 0) break;
 
-      const invoiceTotal = Number(invoice.gesamtbetrag) || 0;
-      const alreadyPaid = paidByInvoice.get(invoice.id) || 0;
-      const stillOwed = invoiceTotal - alreadyPaid;
-      
-      if (stillOwed <= 0) continue;
+        const invoiceTotal = Number(invoice.gesamtbetrag) || 0;
+        const alreadyPaid = paidByInvoice.get(invoice.id) || 0;
+        const stillOwed = roundMoney(invoiceTotal - alreadyPaid);
+        
+        if (stillOwed <= 0) continue;
 
-      const allocated = Math.min(remainingAmount, stillOwed);
-      
-      // Track first invoice for payment linkage
-      if (!firstInvoiceId) {
-        firstInvoiceId = invoice.id;
+        const bk = Number(invoice.betriebskosten) || 0;
+        const wasser = Number(invoice.wasserkosten) || 0;
+        const hk = Number(invoice.heizungskosten) || 0;
+        const miete = Number(invoice.grundmiete) || 0;
+
+        let toAllocate = Math.min(remainingAmount, stillOwed);
+        let allocatedBk = 0, allocatedWasser = 0, allocatedHk = 0, allocatedMiete = 0;
+
+        const allocBk = Math.min(toAllocate, bk);
+        allocatedBk = roundMoney(allocBk);
+        toAllocate -= allocBk;
+
+        const allocWasser = Math.min(toAllocate, wasser);
+        allocatedWasser = roundMoney(allocWasser);
+        toAllocate -= allocWasser;
+
+        const allocHk = Math.min(toAllocate, hk);
+        allocatedHk = roundMoney(allocHk);
+        toAllocate -= allocHk;
+
+        const allocMiete = Math.min(toAllocate, miete);
+        allocatedMiete = roundMoney(allocMiete);
+
+        const allocated = roundMoney(allocatedBk + allocatedWasser + allocatedHk + allocatedMiete);
+        
+        if (!firstInvoiceId) {
+          firstInvoiceId = invoice.id;
+        }
+        
+        allocations.push({
+          invoiceId: invoice.id,
+          allocatedAmount: allocated
+        });
+
+        remainingAmount = roundMoney(remainingAmount - allocated);
+
+        const totalPaidAfter = roundMoney(alreadyPaid + allocated);
+        const newStatus = totalPaidAfter >= invoiceTotal ? 'bezahlt' : 'teilbezahlt';
+        await tx.update(monthlyInvoices)
+          .set({ status: newStatus, updatedAt: new Date() })
+          .where(eq(monthlyInvoices.id, invoice.id));
       }
-      
-      allocations.push({
-        invoiceId: invoice.id,
-        allocatedAmount: allocated
-      });
 
-      remainingAmount -= allocated;
-
-      const totalPaidAfter = alreadyPaid + allocated;
-      const newStatus = totalPaidAfter >= invoiceTotal ? 'bezahlt' : 'teilbezahlt';
-      await db.update(monthlyInvoices)
-        .set({ status: newStatus })
-        .where(eq(monthlyInvoices.id, invoice.id));
-    }
-
-    // Persist payment-to-invoice linkage (link to first allocated invoice)
-    if (firstInvoiceId && paymentId) {
-      try {
-        await db.update(payments)
+      if (firstInvoiceId && paymentId) {
+        await tx.update(payments)
           .set({ invoiceId: firstInvoiceId })
           .where(eq(payments.id, paymentId));
-      } catch (error) {
-        console.error('Failed to update payment invoiceId:', error);
       }
-    }
 
-    return allocations;
+      if (userId && allocations.length > 0) {
+        await writeAudit(tx, userId, 'payments', paymentId, 'update', null, {
+          paymentId,
+          tenantId,
+          amount,
+          allocatedTo: allocations.map(a => a.invoiceId),
+          totalAllocated: allocations.reduce((sum, a) => sum + a.allocatedAmount, 0),
+        });
+      }
+
+      return allocations;
+    });
   }
 
   async getTenantBalance(tenantId: string, year?: number): Promise<{
@@ -161,9 +194,9 @@ export class PaymentService {
     const openInvoices = invoices.filter(inv => inv.status === 'offen' || inv.status === 'teilbezahlt').length;
 
     return {
-      sollGesamt: Math.round(sollGesamt * 100) / 100,
-      istGesamt: Math.round(istGesamt * 100) / 100,
-      saldo: Math.round((sollGesamt - istGesamt) * 100) / 100,
+      sollGesamt: roundMoney(sollGesamt),
+      istGesamt: roundMoney(istGesamt),
+      saldo: roundMoney(sollGesamt - istGesamt),
       openInvoices
     };
   }
@@ -247,7 +280,7 @@ export class PaymentService {
         tenantId,
         tenantName: `${tenant.firstName} ${tenant.lastName}`,
         email: tenant.email,
-        outstandingAmount: Math.round(outstandingAmount * 100) / 100,
+        outstandingAmount: roundMoney(outstandingAmount),
         dunningLevel,
         overdueInvoices: tenantInvoices.map(inv => ({
           id: inv.id,
