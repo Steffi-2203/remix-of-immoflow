@@ -329,7 +329,7 @@ export function Sidebar() {
           </div>
 
           {/* Navigation - scrollable */}
-          <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
+          <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
             {allNavItems.map(item => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
@@ -429,7 +429,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation - scrollable */}
-      <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
         {allNavItems.map(item => {
           const isActive = location.pathname === item.href || 
             (item.href !== '/' && location.pathname.startsWith(item.href));
