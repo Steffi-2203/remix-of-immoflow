@@ -1198,20 +1198,9 @@ export const generateOffenePostenReport = (
     selectedYear,
     reportPeriod === 'monthly' ? selectedMonth : undefined
   );
-  const tenantIds = relevantTenants.map(t => t.id);
   
   // Month multiplier uses the calculated monthCount
   const monthMultiplier = monthCount;
-
-  // Filter combined payments by period (uses 'date' and 'amount' fields)
-  const periodPayments = combinedPayments.filter(p => {
-    if (!tenantIds.includes(p.tenant_id)) return false;
-    const paymentDate = new Date(p.date);
-    const matchesYear = paymentDate.getFullYear() === selectedYear;
-    const paymentMonth = paymentDate.getMonth() + 1;
-    // Check if payment falls within the period range
-    return matchesYear && paymentMonth >= periodStartMonth && paymentMonth <= periodEndMonth;
-  });
 
   // Calculate balance per tenant with MRG-konform allocation
   interface TenantBalance {
@@ -1269,6 +1258,20 @@ export const generateOffenePostenReport = (
     ...tenantsWithInvoicesIds
   ]);
   
+  // WICHTIG: Zahlungsfilterung NACH Bestimmung aller relevanten Mieter
+  // Filter combined payments by period and tenant (uses 'date' and 'amount' fields)
+  const periodPayments = combinedPayments.filter(p => {
+    // Support both camelCase and snake_case
+    const pAny = p as any;
+    const paymentTenantId = pAny.tenantId ?? pAny.tenant_id ?? p.tenant_id;
+    if (!paymentTenantId || !allRelevantTenantIds.has(paymentTenantId)) return false;
+    const paymentDate = new Date(p.date);
+    const matchesYear = paymentDate.getFullYear() === selectedYear;
+    const paymentMonth = paymentDate.getMonth() + 1;
+    // Check if payment falls within the period range
+    return matchesYear && paymentMonth >= periodStartMonth && paymentMonth <= periodEndMonth;
+  });
+  
   // Finde alle zu verarbeitenden Mieter
   const tenantsToProcess = Array.from(allRelevantTenantIds).map(tenantId => {
     const fromRelevant = relevantTenants.find(t => t.id === tenantId);
@@ -1277,7 +1280,11 @@ export const generateOffenePostenReport = (
   }).filter((t): t is TenantData => t !== null);
 
   tenantsToProcess.forEach(tenant => {
-    const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+    // Support both camelCase and snake_case for tenant_id
+    const tenantPayments = periodPayments.filter(p => {
+      const pAny = p as any;
+      return (pAny.tenantId ?? pAny.tenant_id ?? p.tenant_id) === tenant.id;
+    });
     
     // SOLL aus Vorschreibung (monthly_invoices) - bevorzugt über Mieter-Stammdaten
     // Filtere Vorschreibungen für diesen Mieter und den Zeitraum
