@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
@@ -17,6 +19,45 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'immoflowme-secret-key-chan
 const PgSession = connectPgSimple(session);
 
 app.set("trust proxy", 1);
+
+// Security: Helmet for HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled for development (Vite injects scripts)
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Security: Rate limiting - 100 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req.path.startsWith('/api'), // Only limit API routes
+});
+app.use(apiLimiter);
+
+// Security: CORS with whitelist
+const allowedOrigins = [
+  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : '',
+  process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : '',
+  'https://immoflowme.com',
+  'https://www.immoflowme.com',
+].filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 app.use(session({
   store: new PgSession({
