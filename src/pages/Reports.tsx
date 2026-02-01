@@ -1439,15 +1439,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollBk - paymentAllocationDetails.bkAnteil > 0.01 ? 'text-destructive' : periodSollBk - paymentAllocationDetails.bkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollBk - paymentAllocationDetails.bkAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollBk - paymentAllocationDetails.bkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollBk - paymentAllocationDetails.bkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollBk - paymentAllocationDetails.bkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollBk - paymentAllocationDetails.bkAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollBk - paymentAllocationDetails.bkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1461,15 +1461,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollHk - paymentAllocationDetails.hkAnteil > 0.01 ? 'text-destructive' : periodSollHk - paymentAllocationDetails.hkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollHk - paymentAllocationDetails.hkAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollHk - paymentAllocationDetails.hkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollHk - paymentAllocationDetails.hkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollHk - paymentAllocationDetails.hkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollHk - paymentAllocationDetails.hkAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollHk - paymentAllocationDetails.hkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1483,15 +1483,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0.01 ? 'text-destructive' : periodSollGrundmiete - paymentAllocationDetails.mieteAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollGrundmiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1502,15 +1502,15 @@ export default function Reports() {
                   <p className="text-xs font-semibold text-foreground">Gesamt</p>
                   <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">IST (eingegangen):</span>
                     <span>€{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-bold ${mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : mrgTotals.totalSoll - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(mrgTotals.totalSoll - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1714,31 +1714,31 @@ export default function Reports() {
                     <TableCell colSpan={2}>Gesamt</TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{mrgTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                         <div>IST: €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{mrgTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                         <div>IST: €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{mrgTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                         <div>IST: €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{mrgTotals.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                         <div>IST: €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className={`font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
-                        {periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      <div className={`font-bold ${mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : mrgTotals.totalSoll - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                        {mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(mrgTotals.totalSoll - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </div>
                     </TableCell>
                   </TableRow>
