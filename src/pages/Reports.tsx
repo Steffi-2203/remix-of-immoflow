@@ -367,12 +367,30 @@ export default function Reports() {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       
-      // Zeitraum-Filter
-      if (reportPeriod === 'yearly') {
-        if (year !== selectedYear) return false;
-      } else {
-        if (year !== selectedYear || month !== selectedMonth) return false;
+      // Zeitraum-Filter (alle Perioden: monthly, quarterly, halfyearly, yearly)
+      if (year !== selectedYear) return false;
+      
+      // Berechne Zeitraum-Grenzen basierend auf reportPeriod
+      let startMonth: number, endMonth: number;
+      switch (reportPeriod) {
+        case 'quarterly':
+          startMonth = (selectedQuarter - 1) * 3 + 1;
+          endMonth = selectedQuarter * 3;
+          break;
+        case 'halfyearly':
+          startMonth = selectedHalfYear === 1 ? 1 : 7;
+          endMonth = selectedHalfYear === 1 ? 6 : 12;
+          break;
+        case 'yearly':
+          startMonth = 1;
+          endMonth = 12;
+          break;
+        default: // monthly
+          startMonth = selectedMonth;
+          endMonth = selectedMonth;
       }
+      
+      if (month < startMonth || month > endMonth) return false;
       
       // Property-Filter (über Mieter -> Unit -> Property)
       // Note: p.tenant_id is from combinedPayments (snake_case), tenant fields are camelCase
@@ -385,7 +403,7 @@ export default function Reports() {
       
       return true;
     });
-  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth, selectedPropertyId, allUnits, allTenants]);
+  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth, selectedQuarter, selectedHalfYear, selectedPropertyId, allUnits, allTenants]);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
@@ -652,8 +670,29 @@ export default function Reports() {
   const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
   const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
   
-  // Bei jährlicher Ansicht: x12 Monate
-  const monthMultiplier = reportPeriod === 'yearly' ? 12 : 1;
+  // Berechne Zeitraum-Parameter für alle Perioden
+  let periodStartMonth: number, periodEndMonth: number, monthMultiplier: number;
+  switch (reportPeriod) {
+    case 'quarterly':
+      periodStartMonth = (selectedQuarter - 1) * 3 + 1;
+      periodEndMonth = selectedQuarter * 3;
+      monthMultiplier = 3;
+      break;
+    case 'halfyearly':
+      periodStartMonth = selectedHalfYear === 1 ? 1 : 7;
+      periodEndMonth = selectedHalfYear === 1 ? 6 : 12;
+      monthMultiplier = 6;
+      break;
+    case 'yearly':
+      periodStartMonth = 1;
+      periodEndMonth = 12;
+      monthMultiplier = 12;
+      break;
+    default: // monthly
+      periodStartMonth = selectedMonth;
+      periodEndMonth = selectedMonth;
+      monthMultiplier = 1;
+  }
   const periodSollGrundmiete = sollGrundmiete * monthMultiplier;
   const periodSollBk = sollBk * monthMultiplier;
   const periodSollHk = sollHk * monthMultiplier;
@@ -670,7 +709,7 @@ export default function Reports() {
       const tenantInvoices = allInvoices?.filter(inv => 
         inv.tenantId === tenant.id &&
         inv.year === selectedYear &&
-        (reportPeriod === 'yearly' || inv.month === selectedMonth)
+        inv.month >= periodStartMonth && inv.month <= periodEndMonth
       ) || [];
       
       let sollMiete = 0;
@@ -747,7 +786,7 @@ export default function Reports() {
     
     const periodVacancyInvoices = vacancyInvoices.filter(inv =>
       inv.year === selectedYear &&
-      (reportPeriod === 'yearly' || inv.month === selectedMonth)
+      inv.month >= periodStartMonth && inv.month <= periodEndMonth
     );
     
     // Gruppiere nach Unit
@@ -813,7 +852,7 @@ export default function Reports() {
     });
     
     return details;
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, selectedMonth, reportPeriod, selectedPropertyId]);
+  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, periodStartMonth, periodEndMonth, selectedPropertyId]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
