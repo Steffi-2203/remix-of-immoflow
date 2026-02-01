@@ -1,12 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent } from '@/components/ui/card';
-import { FileImage, Upload, Loader2, AlertCircle, CheckCircle, Sparkles, FileText } from 'lucide-react';
+import { FileImage, Upload, Loader2, AlertCircle, CheckCircle, Sparkles, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
@@ -83,50 +79,128 @@ interface ExtractedTenantData {
   notes: string;
 }
 
-const defaultExtractedData: ExtractedTenantData = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  mietbeginn: '',
-  grundmiete: 0,
-  betriebskostenVorschuss: 0,
-  heizkostenVorschuss: 0,
-  kaution: 0,
-  topNummer: '',
-  address: '',
-  notes: '',
-};
+interface SaveResult {
+  tenant: ExtractedTenantData;
+  success: boolean;
+  error?: string;
+}
 
-interface TenantWithUnit extends ExtractedTenantData {
-  selectedUnitId: string;
-  saved: boolean;
+interface ScanError {
+  page: number;
+  error: string;
 }
 
 export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess }: PdfScanDialogProps) {
-  const [step, setStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'done'>('upload');
-  const [file, setFile] = useState<File | null>(null);
+  const [step, setStep] = useState<'upload' | 'scanning' | 'saving' | 'done'>('upload');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [extractedTenants, setExtractedTenants] = useState<TenantWithUnit[]>([]);
-  const [currentTenantIndex, setCurrentTenantIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [savedCount, setSavedCount] = useState(0);
+  const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
+  const [results, setResults] = useState<SaveResult[]>([]);
+  const [scanErrors, setScanErrors] = useState<ScanError[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const currentTenant = extractedTenants[currentTenantIndex];
+  const successCount = results.filter(r => r.success).length;
+  const errorCount = results.filter(r => !r.success).length;
 
   const reset = useCallback(() => {
     setStep('upload');
-    setFile(null);
     setPreviewUrl(null);
-    setExtractedTenants([]);
-    setCurrentTenantIndex(0);
-    setSavedCount(0);
     setError(null);
     setIsDragging(false);
+    setProgress({ current: 0, total: 0, phase: '' });
+    setResults([]);
+    setScanErrors([]);
   }, []);
+
+  const saveAllTenants = async (tenants: ExtractedTenantData[]) => {
+    const saveResults: SaveResult[] = [];
+    const createdUnitsCache = new Map<string, string>();
+    
+    for (let i = 0; i < tenants.length; i++) {
+      const tenant = tenants[i];
+      setProgress({ current: i + 1, total: tenants.length, phase: `${tenant.firstName} ${tenant.lastName}` });
+      
+      try {
+        if (!tenant.firstName?.trim() || !tenant.lastName?.trim()) {
+          saveResults.push({ 
+            tenant, 
+            success: false, 
+            error: 'Name fehlt' 
+          });
+          continue;
+        }
+
+        let unitId = '';
+        const topNummerKey = tenant.topNummer?.toLowerCase().trim() || '';
+        
+        const matchedUnit = units.find(u => 
+          u.top_nummer.toLowerCase() === topNummerKey
+        );
+        
+        if (matchedUnit) {
+          unitId = matchedUnit.id;
+        } else if (createdUnitsCache.has(topNummerKey)) {
+          unitId = createdUnitsCache.get(topNummerKey)!;
+        } else if (tenant.topNummer?.trim()) {
+          try {
+            const unitResponse = await apiRequest('POST', '/api/units', {
+              property_id: propertyId,
+              top_nummer: tenant.topNummer.trim(),
+              type: 'wohnung',
+              status: 'vermietet',
+              flaeche: '0',
+            });
+            const unitData = await unitResponse.json();
+            if (unitData?.id) {
+              unitId = unitData.id;
+              createdUnitsCache.set(topNummerKey, unitId);
+            }
+          } catch (unitError: any) {
+            saveResults.push({ 
+              tenant, 
+              success: false, 
+              error: `Einheit "${tenant.topNummer}" konnte nicht erstellt werden` 
+            });
+            continue;
+          }
+        } else {
+          saveResults.push({ 
+            tenant, 
+            success: false, 
+            error: 'Keine Einheit erkannt' 
+          });
+          continue;
+        }
+
+        await apiRequest('POST', '/api/tenants', {
+          unit_id: unitId,
+          first_name: tenant.firstName,
+          last_name: tenant.lastName,
+          email: tenant.email || null,
+          phone: tenant.phone || null,
+          mietbeginn: tenant.mietbeginn || new Date().toISOString().split('T')[0],
+          grundmiete: tenant.grundmiete || 0,
+          betriebskosten_vorschuss: tenant.betriebskostenVorschuss || 0,
+          heizungskosten_vorschuss: tenant.heizkostenVorschuss || 0,
+          kaution: tenant.kaution || null,
+          notes: tenant.notes || null,
+          status: 'aktiv',
+        });
+
+        saveResults.push({ tenant, success: true });
+      } catch (err: any) {
+        saveResults.push({ 
+          tenant, 
+          success: false, 
+          error: err.message || 'Speichern fehlgeschlagen' 
+        });
+      }
+    }
+    
+    return saveResults;
+  };
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     const isImage = selectedFile.type.startsWith('image/');
@@ -141,22 +215,22 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
       return;
     }
 
-    setFile(selectedFile);
-    setStep('processing');
+    setStep('scanning');
     setError(null);
+    setResults([]);
+    setScanErrors([]);
 
     try {
       let imagesToProcess: Blob[] = [];
       let previewBlob: Blob = selectedFile;
+      const pageErrors: ScanError[] = [];
 
       if (isPdf) {
-        toast({ 
-          title: 'PDF wird konvertiert...', 
-          description: 'Alle Seiten werden verarbeitet.' 
-        });
+        setProgress({ current: 0, total: 0, phase: 'PDF wird konvertiert...' });
         try {
           imagesToProcess = await convertPdfToImages(selectedFile);
           previewBlob = imagesToProcess[0];
+          setProgress({ current: 0, total: imagesToProcess.length, phase: 'Seiten werden analysiert...' });
         } catch (pdfError: any) {
           setError(`PDF-Konvertierung fehlgeschlagen: ${pdfError.message}. Bitte laden Sie stattdessen einen Screenshot hoch.`);
           setStep('upload');
@@ -164,21 +238,17 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
         }
       } else {
         imagesToProcess = [selectedFile];
+        setProgress({ current: 0, total: 1, phase: 'Bild wird analysiert...' });
       }
 
       const previewUrl = URL.createObjectURL(previewBlob);
       setPreviewUrl(previewUrl);
 
-      const allTenants: TenantWithUnit[] = [];
+      const allTenants: ExtractedTenantData[] = [];
 
       for (let i = 0; i < imagesToProcess.length; i++) {
         const imageBlob = imagesToProcess[i];
-        
-        if (isPdf && imagesToProcess.length > 1) {
-          toast({ 
-            title: `Verarbeite Seite ${i + 1} von ${imagesToProcess.length}...`
-          });
-        }
+        setProgress({ current: i + 1, total: imagesToProcess.length, phase: `Seite ${i + 1} von ${imagesToProcess.length}` });
 
         const formData = new FormData();
         formData.append('file', imageBlob, 'page.png');
@@ -196,57 +266,51 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
         try {
           data = JSON.parse(responseText);
         } catch (parseError) {
-          console.error(`Seite ${i + 1} JSON-Parse-Fehler:`, responseText.substring(0, 200));
-          if (imagesToProcess.length === 1) {
-            setError('Server-Fehler: Ungültige Antwort erhalten. Bitte versuchen Sie es erneut.');
-            setStep('upload');
-            return;
-          }
+          pageErrors.push({ page: i + 1, error: 'Ungültige Server-Antwort' });
           continue;
         }
 
         if (!response.ok) {
-          console.error(`Seite ${i + 1} Fehler:`, data.message);
-          if (imagesToProcess.length === 1) {
-            setError(data.message || 'OCR-Verarbeitung fehlgeschlagen');
-            setStep('upload');
-            return;
-          }
+          pageErrors.push({ page: i + 1, error: data.message || 'OCR-Fehler' });
           continue;
         }
         
         if (data.tenants && Array.isArray(data.tenants)) {
           for (const t of data.tenants) {
-            const matchedUnit = units.find(u => 
-              u.top_nummer.toLowerCase() === t.topNummer?.toLowerCase()
-            );
-            allTenants.push({
-              ...t,
-              selectedUnitId: matchedUnit?.id || '',
-              saved: false,
-            });
+            allTenants.push(t);
           }
         }
       }
 
+      setScanErrors(pageErrors);
+
       if (allTenants.length === 0) {
-        setError('Keine Mieter im Dokument gefunden.');
+        if (pageErrors.length > 0) {
+          setError(`Keine Mieter erkannt. ${pageErrors.length} Seite(n) mit Fehlern.`);
+        } else {
+          setError('Keine Mieter im Dokument gefunden. Bitte prüfen Sie, ob das Dokument Mieterdaten enthält.');
+        }
         setStep('upload');
         return;
       }
 
-      setExtractedTenants(allTenants);
-      setCurrentTenantIndex(0);
-      toast({ 
-        title: `${allTenants.length} Mieter gefunden`, 
-        description: 'Überprüfen Sie die Daten vor dem Speichern.' 
-      });
-      setStep('review');
+      setStep('saving');
+      setProgress({ current: 0, total: allTenants.length, phase: 'Mieter werden angelegt...' });
+      
+      const saveResults = await saveAllTenants(allTenants);
+      setResults(saveResults);
+      
+      const successCount = saveResults.filter(r => r.success).length;
+      if (successCount > 0) {
+        onSuccess();
+      }
+      
+      setStep('done');
     } catch (err: any) {
       setError(err.message || 'Ein Fehler ist aufgetreten');
       setStep('upload');
     }
-  }, [propertyId, units, toast]);
+  }, [propertyId, units, toast, onSuccess]);
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -275,156 +339,16 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
     }
   }, [handleFileSelect]);
 
-  const updateField = useCallback((field: keyof TenantWithUnit, value: string | number) => {
-    setExtractedTenants(prev => prev.map((t, idx) => 
-      idx === currentTenantIndex ? { ...t, [field]: value } : t
-    ));
-  }, [currentTenantIndex]);
-
-  const setSelectedUnitId = useCallback((unitId: string) => {
-    setExtractedTenants(prev => prev.map((t, idx) => 
-      idx === currentTenantIndex ? { ...t, selectedUnitId: unitId } : t
-    ));
-  }, [currentTenantIndex]);
-
-  const handleSaveCurrent = async () => {
-    if (!currentTenant) return;
-
-    const validationErrors: string[] = [];
-
-    if (!currentTenant.firstName?.trim()) {
-      validationErrors.push('Vorname ist erforderlich');
-    }
-    if (!currentTenant.lastName?.trim()) {
-      validationErrors.push('Nachname ist erforderlich');
-    }
-    if (!currentTenant.selectedUnitId && !currentTenant.topNummer?.trim()) {
-      validationErrors.push('Einheit ist erforderlich');
-    }
-    if (currentTenant.grundmiete < 0) {
-      validationErrors.push('Grundmiete kann nicht negativ sein');
-    }
-    if (currentTenant.betriebskostenVorschuss < 0) {
-      validationErrors.push('Betriebskosten können nicht negativ sein');
-    }
-    if (currentTenant.heizkostenVorschuss < 0) {
-      validationErrors.push('Heizkosten können nicht negativ sein');
-    }
-
-    if (validationErrors.length > 0) {
-      toast({ 
-        title: 'Fehlende Daten', 
-        description: validationErrors.join('. '), 
-        variant: 'destructive' 
-      });
-      return;
-    }
-
-    setStep('saving');
-
-    try {
-      let unitId = currentTenant.selectedUnitId;
-      
-      if (!unitId && currentTenant.topNummer?.trim()) {
-        toast({ title: 'Erstelle Einheit...', description: `${currentTenant.topNummer} wird angelegt.` });
-        try {
-          const unitResponse = await apiRequest('POST', '/api/units', {
-            property_id: propertyId,
-            top_nummer: currentTenant.topNummer.trim(),
-            type: 'wohnung',
-            status: 'vermietet',
-            flaeche: '0',
-          });
-          const unitData = await unitResponse.json();
-          
-          if (!unitData?.id) {
-            throw new Error('Einheit konnte nicht erstellt werden - keine ID erhalten');
-          }
-          
-          unitId = unitData.id;
-          toast({ title: 'Einheit erstellt', description: `${currentTenant.topNummer} wurde angelegt.` });
-        } catch (unitError: any) {
-          setError(unitError.message || 'Einheit konnte nicht erstellt werden');
-          setStep('review');
-          return;
-        }
-      }
-      
-      if (!unitId) {
-        setError('Keine Einheit ausgewählt oder erkannt');
-        setStep('review');
-        return;
-      }
-      
-      await apiRequest('POST', '/api/tenants', {
-        unit_id: unitId,
-        first_name: currentTenant.firstName,
-        last_name: currentTenant.lastName,
-        email: currentTenant.email || null,
-        phone: currentTenant.phone || null,
-        mietbeginn: currentTenant.mietbeginn || new Date().toISOString().split('T')[0],
-        grundmiete: currentTenant.grundmiete,
-        betriebskosten_vorschuss: currentTenant.betriebskostenVorschuss,
-        heizungskosten_vorschuss: currentTenant.heizkostenVorschuss,
-        kaution: currentTenant.kaution || null,
-        notes: currentTenant.notes || null,
-        status: 'aktiv',
-      });
-
-      setExtractedTenants(prev => prev.map((t, idx) => 
-        idx === currentTenantIndex ? { ...t, saved: true } : t
-      ));
-      setSavedCount(prev => prev + 1);
-
-      toast({ 
-        title: 'Mieter erstellt', 
-        description: `${currentTenant.firstName} ${currentTenant.lastName} wurde erfolgreich angelegt.` 
-      });
-
-      const nextUnsaved = extractedTenants.findIndex((t, idx) => idx > currentTenantIndex && !t.saved);
-      if (nextUnsaved !== -1) {
-        setCurrentTenantIndex(nextUnsaved);
-        setStep('review');
-      } else {
-        setStep('done');
-        onSuccess();
-      }
-    } catch (err: any) {
-      setError(err.message || 'Mieter konnte nicht erstellt werden');
-      setStep('review');
-    }
-  };
-
-  const handleSkipCurrent = () => {
-    const nextUnsaved = extractedTenants.findIndex((t, idx) => idx > currentTenantIndex && !t.saved);
-    if (nextUnsaved !== -1) {
-      setCurrentTenantIndex(nextUnsaved);
-    } else {
-      if (savedCount > 0) {
-        setStep('done');
-        onSuccess();
-      } else {
-        toast({ 
-          title: 'Keine Mieter gespeichert', 
-          description: 'Sie haben alle Mieter übersprungen.', 
-          variant: 'destructive' 
-        });
-        reset();
-        onOpenChange(false);
-      }
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) reset(); onOpenChange(isOpen); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             Dokument scannen (KI-Erkennung)
           </DialogTitle>
           <DialogDescription>
-            Laden Sie einen Mietvertrag oder eine Vorschreibung hoch - die KI extrahiert automatisch die Mieterdaten.
+            Laden Sie einen Mietvertrag oder eine Vorschreibung hoch - alle erkannten Mieter werden automatisch angelegt.
           </DialogDescription>
         </DialogHeader>
 
@@ -470,14 +394,26 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           </div>
         )}
 
-        {step === 'processing' && (
+        {(step === 'scanning' || step === 'saving') && (
           <div className="py-12 text-center">
             <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary mb-4" />
-            <p className="text-lg font-medium mb-2">KI analysiert Dokument...</p>
-            <p className="text-sm text-muted-foreground">
-              Extrahiere Mieterdaten mit GPT-Vision
+            <p className="text-lg font-medium mb-2">
+              {step === 'scanning' ? 'KI analysiert Dokument...' : 'Mieter werden angelegt...'}
             </p>
-            {previewUrl && (
+            {progress.total > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="w-full bg-muted rounded-full h-2.5">
+                  <div 
+                    className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {progress.phase} ({progress.current}/{progress.total})
+                </p>
+              </div>
+            )}
+            {previewUrl && step === 'scanning' && (
               <div className="mt-6 max-w-xs mx-auto">
                 <img 
                   src={previewUrl} 
@@ -489,202 +425,84 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           </div>
         )}
 
-        {step === 'review' && currentTenant && (
-          <div className="space-y-6">
-            <div className="flex items-start gap-4">
-              {previewUrl && (
-                <div className="w-32 flex-shrink-0">
-                  <img 
-                    src={previewUrl} 
-                    alt="Dokument" 
-                    className="rounded-lg border border-border shadow-sm w-full"
-                  />
-                </div>
+        {step === 'done' && (
+          <div className="py-8">
+            <div className="text-center mb-6">
+              {successCount > 0 ? (
+                <CheckCircle className="h-16 w-16 text-success mx-auto mb-4" />
+              ) : (
+                <XCircle className="h-16 w-16 text-destructive mx-auto mb-4" />
               )}
-              <div className="flex-1">
-                <Alert className="bg-success/10 border-success/30">
-                  <CheckCircle className="h-4 w-4 text-success" />
-                  <AlertDescription className="text-success">
-                    {extractedTenants.length > 1 
-                      ? `${extractedTenants.length} Mieter gefunden! Mieter ${currentTenantIndex + 1} von ${extractedTenants.length}` 
-                      : 'Daten erfolgreich extrahiert! Bitte überprüfen und korrigieren Sie die Werte.'}
-                  </AlertDescription>
-                </Alert>
-              </div>
+              <p className="text-xl font-semibold mb-2">
+                {successCount > 0 
+                  ? `${successCount} Mieter erfolgreich angelegt!` 
+                  : 'Keine Mieter angelegt'}
+              </p>
+              {errorCount > 0 && (
+                <p className="text-muted-foreground">
+                  {errorCount} Mieter konnten nicht angelegt werden
+                </p>
+              )}
+              {scanErrors.length > 0 && (
+                <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
+                  {scanErrors.length} Seite(n) mit Scan-Fehlern
+                </p>
+              )}
             </div>
 
-            <Card>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Vorname *</Label>
-                    <Input
-                      value={currentTenant.firstName}
-                      onChange={(e) => updateField('firstName', e.target.value)}
-                      data-testid="input-ocr-firstname"
-                    />
-                  </div>
-                  <div>
-                    <Label>Nachname *</Label>
-                    <Input
-                      value={currentTenant.lastName}
-                      onChange={(e) => updateField('lastName', e.target.value)}
-                      data-testid="input-ocr-lastname"
-                    />
-                  </div>
-                  <div>
-                    <Label>Einheit *</Label>
-                    <Select value={currentTenant.selectedUnitId} onValueChange={setSelectedUnitId}>
-                      <SelectTrigger data-testid="select-ocr-unit">
-                        <SelectValue placeholder={currentTenant.topNummer ? `Neu: ${currentTenant.topNummer}` : "Einheit wählen"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {units.map(u => (
-                          <SelectItem key={u.id} value={u.id}>{u.top_nummer}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {currentTenant.topNummer && !currentTenant.selectedUnitId && (
-                      <p className="text-xs text-primary mt-1">
-                        Einheit "{currentTenant.topNummer}" wird automatisch erstellt
-                      </p>
-                    )}
-                    {currentTenant.topNummer && currentTenant.selectedUnitId && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Erkannt: {currentTenant.topNummer}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Label>Mietbeginn</Label>
-                    <Input
-                      type="date"
-                      value={currentTenant.mietbeginn}
-                      onChange={(e) => updateField('mietbeginn', e.target.value)}
-                      data-testid="input-ocr-mietbeginn"
-                    />
-                  </div>
-                  <div>
-                    <Label>Grundmiete (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={currentTenant.grundmiete}
-                      onChange={(e) => updateField('grundmiete', parseFloat(e.target.value) || 0)}
-                      data-testid="input-ocr-grundmiete"
-                    />
-                  </div>
-                  <div>
-                    <Label>Betriebskosten (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={currentTenant.betriebskostenVorschuss}
-                      onChange={(e) => updateField('betriebskostenVorschuss', parseFloat(e.target.value) || 0)}
-                      data-testid="input-ocr-bk"
-                    />
-                  </div>
-                  <div>
-                    <Label>Heizkosten (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={currentTenant.heizkostenVorschuss}
-                      onChange={(e) => updateField('heizkostenVorschuss', parseFloat(e.target.value) || 0)}
-                      data-testid="input-ocr-hk"
-                    />
-                  </div>
-                  <div>
-                    <Label>Kaution (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={currentTenant.kaution}
-                      onChange={(e) => updateField('kaution', parseFloat(e.target.value) || 0)}
-                      data-testid="input-ocr-kaution"
-                    />
-                  </div>
-                  <div>
-                    <Label>E-Mail</Label>
-                    <Input
-                      type="email"
-                      value={currentTenant.email}
-                      onChange={(e) => updateField('email', e.target.value)}
-                      data-testid="input-ocr-email"
-                    />
-                  </div>
-                  <div>
-                    <Label>Telefon</Label>
-                    <Input
-                      value={currentTenant.phone}
-                      onChange={(e) => updateField('phone', e.target.value)}
-                      data-testid="input-ocr-phone"
-                    />
-                  </div>
+            {scanErrors.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm font-medium mb-2">Scan-Fehler:</p>
+                <div className="space-y-1">
+                  {scanErrors.map((err, idx) => (
+                    <div key={idx} className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
+                      Seite {err.page}: {err.error}
+                    </div>
+                  ))}
                 </div>
-
-                {currentTenant.notes && (
-                  <div className="mt-4">
-                    <Label>Zusätzliche erkannte Informationen</Label>
-                    <p className="text-sm text-muted-foreground mt-1 p-3 bg-muted/50 rounded-lg">
-                      {currentTenant.notes}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+              </div>
             )}
 
-            <DialogFooter className="flex-wrap gap-2">
-              <Button variant="outline" onClick={reset}>
-                Abbrechen
-              </Button>
-              {extractedTenants.length > 1 && (
-                <Button variant="ghost" onClick={handleSkipCurrent}>
-                  Überspringen
-                </Button>
-              )}
-              <Button 
-                onClick={handleSaveCurrent}
-                disabled={!currentTenant.firstName || !currentTenant.lastName || (!currentTenant.selectedUnitId && !currentTenant.topNummer?.trim())}
-                data-testid="button-ocr-save"
-              >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                {extractedTenants.length > 1 
-                  ? `Mieter ${currentTenantIndex + 1}/${extractedTenants.length} speichern` 
-                  : 'Mieter anlegen'}
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
+            {results.length > 0 && (
+              <div className="max-h-60 overflow-y-auto space-y-2 mb-6">
+                {results.map((result, idx) => (
+                  <div 
+                    key={idx}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border",
+                      result.success 
+                        ? "bg-success/10 border-success/30" 
+                        : "bg-destructive/10 border-destructive/30"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      {result.success ? (
+                        <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+                      )}
+                      <span className="font-medium">
+                        {result.tenant.firstName} {result.tenant.lastName}
+                      </span>
+                      {result.tenant.topNummer && (
+                        <span className="text-sm text-muted-foreground">
+                          ({result.tenant.topNummer})
+                        </span>
+                      )}
+                    </div>
+                    {result.error && (
+                      <span className="text-sm text-destructive">{result.error}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-        {step === 'saving' && (
-          <div className="py-12 text-center">
-            <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary mb-4" />
-            <p className="text-lg">Mieter wird angelegt...</p>
-          </div>
-        )}
-
-        {step === 'done' && (
-          <div className="py-8 text-center">
-            <CheckCircle className="h-16 w-16 text-success mx-auto mb-4" />
-            <p className="text-xl font-semibold mb-2">
-              {savedCount > 1 ? `${savedCount} Mieter erfolgreich angelegt!` : 'Mieter erfolgreich angelegt!'}
-            </p>
-            <p className="text-muted-foreground mb-6">
-              Die Mieterdaten wurden gespeichert.
-            </p>
-            <DialogFooter className="justify-center">
-              <Button variant="outline" onClick={reset}>
+            <DialogFooter className="justify-center gap-2">
+              <Button variant="outline" onClick={reset} data-testid="button-scan-another">
                 Weiteres Dokument scannen
               </Button>
-              <Button onClick={() => onOpenChange(false)}>
+              <Button onClick={() => onOpenChange(false)} data-testid="button-close-scan">
                 Schließen
               </Button>
             </DialogFooter>
