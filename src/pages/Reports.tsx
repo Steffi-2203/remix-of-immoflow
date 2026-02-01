@@ -454,14 +454,17 @@ export default function Reports() {
       totalBkAnteil += allocation.allocation.betriebskosten_anteil;
       totalHkAnteil += allocation.allocation.heizung_anteil;
       totalMieteAnteil += allocation.allocation.miete_anteil;
-      totalGesamt += Number(p.amount);
+      // Gesamt = Summe der allozierten Anteile (konsistent mit BK+HK+Miete)
+      totalGesamt += allocation.allocation.betriebskosten_anteil + 
+                     allocation.allocation.heizung_anteil + 
+                     allocation.allocation.miete_anteil;
     });
     
     return {
       mieteAnteil: totalMieteAnteil,
       bkAnteil: totalBkAnteil,
       hkAnteil: totalHkAnteil,
-      gesamt: totalGesamt
+      gesamt: totalGesamt  // Jetzt = bkAnteil + hkAnteil + mieteAnteil
     };
   }, [periodCombinedPayments, allTenants, allInvoices]);
   
