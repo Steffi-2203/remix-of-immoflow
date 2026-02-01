@@ -95,7 +95,7 @@ export class PaymentService {
 
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-          VALUES (${userId}, 'monthly_invoices', ${inv.id}, 'update', ${JSON.stringify({ paymentId, applied: apply })}::jsonb, now())
+          VALUES (${userId}, 'monthly_invoices', ${inv.id}, 'payment_allocated', ${JSON.stringify({ paymentId, applied: apply })}::jsonb, now())
         `);
       }
 
@@ -113,7 +113,7 @@ export class PaymentService {
 
       await tx.execute(sql`
         INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-        VALUES (${userId}, 'payments', ${paymentId}, 'create', ${JSON.stringify({
+        VALUES (${userId}, 'payments', ${paymentId}, 'allocated', ${JSON.stringify({
           tenantId,
           paymentId,
           amount: roundedAmount,
