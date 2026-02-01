@@ -45,7 +45,7 @@ export interface TenantAllocation {
   // Saldo
   ueberzahlung: number;
   unterzahlung: number;
-  saldo: number;  // positiv = Überzahlung, negativ = Unterzahlung
+  saldo: number;  // positiv = Unterzahlung (offene Forderung), negativ = Überzahlung
   // Mahnstatus
   oldestOverdueDays: number;
   mahnstatus: 'aktuell' | 'Zahlungserinnerung' | '1. Mahnung' | '2. Mahnung';
