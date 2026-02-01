@@ -71,6 +71,7 @@ interface ExtractedTenantData {
   phone: string;
   mietbeginn: string;
   grundmiete: number;
+  grundmieteUst?: number;
   betriebskostenVorschuss: number;
   heizkostenVorschuss: number;
   wasserkostenVorschuss: number;
@@ -79,6 +80,7 @@ interface ExtractedTenantData {
   kaution: number;
   topNummer: string;
   address: string;
+  nutzungsart?: string;
   notes: string;
 }
 
@@ -188,6 +190,8 @@ export function PdfScanDialog({ open, onOpenChange, propertyId, units, onSuccess
           betriebskosten_vorschuss: tenant.betriebskostenVorschuss || 0,
           heizungskosten_vorschuss: tenant.heizkostenVorschuss || 0,
           wasserkosten_vorschuss: tenant.wasserkostenVorschuss || 0,
+          warmwasserkosten_vorschuss: tenant.warmwasserkostenVorschuss || 0,
+          sonstigeKosten: tenant.sonstigeKosten || null,
           kaution: tenant.kaution || null,
           notes: tenant.notes || null,
           status: 'aktiv',
