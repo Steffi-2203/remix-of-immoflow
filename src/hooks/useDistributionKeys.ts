@@ -11,6 +11,7 @@ export interface DistributionKey {
   unit: string | null;
   inputType: string | null;
   description: string | null;
+  includedUnitTypes: string[] | null;
   isActive: boolean | null;
   sortOrder: number | null;
   isSystem: boolean | null;

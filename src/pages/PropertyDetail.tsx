@@ -43,6 +43,7 @@ import { useUnits } from '@/hooks/useUnits';
 import { usePropertyDocuments, useUploadPropertyDocument, useDeletePropertyDocument, PROPERTY_DOCUMENT_TYPES } from '@/hooks/usePropertyDocuments';
 import { useDistributionKeysByProperty, useCreatePropertyDistributionKey, useDeletePropertyDistributionKey, inputTypeOptions } from '@/hooks/useDistributionKeys';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
@@ -104,7 +105,23 @@ export default function PropertyDetail() {
   const deleteDistributionKey = useDeletePropertyDistributionKey(id || '');
   
   const [newKeyDialogOpen, setNewKeyDialogOpen] = useState(false);
-  const [newKeyForm, setNewKeyForm] = useState({ keyCode: '', name: '', description: '', inputType: 'flaeche', unit: 'm²' });
+  const [newKeyForm, setNewKeyForm] = useState({ 
+    keyCode: '', 
+    name: '', 
+    description: '', 
+    inputType: 'flaeche', 
+    unit: 'm²',
+    includedUnitTypes: ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'] as string[]
+  });
+  
+  const allUnitTypes = [
+    { value: 'wohnung', label: 'Wohnungen' },
+    { value: 'geschaeft', label: 'Geschäfte' },
+    { value: 'lager', label: 'Lager' },
+    { value: 'garage', label: 'Garagen' },
+    { value: 'stellplatz', label: 'Stellplätze' },
+    { value: 'sonstiges', label: 'Sonstige' },
+  ];
   
   // Check if unit limit is reached for this property
   const canAddUnit = id ? canAddUnitToProperty(id) : false;
@@ -117,8 +134,16 @@ export default function PropertyDetail() {
       description: newKeyForm.description || undefined,
       inputType: newKeyForm.inputType,
       unit: inputTypeOptions.find(o => o.value === newKeyForm.inputType)?.unit || 'Anteil',
+      includedUnitTypes: newKeyForm.includedUnitTypes,
     });
-    setNewKeyForm({ keyCode: '', name: '', description: '', inputType: 'flaeche', unit: 'm²' });
+    setNewKeyForm({ 
+      keyCode: '', 
+      name: '', 
+      description: '', 
+      inputType: 'flaeche', 
+      unit: 'm²',
+      includedUnitTypes: ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges']
+    });
     setNewKeyDialogOpen(false);
   };
 
@@ -733,6 +758,30 @@ export default function PropertyDetail() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div>
+                      <Label>Einbezogene Einheitstypen</Label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Welche Einheitstypen werden bei dieser Kostenart berücksichtigt?
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {allUnitTypes.map(ut => (
+                          <label key={ut.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={newKeyForm.includedUnitTypes.includes(ut.value)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setNewKeyForm(f => ({ ...f, includedUnitTypes: [...f.includedUnitTypes, ut.value] }));
+                                } else {
+                                  setNewKeyForm(f => ({ ...f, includedUnitTypes: f.includedUnitTypes.filter(t => t !== ut.value) }));
+                                }
+                              }}
+                              data-testid={`checkbox-unit-type-${ut.value}`}
+                            />
+                            {ut.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <DialogFooter>
                     <DialogClose asChild>
@@ -764,11 +813,22 @@ export default function PropertyDetail() {
                       <TableHead>Name</TableHead>
                       <TableHead>Typ</TableHead>
                       <TableHead>Einheit</TableHead>
+                      <TableHead>Einbezogene Einheiten</TableHead>
                       <TableHead className="text-right">Aktionen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {distributionKeys.map((key) => (
+                    {distributionKeys.map((key) => {
+                      const unitTypes = (key.includedUnitTypes as string[] | null) || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
+                      const unitTypeLabels: Record<string, string> = {
+                        wohnung: 'Whg',
+                        geschaeft: 'Gesch',
+                        lager: 'Lager',
+                        garage: 'Gar',
+                        stellplatz: 'Stpl',
+                        sonstiges: 'Sonst'
+                      };
+                      return (
                       <TableRow key={key.id} data-testid={`row-distribution-key-${key.id}`}>
                         <TableCell className="font-mono text-sm">{key.keyCode}</TableCell>
                         <TableCell>{key.name}</TableCell>
@@ -778,6 +838,17 @@ export default function PropertyDetail() {
                           </Badge>
                         </TableCell>
                         <TableCell>{key.unit}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {unitTypes.length === 6 ? (
+                              <Badge variant="outline" className="text-xs">Alle</Badge>
+                            ) : (
+                              unitTypes.map(ut => (
+                                <Badge key={ut} variant="outline" className="text-xs">{unitTypeLabels[ut] || ut}</Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"
@@ -790,7 +861,8 @@ export default function PropertyDetail() {
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
