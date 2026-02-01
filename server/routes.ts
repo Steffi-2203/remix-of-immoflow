@@ -1324,25 +1324,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Calculate amounts from tenant data
           const grundmiete = Number(tenant.grundmiete || 0);
-          const betriebskosten = Number(tenant.betriebskostenVorschuss || 0);
-          const heizkosten = Number(tenant.heizkostenVorschuss || 0);
-          const sonstigeKosten = Number(tenant.sonstigeKosten || 0);
-          const gesamtbetrag = grundmiete + betriebskosten + heizkosten + sonstigeKosten;
+          const grundmieteUstSatz = 10; // Default 10% for residential
+          
+          // Calculate sonstigeKosten totals from JSONB (OCR-extracted positions)
+          // Also calculate USt grouped by rate for USTVA
+          let sonstigeKostenTotal = 0;
+          let ust10Total = 0; // USt at 10%
+          let ust20Total = 0; // USt at 20%
+          let netto10Total = 0; // Net amounts at 10%
+          let netto20Total = 0; // Net amounts at 20%
+          
+          if (tenant.sonstigeKosten && typeof tenant.sonstigeKosten === 'object') {
+            const positions = tenant.sonstigeKosten as Record<string, { betrag?: number | string; ust?: number }>;
+            for (const [, item] of Object.entries(positions)) {
+              if (item && item.betrag !== undefined) {
+                const betrag = typeof item.betrag === 'string' ? parseFloat(item.betrag) : Number(item.betrag);
+                const ustSatz = Number(item.ust) || 10;
+                if (!isNaN(betrag)) {
+                  sonstigeKostenTotal += betrag;
+                  const ustBetrag = betrag * ustSatz / 100;
+                  if (ustSatz === 20) {
+                    netto20Total += betrag;
+                    ust20Total += ustBetrag;
+                  } else {
+                    netto10Total += betrag;
+                    ust10Total += ustBetrag;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Add Grundmiete to 10% category
+          const grundmieteUst = grundmiete * grundmieteUstSatz / 100;
+          netto10Total += grundmiete;
+          ust10Total += grundmieteUst;
+          
+          // Fall back to legacy fields if no sonstigeKosten JSONB data
+          const betriebskosten = sonstigeKostenTotal > 0 ? 0 : Number(tenant.betriebskostenVorschuss || 0);
+          const heizkosten = sonstigeKostenTotal > 0 ? 0 : Number(tenant.heizkostenVorschuss || 0);
+          
+          // Legacy USt calculation for fallback
+          if (sonstigeKostenTotal === 0) {
+            netto10Total = grundmiete + betriebskosten;
+            ust10Total = netto10Total * 0.10;
+            netto20Total = heizkosten;
+            ust20Total = netto20Total * 0.20;
+          }
+          
+          const totalUst = ust10Total + ust20Total;
+          const nettoGesamt = grundmiete + betriebskosten + heizkosten + sonstigeKostenTotal;
+          const gesamtbetrag = nettoGesamt + totalUst;
 
           // Calculate due date (1st of month)
           const faelligAm = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
 
           // Create invoice with schema-compliant field names
+          // Store nebenkosten total (from sonstigeKosten or legacy fields)
           const invoiceData = {
             tenantId: tenant.id,
             unitId: tenant.unitId,
             month: targetMonth,
             year: targetYear,
             grundmiete: String(grundmiete),
-            betriebskosten: String(betriebskosten),
+            betriebskosten: String(sonstigeKostenTotal > 0 ? sonstigeKostenTotal : betriebskosten),
             heizkosten: String(heizkosten),
-            sonstigeKosten: String(sonstigeKosten),
-            gesamtbetrag: String(gesamtbetrag),
+            ust: String(totalUst.toFixed(2)),
+            gesamtbetrag: String(gesamtbetrag.toFixed(2)),
             faelligAm,
             status: 'offen' as const,
             vortragMiete: '0',
