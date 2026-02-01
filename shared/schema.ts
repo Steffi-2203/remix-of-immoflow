@@ -26,6 +26,7 @@ export const subscriptionTierEnum = pgEnum('subscription_tier', ['starter', 'pro
 export const userSubscriptionTierEnum = pgEnum('user_subscription_tier', ['trial', 'inactive', 'starter', 'pro', 'enterprise']);
 export const tenantStatusEnum = pgEnum('tenant_status', ['aktiv', 'leerstand', 'beendet']);
 export const unitTypeEnum = pgEnum('unit_type', ['wohnung', 'geschaeft', 'garage', 'stellplatz', 'lager', 'sonstiges']);
+export const leaseStatusEnum = pgEnum('lease_status', ['aktiv', 'beendet', 'gekuendigt']);
 export const mrgBkKategorieEnum = pgEnum('mrg_bk_kategorie', [
   'wasserversorgung', 'abwasserentsorgung', 'muellabfuhr', 'kanalraeumung',
   'hausreinigung', 'hausbetreuung', 'rauchfangkehrer', 'schaedlingsbekaempfung',
@@ -188,6 +189,31 @@ export const tenants = pgTable("tenants", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// ====== LEASES (Mietverträge) ======
+export const leases = pgTable("leases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  grundmiete: numeric("grundmiete", { precision: 10, scale: 2 }).notNull(),
+  betriebskostenVorschuss: numeric("betriebskosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
+  heizkostenVorschuss: numeric("heizungskosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
+  wasserkostenVorschuss: numeric("wasserkosten_vorschuss", { precision: 10, scale: 2 }).default('0'),
+  kaution: numeric("kaution", { precision: 10, scale: 2 }),
+  kautionBezahlt: boolean("kaution_bezahlt").default(false),
+  status: leaseStatusEnum("status").default('aktiv'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  uniqueIndex("leases_tenant_unit_start_unique").on(table.tenantId, table.unitId, table.startDate),
+]);
+
+export const insertLeaseSchema = createInsertSchema(leases).omit({ id: true, createdAt: true, updatedAt: true });
+export type Lease = typeof leases.$inferSelect;
+export type InsertLease = typeof leases.$inferInsert;
+
 export const rentHistory = pgTable("rent_history", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
@@ -262,6 +288,20 @@ export const payments = pgTable("payments", {
   notizen: text("notizen"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+// ====== PAYMENT ALLOCATIONS (Zahlungszuordnungen) ======
+export const paymentAllocations = pgTable("payment_allocations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  paymentId: uuid("payment_id").references(() => payments.id).notNull(),
+  invoiceId: uuid("invoice_id").references(() => monthlyInvoices.id).notNull(),
+  appliedAmount: numeric("applied_amount", { precision: 10, scale: 2 }).notNull(),
+  allocationType: text("allocation_type").default('miete'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertPaymentAllocationSchema = createInsertSchema(paymentAllocations).omit({ id: true, createdAt: true });
+export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
+export type InsertPaymentAllocation = typeof paymentAllocations.$inferInsert;
 
 export const bankAccounts = pgTable("bank_accounts", {
   id: uuid("id").defaultRandom().primaryKey(),

@@ -1,0 +1,67 @@
+// src/services/paymentService.ts (Kernlogik, stark vereinfacht)
+import { db } from "../db";
+import { v4 as uuidv4 } from "uuid";
+import { optimisticUpdate } from "../lib/optimisticLock";
+
+export async function allocatePayment({ paymentId, tenantId, amountCents, externalId }: {
+  paymentId: string;
+  tenantId: string;
+  amountCents: number;
+  externalId?: string;
+}) {
+  // Idempotent insert
+  const inserted = await db.execute(
+    `INSERT INTO payments (id, external_id, tenant_id, amount_cents) 
+     VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id`,
+    [paymentId, externalId || null, tenantId, amountCents]
+  );
+
+  if (!inserted.rowCount) {
+    // already processed
+    return { id: paymentId, status: "already_processed" };
+  }
+
+  let remaining = amountCents;
+
+  // fetch open invoices for tenant's leases ordered by year/month
+  const invoicesRes = await db.execute(
+    `SELECT id, gross_cents, paid_cents FROM monthly_invoices
+     WHERE lease_id IN (SELECT id FROM leases WHERE tenant_id = $1 AND status = 'active')
+     AND paid_cents < gross_cents
+     ORDER BY year, month FOR UPDATE`,
+    [tenantId]
+  );
+
+  for (const inv of invoicesRes.rows) {
+    if (remaining <= 0) break;
+    const due = inv.gross_cents - inv.paid_cents;
+    const apply = Math.min(remaining, due);
+    const newPaid = inv.paid_cents + apply;
+
+    // optimistic update
+    const selectSql = `SELECT id, gross_cents, COALESCE(paid_cents,0) AS paid_cents, version FROM monthly_invoices WHERE id = '${inv.id}'`;
+    const updateSqlBuilder = (_nv: any, oldVersion: number) => ({
+      sql: `UPDATE monthly_invoices SET paid_cents = ${newPaid}, status = '${newPaid >= inv.gross_cents ? 'paid' : 'partial'}', version = ${oldVersion + 1}, updated_at = now() WHERE id = '${inv.id}' AND version = ${oldVersion}`
+    });
+
+    const opt = await optimisticUpdate({ tableName: 'monthly_invoices', id: inv.id, selectSql, updateSqlBuilder, tx: db.transactionClient });
+    if (!opt.success) {
+      // fallback simple update
+      await db.execute(`UPDATE monthly_invoices SET paid_cents = $1, status = $2, version = COALESCE(version,1)+1 WHERE id = $3`, [newPaid, newPaid >= inv.gross_cents ? 'paid' : 'partial', inv.id]);
+    }
+
+    // record allocation
+    await db.execute(`INSERT INTO payment_allocations (id, payment_id, invoice_id, applied_cents) VALUES ($1,$2,$3,$4)`, [uuidv4(), paymentId, inv.id, apply]);
+
+    remaining -= apply;
+  }
+
+  if (remaining > 0) {
+    // create overpayment transaction
+    await db.execute(`INSERT INTO transactions (id, tenant_id, amount_cents, booking_text) VALUES ($1,$2,$3,$4)`, [uuidv4(), tenantId, remaining, 'Überzahlung']);
+  }
+
+  await db.execute(`INSERT INTO audit_logs (user_id, table_name, record_id, action, summary, created_at) VALUES ($1,'payments',$2,'allocate', $3, now())`, ['system', paymentId, JSON.stringify({ amountCents, remaining })]);
+
+  return { id: paymentId, remaining };
+}
