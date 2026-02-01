@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 /**
  * Lock open invoices for a tenant ordered by year/month.
- * Call this inside a db.transaction(tx => { ... }) using tx.execute.
+ * Use inside db.transaction(tx => { ... }) as: const invoices = await lockTenantOpenInvoices(tx, tenantId);
  */
 export async function lockTenantOpenInvoices(tx: any, tenantId: string) {
   const res = await tx.execute(sql`
