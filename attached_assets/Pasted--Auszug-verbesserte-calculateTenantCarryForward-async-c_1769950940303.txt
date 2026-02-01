@@ -1,0 +1,37 @@
+// Auszug: verbesserte calculateTenantCarryForward
+async calculateTenantCarryForward(tenantId: string, year: number): Promise<CarryForward & { credit?: number }> {
+  const previousYear = year - 1;
+  const prevYearInvoices = await db.select().from(monthlyInvoices)
+    .where(and(eq(monthlyInvoices.tenantId, tenantId), eq(monthlyInvoices.year, previousYear)));
+
+  const startDate = `${previousYear}-01-01`;
+  const endDate = `${previousYear}-12-31`;
+  const prevYearPayments = await db.select().from(payments)
+    .where(and(eq(payments.tenantId, tenantId), gte(payments.buchungsDatum, startDate), lte(payments.buchungsDatum, endDate)));
+
+  const sollMiete = prevYearInvoices.reduce((s, inv) => s + Number(inv.grundmiete || 0), 0);
+  const sollBk = prevYearInvoices.reduce((s, inv) => s + Number(inv.betriebskosten || 0), 0);
+  const sollHk = prevYearInvoices.reduce((s, inv) => s + Number(inv.heizungskosten || 0), 0);
+  const sollGesamt = roundMoney(sollMiete + sollBk + sollHk);
+
+  const istGesamt = roundMoney(prevYearPayments.reduce((s, p) => s + Number(p.betrag || 0), 0));
+  const diff = roundMoney(istGesamt - sollGesamt);
+
+  if (diff > 0) {
+    // Überzahlung -> als credit ausweisen (positive Zahl = Guthaben)
+    return { vortragMiete: 0, vortragBk: 0, vortragHk: 0, vortragSonstige: 0, credit: diff };
+  }
+
+  // Unterzahlung -> Verrechnung in Reihenfolge BK -> HK -> Miete (MRG)
+  let remainingPayment = istGesamt;
+  const paidBk = Math.min(remainingPayment, sollBk); remainingPayment = roundMoney(remainingPayment - paidBk);
+  const paidHk = Math.min(remainingPayment, sollHk); remainingPayment = roundMoney(remainingPayment - paidHk);
+  const paidMiete = Math.min(remainingPayment, sollMiete); remainingPayment = roundMoney(remainingPayment - paidMiete);
+
+  return {
+    vortragMiete: roundMoney(Math.max(0, sollMiete - paidMiete)),
+    vortragBk: roundMoney(Math.max(0, sollBk - paidBk)),
+    vortragHk: roundMoney(Math.max(0, sollHk - paidHk)),
+    vortragSonstige: 0
+  };
+}

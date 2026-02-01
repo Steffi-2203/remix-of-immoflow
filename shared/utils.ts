@@ -1,5 +1,5 @@
-export function roundMoney(x: number): number {
-  return Math.round(x * 100) / 100;
+export function roundMoney(value: number): number {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }
 
 export function formatMoney(amount: number, locale: string = 'de-AT'): string {
