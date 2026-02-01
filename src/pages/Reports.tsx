@@ -712,6 +712,9 @@ export default function Reports() {
         istMiete = allocation.allocation.miete_anteil;
       }
       
+      // IST Gesamt = Summe der allozierten Anteile (konsistent mit BK+HK+Miete)
+      const istGesamt = istBk + istHk + istMiete;
+      
       return {
         tenantId: tenant.id,
         tenantName: `${(tenant as any).vorname || (tenant as any).first_name || ''} ${(tenant as any).nachname || (tenant as any).last_name || ''}`.trim() || 'N/A',
@@ -724,11 +727,11 @@ export default function Reports() {
         istMiete,
         istBk,
         istHk,
-        istGesamt: totalPaid,
+        istGesamt,
         diffMiete: sollMiete - istMiete,
         diffBk: sollBk - istBk,
         diffHk: sollHk - istHk,
-        diffGesamt: sollGesamt - totalPaid,
+        diffGesamt: sollGesamt - istGesamt,
         paymentCount: tenantPayments.length
       };
     });

@@ -66,6 +66,19 @@ export interface IStorage {
   deleteSettlementItems(settlementId: string): Promise<void>;
   createSettlementItem(data: any): Promise<schema.SettlementDetail>;
   updateTenantAdvances(tenantId: string, betriebskostenVorschuss: number, heizkostenVorschuss: number): Promise<schema.Tenant | undefined>;
+  
+  // Leases
+  getLeasesByTenant(tenantId: string): Promise<schema.Lease[]>;
+  getLeasesByUnit(unitId: string): Promise<schema.Lease[]>;
+  getLease(id: string): Promise<schema.Lease | undefined>;
+  createLease(data: schema.InsertLease): Promise<schema.Lease>;
+  updateLease(id: string, data: Partial<schema.InsertLease>): Promise<schema.Lease | undefined>;
+  
+  // Payment Allocations
+  getPaymentAllocationsByPayment(paymentId: string): Promise<schema.PaymentAllocation[]>;
+  getPaymentAllocationsByInvoice(invoiceId: string): Promise<schema.PaymentAllocation[]>;
+  createPaymentAllocation(data: schema.InsertPaymentAllocation): Promise<schema.PaymentAllocation>;
+  deletePaymentAllocation(id: string): Promise<void>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -906,6 +919,60 @@ class DatabaseStorage implements IStorage {
       .where(eq(schema.tenants.id, tenantId))
       .returning();
     return result;
+  }
+
+  // ====== LEASES ======
+  async getLeasesByTenant(tenantId: string): Promise<schema.Lease[]> {
+    return db.select().from(schema.leases)
+      .where(eq(schema.leases.tenantId, tenantId))
+      .orderBy(desc(schema.leases.startDate));
+  }
+
+  async getLeasesByUnit(unitId: string): Promise<schema.Lease[]> {
+    return db.select().from(schema.leases)
+      .where(eq(schema.leases.unitId, unitId))
+      .orderBy(desc(schema.leases.startDate));
+  }
+
+  async getLease(id: string): Promise<schema.Lease | undefined> {
+    const result = await db.select().from(schema.leases)
+      .where(eq(schema.leases.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async createLease(data: schema.InsertLease): Promise<schema.Lease> {
+    const [result] = await db.insert(schema.leases).values(data).returning();
+    return result;
+  }
+
+  async updateLease(id: string, data: Partial<schema.InsertLease>): Promise<schema.Lease | undefined> {
+    const [result] = await db.update(schema.leases)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schema.leases.id, id))
+      .returning();
+    return result;
+  }
+
+  // ====== PAYMENT ALLOCATIONS ======
+  async getPaymentAllocationsByPayment(paymentId: string): Promise<schema.PaymentAllocation[]> {
+    return db.select().from(schema.paymentAllocations)
+      .where(eq(schema.paymentAllocations.paymentId, paymentId));
+  }
+
+  async getPaymentAllocationsByInvoice(invoiceId: string): Promise<schema.PaymentAllocation[]> {
+    return db.select().from(schema.paymentAllocations)
+      .where(eq(schema.paymentAllocations.invoiceId, invoiceId));
+  }
+
+  async createPaymentAllocation(data: schema.InsertPaymentAllocation): Promise<schema.PaymentAllocation> {
+    const [result] = await db.insert(schema.paymentAllocations).values(data).returning();
+    return result;
+  }
+
+  async deletePaymentAllocation(id: string): Promise<void> {
+    await db.delete(schema.paymentAllocations)
+      .where(eq(schema.paymentAllocations.id, id));
   }
 }
 

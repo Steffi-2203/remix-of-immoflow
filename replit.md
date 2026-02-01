@@ -69,6 +69,8 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 **System Design Choices:**
 - **Modular Structure**: The project is organized into `server/`, `shared/`, and `src/` directories for clear separation of backend, shared schemas, and frontend concerns.
 - **Drizzle ORM**: Used for type-safe database interactions and schema management, with over 30 tables covering organizations, users, properties, tenants, financials, settlements, maintenance, and MRG compliance.
+- **Leases Table**: Dedicated `leases` table for rental contract history, linking tenants to units with start/end dates, rent amounts, and deposit tracking. Enables multiple sequential leases per unit.
+- **Payment Allocations**: `payment_allocations` table enables flexible 1:n payment-to-invoice mapping for partial payments, overpayments, and multi-invoice allocation.
 - **Migrated Functions**: Key business logic functions, originally Supabase Edge Functions, are now integrated directly into the Express.js backend for unified management.
 
 ## External Dependencies

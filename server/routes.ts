@@ -1220,6 +1220,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====== LEASES (Mietverträge) ======
+  app.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: any, res) => {
+    try {
+      const leases = await storage.getLeasesByTenant(req.params.tenantId);
+      res.json(leases);
+    } catch (error) {
+      console.error("Get leases by tenant error:", error);
+      res.status(500).json({ error: "Failed to fetch leases" });
+    }
+  });
+
+  app.get("/api/units/:unitId/leases", isAuthenticated, async (req: any, res) => {
+    try {
+      const leases = await storage.getLeasesByUnit(req.params.unitId);
+      res.json(leases);
+    } catch (error) {
+      console.error("Get leases by unit error:", error);
+      res.status(500).json({ error: "Failed to fetch leases" });
+    }
+  });
+
+  app.get("/api/leases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const lease = await storage.getLease(req.params.id);
+      if (!lease) {
+        return res.status(404).json({ error: "Lease not found" });
+      }
+      res.json(lease);
+    } catch (error) {
+      console.error("Get lease error:", error);
+      res.status(500).json({ error: "Failed to fetch lease" });
+    }
+  });
+
+  app.post("/api/leases", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = schema.insertLeaseSchema.parse(req.body);
+      const lease = await storage.createLease(validatedData);
+      res.status(201).json(lease);
+    } catch (error: any) {
+      console.error("Create lease error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create lease" });
+    }
+  });
+
+  app.patch("/api/leases/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const lease = await storage.updateLease(req.params.id, req.body);
+      if (!lease) {
+        return res.status(404).json({ error: "Lease not found" });
+      }
+      res.json(lease);
+    } catch (error) {
+      console.error("Update lease error:", error);
+      res.status(500).json({ error: "Failed to update lease" });
+    }
+  });
+
+  // ====== PAYMENT ALLOCATIONS (Zahlungszuordnungen) ======
+  app.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: any, res) => {
+    try {
+      const allocations = await storage.getPaymentAllocationsByPayment(req.params.paymentId);
+      res.json(allocations);
+    } catch (error) {
+      console.error("Get payment allocations error:", error);
+      res.status(500).json({ error: "Failed to fetch payment allocations" });
+    }
+  });
+
+  app.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: any, res) => {
+    try {
+      const allocations = await storage.getPaymentAllocationsByInvoice(req.params.invoiceId);
+      res.json(allocations);
+    } catch (error) {
+      console.error("Get invoice allocations error:", error);
+      res.status(500).json({ error: "Failed to fetch invoice allocations" });
+    }
+  });
+
+  app.post("/api/payment-allocations", isAuthenticated, async (req: any, res) => {
+    try {
+      const validatedData = schema.insertPaymentAllocationSchema.parse(req.body);
+      const allocation = await storage.createPaymentAllocation(validatedData);
+      res.status(201).json(allocation);
+    } catch (error: any) {
+      console.error("Create payment allocation error:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create payment allocation" });
+    }
+  });
+
+  app.delete("/api/payment-allocations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deletePaymentAllocation(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete payment allocation error:", error);
+      res.status(500).json({ error: "Failed to delete payment allocation" });
+    }
+  });
+
   app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
