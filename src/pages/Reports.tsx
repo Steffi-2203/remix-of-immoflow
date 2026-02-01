@@ -2152,7 +2152,7 @@ export default function Reports() {
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="font-medium">
-                                Top {alloc.unit?.top_nummer || '-'}
+                                {alloc.unit?.top_nummer || '-'}
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {alloc.tenant.first_name} {alloc.tenant.last_name} • {property?.name || '-'}
@@ -2326,7 +2326,7 @@ export default function Reports() {
                             const saldo = unitData.income - unitData.expenses;
                             return (
                               <TableRow key={unitData.unit?.id}>
-                                <TableCell className="font-medium">Top {unitData.unit?.top_nummer}</TableCell>
+                                <TableCell className="font-medium">{unitData.unit?.top_nummer || '-'}</TableCell>
                                 <TableCell>
                                   {activeTenant ? `${activeTenant.vorname || activeTenant.first_name || ''} ${activeTenant.nachname || activeTenant.last_name || ''}`.trim() || 'Mieter' : <span className="text-muted-foreground">Leerstand</span>}
                                 </TableCell>
@@ -2539,7 +2539,7 @@ export default function Reports() {
                           <TableRow key={idx}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">Top {item.unit?.top_nummer || '-'}</span>
+                                <span className="font-medium">{item.unit?.top_nummer || '-'}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {unitTypeLabels[(item.unit as any)?.type || ''] || (item.unit as any)?.type}
                                 </span>
