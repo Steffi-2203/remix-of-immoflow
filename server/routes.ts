@@ -1326,30 +1326,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const grundmiete = Number(tenant.grundmiete || 0);
           const grundmieteUstSatz = 10; // Default 10% for residential
           
-          // Calculate sonstigeKosten totals from JSONB (OCR-extracted positions)
-          // Also calculate USt grouped by rate for USTVA
-          let sonstigeKostenTotal = 0;
+          // Parse sonstigeKosten JSONB and categorize by type
+          // Categories: betriebskosten (BK), heizungskosten (Heizung/Zentralheizung), wasserkosten (Wasser)
+          let betriebskostenTotal = 0;
+          let heizungskostenTotal = 0;
+          let wasserkostenTotal = 0;
           let ust10Total = 0; // USt at 10%
           let ust20Total = 0; // USt at 20%
-          let netto10Total = 0; // Net amounts at 10%
-          let netto20Total = 0; // Net amounts at 20%
+          let hasSonstigeKosten = false;
           
           if (tenant.sonstigeKosten && typeof tenant.sonstigeKosten === 'object') {
             const positions = tenant.sonstigeKosten as Record<string, { betrag?: number | string; ust?: number }>;
-            for (const [, item] of Object.entries(positions)) {
+            const keys = Object.keys(positions);
+            hasSonstigeKosten = keys.length > 0;
+            
+            // Expanded synonym lists for categorization
+            const heizungKeywords = ['heiz', 'hk', 'zentralheizung', 'fernwärme', 'wärme', 'heizung', 'heizk'];
+            const wasserKeywords = ['wasser', 'kaltwasser', 'warmwasser', 'ww', 'kw', 'abwasser', 'kanal'];
+            
+            for (const [key, item] of Object.entries(positions)) {
               if (item && item.betrag !== undefined) {
                 const betrag = typeof item.betrag === 'string' ? parseFloat(item.betrag) : Number(item.betrag);
-                const ustSatz = Number(item.ust) || 10;
                 if (!isNaN(betrag)) {
-                  sonstigeKostenTotal += betrag;
-                  const ustBetrag = betrag * ustSatz / 100;
-                  if (ustSatz === 20) {
-                    netto20Total += betrag;
-                    ust20Total += ustBetrag;
+                  // Categorize by position name (case-insensitive)
+                  const keyLower = key.toLowerCase();
+                  const isHeizung = heizungKeywords.some(kw => keyLower.includes(kw));
+                  const isWasser = wasserKeywords.some(kw => keyLower.includes(kw));
+                  const isMahnkosten = keyLower.includes('mahn') || keyLower.includes('verzug');
+                  
+                  // USt: use explicit value if provided, otherwise infer from category
+                  // Heizung = 20%, BK/Wasser = 10%, Mahnkosten = 0%
+                  let ustSatz: number;
+                  if (item.ust !== undefined) {
+                    ustSatz = Number(item.ust);
+                  } else if (isMahnkosten) {
+                    ustSatz = 0;
+                  } else if (isHeizung) {
+                    ustSatz = 20;
                   } else {
-                    netto10Total += betrag;
+                    ustSatz = 10; // BK, Wasser, etc.
+                  }
+                  
+                  const ustBetrag = betrag * ustSatz / 100;
+                  
+                  if (isHeizung) {
+                    heizungskostenTotal += betrag;
+                  } else if (isWasser) {
+                    wasserkostenTotal += betrag;
+                  } else {
+                    // Default to Betriebskosten (BK, Lift, Müll, Mahnkosten, etc.)
+                    betriebskostenTotal += betrag;
+                  }
+                  
+                  // Group USt by rate (0% = no tax, 10%, 20%)
+                  if (ustSatz === 20) {
+                    ust20Total += ustBetrag;
+                  } else if (ustSatz === 10) {
                     ust10Total += ustBetrag;
                   }
+                  // USt 0% (Mahnkosten) adds nothing
                 }
               }
             }
@@ -1357,38 +1392,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Add Grundmiete to 10% category
           const grundmieteUst = grundmiete * grundmieteUstSatz / 100;
-          netto10Total += grundmiete;
           ust10Total += grundmieteUst;
           
           // Fall back to legacy fields if no sonstigeKosten JSONB data
-          const betriebskosten = sonstigeKostenTotal > 0 ? 0 : Number(tenant.betriebskostenVorschuss || 0);
-          const heizkosten = sonstigeKostenTotal > 0 ? 0 : Number(tenant.heizkostenVorschuss || 0);
+          const betriebskosten = hasSonstigeKosten ? betriebskostenTotal : Number(tenant.betriebskostenVorschuss || 0);
+          const heizungskosten = hasSonstigeKosten ? heizungskostenTotal : Number(tenant.heizkostenVorschuss || 0);
+          const wasserkosten = hasSonstigeKosten ? wasserkostenTotal : Number(tenant.wasserkostenVorschuss || 0);
           
-          // Legacy USt calculation for fallback
-          if (sonstigeKostenTotal === 0) {
-            netto10Total = grundmiete + betriebskosten;
-            ust10Total = netto10Total * 0.10;
-            netto20Total = heizkosten;
-            ust20Total = netto20Total * 0.20;
+          // Legacy USt calculation for fallback (when no sonstigeKosten)
+          if (!hasSonstigeKosten) {
+            ust10Total = (grundmiete + betriebskosten + wasserkosten) * 0.10;
+            ust20Total = heizungskosten * 0.20;
           }
           
           const totalUst = ust10Total + ust20Total;
-          const nettoGesamt = grundmiete + betriebskosten + heizkosten + sonstigeKostenTotal;
+          const nettoGesamt = grundmiete + betriebskosten + heizungskosten + wasserkosten;
           const gesamtbetrag = nettoGesamt + totalUst;
 
           // Calculate due date (1st of month)
           const faelligAm = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
 
           // Create invoice with schema-compliant field names
-          // Store nebenkosten total (from sonstigeKosten or legacy fields)
           const invoiceData = {
             tenantId: tenant.id,
             unitId: tenant.unitId,
             month: targetMonth,
             year: targetYear,
             grundmiete: String(grundmiete),
-            betriebskosten: String(sonstigeKostenTotal > 0 ? sonstigeKostenTotal : betriebskosten),
-            heizkosten: String(heizkosten),
+            betriebskosten: String(betriebskosten),
+            heizungskosten: String(heizungskosten),
+            wasserkosten: String(wasserkosten),
             ust: String(totalUst.toFixed(2)),
             gesamtbetrag: String(gesamtbetrag.toFixed(2)),
             faelligAm,
