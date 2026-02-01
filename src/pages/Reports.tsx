@@ -823,14 +823,21 @@ export default function Reports() {
       let istHk = 0;
       let istMiete = 0;
       
-      // BUCHHALTÄRISCH KORREKT: Wenn voll bezahlt (totalPaid >= sollGesamt), 
-      // dann IST = SOLL für jede Komponente (keine MRG-Allokation nötig)
-      if (totalPaid >= sollGesamt - 0.01 && sollGesamt > 0) {
+      // BUCHHALTÄRISCH KORREKT: Nur als "voll bezahlt" behandeln wenn:
+      // 1. Es gibt einen positiven SOLL-Betrag (sollGesamt > 0.01)
+      // 2. Die Zahlung deckt mindestens den SOLL-Betrag
+      if (sollGesamt > 0.01 && totalPaid >= sollGesamt - 0.01) {
         // Voll bezahlt: IST = SOLL für alle Komponenten
         istBk = sollBk;
         istHk = sollHk;
         istMiete = sollMiete;
-      } else if (totalPaid > 0) {
+      } else if (totalPaid < 0.01) {
+        // KEINE Zahlung erfolgt: IST = 0 für alle Komponenten
+        // Dies verhindert fälschliche "Überzahlung" Anzeige
+        istBk = 0;
+        istHk = 0;
+        istMiete = 0;
+      } else {
         // Unterzahlung: MRG-Allokation BK → HK → Miete
         const allocation = allocatePayment(totalPaid, invoiceAmounts, false);
         istBk = allocation.allocation.betriebskosten_anteil;
