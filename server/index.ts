@@ -82,8 +82,18 @@ app.use(session({
   },
 }));
 
+// Stricter rate limit for Stripe webhooks
+const webhookLimiter = rateLimit({
+  windowMs: 60000, // 1 minute
+  max: 5,
+  message: { error: 'Too many webhook requests' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.post(
   '/api/stripe/webhook',
+  webhookLimiter,
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const signature = req.headers['stripe-signature'];
