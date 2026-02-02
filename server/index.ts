@@ -152,6 +152,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      const requestBody = isDev && req.body && Object.keys(req.body).length > 0 ? sanitize(req.body) : undefined;
+      if (requestBody) {
+        logLine += ` <- ${JSON.stringify(requestBody)}`;
+      }
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
