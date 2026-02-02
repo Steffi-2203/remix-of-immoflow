@@ -141,9 +141,10 @@ app.use((req, res, next) => {
   const path = req.path;
   let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
+  const isDev = process.env.NODE_ENV !== "production";
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = sanitize(bodyJson) as Record<string, unknown>;
+    capturedJsonResponse = isDev ? bodyJson : sanitize(bodyJson) as Record<string, unknown>;
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
