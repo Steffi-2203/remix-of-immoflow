@@ -144,7 +144,7 @@ app.use((req, res, next) => {
   const isDev = process.env.NODE_ENV !== "production";
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = isDev ? bodyJson : sanitize(bodyJson) as Record<string, unknown>;
+    capturedJsonResponse = bodyJson;
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
@@ -156,8 +156,9 @@ app.use((req, res, next) => {
       if (requestBody) {
         logLine += ` <- ${JSON.stringify(requestBody)}`;
       }
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      const responseToLog = isDev ? capturedJsonResponse : sanitize(capturedJsonResponse);
+      if (responseToLog) {
+        logLine += ` :: ${JSON.stringify(responseToLog)}`;
       }
 
       if (logLine.length > 80) {
