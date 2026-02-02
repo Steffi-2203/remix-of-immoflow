@@ -4,7 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
@@ -159,7 +159,11 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      if (res.statusCode >= 400) {
+        logError(logLine);
+      } else {
+        logInfo(logLine);
+      }
     }
   });
 

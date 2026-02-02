@@ -68,13 +68,23 @@ export function serveStatic(app: Express) {
   });
 }
 
-export function log(message: string) {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
+function formatTime() {
+  return new Date().toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
   });
+}
 
-  console.log(`${formattedTime} [express] ${message}`);
+export function log(message: string) {
+  console.log(`${formatTime()} [express] ${message}`);
+}
+
+export function logInfo(message: string) {
+  console.log(`${formatTime()} [express] ${message}`);
+}
+
+export function logError(message: string) {
+  console.error(`${formatTime()} [express] ERROR: ${message}`);
 }
