@@ -122,6 +122,20 @@ app.post(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
+// Sanitize sensitive data from logs
+function sanitize(obj: unknown): unknown {
+  if (!obj || typeof obj !== "object") return obj;
+
+  const clone = structuredClone(obj) as Record<string, unknown>;
+  const sensitiveKeys = ["password", "token", "access_token", "refresh_token", "session", "secret", "apiKey", "api_key", "authorization"];
+
+  for (const key of sensitiveKeys) {
+    if (clone[key]) clone[key] = "***REDACTED***";
+  }
+
+  return clone;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -138,7 +152,7 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${JSON.stringify(sanitize(capturedJsonResponse))}`;
       }
 
       if (logLine.length > 80) {
