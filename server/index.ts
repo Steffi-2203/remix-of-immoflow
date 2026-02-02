@@ -3,6 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import onFinished from "on-finished";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
@@ -148,7 +149,7 @@ app.use((req, res, next) => {
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
-  res.on("finish", () => {
+  onFinished(res, () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       const requestBody = isDev && req.body && Object.keys(req.body).length > 0 ? sanitize(req.body) : undefined;
