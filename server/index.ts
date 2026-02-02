@@ -193,8 +193,8 @@ async function initStripe() {
     const status = (err as { status?: number })?.status || (err as { statusCode?: number })?.statusCode || 500;
     const message = (err as { message?: string })?.message || "Internal Server Error";
 
+    console.error('Error:', err);
     res.status(status).json({ message });
-    throw err;
   });
 
   if (app.get("env") === "development") {
