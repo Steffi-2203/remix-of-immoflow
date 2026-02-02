@@ -41,8 +41,12 @@ app.use(apiLimiter);
 const allowedOrigins = [
   process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : '',
   process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : '',
+  process.env.REPLIT_DEPLOYMENT_ID ? `https://${process.env.REPL_SLUG}.replit.app` : '',
   'https://immoflowme.com',
   'https://www.immoflowme.com',
+  'https://app.immoflowme.com',
+  'https://immoflow.me',
+  'https://www.immoflow.me',
 ].filter(Boolean);
 
 app.use((req, res, next) => {
@@ -59,6 +63,8 @@ app.use((req, res, next) => {
   next();
 });
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 app.use(session({
   store: new PgSession({
     pool: pool as any,
@@ -69,10 +75,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: true,
+    secure: isProduction,
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: 'none',
+    sameSite: isProduction ? 'none' : 'lax',
   },
 }));
 
