@@ -1431,6 +1431,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dry-run invoice generation (preview without persisting)
+  app.post("/api/invoices/dry-run", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Organization not found" });
+      }
+
+      const { period, units: unitIds } = req.body;
+      if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+        return res.status(400).json({ error: "Invalid period format. Use YYYY-MM" });
+      }
+
+      const [yearStr, monthStr] = period.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+
+      // Get tenants for organization, optionally filtered by units
+      let tenants = await storage.getTenantsByOrganization(profile.organizationId);
+      const activeTenants = tenants.filter(t => t.status === "aktiv");
+
+      // Filter by unit IDs if provided
+      const filteredTenants = unitIds && Array.isArray(unitIds) && unitIds.length > 0
+        ? activeTenants.filter(t => t.unitId && unitIds.includes(t.unitId))
+        : activeTenants;
+
+      const preview = [];
+      for (const tenant of filteredTenants) {
+        if (!tenant.unitId) continue;
+
+        const unit = await storage.getUnit(tenant.unitId);
+        if (!unit) continue;
+
+        const property = await storage.getProperty(unit.propertyId);
+        if (!property) continue;
+
+        // Calculate amounts
+        const grundmiete = Number(tenant.grundmiete || 0);
+        const bkVorschuss = Number(tenant.betriebskostenVorschuss || 0);
+        const hkVorschuss = Number(tenant.heizkostenVorschuss || 0);
+
+        // Determine VAT based on unit type
+        const unitType = (unit.type || "wohnung").toLowerCase();
+        const isCommercial = unitType.includes("geschäft") || unitType.includes("gewerbe") || unitType.includes("büro");
+        const isParking = unitType.includes("stellplatz") || unitType.includes("garage") || unitType.includes("parkplatz");
+        const mietUst = isCommercial || isParking ? 20 : 10;
+
+        const mieteBrutto = grundmiete * (1 + mietUst / 100);
+        const bkBrutto = bkVorschuss * 1.10; // 10% USt
+        const hkBrutto = hkVorschuss * 1.20; // 20% USt
+        const totalBrutto = mieteBrutto + bkBrutto + hkBrutto;
+
+        preview.push({
+          tenantId: tenant.id,
+          tenantName: `${tenant.firstName} ${tenant.lastName}`,
+          unitId: unit.id,
+          unitNumber: unit.unitNumber,
+          propertyId: property.id,
+          propertyName: property.name,
+          year,
+          month,
+          grundmieteNetto: grundmiete,
+          grundmieteBrutto: mieteBrutto,
+          mietUst,
+          bkNetto: bkVorschuss,
+          bkBrutto,
+          hkNetto: hkVorschuss,
+          hkBrutto,
+          totalBrutto,
+          dueDate: new Date(year, month - 1, 5).toISOString().split("T")[0]
+        });
+      }
+
+      res.json({
+        success: true,
+        dryRun: true,
+        period,
+        count: preview.length,
+        totalBrutto: preview.reduce((sum, p) => sum + p.totalBrutto, 0),
+        preview
+      });
+    } catch (error) {
+      console.error("Dry-run invoice error:", error);
+      res.status(500).json({ error: "Failed to generate invoice preview" });
+    }
+  });
+
   // Generate monthly invoices (Vorschreibungen) for all active tenants
   app.post("/api/functions/generate-monthly-invoices", isAuthenticated, async (req: any, res) => {
     try {
