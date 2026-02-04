@@ -71,6 +71,7 @@ app.use((req, res, next) => {
 const isProduction = process.env.NODE_ENV === 'production';
 
 app.use(session({
+  name: 'immo_sid',
   store: new PgSession({
     pool: pool as any,
     tableName: 'user_sessions',
@@ -82,8 +83,8 @@ app.use(session({
   cookie: {
     secure: isProduction,
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: isProduction ? 'none' : 'lax',
+    sameSite: 'lax',
+    maxAge: 1000 * 60 * 60 * 8, // 8 hours
   },
 }));
 
