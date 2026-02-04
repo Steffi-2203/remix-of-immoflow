@@ -66,7 +66,7 @@ app.use((req, res, next) => {
 const isProduction = process.env.NODE_ENV === 'production';
 
 app.use(session({
-  name: 'immo_sid',
+  name: isProduction ? '__Secure-immo_sid' : 'immo_sid',
   store: new PgSession({
     pool: pool as any,
     tableName: 'user_sessions',
