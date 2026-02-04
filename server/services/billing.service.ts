@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { db } from "../db";
 import { invoiceGenerator } from "./invoice.generator";
 import { roundMoney } from "@shared/utils";
@@ -7,25 +8,52 @@ import {
   invoiceLines,
   tenants,
   units,
-  auditLogs
+  auditLogs,
+  invoiceRuns
 } from "@shared/schema";
 
-/**
- * BillingService
- * - orchestrates dry-run and persist generation
- * - ensures deterministic dry-run -> persist behavior
- * - writes one audit summary per run inside transaction
- */
+type GenerateOpts = {
+  userId: string;
+  propertyIds: string[];
+  year: number;
+  month: number;
+  dryRun?: boolean;
+};
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function reconcileRounding(lines: any[], expectedTotal: number): void {
+  const roundedSum = lines.reduce((s, l) => s + roundMoney(l.grossAmount || l.amount || 0), 0);
+  let diff = roundMoney(expectedTotal - roundedSum);
+  if (Math.abs(diff) < 0.01) return;
+
+  lines.sort((a, b) => Math.abs(b.grossAmount || b.amount || 0) - Math.abs(a.grossAmount || a.amount || 0));
+  let i = 0;
+  while (Math.abs(diff) >= 0.01 && i < lines.length * 2) {
+    const adjust = diff > 0 ? 0.01 : -0.01;
+    const field = lines[i % lines.length].grossAmount !== undefined ? 'grossAmount' : 'amount';
+    lines[i % lines.length][field] = roundMoney(lines[i % lines.length][field] + adjust);
+    diff = roundMoney(diff - adjust);
+    i++;
+  }
+}
+
+function unitTypeFromTenant(unitId: string | null, unitTypeMap: Map<string, string>) {
+  if (!unitId) return 'wohnung';
+  return unitTypeMap.get(unitId) || 'wohnung';
+}
 
 export class BillingService {
-  async generateMonthlyInvoices(params: {
-    userId: string;
-    propertyIds: string[];
-    year: number;
-    month: number;
-    dryRun?: boolean;
-  }) {
-    const { userId, propertyIds, year, month, dryRun = true } = params;
+  async generateMonthlyInvoices(opts: GenerateOpts) {
+    const { userId, propertyIds, year, month, dryRun = true } = opts;
+    const runId = uuidv4();
+    const period = `${year}-${String(month).padStart(2, '0')}`;
     const isJanuary = month === 1;
     const dueDate = new Date(year, month - 1, 5).toISOString().split('T')[0];
 
@@ -61,61 +89,94 @@ export class BillingService {
           preview.push({ invoice: inv, lines });
         }
       }
-      return { success: true, dryRun: true, count: preview.length, preview };
+      const summary = {
+        count: preview.length,
+        total: roundMoney(preview.reduce((s, p) => s + (p.invoice.gesamtbetrag || 0), 0))
+      };
+      return { runId, dryRun: true, period, count: preview.length, summary, preview };
     }
 
-    const createdInvoices = await db.transaction(async (tx) => {
-      const insertedInvoices: any[] = [];
-      for (const inv of invoicesToCreate) {
-        const res = await tx.execute(sql`
-          INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, grundmiete, betriebskosten, heizungskosten, gesamtbetrag, ust, ust_satz_miete, ust_satz_bk, ust_satz_heizung, status, faellig_am, vortrag_miete, vortrag_bk, vortrag_hk, vortrag_sonstige, created_at)
-          VALUES (gen_random_uuid(), ${inv.tenantId}, ${inv.unitId}, ${inv.year}, ${inv.month}, ${inv.grundmiete}, ${inv.betriebskosten}, ${inv.heizungskosten}, ${inv.gesamtbetrag}, ${inv.ust}, ${inv.ustSatzMiete}, ${inv.ustSatzBk}, ${inv.ustSatzHeizung}, ${inv.status}, ${inv.faelligAm}, ${inv.vortragMiete}, ${inv.vortragBk}, ${inv.vortragHk}, ${inv.vortragSonstige}, now())
-          ON CONFLICT (tenant_id, year, month) DO NOTHING
-          RETURNING *
-        `);
-        if (res.rows && res.rows.length) {
-          insertedInvoices.push(res.rows[0]);
-        }
-      }
+    const insertedRun = await db.execute(sql`
+      INSERT INTO invoice_runs (run_id, period, initiated_by, status)
+      VALUES (${runId}::uuid, ${period}, ${userId}::uuid, 'started')
+      ON CONFLICT (run_id) DO NOTHING
+      RETURNING id
+    `);
 
-      const allLines: any[] = [];
-      for (const inv of insertedInvoices) {
-        const tenant = tenantsData.find(t => t.id === inv.tenant_id);
-        if (!tenant) continue;
-        const unitType = unitTypeMap.get(inv.unit_id || '') || 'wohnung';
-        const vatRates = invoiceGenerator.getVatRates(unitType);
-        const lines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year);
-        allLines.push(...lines);
-      }
+    if (!insertedRun.rows || insertedRun.rows.length === 0) {
+      return { runId, error: 'Run already exists' };
+    }
 
-      for (let i = 0; i < allLines.length; i += 500) {
-        const batch = allLines.slice(i, i + 500);
-        if (batch.length > 0) {
-          const values = batch.map(line => 
-            sql`(${line.invoiceId}, ${line.expenseType}, ${line.description}, ${line.netAmount}, ${line.vatRate}, ${line.grossAmount}, ${line.allocationReference}, now())`
-          );
-          await tx.execute(sql`
-            INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, ust_satz, gross_amount, allocation_reference, created_at)
-            VALUES ${sql.join(values, sql`, `)}
+    try {
+      const createdInvoices = await db.transaction(async (tx) => {
+        const insertedInvoices: any[] = [];
+        for (const inv of invoicesToCreate) {
+          const res = await tx.execute(sql`
+            INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, grundmiete, betriebskosten, heizungskosten, gesamtbetrag, ust, ust_satz_miete, ust_satz_bk, ust_satz_heizung, status, faellig_am, vortrag_miete, vortrag_bk, vortrag_hk, vortrag_sonstige, created_at)
+            VALUES (gen_random_uuid(), ${inv.tenantId}, ${inv.unitId}, ${inv.year}, ${inv.month}, ${inv.grundmiete}, ${inv.betriebskosten}, ${inv.heizungskosten}, ${inv.gesamtbetrag}, ${inv.ust}, ${inv.ustSatzMiete}, ${inv.ustSatzBk}, ${inv.ustSatzHeizung}, ${inv.status}, ${inv.faelligAm}, ${inv.vortragMiete}, ${inv.vortragBk}, ${inv.vortragHk}, ${inv.vortragSonstige}, now())
+            ON CONFLICT (tenant_id, year, month) DO NOTHING
+            RETURNING *
           `);
+          if (res.rows && res.rows.length) {
+            insertedInvoices.push(res.rows[0]);
+          }
         }
-      }
 
-      await tx.execute(sql`
-        INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-        VALUES (${userId}, 'monthly_invoices', NULL, 'bulk_create', ${JSON.stringify({ createdCount: insertedInvoices.length, year, month })}::jsonb, now())
+        const allLines: any[] = [];
+        for (const inv of insertedInvoices) {
+          const tenant = tenantsData.find(t => t.id === inv.tenant_id);
+          if (!tenant) continue;
+          const unitType = unitTypeMap.get(inv.unit_id || '') || 'wohnung';
+          const vatRates = invoiceGenerator.getVatRates(unitType);
+          const lines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year);
+          
+          const expectedTotal = roundMoney(inv.gesamtbetrag || 0);
+          reconcileRounding(lines, expectedTotal);
+          
+          allLines.push(...lines);
+        }
+
+        const batches = chunk(allLines, 500);
+        for (const batch of batches) {
+          if (batch.length > 0) {
+            const values = batch.map(line => 
+              sql`(${line.invoiceId}, ${line.expenseType}, ${line.description}, ${roundMoney(line.netAmount)}, ${line.vatRate}, ${roundMoney(line.grossAmount)}, ${line.allocationReference}, now())`
+            );
+            await tx.execute(sql`
+              INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, ust_satz, gross_amount, allocation_reference, created_at)
+              VALUES ${sql.join(values, sql`, `)}
+            `);
+          }
+        }
+
+        await tx.execute(sql`
+          UPDATE invoice_runs SET status = 'completed', updated_at = now()
+          WHERE run_id = ${runId}::uuid
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO audit_logs (user_id, run_id, table_name, action, details, created_at)
+          VALUES (${userId}::uuid, ${runId}::uuid, 'monthly_invoices', 'generate_invoices', ${JSON.stringify({ period, invoicesCount: insertedInvoices.length, linesCount: allLines.length })}::jsonb, now())
+        `);
+
+        return insertedInvoices;
+      });
+
+      return { runId, success: true, period, created: createdInvoices.length, invoices: createdInvoices };
+    } catch (err: any) {
+      await db.execute(sql`
+        UPDATE invoice_runs SET status = 'failed', error = ${String(err.message || err)}, updated_at = now()
+        WHERE run_id = ${runId}::uuid
       `);
 
-      return insertedInvoices;
-    });
+      await db.execute(sql`
+        INSERT INTO audit_logs (user_id, run_id, table_name, action, details, created_at)
+        VALUES (${userId}::uuid, ${runId}::uuid, 'monthly_invoices', 'generate_invoices_failed', ${JSON.stringify({ error: String(err.message || err) })}::jsonb, now())
+      `);
 
-    return { success: true, dryRun: false, created: createdInvoices.length, invoices: createdInvoices };
+      throw err;
+    }
   }
-}
-
-function unitTypeFromTenant(unitId: string | null, unitTypeMap: Map<string, string>) {
-  if (!unitId) return 'wohnung';
-  return unitTypeMap.get(unitId) || 'wohnung';
 }
 
 export const billingService = new BillingService();
