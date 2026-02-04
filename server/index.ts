@@ -12,14 +12,9 @@ import { WebhookHandlers } from './webhookHandlers';
 import { setupAuth } from "./auth";
 import { pool } from "./db";
 import { seedDistributionKeys } from "./seedDistributionKeys";
+import SESSION_SECRET from "./config/session";
 
 const app = express();
-
-const SESSION_SECRET = process.env.SESSION_SECRET;
-if (!SESSION_SECRET) {
-  console.error('FATAL: SESSION_SECRET is not set. Aborting startup.');
-  process.exit(1);
-}
 
 const PgSession = connectPgSimple(session);
 
