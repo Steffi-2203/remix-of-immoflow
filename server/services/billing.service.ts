@@ -143,7 +143,7 @@ export class BillingService {
               sql`(${line.invoiceId}, ${line.expenseType}, ${line.description}, ${roundMoney(line.netAmount)}, ${line.vatRate}, ${roundMoney(line.grossAmount)}, ${line.allocationReference}, now())`
             );
             await tx.execute(sql`
-              INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, ust_satz, gross_amount, allocation_reference, created_at)
+              INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, vat_rate, gross_amount, allocation_reference, created_at)
               VALUES ${sql.join(values, sql`, `)}
             `);
           }
@@ -155,8 +155,8 @@ export class BillingService {
         `);
 
         await tx.execute(sql`
-          INSERT INTO audit_logs (user_id, run_id, table_name, action, details, created_at)
-          VALUES (${userId}::uuid, ${runId}::uuid, 'monthly_invoices', 'generate_invoices', ${JSON.stringify({ period, invoicesCount: insertedInvoices.length, linesCount: allLines.length })}::jsonb, now())
+          INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+          VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({ period, invoicesCount: insertedInvoices.length, linesCount: allLines.length })}::jsonb, now())
         `);
 
         return insertedInvoices;
@@ -170,8 +170,8 @@ export class BillingService {
       `);
 
       await db.execute(sql`
-        INSERT INTO audit_logs (user_id, run_id, table_name, action, details, created_at)
-        VALUES (${userId}::uuid, ${runId}::uuid, 'monthly_invoices', 'generate_invoices_failed', ${JSON.stringify({ error: String(err.message || err) })}::jsonb, now())
+        INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+        VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices_failed', ${JSON.stringify({ error: String(err.message || err) })}::jsonb, now())
       `);
 
       throw err;
