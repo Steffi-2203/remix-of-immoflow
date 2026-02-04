@@ -1,0 +1,125 @@
+import { v4 as uuidv4 } from 'uuid';
+import { chunk } from 'lodash';
+import { db } from '../db'; // passe an: dein Drizzle/DB-Client
+import { roundToCents } from '../utils/rounding'; // siehe unten
+import { calculateInvoiceLines } from './invoice.generator'; // reine Berechnungsfunktion
+
+type GenerateOpts = { period: string; dryRun?: boolean; initiatedBy?: string };
+
+export async function generateMonthlyInvoices(opts: GenerateOpts) {
+  const { period, dryRun = false, initiatedBy } = opts;
+  const runId = uuidv4();
+
+  // 1) Berechnung (pure)
+  const invoiceLines = await calculateInvoiceLines({ period });
+
+  // 2) Dry run -> nur Vorschau zurückgeben
+  if (dryRun) {
+    const summary = summarizeInvoiceLines(invoiceLines);
+    return { runId, dryRun: true, summary, invoiceLines };
+  }
+
+  // 3) Persist: Idempotency - mark run started
+  const insertedRun = await db
+    .insert('invoice_runs')
+    .values({ run_id: runId, period, initiated_by: initiatedBy, status: 'started' })
+    .onConflictDoNothing()
+    .returning('id');
+
+  if (!insertedRun || insertedRun.length === 0) {
+    // Falls run_id bereits existiert (sehr unwahrscheinlich, aber defensiv)
+    return { runId, error: 'Run already exists' };
+  }
+
+  // 4) Persist in Transaction mit Batch-Insert
+  try {
+    await db.transaction(async (tx) => {
+      // 4a) Erzeuge monthly_invoice (ein Eintrag pro Objekt/Property je nach Logik)
+      // Beispiel: wir erzeugen eine Sammelrechnung pro property; passe Felder an
+      const invoiceRes = await tx
+        .insert('monthly_invoices')
+        .values({
+          period,
+          run_id: runId,
+          status: 'issued',
+          created_at: new Date().toISOString()
+        })
+        .returning('id');
+
+      const invoiceId = invoiceRes[0].id;
+
+      // 4b) Rounding reconciliation: stelle sicher, dass Summen stimmen
+      const expectedTotal = invoiceLines.reduce((s, l) => s + l.amount, 0);
+      reconcileRounding(invoiceLines, expectedTotal);
+
+      // 4c) Batch insert invoice_lines
+      const batches = chunk(invoiceLines, 500);
+      for (const b of batches) {
+        const rows = b.map((l) => ({
+          invoice_id: invoiceId,
+          unit_id: l.unitId,
+          description: l.description,
+          amount: roundToCents(l.amount),
+          meta: l.meta || {}
+        }));
+        await tx.insert('invoice_lines').values(rows);
+      }
+
+      // 4d) Optional: expense_allocations oder weitere Tabellen hier einfügen
+
+      // 4e) Update run status
+      await tx
+        .update('invoice_runs')
+        .set({ status: 'completed', updated_at: new Date().toISOString() })
+        .where({ run_id: runId });
+
+      // 4f) Audit log (innerhalb TX für Konsistenz)
+      await tx.insert('audit_logs').values({
+        run_id: runId,
+        action: 'generate_invoices',
+        details: JSON.stringify({ period, invoiceLinesCount: invoiceLines.length })
+      });
+    });
+
+    return { runId, success: true, created: invoiceLines.length };
+  } catch (err) {
+    // Fehlerbehandlung: markiere run als failed
+    await db
+      .update('invoice_runs')
+      .set({ status: 'failed', error: String(err), updated_at: new Date().toISOString() })
+      .where({ run_id: runId });
+
+    // Audit Fehler
+    await db.insert('audit_logs').values({
+      run_id: runId,
+      action: 'generate_invoices_failed',
+      details: JSON.stringify({ error: String(err) })
+    });
+
+    throw err;
+  }
+}
+
+/* Hilfsfunktionen */
+
+function summarizeInvoiceLines(lines: any[]) {
+  const total = lines.reduce((s, l) => s + l.amount, 0);
+  return { count: lines.length, total: roundToCents(total) };
+}
+
+function reconcileRounding(lines: any[], expectedTotal: number) {
+  // Summiere gerundete Zeilen und verteile Differenz deterministisch
+  const roundedSum = lines.reduce((s, l) => s + roundToCents(l.amount), 0);
+  let diff = roundToCents(expectedTotal) - roundedSum;
+  if (diff === 0) return;
+
+  // Sortiere nach Betrag absteigend, verteile Cent für Cent
+  lines.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  let i = 0;
+  while (diff !== 0 && i < lines.length) {
+    const adjust = diff > 0 ? 0.01 : -0.01;
+    lines[i].amount = roundToCents(lines[i].amount + adjust);
+    diff = roundToCents(diff - adjust);
+    i = (i + 1) % lines.length;
+  }
+}
