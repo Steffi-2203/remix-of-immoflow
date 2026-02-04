@@ -15,7 +15,11 @@ import { seedDistributionKeys } from "./seedDistributionKeys";
 
 const app = express();
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'immoflowme-secret-key-change-in-production';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  console.error('FATAL: SESSION_SECRET is not set. Aborting startup.');
+  process.exit(1);
+}
 
 const PgSession = connectPgSimple(session);
 
