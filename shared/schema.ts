@@ -553,14 +553,27 @@ export const messages = pgTable("messages", {
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => profiles.id),
+  runId: uuid("run_id"),
   tableName: text("table_name").notNull(),
   recordId: text("record_id"),
   action: text("action").notNull(),
   oldData: jsonb("old_data"),
   newData: jsonb("new_data"),
+  details: jsonb("details"),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const invoiceRuns = pgTable("invoice_runs", {
+  id: serial("id").primaryKey(),
+  runId: uuid("run_id").notNull().unique(),
+  period: text("period").notNull(),
+  initiatedBy: uuid("initiated_by").references(() => profiles.id),
+  status: text("status").notNull().default("started"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true, updatedAt: true });
@@ -749,6 +762,7 @@ export type LearnedMatch = typeof learnedMatches.$inferSelect;
 export type SepaCollection = typeof sepaCollections.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type InvoiceRun = typeof invoiceRuns.$inferSelect;
 export type UserRole = typeof userRoles.$inferSelect;
 
 export type Owner = typeof owners.$inferSelect;
