@@ -170,7 +170,8 @@ export class BillingService {
               SELECT COUNT(*) as cnt, array_agg(invoice_id) as inserted_ids FROM inserted
             `);
             const inserted = Number(result.rows?.[0]?.cnt || 0);
-            const insertedIds = new Set<string>((result.rows?.[0]?.inserted_ids || []).map(String));
+            const rawIds = result.rows?.[0]?.inserted_ids as string[] | null;
+            const insertedIds = new Set<string>((rawIds || []).map(String));
             
             for (const line of batch) {
               if (!insertedIds.has(line.invoiceId)) {
