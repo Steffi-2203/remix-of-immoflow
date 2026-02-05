@@ -117,72 +117,69 @@ export class InvoiceGenerator {
     tenant: typeof tenants.$inferSelect,
     vatRates: VatRates,
     month: number,
-    year: number
+    year: number,
+    unitId?: string
   ): Array<{
     invoiceId: string;
-    expenseType: string;
+    unitId?: string;
+    lineType: string;
     description: string;
-    netAmount: number;
-    vatRate: number;
-    grossAmount: number;
-    allocationReference?: string;
+    amount: number;
+    taxRate: number;
+    meta?: Record<string, unknown>;
   }> {
     const lines: any[] = [];
     const monthName = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][month - 1];
 
     const grundmiete = roundMoney(Number(tenant.grundmiete) || 0);
     if (grundmiete > 0) {
-      const netMiete = roundMoney(grundmiete / (1 + vatRates.ustSatzMiete / 100));
       lines.push({
         invoiceId,
-        expenseType: 'grundmiete',
+        unitId,
+        lineType: 'grundmiete',
         description: `Nettomiete ${monthName} ${year}`,
-        netAmount: netMiete,
-        vatRate: vatRates.ustSatzMiete,
-        grossAmount: grundmiete,
-        allocationReference: 'MRG §15'
+        amount: grundmiete,
+        taxRate: vatRates.ustSatzMiete,
+        meta: { reference: 'MRG §15' }
       });
     }
 
     const bk = roundMoney(Number(tenant.betriebskostenVorschuss) || 0);
     if (bk > 0) {
-      const netBk = roundMoney(bk / (1 + vatRates.ustSatzBk / 100));
       lines.push({
         invoiceId,
-        expenseType: 'betriebskosten',
+        unitId,
+        lineType: 'betriebskosten',
         description: `BK-Vorschuss ${monthName} ${year}`,
-        netAmount: netBk,
-        vatRate: vatRates.ustSatzBk,
-        grossAmount: bk,
-        allocationReference: 'MRG §21'
+        amount: bk,
+        taxRate: vatRates.ustSatzBk,
+        meta: { reference: 'MRG §21' }
       });
     }
 
     const hk = roundMoney(Number(tenant.heizkostenVorschuss) || 0);
     if (hk > 0) {
-      const netHk = roundMoney(hk / (1 + vatRates.ustSatzHeizung / 100));
       lines.push({
         invoiceId,
-        expenseType: 'heizkosten',
+        unitId,
+        lineType: 'heizkosten',
         description: `HK-Vorschuss ${monthName} ${year}`,
-        netAmount: netHk,
-        vatRate: vatRates.ustSatzHeizung,
-        grossAmount: hk,
-        allocationReference: 'HeizKG'
+        amount: hk,
+        taxRate: vatRates.ustSatzHeizung,
+        meta: { reference: 'HeizKG' }
       });
     }
 
     const wasser = roundMoney(Number(tenant.wasserkostenVorschuss) || 0);
     if (wasser > 0) {
-      const netWasser = roundMoney(wasser / 1.10);
       lines.push({
         invoiceId,
-        expenseType: 'wasserkosten',
+        unitId,
+        lineType: 'wasserkosten',
         description: `Wasserkosten-Vorschuss ${monthName} ${year}`,
-        netAmount: netWasser,
-        vatRate: 10,
-        grossAmount: wasser,
-        allocationReference: 'MRG §21'
+        amount: wasser,
+        taxRate: 10,
+        meta: { reference: 'MRG §21' }
       });
     }
 
@@ -192,15 +189,14 @@ export class InvoiceGenerator {
         if (value && Number(value.betrag) > 0) {
           const betrag = roundMoney(Number(value.betrag));
           const ust = Number(value.ust) || 10;
-          const netBetrag = roundMoney(betrag / (1 + ust / 100));
           lines.push({
             invoiceId,
-            expenseType: 'sonstige',
+            unitId,
+            lineType: 'sonstige',
             description: `${key} ${monthName} ${year}`,
-            netAmount: netBetrag,
-            vatRate: ust,
-            grossAmount: betrag,
-            allocationReference: value.schluessel || 'Vereinbarung'
+            amount: betrag,
+            taxRate: ust,
+            meta: { reference: value.schluessel || 'Vereinbarung' }
           });
         }
       }

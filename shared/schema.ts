@@ -254,23 +254,29 @@ export const monthlyInvoices = pgTable("monthly_invoices", {
   vortragBk: numeric("vortrag_bk", { precision: 10, scale: 2 }).default('0'),
   vortragHk: numeric("vortrag_hk", { precision: 10, scale: 2 }).default('0'),
   vortragSonstige: numeric("vortrag_sonstige", { precision: 10, scale: 2 }).default('0'),
+  runId: uuid("run_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
   index("idx_invoices_unit_status_year_month").on(table.unitId, table.status, table.year, table.month),
+  index("idx_invoices_run_id").on(table.runId),
 ]);
 
 export const invoiceLines = pgTable("invoice_lines", {
   id: uuid("id").defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").notNull().references(() => monthlyInvoices.id),
-  expenseType: varchar("expense_type", { length: 50 }).notNull(),
+  unitId: uuid("unit_id").references(() => units.id),
+  lineType: varchar("line_type", { length: 50 }).notNull(),
   description: text("description"),
-  netAmount: numeric("net_amount", { precision: 12, scale: 2 }).notNull(),
-  vatRate: integer("vat_rate").notNull(),
-  grossAmount: numeric("gross_amount", { precision: 12, scale: 2 }).notNull(),
-  allocationReference: varchar("allocation_reference", { length: 100 }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  taxRate: integer("tax_rate").default(0),
+  meta: jsonb("meta"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+  index("idx_invoice_lines_invoice").on(table.invoiceId),
+  index("idx_invoice_lines_unit").on(table.unitId),
+  uniqueIndex("idx_invoice_lines_unique").on(table.invoiceId, table.unitId, table.lineType, table.description),
+]);
 
 export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true });
 export type InvoiceLine = typeof invoiceLines.$inferSelect;
