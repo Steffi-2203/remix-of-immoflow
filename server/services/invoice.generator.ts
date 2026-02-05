@@ -85,10 +85,25 @@ export class InvoiceGenerator {
     const ustMiete = roundMoney(this.calculateVatFromGross(grundmiete, vatRates.ustSatzMiete));
     const ustBk = roundMoney(this.calculateVatFromGross(betriebskosten, vatRates.ustSatzBk));
     const ustHeizung = roundMoney(this.calculateVatFromGross(heizungskosten, vatRates.ustSatzHeizung));
-    const ust = roundMoney(ustMiete + ustBk + ustHeizung);
+    
+    let sonstigeSum = 0;
+    let ustSonstige = 0;
+    const sonstigeKosten = tenant.sonstigeKosten as Record<string, { betrag: number; ust: number }> | null;
+    if (sonstigeKosten && typeof sonstigeKosten === 'object') {
+      for (const value of Object.values(sonstigeKosten)) {
+        if (value && Number(value.betrag) > 0) {
+          const betrag = roundMoney(Number(value.betrag));
+          const ustRate = Number(value.ust) || 10;
+          sonstigeSum += betrag;
+          ustSonstige += roundMoney(this.calculateVatFromGross(betrag, ustRate));
+        }
+      }
+    }
+    
+    const ust = roundMoney(ustMiete + ustBk + ustHeizung + ustSonstige);
 
     const vortragGesamt = roundMoney((carryForward.vortragMiete || 0) + (carryForward.vortragBk || 0) + (carryForward.vortragHk || 0) + (carryForward.vortragSonstige || 0));
-    const gesamtbetrag = roundMoney(grundmiete + betriebskosten + heizungskosten + vortragGesamt);
+    const gesamtbetrag = roundMoney(grundmiete + betriebskosten + heizungskosten + sonstigeSum + vortragGesamt);
 
     return {
       tenantId: tenant.id,
