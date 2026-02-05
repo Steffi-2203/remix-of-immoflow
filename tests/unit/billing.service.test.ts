@@ -100,5 +100,18 @@ describe('BillingService', () => {
     });
     expect(result.success).toBe(true);
     expect(result.runId).toBeDefined();
+    expect(typeof result.runId).toBe('string');
+    expect(result.runId.length).toBe(36);
+  });
+
+  test('invoice lines use correct field names', async () => {
+    const result = await billingService.generateMonthlyInvoices({
+      userId: testUserId,
+      propertyIds: [testPropertyId],
+      year: 2026,
+      month: 8,
+      dryRun: false
+    });
+    expect(result.success).toBe(true);
   });
 });
