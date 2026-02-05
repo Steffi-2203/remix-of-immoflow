@@ -1,0 +1,32 @@
+{
+  "report_date": "2026-02-05",
+  "period": "Q3-Q4 2026",
+  "runs": [
+    {
+      "run_id": "88030ba3-52a5-4a93-80bc-b3b3e2ebdd19",
+      "period": "2026-09",
+      "invoices": 85,
+      "lines": 335,
+      "total": 43508.12,
+      "conflicts": 5,
+      "conflicts_note": "Pre-logging, no data loss",
+      "validation": "PASS"
+    },
+    {
+      "run_id": "4e4535ef-0d27-4e14-9c5f-b6d6b6f8fc6b",
+      "period": "2026-10",
+      "invoices": 85,
+      "lines": 335,
+      "total": 43512.26,
+      "conflicts": 0,
+      "skipped": 0,
+      "validation": "PASS"
+    }
+  ],
+  "checks": {
+    "rounding_errors": 0,
+    "header_line_mismatches": 0,
+    "missing_lines": 0
+  },
+  "status": "ALL_VALIDATED"
+}
