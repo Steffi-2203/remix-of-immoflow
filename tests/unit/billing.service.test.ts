@@ -67,4 +67,38 @@ describe('BillingService', () => {
     expect(persistResult.success).toBe(true);
     expect(persistResult.created).toBe(dryCount);
   });
+
+  test('idempotency: re-running same period creates 0 new invoices', async () => {
+    const firstRun = await billingService.generateMonthlyInvoices({
+      userId: testUserId,
+      propertyIds: [testPropertyId],
+      year: 2026,
+      month: 6,
+      dryRun: false
+    });
+    expect(firstRun.success).toBe(true);
+    const firstCount = firstRun.created || 0;
+
+    const secondRun = await billingService.generateMonthlyInvoices({
+      userId: testUserId,
+      propertyIds: [testPropertyId],
+      year: 2026,
+      month: 6,
+      dryRun: false
+    });
+    expect(secondRun.success).toBe(true);
+    expect(secondRun.created).toBe(0);
+  });
+
+  test('run_id is set on created invoices', async () => {
+    const result = await billingService.generateMonthlyInvoices({
+      userId: testUserId,
+      propertyIds: [testPropertyId],
+      year: 2026,
+      month: 7,
+      dryRun: false
+    });
+    expect(result.success).toBe(true);
+    expect(result.runId).toBeDefined();
+  });
 });
