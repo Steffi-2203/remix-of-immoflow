@@ -17,6 +17,7 @@ import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import { paymentService } from "./services/paymentService";
+import readonlyRoutes from "./routes/readonly";
 import crypto from "crypto";
 import multer from "multer";
 import OpenAI from "openai";
@@ -140,6 +141,8 @@ function isTester(roles: string[]): boolean {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  app.use("/api/readonly", readonlyRoutes);
+
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
