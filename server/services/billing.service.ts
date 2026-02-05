@@ -84,13 +84,17 @@ export class BillingService {
         const vatRates = invoiceGenerator.getVatRates(unitTypeFromTenant(inv.unitId, unitTypeMap));
         const tenant = tenantsData.find(x => x.id === inv.tenantId);
         if (tenant) {
-          const lines = invoiceGenerator.buildInvoiceLines(id, tenant, vatRates, month, year);
-          preview.push({ invoice: inv, lines });
+          const rawLines = invoiceGenerator.buildInvoiceLines(id, tenant, vatRates, month, year);
+          const validLines = rawLines.filter(l => roundMoney(l.amount) > 0 && l.lineType && l.invoiceId);
+          const expectedTotal = roundMoney(inv.gesamtbetrag || 0);
+          reconcileRounding(validLines, expectedTotal);
+          preview.push({ invoice: inv, lines: validLines });
         }
       }
       const summary = {
         count: preview.length,
-        total: roundMoney(preview.reduce((s, p) => s + (p.invoice.gesamtbetrag || 0), 0))
+        total: roundMoney(preview.reduce((s, p) => s + (p.invoice.gesamtbetrag || 0), 0)),
+        linesCount: preview.reduce((s, p) => s + p.lines.length, 0)
       };
       return { runId, dryRun: true, period, count: preview.length, summary, preview };
     }
@@ -146,18 +150,43 @@ export class BillingService {
           allLines.push(...validLines);
         }
 
+        let insertedLinesCount = 0;
+        let conflictCount = 0;
+        const conflictKeys: { invoiceId: string; lineType: string; description: string }[] = [];
+        
         const batches = chunk(allLines, 500);
         for (const batch of batches) {
           if (batch.length > 0) {
             const values = batch.map(line => 
               sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
             );
-            await tx.execute(sql`
-              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
-              VALUES ${sql.join(values, sql`, `)}
-              ON CONFLICT ON CONSTRAINT invoice_lines_unique_key DO NOTHING
+            const result = await tx.execute(sql`
+              WITH inserted AS (
+                INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
+                VALUES ${sql.join(values, sql`, `)}
+                ON CONFLICT ON CONSTRAINT invoice_lines_unique_key DO NOTHING
+                RETURNING id, invoice_id, line_type, description
+              )
+              SELECT COUNT(*) as cnt, array_agg(invoice_id) as inserted_ids FROM inserted
             `);
+            const inserted = Number(result.rows?.[0]?.cnt || 0);
+            const insertedIds = new Set<string>((result.rows?.[0]?.inserted_ids || []).map(String));
+            
+            for (const line of batch) {
+              if (!insertedIds.has(line.invoiceId)) {
+                if (conflictKeys.length < 20) {
+                  conflictKeys.push({ invoiceId: line.invoiceId, lineType: line.lineType, description: line.description });
+                }
+              }
+            }
+            
+            insertedLinesCount += inserted;
+            conflictCount += batch.length - inserted;
           }
+        }
+        
+        if (conflictCount > 0) {
+          console.warn(`Invoice lines: ${conflictCount} conflicts (duplicates skipped)`, conflictKeys.slice(0, 5));
         }
 
         await tx.execute(sql`
@@ -171,6 +200,9 @@ export class BillingService {
             period, 
             invoicesCount: insertedInvoices.length, 
             linesCount: allLines.length,
+            insertedLinesCount,
+            conflictCount,
+            conflictKeys: conflictKeys.slice(0, 10),
             skippedLinesCount: skippedLines.length,
             skippedDetails: skippedLines.slice(0, 10)
           })}::jsonb, now())
