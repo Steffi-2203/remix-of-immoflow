@@ -122,29 +122,31 @@ export class BillingService {
         }
 
         const allLines: any[] = [];
+        let skippedLines: { type: string; reason: string }[] = [];
+        
         for (const inv of insertedInvoices) {
           const tenant = tenantsData.find(t => t.id === inv.tenant_id);
           if (!tenant) continue;
           const unitType = unitTypeMap.get(inv.unit_id || '') || 'wohnung';
           const vatRates = invoiceGenerator.getVatRates(unitType);
-          const lines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year, inv.unit_id);
+          const rawLines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year, inv.unit_id);
+          
+          const validLines = rawLines.filter(line => {
+            const amt = roundMoney(line.amount);
+            if (amt <= 0 || !line.lineType || !line.invoiceId) {
+              skippedLines.push({ type: line.lineType || 'unknown', reason: `amount=${amt}` });
+              return false;
+            }
+            return true;
+          });
           
           const expectedTotal = roundMoney(inv.gesamtbetrag || 0);
-          reconcileRounding(lines, expectedTotal);
+          reconcileRounding(validLines, expectedTotal);
           
-          allLines.push(...lines);
+          allLines.push(...validLines);
         }
 
-        const validLines = allLines.filter(line => {
-          const amt = roundMoney(line.amount);
-          if (amt <= 0 || !line.lineType || !line.invoiceId) {
-            console.warn(`Skipping invalid line: amount=${amt}, type=${line.lineType}`);
-            return false;
-          }
-          return true;
-        });
-
-        const batches = chunk(validLines, 500);
+        const batches = chunk(allLines, 500);
         for (const batch of batches) {
           if (batch.length > 0) {
             const values = batch.map(line => 
@@ -153,7 +155,7 @@ export class BillingService {
             await tx.execute(sql`
               INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
-              ON CONFLICT (invoice_id, COALESCE(unit_id, '00000000-0000-0000-0000-000000000000'), line_type, COALESCE(description, '')) DO NOTHING
+              ON CONFLICT ON CONSTRAINT invoice_lines_unique_key DO NOTHING
             `);
           }
         }
@@ -165,7 +167,13 @@ export class BillingService {
 
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-          VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({ period, invoicesCount: insertedInvoices.length, linesCount: allLines.length })}::jsonb, now())
+          VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({ 
+            period, 
+            invoicesCount: insertedInvoices.length, 
+            linesCount: allLines.length,
+            skippedLinesCount: skippedLines.length,
+            skippedDetails: skippedLines.slice(0, 10)
+          })}::jsonb, now())
         `);
 
         return insertedInvoices;
