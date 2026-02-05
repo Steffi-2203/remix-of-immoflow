@@ -30,8 +30,10 @@ async function main() {
   console.log(`Dry-run für ${year}-${String(month).padStart(2, "0")}`);
   console.log(`Properties: ${propertyIds.length}`);
 
+  const userId = getArg("user") || "e118c1df-eb5d-4939-960d-cdf61b56d6e4";
+  
   const result = await billingService.generateMonthlyInvoices({
-    userId: "cli-dryrun",
+    userId,
     propertyIds,
     year,
     month,
