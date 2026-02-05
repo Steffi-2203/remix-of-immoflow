@@ -1,6 +1,6 @@
 import { billingService } from "../server/services/billing.service";
 import { db } from "../server/db";
-import { properties } from "@shared/schema";
+import { properties } from "../shared/schema";
 import { eq, isNull } from "drizzle-orm";
 import * as fs from "fs";
 
