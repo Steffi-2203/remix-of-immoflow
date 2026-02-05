@@ -135,7 +135,16 @@ export class BillingService {
           allLines.push(...lines);
         }
 
-        const batches = chunk(allLines, 500);
+        const validLines = allLines.filter(line => {
+          const amt = roundMoney(line.amount);
+          if (amt <= 0 || !line.lineType || !line.invoiceId) {
+            console.warn(`Skipping invalid line: amount=${amt}, type=${line.lineType}`);
+            return false;
+          }
+          return true;
+        });
+
+        const batches = chunk(validLines, 500);
         for (const batch of batches) {
           if (batch.length > 0) {
             const values = batch.map(line => 
@@ -144,6 +153,7 @@ export class BillingService {
             await tx.execute(sql`
               INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
+              ON CONFLICT (invoice_id, COALESCE(unit_id, '00000000-0000-0000-0000-000000000000'), line_type, COALESCE(description, '')) DO NOTHING
             `);
           }
         }
