@@ -29,16 +29,15 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 function reconcileRounding(lines: any[], expectedTotal: number): void {
-  const roundedSum = lines.reduce((s, l) => s + roundMoney(l.grossAmount || l.amount || 0), 0);
+  const roundedSum = lines.reduce((s, l) => s + roundMoney(l.amount || 0), 0);
   let diff = roundMoney(expectedTotal - roundedSum);
   if (Math.abs(diff) < 0.01) return;
 
-  lines.sort((a, b) => Math.abs(b.grossAmount || b.amount || 0) - Math.abs(a.grossAmount || a.amount || 0));
+  lines.sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0));
   let i = 0;
   while (Math.abs(diff) >= 0.01 && i < lines.length * 2) {
     const adjust = diff > 0 ? 0.01 : -0.01;
-    const field = lines[i % lines.length].grossAmount !== undefined ? 'grossAmount' : 'amount';
-    lines[i % lines.length][field] = roundMoney(lines[i % lines.length][field] + adjust);
+    lines[i % lines.length].amount = roundMoney(lines[i % lines.length].amount + adjust);
     diff = roundMoney(diff - adjust);
     i++;
   }
@@ -128,7 +127,7 @@ export class BillingService {
           if (!tenant) continue;
           const unitType = unitTypeMap.get(inv.unit_id || '') || 'wohnung';
           const vatRates = invoiceGenerator.getVatRates(unitType);
-          const lines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year);
+          const lines = invoiceGenerator.buildInvoiceLines(inv.id, tenant, vatRates, inv.month, inv.year, inv.unit_id);
           
           const expectedTotal = roundMoney(inv.gesamtbetrag || 0);
           reconcileRounding(lines, expectedTotal);
@@ -140,10 +139,10 @@ export class BillingService {
         for (const batch of batches) {
           if (batch.length > 0) {
             const values = batch.map(line => 
-              sql`(${line.invoiceId}, ${line.expenseType}, ${line.description}, ${roundMoney(line.netAmount)}, ${line.vatRate}, ${roundMoney(line.grossAmount)}, ${line.allocationReference}, now())`
+              sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
             );
             await tx.execute(sql`
-              INSERT INTO invoice_lines (invoice_id, expense_type, description, net_amount, vat_rate, gross_amount, allocation_reference, created_at)
+              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
             `);
           }
