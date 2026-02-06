@@ -161,6 +161,92 @@ export type Database = {
           },
         ]
       }
+      booking_number_sequences: {
+        Row: {
+          current_number: number
+          current_year: number
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          current_number?: number
+          current_year?: number
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          current_number?: number
+          current_year?: number
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_number_sequences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chart_of_accounts: {
+        Row: {
+          account_number: string
+          account_type: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          name: string
+          organization_id: string | null
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_number: string
+          account_type: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name: string
+          organization_id?: string | null
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string
+          account_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name?: string
+          organization_id?: string | null
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_of_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chart_of_accounts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contractors: {
         Row: {
           address: string | null
@@ -381,6 +467,154 @@ export type Database = {
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_entries: {
+        Row: {
+          beleg_nummer: string | null
+          beleg_url: string | null
+          booking_number: string
+          created_at: string
+          created_by: string | null
+          description: string
+          entry_date: string
+          id: string
+          is_storno: boolean
+          organization_id: string
+          property_id: string | null
+          source_id: string | null
+          source_type: string | null
+          storno_of: string | null
+          tenant_id: string | null
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          beleg_nummer?: string | null
+          beleg_url?: string | null
+          booking_number: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          entry_date: string
+          id?: string
+          is_storno?: boolean
+          organization_id: string
+          property_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          storno_of?: string | null
+          tenant_id?: string | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          beleg_nummer?: string | null
+          beleg_url?: string | null
+          booking_number?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          entry_date?: string
+          id?: string
+          is_storno?: boolean
+          organization_id?: string
+          property_id?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          storno_of?: string | null
+          tenant_id?: string | null
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_storno_of_fkey"
+            columns: ["storno_of"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_entry_lines: {
+        Row: {
+          account_id: string
+          created_at: string
+          credit: number
+          debit: number
+          description: string | null
+          id: string
+          journal_entry_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          description?: string | null
+          id?: string
+          journal_entry_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          description?: string | null
+          id?: string
+          journal_entry_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entry_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_lines_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -2983,6 +3217,7 @@ export type Database = {
         Args: { _access_type: string; _record_id?: string; _table_name: string }
         Returns: undefined
       }
+      next_booking_number: { Args: { _org_id: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
