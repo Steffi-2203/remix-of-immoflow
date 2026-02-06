@@ -57,7 +57,7 @@ export function useCalendarEvents(year: number, month: number) {
       // 2. Tenant rental ends
       const { data: tenantsEnding } = await supabase
         .from('tenants')
-        .select('id, first_name, last_name, mietende, unit_id, units(unit_number, property_id, properties(name))')
+        .select('id, first_name, last_name, mietende, unit_id, units(top_nummer, property_id, properties(name))')
         .gte('mietende', startDate)
         .lte('mietende', endDate)
         .eq('status', 'aktiv');
@@ -70,7 +70,7 @@ export function useCalendarEvents(year: number, month: number) {
             title: `Mietende: ${tenant.first_name} ${tenant.last_name}`,
             type: 'rental_end',
             propertyName: tenant.units?.properties?.name,
-            unitNumber: tenant.units?.unit_number,
+            unitNumber: tenant.units?.top_nummer,
             link: `/mieter/${tenant.id}/bearbeiten`,
           });
         });
@@ -79,7 +79,7 @@ export function useCalendarEvents(year: number, month: number) {
       // 3. Tenant rental starts (future starts)
       const { data: tenantsStarting } = await supabase
         .from('tenants')
-        .select('id, first_name, last_name, mietbeginn, unit_id, units(unit_number, property_id, properties(name))')
+        .select('id, first_name, last_name, mietbeginn, unit_id, units(top_nummer, property_id, properties(name))')
         .gte('mietbeginn', startDate)
         .lte('mietbeginn', endDate);
 
@@ -91,7 +91,7 @@ export function useCalendarEvents(year: number, month: number) {
             title: `Mietbeginn: ${tenant.first_name} ${tenant.last_name}`,
             type: 'rental_start',
             propertyName: tenant.units?.properties?.name,
-            unitNumber: tenant.units?.unit_number,
+            unitNumber: tenant.units?.top_nummer,
             link: `/mieter/${tenant.id}/bearbeiten`,
           });
         });
@@ -100,7 +100,7 @@ export function useCalendarEvents(year: number, month: number) {
       // 4. Monthly invoices due dates
       const { data: invoices } = await supabase
         .from('monthly_invoices')
-        .select('id, faellig_am, month, year, tenant_id, tenants(first_name, last_name, unit_id, units(unit_number, properties(name)))')
+        .select('id, faellig_am, month, year, tenant_id, tenants(first_name, last_name, unit_id, units(top_nummer, properties(name)))')
         .gte('faellig_am', startDate)
         .lte('faellig_am', endDate)
         .eq('status', 'offen');
@@ -113,8 +113,8 @@ export function useCalendarEvents(year: number, month: number) {
             title: `Fällig: ${invoice.tenants?.first_name} ${invoice.tenants?.last_name}`,
             type: 'invoice',
             propertyName: invoice.tenants?.units?.properties?.name,
-            unitNumber: invoice.tenants?.units?.unit_number,
-            link: '/vorschreibungen',
+            unitNumber: invoice.tenants?.units?.top_nummer,
+            link: '/zahlungen?tab=invoices',
           });
         });
       }
@@ -136,7 +136,7 @@ export function useCalendarEvents(year: number, month: number) {
               title: task.title,
               type: 'task',
               propertyName: task.properties?.name,
-              link: '/instandhaltung',
+              link: '/wartungen',
             });
           }
         });

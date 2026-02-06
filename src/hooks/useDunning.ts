@@ -30,6 +30,7 @@ export function useSendDunning() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['dunningOverview'] });
       toast.success(data.message);
     },
     onError: (error) => {
