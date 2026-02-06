@@ -29,6 +29,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useIsTester } from '@/hooks/useUserRole';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -118,6 +119,10 @@ export function Sidebar() {
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
   const { data: isAdmin } = useIsAdmin();
   const permissions = usePermissions();
+  const { isTester } = useIsTester();
+
+  // For testers, hide pages that don't have demo data
+  const testerHiddenPaths = ['/budgets', '/mahnwesen', '/rechnungsfreigabe', '/nachrichten', '/team', '/abrechnung'];
 
   // Role-based navigation items
   const roleBasedItems: NavItem[] = [
@@ -165,7 +170,7 @@ export function Sidebar() {
     ...navItems.slice(0, -1), // All items except Einstellungen
     ...roleBasedItems,
     navItems[navItems.length - 1] // Einstellungen at the end
-  ];
+  ].filter(item => !isTester || !testerHiddenPaths.includes(item.href));
 
   const handleLinkClick = () => {
     // Close sidebar on mobile after clicking a link

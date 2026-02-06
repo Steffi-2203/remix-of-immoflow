@@ -17,16 +17,18 @@ import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
 import { useFeatureTour } from "@/hooks/useFeatureTour";
+import { useIsTester } from "@/hooks/useUserRole";
 
 export default function SimpleDashboard() {
   const { data: organization, isLoading } = useOrganization();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
   const { isComplete, markComplete } = useOnboardingStatus();
   const { isOpen, steps, startTour, closeTour, completeTour, autoStartTour, hasCompletedTour } = useFeatureTour();
+  const { isTester } = useIsTester();
 
   const propertiesList = properties || [];
   const isDemoMode = organization?.name === 'Demo-Organisation';
-  const showOnboarding = !isDemoMode && !isComplete && propertiesList.length === 0 && !propertiesLoading;
+  const showOnboarding = !isTester && !isDemoMode && !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   // Auto-start tour for new users
   useEffect(() => {

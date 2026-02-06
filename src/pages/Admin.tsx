@@ -24,6 +24,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -115,8 +125,9 @@ export default function Admin() {
     }
   };
 
+  const [cancelConfirmOrg, setCancelConfirmOrg] = useState<AdminOrganization | null>(null);
+
   const handleCancelSubscription = async (org: AdminOrganization) => {
-    if (!confirm(`Abo für "${org.name}" wirklich kündigen?`)) return;
 
     try {
       const { error } = await supabase
@@ -305,7 +316,7 @@ export default function Admin() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleCancelSubscription(org)}
+                                onClick={() => setCancelConfirmOrg(org)}
                               >
                                 <XCircle className="h-4 w-4 text-destructive" />
                               </Button>
@@ -409,6 +420,32 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Subscription Confirmation */}
+      <AlertDialog open={!!cancelConfirmOrg} onOpenChange={(open) => !open && setCancelConfirmOrg(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Abo wirklich kündigen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Das Abo für &quot;{cancelConfirmOrg?.name}&quot; wird gekündigt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (cancelConfirmOrg) {
+                  handleCancelSubscription(cancelConfirmOrg);
+                  setCancelConfirmOrg(null);
+                }
+              }}
+            >
+              Abo kündigen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
