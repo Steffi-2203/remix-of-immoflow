@@ -526,17 +526,23 @@ export default function Reports() {
   // ====== RENDITE-BERECHNUNG (IST-Basis, SSOT = payments) ======
   // Nettoertrag = IST-Mieteinnahmen aus payments (SSOT) - Instandhaltungskosten
   const nettoertrag = paymentAllocationDetails.mieteAnteil - combinedInstandhaltung;
-  const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
+  // Bei Monatsansicht: Miete wird hochgerechnet, Instandhaltung NICHT (einmalige Kosten)
+  const annualNettoertrag = reportPeriod === 'monthly' 
+    ? (paymentAllocationDetails.mieteAnteil * 12) - combinedInstandhaltung
+    : nettoertrag;
 
   // Vacancy rate
   const totalUnits = units?.length || 0;
   const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  // Property value: use marktwert if set, otherwise estimate €3000/m²
+  // Property value: use marktwert if set, otherwise estimate €2000/m² (konservativer Durchschnitt AT)
+  const hasRealMarktwert = selectedPropertyId === 'all'
+    ? properties?.some(p => Number(p.marktwert) > 0) ?? false
+    : Number(selectedProperty?.marktwert) > 0;
   const estimatedPropertyValue = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + (Number(p.marktwert) || Number(p.total_qm || 0) * 3000), 0) || 0
-    : Number(selectedProperty?.marktwert) || Number(selectedProperty?.total_qm || 0) * 3000;
+    ? properties?.reduce((sum, p) => sum + (Number(p.marktwert) || Number(p.total_qm || 0) * 2000), 0) || 0
+    : Number(selectedProperty?.marktwert) || Number(selectedProperty?.total_qm || 0) * 2000;
   
   // Rendite basierend auf payments (SSOT für Mieteinnahmen)
   const annualYieldFromTransactions = estimatedPropertyValue > 0 
@@ -1160,12 +1166,17 @@ export default function Reports() {
                   {annualYieldFromTransactions.toFixed(1)}%
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Mieteinnahmen - Instandhaltung
+                  {reportPeriod === 'monthly' ? 'Miete hochgerechnet, IH tatsächlich' : 'Mieteinnahmen - Instandhaltung'}
                 </p>
               </div>
-              <div className="flex items-center gap-1 text-success text-sm">
-                <ArrowUpRight className="h-4 w-4" />
-                €{estimatedPropertyValue.toLocaleString('de-AT')} Marktwert
+              <div className="text-right">
+                <div className="flex items-center gap-1 text-success text-sm">
+                  <ArrowUpRight className="h-4 w-4" />
+                  €{estimatedPropertyValue.toLocaleString('de-AT')} Marktwert
+                </div>
+                {!hasRealMarktwert && (
+                  <p className="text-xs text-warning mt-1">Geschätzt (€2.000/m²)</p>
+                )}
               </div>
             </div>
           </CardContent>

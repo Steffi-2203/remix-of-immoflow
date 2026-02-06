@@ -95,7 +95,9 @@ export function useTransactionsByBankAccount(bankAccountId?: string) {
 }
 
 export function useTransactionsByCategory(categoryId?: string) {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'category', categoryId],
     queryFn: async () => {
       if (!categoryId) return [];
@@ -108,8 +110,19 @@ export function useTransactionsByCategory(categoryId?: string) {
       if (error) throw error;
       return data as Transaction[];
     },
-    enabled: !!categoryId,
+    enabled: !!categoryId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTransactions.filter(t => (t as any).category_id === categoryId) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useRecentTransactions(limit: number = 10) {
@@ -181,7 +194,9 @@ export interface TransactionSummary {
 }
 
 export function useTransactionSummary(startDate?: string, endDate?: string) {
-  return useQuery({
+  const { isDemoMode } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'summary', startDate, endDate],
     queryFn: async () => {
       let query = supabase
@@ -239,7 +254,19 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
         })).sort((a, b) => a.total - b.total),
       } as TransactionSummary;
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: { totalIncome: 0, totalExpenses: 0, balance: 0, incomeByCategory: [], expensesByCategory: [] } as TransactionSummary,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useCreateTransaction() {
@@ -271,9 +298,14 @@ export function useCreateTransaction() {
 
 export function useCreateTransactions() {
   const queryClient = useQueryClient();
+  const { isDemoMode } = useDemoData();
   
   return useMutation({
     mutationFn: async (transactions: TransactionInsert[]) => {
+      if (isDemoMode) {
+        toast.info('Import ist im Demo-Modus nicht verfügbar');
+        return [] as Transaction[];
+      }
       const { data, error } = await supabase
         .from('transactions')
         .insert(transactions)
@@ -283,8 +315,10 @@ export function useCreateTransactions() {
       return data as Transaction[];
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      toast.success(`${data.length} Transaktionen erfolgreich importiert`);
+      if (!isDemoMode) {
+        queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        toast.success(`${data.length} Transaktionen erfolgreich importiert`);
+      }
     },
     onError: (error) => {
       toast.error('Fehler beim Importieren der Transaktionen');
