@@ -816,6 +816,356 @@ export const mockDashboardStats: DashboardStats = {
   overdueAmount: 0,
 };
 
+// ============ Demo Contractors ============
+export interface DemoContractor {
+  id: string;
+  organization_id: string | null;
+  company_name: string;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  address: string | null;
+  postal_code: string | null;
+  city: string | null;
+  specializations: string[];
+  rating: number | null;
+  notes: string | null;
+  is_active: boolean;
+  iban: string | null;
+  bic: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const mockContractors: DemoContractor[] = [
+  {
+    id: 'demo-contractor-1',
+    organization_id: null,
+    company_name: 'Schindler Aufzüge GmbH',
+    contact_person: 'Franz Hofer',
+    email: 'service@schindler.at',
+    phone: '+43 1 89012345',
+    mobile: null,
+    address: 'Industriestraße 10',
+    postal_code: '1230',
+    city: 'Wien',
+    specializations: ['aufzug'],
+    rating: 5,
+    notes: 'Wartungsvertrag bis 2026',
+    is_active: true,
+    iban: 'AT611904300234570001',
+    bic: 'GIBAATWWXXX',
+    created_by: null,
+    created_at: '2023-01-15T10:00:00Z',
+    updated_at: '2024-11-20T14:30:00Z',
+  },
+  {
+    id: 'demo-contractor-2',
+    organization_id: null,
+    company_name: 'Maler Huber',
+    contact_person: 'Josef Huber',
+    email: 'office@malerhuber.at',
+    phone: '+43 1 5551234',
+    mobile: '+43 664 1234567',
+    address: 'Handwerkergasse 5',
+    postal_code: '1050',
+    city: 'Wien',
+    specializations: ['maler'],
+    rating: 4,
+    notes: null,
+    is_active: true,
+    iban: 'AT483200000012340002',
+    bic: 'RLNWATWWXXX',
+    created_by: null,
+    created_at: '2023-06-10T09:00:00Z',
+    updated_at: '2025-01-18T14:00:00Z',
+  },
+  {
+    id: 'demo-contractor-3',
+    organization_id: null,
+    company_name: 'Installateur Berger',
+    contact_person: 'Karl Berger',
+    email: 'berger@installateur.at',
+    phone: '+43 662 987654',
+    mobile: null,
+    address: 'Gewerbepark 12',
+    postal_code: '5020',
+    city: 'Salzburg',
+    specializations: ['sanitaer', 'heizung'],
+    rating: 4,
+    notes: 'Gute Erfahrung bei Heizungsservice',
+    is_active: true,
+    iban: null,
+    bic: null,
+    created_by: null,
+    created_at: '2022-03-20T11:00:00Z',
+    updated_at: '2024-12-12T15:00:00Z',
+  },
+  {
+    id: 'demo-contractor-4',
+    organization_id: null,
+    company_name: 'Brandschutz Austria',
+    contact_person: 'Markus Stein',
+    email: 'info@brandschutz-austria.at',
+    phone: '+43 316 123456',
+    mobile: null,
+    address: 'Sicherheitsweg 3',
+    postal_code: '8010',
+    city: 'Graz',
+    specializations: ['brandschutz'],
+    rating: 3,
+    notes: null,
+    is_active: true,
+    iban: 'AT891400027011110004',
+    bic: 'BAWAATWWXXX',
+    created_by: null,
+    created_at: '2024-01-10T08:00:00Z',
+    updated_at: '2025-01-20T09:00:00Z',
+  },
+  {
+    id: 'demo-contractor-5',
+    organization_id: null,
+    company_name: 'Hausbetreuung Meier GmbH',
+    contact_person: 'Anna Meier',
+    email: 'office@meier-hb.at',
+    phone: '+43 1 6667890',
+    mobile: '+43 660 9876543',
+    address: 'Reinigungsgasse 8',
+    postal_code: '1030',
+    city: 'Wien',
+    specializations: ['hausmeister', 'reinigung', 'garten'],
+    rating: 4,
+    notes: 'Zuständig für Mozartstraße 15',
+    is_active: true,
+    iban: 'AT555555555555550005',
+    bic: 'GIBAATWWXXX',
+    created_by: null,
+    created_at: '2023-03-01T08:00:00Z',
+    updated_at: '2025-01-05T07:00:00Z',
+  },
+];
+
+// ============ Demo Documents ============
+export interface DemoDocument {
+  id: string;
+  property_id: string;
+  name: string;
+  type: string;
+  file_url: string;
+  uploaded_at: string;
+}
+
+export const mockDocuments: DemoDocument[] = [
+  {
+    id: 'demo-doc-1',
+    property_id: 'demo-prop-1',
+    name: 'Grundbuchauszug Mozartstraße 15',
+    type: 'grundbuch',
+    file_url: '#demo',
+    uploaded_at: '2023-01-15T10:00:00Z',
+  },
+  {
+    id: 'demo-doc-2',
+    property_id: 'demo-prop-1',
+    name: 'Energieausweis 2024',
+    type: 'energieausweis',
+    file_url: '#demo',
+    uploaded_at: '2024-03-10T09:00:00Z',
+  },
+  {
+    id: 'demo-doc-3',
+    property_id: 'demo-prop-1',
+    name: 'Versicherungspolizze Gebäude',
+    type: 'versicherung',
+    file_url: '#demo',
+    uploaded_at: '2025-01-02T08:00:00Z',
+  },
+  {
+    id: 'demo-doc-4',
+    property_id: 'demo-prop-2',
+    name: 'Grundbuchauszug Hauptplatz 8',
+    type: 'grundbuch',
+    file_url: '#demo',
+    uploaded_at: '2022-06-10T09:00:00Z',
+  },
+  {
+    id: 'demo-doc-5',
+    property_id: 'demo-prop-2',
+    name: 'Wartungsvertrag Aufzug',
+    type: 'vertrag',
+    file_url: '#demo',
+    uploaded_at: '2024-06-01T11:00:00Z',
+  },
+];
+
+// ============ Demo Messages ============
+export interface DemoMessage {
+  id: string;
+  organization_id: string | null;
+  tenant_id: string | null;
+  unit_id: string | null;
+  maintenance_task_id: string | null;
+  recipient_type: string | null;
+  recipient_name: string | null;
+  recipient_email: string | null;
+  recipient_phone: string | null;
+  subject: string | null;
+  message_body: string;
+  message_type: string | null;
+  status: string | null;
+  sent_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export const mockMessages: DemoMessage[] = [
+  {
+    id: 'demo-msg-1',
+    organization_id: null,
+    tenant_id: 'demo-tenant-3',
+    unit_id: 'demo-unit-4',
+    maintenance_task_id: null,
+    recipient_type: 'tenant',
+    recipient_name: 'Familie Müller',
+    recipient_email: 'mueller.familie@gmx.at',
+    recipient_phone: null,
+    subject: 'Betriebskostenabrechnung 2024',
+    message_body: 'Sehr geehrte Familie Müller, anbei übermitteln wir Ihnen die Betriebskostenabrechnung für das Jahr 2024.',
+    message_type: 'email',
+    status: 'sent',
+    sent_at: '2025-01-20T10:00:00Z',
+    created_by: null,
+    created_at: '2025-01-20T10:00:00Z',
+  },
+  {
+    id: 'demo-msg-2',
+    organization_id: null,
+    tenant_id: 'demo-tenant-1',
+    unit_id: 'demo-unit-1',
+    maintenance_task_id: null,
+    recipient_type: 'tenant',
+    recipient_name: 'Café Amadeus GmbH',
+    recipient_email: 'office@cafe-amadeus.at',
+    recipient_phone: null,
+    subject: 'Information: Aufzugswartung am 15.02.2025',
+    message_body: 'Sehr geehrte Damen und Herren, wir möchten Sie informieren, dass am 15.02.2025 eine Aufzugswartung durchgeführt wird.',
+    message_type: 'email',
+    status: 'sent',
+    sent_at: '2025-01-18T14:00:00Z',
+    created_by: null,
+    created_at: '2025-01-18T14:00:00Z',
+  },
+  {
+    id: 'demo-msg-3',
+    organization_id: null,
+    tenant_id: null,
+    unit_id: null,
+    maintenance_task_id: 'demo-task-2',
+    recipient_type: 'contractor',
+    recipient_name: 'Maler Huber',
+    recipient_email: 'office@malerhuber.at',
+    recipient_phone: null,
+    subject: 'Beauftragung Renovierung Top 3',
+    message_body: 'Sehr geehrter Herr Huber, wir beauftragen Sie hiermit mit der Renovierung der Wohnung Top 3 in der Mozartstraße 15.',
+    message_type: 'email',
+    status: 'sent',
+    sent_at: '2025-01-06T09:00:00Z',
+    created_by: null,
+    created_at: '2025-01-06T09:00:00Z',
+  },
+  {
+    id: 'demo-msg-4',
+    organization_id: null,
+    tenant_id: 'demo-tenant-2',
+    unit_id: 'demo-unit-2',
+    maintenance_task_id: null,
+    recipient_type: 'tenant',
+    recipient_name: 'Maria Huber',
+    recipient_email: 'maria.huber@email.at',
+    recipient_phone: null,
+    subject: 'Mietanpassung ab 01.04.2025',
+    message_body: 'Sehr geehrte Frau Huber, wir informieren Sie über die Anpassung Ihres Mietzinses gemäß Richtwertgesetz ab 01.04.2025.',
+    message_type: 'email',
+    status: 'draft',
+    sent_at: null,
+    created_by: null,
+    created_at: '2025-01-22T11:00:00Z',
+  },
+];
+
+// ============ Demo Budgets ============
+export interface DemoBudget {
+  id: string;
+  property_id: string;
+  organization_id: string | null;
+  year: number;
+  status: string | null;
+  notes: string | null;
+  position_1_name: string | null;
+  position_1_amount: number | null;
+  position_2_name: string | null;
+  position_2_amount: number | null;
+  position_3_name: string | null;
+  position_3_amount: number | null;
+  position_4_name: string | null;
+  position_4_amount: number | null;
+  position_5_name: string | null;
+  position_5_amount: number | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const mockBudgets: DemoBudget[] = [
+  {
+    id: 'demo-budget-1',
+    property_id: 'demo-prop-1',
+    organization_id: null,
+    year: 2025,
+    status: 'genehmigt',
+    notes: 'Jahresbudget genehmigt in EV am 15.12.2024',
+    position_1_name: 'Instandhaltung allgemein',
+    position_1_amount: 15000,
+    position_2_name: 'Aufzugswartung & Reparatur',
+    position_2_amount: 5000,
+    position_3_name: 'Fassade / Fenster',
+    position_3_amount: 8000,
+    position_4_name: 'Gartenanlage',
+    position_4_amount: 2500,
+    position_5_name: 'Sonstiges / Reserve',
+    position_5_amount: 4500,
+    approved_at: '2024-12-15T18:00:00Z',
+    approved_by: null,
+    created_at: '2024-11-01T10:00:00Z',
+    updated_at: '2024-12-15T18:00:00Z',
+  },
+  {
+    id: 'demo-budget-2',
+    property_id: 'demo-prop-2',
+    organization_id: null,
+    year: 2025,
+    status: 'entwurf',
+    notes: 'Entwurf für EV am 20.02.2025',
+    position_1_name: 'Allgemeine Instandhaltung',
+    position_1_amount: 22000,
+    position_2_name: 'Heizungsanlage',
+    position_2_amount: 8000,
+    position_3_name: 'Brandschutz',
+    position_3_amount: 3000,
+    position_4_name: 'Dachsanierung (Anteil)',
+    position_4_amount: 15000,
+    position_5_name: null,
+    position_5_amount: null,
+    approved_at: null,
+    approved_by: null,
+    created_at: '2025-01-10T09:00:00Z',
+    updated_at: '2025-01-20T14:00:00Z',
+  },
+];
+
 // ============ Legacy Format Exports (for backwards compatibility) ============
 export const mockPropertiesLegacy: Property[] = [
   {
