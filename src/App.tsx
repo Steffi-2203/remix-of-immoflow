@@ -40,6 +40,7 @@ import TeamManagement from "./pages/TeamManagement";
 import Contractors from "./pages/Contractors";
 import Dunning from "./pages/Dunning";
 import Budgets from "./pages/Budgets";
+import TenantDetail from "./pages/TenantDetail";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -79,6 +80,7 @@ const App = () => (
             <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter" element={<ProtectedRoute><DemoDataProvider><TenantList /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mieter/:tenantId" element={<ProtectedRoute><DemoDataProvider><TenantDetail /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><PaymentList /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
