@@ -1278,6 +1278,7 @@ export type Database = {
           heizung_anteil_wohnung: number
           heizungskosten_gesamt: number
           id: string
+          marktwert: number | null
           name: string
           postal_code: string
           richtwert_bundesland: string | null
@@ -1305,6 +1306,7 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
+          marktwert?: number | null
           name: string
           postal_code: string
           richtwert_bundesland?: string | null
@@ -1332,6 +1334,7 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
+          marktwert?: number | null
           name?: string
           postal_code?: string
           richtwert_bundesland?: string | null
