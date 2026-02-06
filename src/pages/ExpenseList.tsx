@@ -86,7 +86,7 @@ function parseEuroAmount(raw: string): number | null {
   return isFinite(num) && num >= 0 ? num : null;
 }
 
-export default function ExpenseList() {
+export default function ExpenseList({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -780,11 +780,8 @@ export default function ExpenseList() {
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  return (
-    <MainLayout
-      title="Buchhaltung"
-      subtitle="Kosten erfassen und kategorisieren"
-    >
+  const content = (
+    <>
       {/* Batch Results Summary Dialog */}
       <BatchResultsSummary
         open={batchSummaryOpen}
@@ -1598,6 +1595,17 @@ export default function ExpenseList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout
+      title="Buchhaltung"
+      subtitle="Kosten erfassen und kategorisieren"
+    >
+      {content}
     </MainLayout>
   );
 }

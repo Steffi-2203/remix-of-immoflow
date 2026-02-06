@@ -16,12 +16,9 @@ import {
   Users,
   X,
   Shield,
-  FileText,
   Wrench,
-  CheckSquare,
   MessageSquare,
   HardHat,
-  AlertTriangle,
   PiggyBank
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -73,11 +70,6 @@ const navItems: NavItem[] = [
     href: '/zahlungen'
   },
   {
-    label: 'Vorschreibungen',
-    icon: FileText,
-    href: '/vorschreibungen'
-  },
-  {
     label: 'Kosten & Belege',
     icon: Receipt,
     href: '/kosten',
@@ -122,7 +114,7 @@ export function Sidebar() {
   const { isTester } = useIsTester();
 
   // For testers, hide pages that don't have demo data
-  const testerHiddenPaths = ['/budgets', '/mahnwesen', '/rechnungsfreigabe', '/nachrichten', '/team', '/abrechnung'];
+  const testerHiddenPaths = ['/budgets', '/nachrichten', '/team', '/abrechnung'];
 
   // Role-based navigation items
   const roleBasedItems: NavItem[] = [
@@ -131,25 +123,11 @@ export function Sidebar() {
       icon: Wrench,
       href: '/wartungen',
       tourId: 'nav-maintenance'
-    }, {
-      label: 'Handwerker',
-      icon: HardHat,
-      href: '/handwerker',
     }] : []),
     ...(permissions.canEditFinances || permissions.isAdmin ? [{
-      label: 'Mahnwesen',
-      icon: AlertTriangle,
-      href: '/mahnwesen',
-    }, {
       label: 'Budgetplanung',
       icon: PiggyBank,
       href: '/budgets',
-    }] : []),
-    ...(permissions.canApproveInvoices || permissions.isAdmin ? [{
-      label: 'Rechnungsfreigabe',
-      icon: CheckSquare,
-      href: '/rechnungsfreigabe',
-      tourId: 'nav-invoice-approval'
     }] : []),
     ...(permissions.canSendMessages || permissions.isAdmin ? [{
       label: 'Nachrichten',

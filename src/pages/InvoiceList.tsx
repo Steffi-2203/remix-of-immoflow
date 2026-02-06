@@ -73,7 +73,7 @@ const months = [
   { value: '12', label: 'Dezember' },
 ];
 
-export default function InvoiceList() {
+export default function InvoiceList({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
@@ -294,11 +294,8 @@ export default function InvoiceList() {
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
-  return (
-    <MainLayout
-      title="Vorschreibungen"
-      subtitle="Monatliche Mietvorschreibungen verwalten"
-    >
+  const content = (
+    <>
       {/* Actions Bar */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex gap-2">
@@ -642,6 +639,17 @@ export default function InvoiceList() {
           )}
         </CardContent>
       </Card>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout
+      title="Vorschreibungen"
+      subtitle="Monatliche Mietvorschreibungen verwalten"
+    >
+      {content}
     </MainLayout>
   );
 }
