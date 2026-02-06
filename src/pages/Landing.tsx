@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Shield, BarChart3, Users, FileText, Euro, ArrowRight, CheckCircle, Building2 } from 'lucide-react';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { DemoRegistrationDialog } from '@/components/landing/DemoRegistrationDialog';
 
 const features = [
   {
@@ -80,6 +81,7 @@ export default function Landing() {
             Verwalten Sie alles an einem Ort – übersichtlich, effizient und sicher.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <DemoRegistrationDialog />
             <Button size="lg" asChild className="text-lg px-8">
               <Link to="/login">
                 Anmelden
