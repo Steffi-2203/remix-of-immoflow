@@ -48,6 +48,28 @@ export function useOrganization() {
     queryFn: async () => {
       if (!user) return null;
 
+      // Check if user is a tester - return demo organization
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (roleData?.role === 'tester') {
+        return {
+          id: 'demo-org',
+          name: 'Demo Hausverwaltung',
+          subscription_tier: 'enterprise' as SubscriptionTier,
+          subscription_status: 'active' as SubscriptionStatus,
+          trial_ends_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          iban: null,
+          bic: null,
+          sepa_creditor_id: null,
+        } as Organization;
+      }
+
       // First get the user's profile to find their organization
       const { data: profile, error: profileError } = await supabase
         .from('profiles')

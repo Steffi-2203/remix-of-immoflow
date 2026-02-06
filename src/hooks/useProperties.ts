@@ -108,6 +108,12 @@ export function useCreateProperty() {
           heizung_anteil_geschaeft: property.heizung_anteil_geschaeft || 0,
           betriebskosten_gesamt: property.betriebskosten_gesamt || 0,
           heizungskosten_gesamt: property.heizungskosten_gesamt || 0,
+          baubewilligung_nach_1945: null,
+          baubewilligung_nach_1953: null,
+          baujahr_mrg: null,
+          foerderung_erhalten: null,
+          richtwert_bundesland: null,
+          stichtag_mrg: null,
         });
         return newProperty;
       }

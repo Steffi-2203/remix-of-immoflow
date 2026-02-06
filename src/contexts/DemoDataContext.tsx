@@ -173,7 +173,7 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
       id: generateId(),
       created_at: now,
       updated_at: now,
-    };
+    } as DemoUnit;
     setUnits(prev => [newUnit, ...prev]);
     return newUnit;
   }, []);
@@ -332,7 +332,7 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
     const activeTenants = tenants.filter(t => t.status === 'aktiv');
     
     const monthlyRevenue = activeTenants.reduce((sum, t) => 
-      sum + (t.grundmiete || 0) + (t.betriebskosten_vorschuss || 0) + (t.heizkosten_vorschuss || 0), 0
+      sum + (t.grundmiete || 0) + (t.betriebskosten_vorschuss || 0) + (t.heizungskosten_vorschuss || 0), 0
     );
     
     return {

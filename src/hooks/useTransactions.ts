@@ -2,13 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type Transaction = Tables<'transactions'>;
 export type TransactionInsert = TablesInsert<'transactions'>;
 export type TransactionUpdate = TablesUpdate<'transactions'>;
 
 export function useTransactions() {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -19,11 +22,20 @@ export function useTransactions() {
       if (error) throw error;
       return data as Transaction[];
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return { data: demoTransactions as any, isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function useTransactionsByUnit(unitId?: string) {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'unit', unitId],
     queryFn: async () => {
       if (!unitId) return [];
@@ -36,12 +48,25 @@ export function useTransactionsByUnit(unitId?: string) {
       if (error) throw error;
       return data as Transaction[];
     },
-    enabled: !!unitId,
+    enabled: !!unitId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTransactions.filter(t => t.unit_id === unitId) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useTransactionsByBankAccount(bankAccountId?: string) {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'bank_account', bankAccountId],
     queryFn: async () => {
       if (!bankAccountId) return [];
@@ -54,8 +79,19 @@ export function useTransactionsByBankAccount(bankAccountId?: string) {
       if (error) throw error;
       return data as Transaction[];
     },
-    enabled: !!bankAccountId,
+    enabled: !!bankAccountId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTransactions.filter(t => t.bank_account_id === bankAccountId) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useTransactionsByCategory(categoryId?: string) {
@@ -77,7 +113,9 @@ export function useTransactionsByCategory(categoryId?: string) {
 }
 
 export function useRecentTransactions(limit: number = 10) {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'recent', limit],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -89,11 +127,25 @@ export function useRecentTransactions(limit: number = 10) {
       if (error) throw error;
       return data as Transaction[];
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTransactions.slice(0, limit) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useUnmatchedTransactions() {
-  return useQuery({
+  const { isDemoMode, transactions: demoTransactions } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['transactions', 'unmatched'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -105,7 +157,19 @@ export function useUnmatchedTransactions() {
       if (error) throw error;
       return data as Transaction[];
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTransactions.filter(t => t.status === 'unmatched') as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export interface TransactionSummary {
@@ -137,7 +201,6 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
       
       const transactions = data as Array<Transaction & { account_categories: { id: string; name: string; type: string } | null }>;
       
-      // Calculate totals
       const totalIncome = transactions
         .filter(t => t.amount > 0)
         .reduce((sum, t) => sum + Number(t.amount), 0);
@@ -146,7 +209,6 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
         .filter(t => t.amount < 0)
         .reduce((sum, t) => sum + Number(t.amount), 0);
       
-      // Group by category
       const incomeByCategory = new Map<string | null, { categoryName: string; total: number }>();
       const expensesByCategory = new Map<string | null, { categoryName: string; total: number }>();
       
@@ -174,7 +236,7 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
         expensesByCategory: Array.from(expensesByCategory.entries()).map(([categoryId, data]) => ({
           categoryId,
           ...data
-        })).sort((a, b) => a.total - b.total), // Most negative first
+        })).sort((a, b) => a.total - b.total),
       } as TransactionSummary;
     },
   });
@@ -182,9 +244,13 @@ export function useTransactionSummary(startDate?: string, endDate?: string) {
 
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
+  const { isDemoMode, addTransaction } = useDemoData();
   
   return useMutation({
     mutationFn: async (transaction: TransactionInsert) => {
+      if (isDemoMode) {
+        return addTransaction(transaction as any);
+      }
       const { data, error } = await supabase
         .from('transactions')
         .insert(transaction)
@@ -229,20 +295,22 @@ export function useCreateTransactions() {
 
 export function useUpdateTransaction() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updateTransaction: updateDemoTransaction } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TransactionUpdate & { id: string }) => {
-      // Auto-set status to 'matched' if unit, tenant, property, or category is assigned
+      if (isDemoMode) {
+        updateDemoTransaction(id, updates as any);
+        return { id, ...updates } as any;
+      }
       const finalUpdates = { ...updates };
       
-      // If any assignment field is being set, auto-update status to matched
       const hasAssignment = 
         updates.unit_id || 
         updates.tenant_id || 
         updates.property_id || 
         updates.category_id;
       
-      // Only auto-update status if not explicitly set and there's an assignment
       if (hasAssignment && !updates.status) {
         finalUpdates.status = 'matched';
         finalUpdates.matched_at = new Date().toISOString();
@@ -271,9 +339,14 @@ export function useUpdateTransaction() {
 
 export function useDeleteTransaction() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deleteTransaction: deleteDemoTransaction } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoTransaction(id);
+        return;
+      }
       const { error } = await supabase
         .from('transactions')
         .delete()
