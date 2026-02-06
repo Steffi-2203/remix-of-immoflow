@@ -327,7 +327,7 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
   
   // Calculate dashboard stats dynamically
   const dashboardStats = useMemo((): DashboardStats => {
-    const occupiedUnits = units.filter(u => u.status === 'vermietet').length;
+    const occupiedUnits = units.filter(u => u.status === 'aktiv').length;
     const vacantUnits = units.filter(u => u.status === 'leerstand').length;
     const activeTenants = tenants.filter(t => t.status === 'aktiv');
     
