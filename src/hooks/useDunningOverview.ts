@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export interface DunningInvoice {
   id: string;
@@ -36,6 +37,8 @@ export interface DunningStats {
 }
 
 export function useDunningOverview() {
+  const { isDemoMode } = useDemoData();
+
   return useQuery({
     queryKey: ['dunningOverview'],
     queryFn: async () => {
@@ -64,7 +67,7 @@ export function useDunningOverview() {
             unit_id,
             units (
               id,
-              unit_number,
+              top_nummer,
               property_id,
               properties (
                 id,
@@ -97,7 +100,7 @@ export function useDunningOverview() {
             propertyId: tenant.units?.properties?.id || '',
             propertyName: tenant.units?.properties?.name || 'Unbekannt',
             unitId: tenant.units?.id || '',
-            unitNumber: tenant.units?.unit_number || '',
+            unitNumber: tenant.units?.top_nummer || '',
             invoices: [],
             totalAmount: 0,
             highestMahnstufe: 0,
@@ -141,6 +144,7 @@ export function useDunningOverview() {
       
       return { cases, stats };
     },
+    enabled: !isDemoMode,
   });
 }
 
