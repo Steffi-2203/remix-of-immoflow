@@ -11,6 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Plus, Trash2, ChevronDown, ChevronRight, Home, Sparkles } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { SyncStatusWidget } from "@/components/dashboard/SyncStatusWidget";
 import { DataQualityWidget } from "@/components/dashboard/DataQualityWidget";
 import { BankAccountsWidget } from "@/components/dashboard/BankAccountsWidget";
@@ -202,7 +213,7 @@ export default function SimpleDashboard() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className="bg-green-100 text-green-800">Aktiv</Badge>
+                <Badge variant="secondary">Aktiv</Badge>
               </div>
             </div>
           </CardContent>
@@ -338,19 +349,35 @@ export default function SimpleDashboard() {
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Liegenschaft wirklich löschen?')) {
-                            deleteProperty.mutate(property.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Liegenschaft löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Möchten Sie "{property.name}" wirklich löschen? Alle zugehörigen Einheiten werden ebenfalls entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteProperty.mutate(property.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
 
                     {/* Units Section - nur wenn Property ausgewählt */}
