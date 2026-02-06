@@ -2,13 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type Invoice = Tables<'monthly_invoices'>;
 export type InvoiceInsert = TablesInsert<'monthly_invoices'>;
 export type InvoiceUpdate = TablesUpdate<'monthly_invoices'>;
 
 export function useInvoices(year?: number, month?: number) {
-  return useQuery({
+  const { isDemoMode } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['invoices', year, month],
     queryFn: async () => {
       let query = supabase
@@ -29,11 +32,20 @@ export function useInvoices(year?: number, month?: number) {
       if (error) throw error;
       return data;
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return { data: [] as Invoice[], isLoading: false, error: null, isError: false, refetch: realQuery.refetch };
+  }
+
+  return realQuery;
 }
 
 export function useInvoicesByTenant(tenantId: string) {
-  return useQuery({
+  const { isDemoMode } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['invoices', 'tenant', tenantId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -46,15 +58,26 @@ export function useInvoicesByTenant(tenantId: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return { data: [] as Invoice[], isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function useCreateInvoice() {
   const queryClient = useQueryClient();
+  const { isDemoMode } = useDemoData();
 
   return useMutation({
     mutationFn: async (invoice: InvoiceInsert) => {
+      if (isDemoMode) {
+        toast.info('Vorschreibungen erstellen ist im Demo-Modus nicht verfügbar');
+        return {} as Invoice;
+      }
       const { data, error } = await supabase
         .from('monthly_invoices')
         .insert(invoice)
@@ -65,8 +88,10 @@ export function useCreateInvoice() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Vorschreibung erfolgreich erstellt');
+      if (!isDemoMode) {
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        toast.success('Vorschreibung erfolgreich erstellt');
+      }
     },
     onError: (error) => {
       toast.error('Fehler beim Erstellen der Vorschreibung');
