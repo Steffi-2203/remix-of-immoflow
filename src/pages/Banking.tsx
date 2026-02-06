@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -64,6 +64,7 @@ interface NewBankAccount {
 }
 
 export default function Banking() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'manual';
   const initialStatus = searchParams.get('status') || 'all';
@@ -584,7 +585,7 @@ export default function Banking() {
                   <p className="text-sm text-muted-foreground">Kosten automatisch per KI aus Rechnungen erfassen</p>
                 </div>
               </div>
-              <Button onClick={() => window.location.href = '/kosten'} className="shrink-0">
+              <Button onClick={() => navigate('/kosten')} className="shrink-0">
                 <Upload className="h-4 w-4 mr-2" />
                 Zur OCR Drop Zone
               </Button>
