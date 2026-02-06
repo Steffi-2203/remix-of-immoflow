@@ -27,6 +27,7 @@ import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsTester } from '@/hooks/useUserRole';
+import { useSidebarBadges } from '@/hooks/useSidebarBadges';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -112,6 +113,15 @@ export function Sidebar() {
   const { data: isAdmin } = useIsAdmin();
   const permissions = usePermissions();
   const { isTester } = useIsTester();
+  const { data: badges } = useSidebarBadges();
+
+  // Map route paths to badge counts
+  const badgeMap: Record<string, number> = {
+    '/zahlungen': badges?.dunning ?? 0,
+    '/wartungen': badges?.maintenance ?? 0,
+    '/nachrichten': badges?.messages ?? 0,
+    '/kosten': badges?.invoiceApproval ?? 0,
+  };
 
   // For testers, hide pages that don't have demo data
   const testerHiddenPaths = ['/budgets', '/nachrichten', '/team', '/abrechnung'];
@@ -215,9 +225,9 @@ export function Sidebar() {
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
+                  {(badgeMap[item.href] ?? 0) > 0 && (
                     <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                      {item.badge}
+                      {badgeMap[item.href]}
                     </span>
                   )}
                 </Link>
@@ -304,9 +314,9 @@ export function Sidebar() {
               {!collapsed && (
                 <>
                   <span className="flex-1">{item.label}</span>
-                  {item.badge && (
+                  {(badgeMap[item.href] ?? 0) > 0 && (
                     <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                      {item.badge}
+                      {badgeMap[item.href]}
                     </span>
                   )}
                 </>
