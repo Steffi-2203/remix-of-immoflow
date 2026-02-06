@@ -10,11 +10,23 @@ export interface SidebarBadges {
 }
 
 export function useSidebarBadges() {
-  const { isDemoMode } = useDemoData();
+  const { isDemoMode, maintenanceTasks: demoTasks } = useDemoData();
 
   return useQuery({
-    queryKey: ['sidebarBadges'],
+    queryKey: ['sidebarBadges', isDemoMode],
     queryFn: async (): Promise<SidebarBadges> => {
+      // Demo mode: compute badges from mock data
+      if (isDemoMode) {
+        const openTasks = demoTasks.filter(t => t.status === 'open' || t.status === 'in_progress').length;
+        const pendingApproval = demoTasks.filter(t => t.status === 'pending_approval').length;
+        return {
+          dunning: 0,
+          maintenance: openTasks,
+          messages: 0,
+          invoiceApproval: pendingApproval,
+        };
+      }
+
       const today = new Date().toISOString().split('T')[0];
 
       // Run all counts in parallel
@@ -49,8 +61,7 @@ export function useSidebarBadges() {
         invoiceApproval: approvalRes.count ?? 0,
       };
     },
-    enabled: !isDemoMode,
-    refetchInterval: 60_000, // refresh every minute
+    refetchInterval: 60_000,
     staleTime: 30_000,
   });
 }
