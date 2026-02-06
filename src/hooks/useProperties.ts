@@ -114,6 +114,7 @@ export function useCreateProperty() {
           foerderung_erhalten: null,
           richtwert_bundesland: null,
           stichtag_mrg: null,
+          marktwert: null,
         });
         return newProperty;
       }

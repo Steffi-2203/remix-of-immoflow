@@ -500,14 +500,32 @@ export default function Reports() {
     .reduce((sum, e) => sum + Number(e.betrag), 0);
 
   // ====== KOMBINIERTE AUSGABEN (Transaktionen + Kosten & Belege) ======
-  const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpenses;
-  const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpenses;
-  const combinedSonstigeKosten = sonstigeKostenFromExpenses; // Nur aus expenses, keine Transaktionen-Kategorie
-  const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCosts;
+  // WICHTIG: Expenses mit transaction_id sind bereits in Transaktionen enthalten → nicht doppelt zählen!
+  const expensesWithoutTransaction = periodExpenses.filter(e => !e.transaction_id);
+  
+  const betriebskostenFromExpensesDeduped = expensesWithoutTransaction
+    .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const instandhaltungFromExpensesDeduped = expensesWithoutTransaction
+    .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+    
+  const sonstigeKostenFromExpensesDeduped = expensesWithoutTransaction
+    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expense_type))
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  
+  const totalExpensesFromCostsDeduped = expensesWithoutTransaction
+    .reduce((sum, e) => sum + Number(e.betrag), 0);
 
-  // ====== RENDITE-BERECHNUNG (IST-Basis) ======
-  // Nettoertrag = IST-Mieteinnahmen - Instandhaltungskosten (Banking + Belege)
-  const nettoertrag = mieteFromTransactions - combinedInstandhaltung;
+  const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpensesDeduped;
+  const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpensesDeduped;
+  const combinedSonstigeKosten = sonstigeKostenFromExpensesDeduped;
+  const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCostsDeduped;
+
+  // ====== RENDITE-BERECHNUNG (IST-Basis, SSOT = payments) ======
+  // Nettoertrag = IST-Mieteinnahmen aus payments (SSOT) - Instandhaltungskosten
+  const nettoertrag = paymentAllocationDetails.mieteAnteil - combinedInstandhaltung;
   const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
 
   // Vacancy rate
@@ -515,13 +533,12 @@ export default function Reports() {
   const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  // Property value estimation
-  const totalQm = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + Number(p.total_qm || 0), 0) || 0
-    : Number(selectedProperty?.total_qm || 0);
-  const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
+  // Property value: use marktwert if set, otherwise estimate €3000/m²
+  const estimatedPropertyValue = selectedPropertyId === 'all'
+    ? properties?.reduce((sum, p) => sum + (Number(p.marktwert) || Number(p.total_qm || 0) * 3000), 0) || 0
+    : Number(selectedProperty?.marktwert) || Number(selectedProperty?.total_qm || 0) * 3000;
   
-  // Rendite basierend auf Transaktionen (Mieteinnahmen aus kategorisierten Transaktionen)
+  // Rendite basierend auf payments (SSOT für Mieteinnahmen)
   const annualYieldFromTransactions = estimatedPropertyValue > 0 
     ? (annualNettoertrag / estimatedPropertyValue) * 100 
     : 0;
@@ -795,8 +812,15 @@ export default function Reports() {
   // VAT liability from invoices (alt)
   const vatLiability = totalUst - vorsteuerFromExpenses;
 
-  // Kombinierte Vorsteuer aus Banking + Kosten & Belege
-  const combinedVorsteuer = vorsteuerFromTransactions + vorsteuerFromExpenses;
+  // Kombinierte Vorsteuer aus Banking + Kosten & Belege (dedupliziert)
+  // Nur expenses OHNE transaction_id zählen, da die anderen schon in Transaktionen enthalten sind
+  const vorsteuerFromExpensesDeduped = expensesWithoutTransaction.reduce((sum, exp) => {
+    const expenseType = (exp as any).expense_type || 'sonstiges';
+    const betrag = Number((exp as any).betrag || 0);
+    const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
+    return sum + calculateVatFromGross(betrag, vatRate);
+  }, 0);
+  const combinedVorsteuer = vorsteuerFromTransactions + vorsteuerFromExpensesDeduped;
   const combinedVatLiability = totalUstEinnahmen - combinedVorsteuer;
 
   // Period label for display
@@ -1133,7 +1157,7 @@ export default function Reports() {
               </div>
               <div className="flex items-center gap-1 text-success text-sm">
                 <ArrowUpRight className="h-4 w-4" />
-                {totalQm.toLocaleString('de-AT')} m²
+                €{estimatedPropertyValue.toLocaleString('de-AT')} Marktwert
               </div>
             </div>
           </CardContent>
