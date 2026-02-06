@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -64,8 +66,16 @@ export function DocumentUploadDialog({
     }
   };
 
+  const { isDemoMode } = useDemoData();
+
   const handleSubmit = async () => {
     if (!selectedFile || !documentType || !documentName) return;
+    if (isDemoMode) {
+      toast.info('Dokument-Upload ist im Demo-Modus nicht verfügbar');
+      resetForm();
+      onOpenChange(false);
+      return;
+    }
 
     await onUpload(selectedFile, documentType, documentName);
 

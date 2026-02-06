@@ -51,7 +51,7 @@ export default function Settings() {
     navigate('/dashboard');
   };
 
-  const canViewFinancials = userRole === 'admin' || userRole === 'finance';
+  const canViewFinancials = userRole === 'admin' || userRole === 'finance' || userRole === 'property_manager' || userRole === 'tester';
 
   if (isLoading) {
     return (

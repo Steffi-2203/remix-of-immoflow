@@ -12,6 +12,8 @@ import { de } from 'date-fns/locale';
 import { useDunningOverview, getDaysOverdue, DunningCase } from '@/hooks/useDunningOverview';
 import { useSendDunning, getDunningStatusLabel, getNextDunningAction } from '@/hooks/useDunning';
 import { useProperties } from '@/hooks/useProperties';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { toast } from 'sonner';
 
 export default function Dunning() {
   const [filterMahnstufe, setFilterMahnstufe] = useState<string>('all');
@@ -34,7 +36,13 @@ export default function Dunning() {
     return true;
   });
   
+  const { isDemoMode } = useDemoData();
+
   const handleSendDunning = async (dunningCase: DunningCase) => {
+    if (isDemoMode) {
+      toast.info('Mahnversand ist im Demo-Modus nicht verfügbar');
+      return;
+    }
     const nextAction = getNextDunningAction(dunningCase.highestMahnstufe);
     if (!nextAction || !dunningCase.email) return;
     

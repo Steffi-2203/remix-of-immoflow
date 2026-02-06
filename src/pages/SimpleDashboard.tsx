@@ -121,7 +121,8 @@ export default function SimpleDashboard() {
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
   const propertiesList = properties || [];
-  const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
+  const isDemoMode = organization?.name === 'Demo-Organisation';
+  const showOnboarding = !isDemoMode && !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   // Auto-start tour for new users
   useEffect(() => {
@@ -143,7 +144,7 @@ export default function SimpleDashboard() {
     );
   }
 
-  if (!organization) {
+  if (!organization && !isDemoMode) {
     return (
       <MainLayout title="Dashboard" subtitle="Übersicht">
         <div className="max-w-4xl">
