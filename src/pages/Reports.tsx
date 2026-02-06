@@ -772,9 +772,10 @@ export default function Reports() {
   };
   
   // Vorsteuer-Aufschlüsselung nach expense_type
-  const vorsteuerByExpenseType = periodExpenses.reduce((acc, exp) => {
-    const expenseType = exp.expense_type || 'sonstiges';
-    const betrag = Number(exp.betrag || 0);
+  type VorsteuerEntry = { brutto: number; vorsteuer: number; vatRate: number };
+  const vorsteuerByExpenseType: Record<string, VorsteuerEntry> = periodExpenses.reduce<Record<string, VorsteuerEntry>>((acc, exp) => {
+    const expenseType = (exp as any).expense_type || 'sonstiges';
+    const betrag = Number((exp as any).betrag || 0);
     const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
     const vorsteuer = calculateVatFromGross(betrag, vatRate);
     
@@ -785,7 +786,7 @@ export default function Reports() {
     acc[expenseType].vorsteuer += vorsteuer;
     
     return acc;
-  }, {} as Record<string, { brutto: number; vorsteuer: number; vatRate: number }>);
+  }, {});
 
   const vorsteuerFromExpenses = Object.values(vorsteuerByExpenseType).reduce(
     (sum, data) => sum + data.vorsteuer, 0
@@ -2031,12 +2032,12 @@ export default function Reports() {
           {selectedReportId === 'detailbericht' && (() => {
             // Gruppiere Transaktionen nach Einheiten
             const unitTransactions = new Map<string, { 
-              unit: typeof units extends (infer U)[] ? U : never;
-              property: typeof properties extends (infer P)[] ? P : never;
+              unit: any;
+              property: any;
               income: number; 
               expenses: number; 
-              transactions: typeof periodTransactions;
-              tenants: typeof allTenants;
+              transactions: any[];
+              tenants: any[];
             }>();
 
             // Initialisiere alle Einheiten
@@ -2073,12 +2074,12 @@ export default function Reports() {
 
             // Gruppiere nach Liegenschaft
             const propertiesData = new Map<string, {
-              property: typeof properties extends (infer P)[] ? P : never;
+              property: any;
               units: Array<{
-                unit: typeof units extends (infer U)[] ? U : never;
+                unit: any;
                 income: number;
                 expenses: number;
-                tenants: typeof allTenants;
+                tenants: any[];
               }>;
               totalIncome: number;
               totalExpenses: number;
@@ -2201,10 +2202,10 @@ export default function Reports() {
             // SOLL-Werte direkt aus tenants-Tabelle (aktive Mieter)
             // Gruppiere nach Liegenschaft
             const propertiesData = new Map<string, {
-              property: typeof properties extends (infer P)[] ? P : never;
+              property: any;
               tenantsSoll: Array<{
-                tenant: typeof allTenants extends (infer T)[] ? T : never;
-                unit: typeof allUnits extends (infer U)[] ? U : never;
+                tenant: any;
+                unit: any;
                 grundmiete: number;
                 betriebskosten: number;
                 heizungskosten: number;
