@@ -32,6 +32,7 @@ import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import SystemTest from "./pages/SystemTest";
 import Banking from "./pages/Banking";
+import Accounting from "./pages/Accounting";
 import MaintenanceHub from "./pages/MaintenanceHub";
 import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><RentalFinance /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/finanzbuchhaltung" element={<ProtectedRoute><DemoDataProvider><Accounting /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><CostsHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />

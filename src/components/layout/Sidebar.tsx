@@ -83,6 +83,12 @@ const navItems: NavItem[] = [
     tourId: 'nav-banking'
   },
   {
+    label: 'Finanzbuchhaltung',
+    icon: Calculator,
+    href: '/finanzbuchhaltung',
+    tourId: 'nav-accounting'
+  },
+  {
     label: 'BK-Abrechnung',
     icon: Calculator,
     href: '/abrechnung'
