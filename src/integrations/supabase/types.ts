@@ -471,6 +471,87 @@ export type Database = {
           },
         ]
       }
+      fixed_assets: {
+        Row: {
+          acquisition_cost: number
+          acquisition_date: string
+          annual_depreciation: number | null
+          asset_type: string
+          created_at: string
+          depreciation_method: string
+          description: string | null
+          id: string
+          is_active: boolean
+          monthly_depreciation: number | null
+          name: string
+          notes: string | null
+          organization_id: string
+          property_id: string | null
+          residual_value: number
+          sold_amount: number | null
+          sold_at: string | null
+          updated_at: string
+          useful_life_years: number
+        }
+        Insert: {
+          acquisition_cost: number
+          acquisition_date: string
+          annual_depreciation?: number | null
+          asset_type: string
+          created_at?: string
+          depreciation_method?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_depreciation?: number | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          property_id?: string | null
+          residual_value?: number
+          sold_amount?: number | null
+          sold_at?: string | null
+          updated_at?: string
+          useful_life_years?: number
+        }
+        Update: {
+          acquisition_cost?: number
+          acquisition_date?: string
+          annual_depreciation?: number | null
+          asset_type?: string
+          created_at?: string
+          depreciation_method?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          monthly_depreciation?: number | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          property_id?: string | null
+          residual_value?: number
+          sold_amount?: number | null
+          sold_at?: string | null
+          updated_at?: string
+          useful_life_years?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixed_assets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixed_assets_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_entries: {
         Row: {
           beleg_nummer: string | null
@@ -3178,6 +3259,26 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uva_data: {
+        Row: {
+          jahr: number | null
+          monat: number | null
+          netto_aufwaende: number | null
+          netto_umsaetze: number | null
+          organization_id: string | null
+          ust_betrag: number | null
+          vorsteuer_betrag: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
