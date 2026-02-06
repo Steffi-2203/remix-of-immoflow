@@ -3,7 +3,7 @@
  * Stellt sicher, dass SOLL-Berechnungen in allen Reports konsistent sind
  */
 
-interface TenantForFilter {
+export interface TenantForFilter {
   id: string;
   unit_id: string;
   status: string;
@@ -12,6 +12,8 @@ interface TenantForFilter {
   grundmiete?: number;
   betriebskosten_vorschuss?: number;
   heizungskosten_vorschuss?: number;
+  first_name?: string;
+  last_name?: string;
 }
 
 interface UnitForFilter {
