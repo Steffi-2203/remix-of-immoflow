@@ -193,8 +193,8 @@ export function PrivacySettings() {
             </ul>
             <p className="pt-2">
               Bei Fragen zum Datenschutz wenden Sie sich bitte an{' '}
-              <a href="mailto:datenschutz@immoflow.at" className="text-primary underline">
-                datenschutz@immoflow.at
+              <a href="mailto:datenschutz@immoflowme.at" className="text-primary underline">
+                datenschutz@immoflowme.at
               </a>
             </p>
           </div>
