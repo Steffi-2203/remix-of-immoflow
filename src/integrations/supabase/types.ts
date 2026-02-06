@@ -1553,6 +1553,73 @@ export type Database = {
           },
         ]
       }
+      rent_adjustments: {
+        Row: {
+          adjustment_date: string
+          applied_by: string | null
+          change_percent: number
+          clause_id: string
+          created_at: string
+          id: string
+          new_grundmiete: number
+          new_index_value: number
+          notes: string | null
+          old_grundmiete: number
+          old_index_value: number
+          tenant_id: string
+        }
+        Insert: {
+          adjustment_date: string
+          applied_by?: string | null
+          change_percent: number
+          clause_id: string
+          created_at?: string
+          id?: string
+          new_grundmiete: number
+          new_index_value: number
+          notes?: string | null
+          old_grundmiete: number
+          old_index_value: number
+          tenant_id: string
+        }
+        Update: {
+          adjustment_date?: string
+          applied_by?: string | null
+          change_percent?: number
+          clause_id?: string
+          created_at?: string
+          id?: string
+          new_grundmiete?: number
+          new_index_value?: number
+          notes?: string | null
+          old_grundmiete?: number
+          old_index_value?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_adjustments_clause_id_fkey"
+            columns: ["clause_id"]
+            isOneToOne: false
+            referencedRelation: "rent_index_clauses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_adjustments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_adjustments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rent_expectations: {
         Row: {
           created_at: string | null
@@ -1600,6 +1667,63 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rent_index_clauses: {
+        Row: {
+          base_index_date: string
+          base_index_value: number
+          created_at: string
+          current_index_value: number | null
+          id: string
+          index_type: string
+          is_active: boolean
+          notes: string | null
+          tenant_id: string
+          threshold_percent: number
+          updated_at: string
+        }
+        Insert: {
+          base_index_date: string
+          base_index_value: number
+          created_at?: string
+          current_index_value?: number | null
+          id?: string
+          index_type?: string
+          is_active?: boolean
+          notes?: string | null
+          tenant_id: string
+          threshold_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          base_index_date?: string
+          base_index_value?: number
+          created_at?: string
+          current_index_value?: number | null
+          id?: string
+          index_type?: string
+          is_active?: boolean
+          notes?: string | null
+          tenant_id?: string
+          threshold_percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_index_clauses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_index_clauses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -1942,6 +2066,78 @@ export type Database = {
             columns: ["maintenance_task_id"]
             isOneToOne: false
             referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_deposits: {
+        Row: {
+          bank_account: string | null
+          created_at: string
+          deduction_notes: string | null
+          deductions: number | null
+          deposit_amount: number
+          deposit_paid_date: string | null
+          deposit_returned_amount: number | null
+          deposit_returned_date: string | null
+          deposit_type: string
+          id: string
+          interest_accrued: number | null
+          interest_rate: number | null
+          last_interest_calc_date: string | null
+          notes: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          bank_account?: string | null
+          created_at?: string
+          deduction_notes?: string | null
+          deductions?: number | null
+          deposit_amount?: number
+          deposit_paid_date?: string | null
+          deposit_returned_amount?: number | null
+          deposit_returned_date?: string | null
+          deposit_type?: string
+          id?: string
+          interest_accrued?: number | null
+          interest_rate?: number | null
+          last_interest_calc_date?: string | null
+          notes?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          bank_account?: string | null
+          created_at?: string
+          deduction_notes?: string | null
+          deductions?: number | null
+          deposit_amount?: number
+          deposit_paid_date?: string | null
+          deposit_returned_amount?: number | null
+          deposit_returned_date?: string | null
+          deposit_type?: string
+          id?: string
+          interest_accrued?: number | null
+          interest_rate?: number | null
+          last_interest_calc_date?: string | null
+          notes?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_deposits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_deposits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]

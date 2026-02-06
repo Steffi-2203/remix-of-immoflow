@@ -9,6 +9,8 @@ import { useTenant } from '@/hooks/useTenants';
 import { useUnit } from '@/hooks/useUnits';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { RentIndexCard } from '@/components/tenants/RentIndexCard';
+import { DepositManagementCard } from '@/components/tenants/DepositManagementCard';
 
 const statusLabels: Record<string, string> = {
   aktiv: 'Aktiv',
@@ -198,6 +200,21 @@ export default function TenantDetail() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Rent Index / Wertsicherung */}
+        <RentIndexCard
+          tenantId={tenant.id}
+          currentGrundmiete={tenant.grundmiete || 0}
+          tenantName={`${tenant.first_name} ${tenant.last_name}`}
+        />
+
+        {/* Deposit / Kautionsmanagement */}
+        <DepositManagementCard
+          tenantId={tenant.id}
+          tenantName={`${tenant.first_name} ${tenant.last_name}`}
+          existingKaution={tenant.kaution}
+          existingKautionBezahlt={tenant.kaution_bezahlt}
+        />
 
         {/* SEPA Info */}
         <Card>
