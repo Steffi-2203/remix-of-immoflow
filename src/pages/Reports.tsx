@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
+import { getActiveTenantsForPeriod, getActiveMonthsInYear } from '@/utils/tenantFilterUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -619,15 +619,19 @@ export default function Reports() {
   }, [allTenants, allUnits, selectedPropertyId, selectedYear, selectedMonth, reportPeriod]);
   
   // Monatliche SOLL-Summen aus Mieterdaten
-  const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
-  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
-  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
-  
-  // Bei jährlicher Ansicht: x12 Monate
-  const monthMultiplier = reportPeriod === 'yearly' ? 12 : 1;
-  const periodSollGrundmiete = sollGrundmiete * monthMultiplier;
-  const periodSollBk = sollBk * monthMultiplier;
-  const periodSollHk = sollHk * monthMultiplier;
+  // Bei jährlicher Ansicht: proportional nach aktiven Monaten (nicht pauschal x12)
+  const periodSollGrundmiete = relevantTenants.reduce((sum, t) => {
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    return sum + Number(t.grundmiete || 0) * months;
+  }, 0);
+  const periodSollBk = relevantTenants.reduce((sum, t) => {
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    return sum + Number(t.betriebskosten_vorschuss || 0) * months;
+  }, 0);
+  const periodSollHk = relevantTenants.reduce((sum, t) => {
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    return sum + Number(t.heizungskosten_vorschuss || 0) * months;
+  }, 0);
   const periodSollGesamt = periodSollGrundmiete + periodSollBk + periodSollHk;
   
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
@@ -636,10 +640,11 @@ export default function Reports() {
       const unit = allUnits?.find(u => u.id === tenant.unit_id);
       const property = properties?.find(p => p.id === unit?.property_id);
       
-      // SOLL-Werte aus Mieterdaten (monatlich * multiplier)
-      const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      // SOLL-Werte proportional nach aktiven Monaten
+      const tenantMonths = reportPeriod === 'yearly' ? getActiveMonthsInYear(tenant, selectedYear) : 1;
+      const sollMiete = Number(tenant.grundmiete || 0) * tenantMonths;
+      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * tenantMonths;
+      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * tenantMonths;
       const sollGesamt = sollMiete + sollBk + sollHk;
       
       // IST-Werte aus Zahlungen für diesen Mieter
@@ -685,23 +690,26 @@ export default function Reports() {
         paymentCount: tenantPayments.length
       };
     });
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, monthMultiplier]);
+  }, [relevantTenants, allUnits, properties, periodCombinedPayments, reportPeriod, selectedYear]);
 
   // USt aus SOLL-Werten berechnen (nach Einheitstyp)
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.grundmiete || 0) * monthMultiplier;
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    const betrag = Number(t.grundmiete || 0) * months;
     const vatRate = getVatRateForUnit(t.unit_id, 'miete');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollBk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.betriebskosten_vorschuss || 0) * monthMultiplier;
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    const betrag = Number(t.betriebskosten_vorschuss || 0) * months;
     const vatRate = getVatRateForUnit(t.unit_id, 'bk');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollHk = relevantTenants.reduce((sum, t) => {
-    const betrag = Number(t.heizungskosten_vorschuss || 0) * monthMultiplier;
+    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
+    const betrag = Number(t.heizungskosten_vorschuss || 0) * months;
     return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
   }, 0);
   
