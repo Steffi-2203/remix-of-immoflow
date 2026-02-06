@@ -66,7 +66,7 @@ import { toast } from 'sonner';
 import { TenantPaymentDetailDialog } from '@/components/payments/TenantPaymentDetailDialog';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 
-export default function PaymentList() {
+export default function PaymentList({ embedded = false }: { embedded?: boolean }) {
   const now = new Date();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
@@ -383,11 +383,8 @@ export default function PaymentList() {
     return grouped;
   }, [tenants, units, properties]);
 
-  return (
-    <MainLayout
-      title="Mieteinnahmen"
-      subtitle="Übersicht der Mieteinnahmen aus der Buchhaltung"
-    >
+  const content = (
+    <>
       {/* Data Consistency Alert */}
       <DataConsistencyAlert variant="compact" />
 
@@ -1068,6 +1065,17 @@ export default function PaymentList() {
         year={selectedYear}
         month={selectedMonth}
       />
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout
+      title="Mieteinnahmen"
+      subtitle="Übersicht der Mieteinnahmen aus der Buchhaltung"
+    >
+      {content}
     </MainLayout>
   );
 }

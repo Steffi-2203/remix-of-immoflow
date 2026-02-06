@@ -49,7 +49,7 @@ import { AddInvoiceDialog } from '@/components/maintenance/AddInvoiceDialog';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-export default function MaintenancePage() {
+export default function MaintenancePage({ embedded = false }: { embedded?: boolean }) {
   const permissions = usePermissions();
   const { data: properties } = useProperties();
   const { data: units } = useUnits();
@@ -98,13 +98,17 @@ export default function MaintenancePage() {
   });
 
   if (!permissions.canManageMaintenance && !permissions.isAdmin) {
+    const noAccess = (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">
+          Sie haben keine Berechtigung für diese Seite.
+        </p>
+      </div>
+    );
+    if (embedded) return noAccess;
     return (
       <MainLayout title="Keine Berechtigung" subtitle="">
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">
-            Sie haben keine Berechtigung für diese Seite.
-          </p>
-        </div>
+        {noAccess}
       </MainLayout>
     );
   }
@@ -173,11 +177,8 @@ export default function MaintenancePage() {
     completed: tasks?.filter((t) => t.status === 'completed').length || 0,
   };
 
-  return (
-    <MainLayout
-      title="Wartungen & Aufträge"
-      subtitle="Facility Management und Handwerkeraufträge verwalten"
-    >
+  const content = (
+    <>
       {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
@@ -671,6 +672,17 @@ export default function MaintenancePage() {
           contractorName={selectedTaskForInvoice.contractorName}
         />
       )}
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout
+      title="Wartungen & Aufträge"
+      subtitle="Facility Management und Handwerkeraufträge verwalten"
+    >
+      {content}
     </MainLayout>
   );
 }

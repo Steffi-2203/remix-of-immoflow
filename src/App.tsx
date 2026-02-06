@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -21,9 +21,8 @@ import UnitDetail from "./pages/UnitDetail";
 import UnitForm from "./pages/UnitForm";
 import TenantForm from "./pages/TenantForm";
 import TenantList from "./pages/TenantList";
-import PaymentList from "./pages/PaymentList";
-import ExpenseList from "./pages/ExpenseList";
-import InvoiceList from "./pages/InvoiceList";
+import RentalFinance from "./pages/RentalFinance";
+import CostsHub from "./pages/CostsHub";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
 import Reports from "./pages/Reports";
 import OperatingCostSettlement from "./pages/OperatingCostSettlement";
@@ -33,12 +32,9 @@ import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import SystemTest from "./pages/SystemTest";
 import Banking from "./pages/Banking";
-import Maintenance from "./pages/Maintenance";
-import InvoiceApproval from "./pages/InvoiceApproval";
+import MaintenanceHub from "./pages/MaintenanceHub";
 import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
-import Contractors from "./pages/Contractors";
-import Dunning from "./pages/Dunning";
 import Budgets from "./pages/Budgets";
 import TenantDetail from "./pages/TenantDetail";
 import NotFound from "./pages/NotFound";
@@ -82,21 +78,23 @@ const App = () => (
             <Route path="/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter/:tenantId" element={<ProtectedRoute><DemoDataProvider><TenantDetail /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><PaymentList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><RentalFinance /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><ExpenseList /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/vorschreibungen" element={<ProtectedRoute><DemoDataProvider><InvoiceList /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><CostsHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><DemoDataProvider><Reports /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/wartungen" element={<ProtectedRoute><DemoDataProvider><Maintenance /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/handwerker" element={<ProtectedRoute><DemoDataProvider><Contractors /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mahnwesen" element={<ProtectedRoute><DemoDataProvider><Dunning /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/wartungen" element={<ProtectedRoute><DemoDataProvider><MaintenanceHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute><DemoDataProvider><Budgets /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/rechnungsfreigabe" element={<ProtectedRoute><DemoDataProvider><InvoiceApproval /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><DemoDataProvider><TeamManagement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
+            
+            {/* Redirects for merged routes */}
+            <Route path="/vorschreibungen" element={<Navigate to="/zahlungen?tab=invoices" replace />} />
+            <Route path="/mahnwesen" element={<Navigate to="/zahlungen?tab=dunning" replace />} />
+            <Route path="/handwerker" element={<Navigate to="/wartungen?tab=contractors" replace />} />
+            <Route path="/rechnungsfreigabe" element={<Navigate to="/kosten?tab=approval" replace />} />
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

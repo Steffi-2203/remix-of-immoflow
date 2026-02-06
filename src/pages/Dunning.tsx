@@ -15,7 +15,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useDemoData } from '@/contexts/DemoDataContext';
 import { toast } from 'sonner';
 
-export default function Dunning() {
+export default function Dunning({ embedded = false }: { embedded?: boolean }) {
   const [filterMahnstufe, setFilterMahnstufe] = useState<string>('all');
   const [filterProperty, setFilterProperty] = useState<string>('all');
   
@@ -73,8 +73,8 @@ export default function Dunning() {
     }
   };
   
-  return (
-    <MainLayout title="Mahnwesen" subtitle="Übersicht und Verwaltung offener Zahlungen">
+  const content = (
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div>
@@ -301,6 +301,14 @@ export default function Dunning() {
           </CardContent>
         </Card>
       </div>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout title="Mahnwesen" subtitle="Übersicht und Verwaltung offener Zahlungen">
+      {content}
     </MainLayout>
   );
 }
