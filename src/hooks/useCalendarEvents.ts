@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfMonth, endOfMonth, format, parseISO } from 'date-fns';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export interface CalendarEvent {
   id: string;
@@ -27,12 +28,56 @@ export function getEventColor(type: CalendarEvent['type']): string {
 export function useCalendarEvents(year: number, month: number) {
   const startDate = format(startOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
   const endDate = format(endOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
+  const { isDemoMode, maintenanceTasks: demoTasks, tenants: demoTenants, properties: demoProperties } = useDemoData();
 
   return useQuery({
-    queryKey: ['calendarEvents', year, month],
+    queryKey: ['calendarEvents', year, month, isDemoMode],
     queryFn: async () => {
       const events: CalendarEvent[] = [];
 
+      // Demo mode: build events from mock data
+      if (isDemoMode) {
+        // Maintenance tasks with due dates in range
+        demoTasks.forEach(task => {
+          if (task.due_date && task.due_date >= startDate && task.due_date <= endDate && task.status !== 'completed') {
+            events.push({
+              id: `task-${task.id}`,
+              date: task.due_date,
+              title: task.title,
+              type: 'task',
+              propertyName: task.properties?.name,
+              link: '/wartungen',
+            });
+          }
+        });
+
+        // Tenant rental ends in range
+        demoTenants.forEach(tenant => {
+          if (tenant.mietende && tenant.mietende >= startDate && tenant.mietende <= endDate) {
+            events.push({
+              id: `te-${tenant.id}`,
+              date: tenant.mietende,
+              title: `Mietende: ${tenant.first_name} ${tenant.last_name}`,
+              type: 'rental_end',
+              link: `/mieter/${tenant.id}/bearbeiten`,
+            });
+          }
+          // Rental starts in range
+          if (tenant.mietbeginn >= startDate && tenant.mietbeginn <= endDate) {
+            events.push({
+              id: `ts-${tenant.id}`,
+              date: tenant.mietbeginn,
+              title: `Mietbeginn: ${tenant.first_name} ${tenant.last_name}`,
+              type: 'rental_start',
+              link: `/mieter/${tenant.id}/bearbeiten`,
+            });
+          }
+        });
+
+        return events;
+      }
+
+      // Real mode: query Supabase
       // 1. Maintenance contracts - next due dates
       const { data: contracts } = await supabase
         .from('maintenance_contracts')

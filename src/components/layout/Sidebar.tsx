@@ -124,7 +124,7 @@ export function Sidebar() {
   };
 
   // For testers, hide pages that don't have demo data
-  const testerHiddenPaths = ['/budgets', '/nachrichten', '/team', '/abrechnung'];
+  const testerHiddenPaths = ['/team']; // Only hide team management (no real users in demo)
 
   // Role-based navigation items
   const roleBasedItems: NavItem[] = [

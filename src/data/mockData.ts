@@ -802,16 +802,18 @@ export const mockMaintenanceTasks: DemoMaintenanceTask[] = [
 ];
 
 // ============ Dashboard Statistics ============
+// These values are dynamically recalculated in DemoDataContext.dashboardStats
+// but serve as fallback for monthlyBetriebskosten, openInvoices, overdueAmount
 export const mockDashboardStats: DashboardStats = {
   totalProperties: 3,
-  totalUnits: 38,
-  occupiedUnits: 34,
-  vacantUnits: 4,
-  totalTenants: 34,
-  monthlyRevenue: 45680,
-  monthlyBetriebskosten: 6540,
-  openInvoices: 5,
-  overdueAmount: 2340,
+  totalUnits: 5,
+  occupiedUnits: 4,
+  vacantUnits: 1,
+  totalTenants: 4,
+  monthlyRevenue: 5975, // sum of all active tenants' rent+BK+HK
+  monthlyBetriebskosten: 2140.50, // sum of demo expenses for current month
+  openInvoices: 0,
+  overdueAmount: 0,
 };
 
 // ============ Legacy Format Exports (for backwards compatibility) ============

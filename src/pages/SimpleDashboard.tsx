@@ -27,7 +27,7 @@ export default function SimpleDashboard() {
   const { isTester } = useIsTester();
 
   const propertiesList = properties || [];
-  const isDemoMode = organization?.name === 'Demo-Organisation';
+  const isDemoMode = isTester || organization?.name === 'Demo-Organisation';
   const showOnboarding = !isTester && !isDemoMode && !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   // Auto-start tour for new users
