@@ -1,228 +1,162 @@
 
-# Plan: Virtuelle Demo-Umgebung für Tester
+# Umfassende Qualitaetspruefung: ImmoflowMe
 
 ## Zusammenfassung
 
-Wenn ein Tester sich anmeldet, bekommt er eine **komplett isolierte virtuelle Umgebung** mit Demo-Daten. Er kann diese Daten ansehen und sogar bearbeiten - aber alles passiert nur lokal im Browser und beeinflusst die echten Daten nicht.
-
-Nach 30 Minuten endet die Session und alle virtuellen Änderungen sind weg.
+Nach systematischer Pruefung aller Seiten, Hooks, Datenfluesse und Rollen-Logik habe ich **23 Probleme** identifiziert, sortiert nach Schweregrad. Ich empfehle, diese Schritt fuer Schritt abzuarbeiten.
 
 ---
 
-## Konzept
+## PRIORITAET 1: Build-Fehler und Kritische Bugs
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│                    NORMALE BENUTZER                        │
-│                                                            │
-│    App → Hooks → Supabase → Echte Datenbank               │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
+### 1.1 Build-Fehler in useProperties.ts (BLOCKIERT ALLES)
+**Datei:** `src/hooks/useProperties.ts` Zeile 94
+**Problem:** `addProperty` erwartet die neuen Felder `baubewilligung_nach_1945`, `baubewilligung_nach_1953`, `baujahr_mrg`, `foerderung_erhalten`, `richtwert_bundesland`, `stichtag_mrg` - diese werden beim Erstellen nicht mitgegeben.
+**Loesung:** Felder als optionale Defaults (null) in den `addProperty`-Aufruf aufnehmen.
 
-┌────────────────────────────────────────────────────────────┐
-│                       TESTER                               │
-│                                                            │
-│    App → Hooks → DemoDataProvider → Lokaler State         │
-│                                                            │
-│    ✓ Sieht Demo-Liegenschaften, Einheiten, Mieter         │
-│    ✓ Kann "erstellen", "bearbeiten", "löschen"            │
-│    ✓ Alles nur im Browser-Speicher                        │
-│    ✓ Keine echten Datenbank-Aufrufe                       │
-│    ✓ Nach 30 Min. alles weg                               │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Geplante Änderungen
-
-### 1. DemoDataProvider Context erstellen
-
-**Neue Datei:** `src/contexts/DemoDataContext.tsx`
-
-Dieser Context:
-- Prüft ob der Benutzer die Tester-Rolle hat
-- Stellt Demo-Daten bereit (aus `mockData.ts` erweitert)
-- Speichert alle Änderungen im lokalen State
-- Bietet CRUD-Funktionen die nur den lokalen State ändern
-
-```text
-DemoDataContext
-├── isDemoMode: boolean
-├── properties: Property[]
-├── units: Unit[]
-├── tenants: Tenant[]
-├── expenses: Expense[]
-├── transactions: Transaction[]
-├── addProperty(...)
-├── updateProperty(...)
-├── deleteProperty(...)
-└── ... (alle CRUD-Operationen)
-```
-
----
-
-### 2. Mock-Daten erweitern
-
+### 1.2 Feldname-Fehler in Demo-Daten
 **Datei:** `src/data/mockData.ts`
+**Problem:** Mock-Mieter verwenden `heizkosten_vorschuss`, aber die gesamte App und die Datenbank verwenden `heizungskosten_vorschuss`. Im Demo-Modus wuerden alle Heizkosten als 0 angezeigt.
+**Loesung:** In `DemoTenant` und allen Mock-Mieterdaten `heizkosten_vorschuss` zu `heizungskosten_vorschuss` umbenennen.
 
-Erweitern mit:
-- Demo-Transaktionen
-- Demo-Ausgaben
-- Demo-Zahlungen
-- Demo-Wartungsaufgaben
-- Dashboard-Statistiken passend zu den Demo-Daten
-
----
-
-### 3. Wrapper-Hooks erstellen
-
-**Neue Dateien:**
-- `src/hooks/demo/useDemoProperties.ts`
-- `src/hooks/demo/useDemoUnits.ts`
-- `src/hooks/demo/useDemoTenants.ts`
-- etc.
-
-Jeder Hook:
-- Prüft `isDemoMode` aus dem Context
-- Wenn Demo: Gibt lokale Daten zurück
-- Wenn nicht Demo: Delegiert an echten Supabase-Hook
-
----
-
-### 4. App-Level Integration
-
-**Datei:** `src/App.tsx`
-
-DemoDataProvider um die geschützten Routen wickeln:
-
-```text
-<ProtectedRoute>
-  <DemoDataProvider>
-    <SimpleDashboard />
-  </DemoDataProvider>
-</ProtectedRoute>
-```
-
----
-
-### 5. Bestehende Hooks anpassen
-
+### 1.3 Demo-Modus nur in Properties implementiert
+**Problem:** Nur `useProperties` hat den Demo-Fallback. Alle anderen Hooks (`useUnits`, `useTenants`, `useTransactions`, `useExpenses`, `usePayments`, `useBankAccounts`, `useMaintenanceTasks`, `useInvoices`) greifen weiterhin auf die echte Datenbank zu. Tester sehen entweder echte Daten oder leere Seiten.
 **Betroffene Hooks:**
-| Hook | Änderung |
-|------|----------|
-| `useProperties.ts` | Demo-Fallback hinzufügen |
-| `useUnits.ts` | Demo-Fallback hinzufügen |
-| `useTenants.ts` | Demo-Fallback hinzufügen |
-| `useTransactions.ts` | Demo-Fallback hinzufügen |
-| `useExpenses.ts` | Demo-Fallback hinzufügen |
-| `usePayments.ts` | Demo-Fallback hinzufügen |
-| `useBankAccounts.ts` | Demo-Fallback hinzufügen |
 
-Die Anpassung erfolgt direkt in den bestehenden Hooks:
+| Hook | Status | Auswirkung |
+|------|--------|------------|
+| useUnits | Kein Demo | Leere Einheiten-Liste |
+| useTenants | Kein Demo | Leere Mieter-Liste |
+| useTransactions | Kein Demo | Leeres Banking |
+| useExpenses | Kein Demo | Leere Kostenliste |
+| usePayments | Kein Demo | Leere Zahlungsliste |
+| useBankAccounts | Kein Demo | Keine Bankkonten |
+| useMaintenanceTasks | Kein Demo | Keine Wartungen |
+| useInvoices | Kein Demo | Keine Vorschreibungen |
 
-```typescript
-export function useProperties() {
-  const { isDemoMode, properties } = useDemoData();
-  
-  // Wenn Demo-Modus: lokale Daten zurückgeben
-  if (isDemoMode) {
-    return {
-      data: properties,
-      isLoading: false,
-      error: null
-    };
-  }
-  
-  // Sonst: normaler Supabase-Aufruf
-  return useQuery({...});
-}
-```
+**Loesung:** Alle Hooks mit isDemoMode-Fallback ausstatten (wie bei useProperties).
+
+### 1.4 Dashboard blockiert fuer Tester
+**Datei:** `src/pages/SimpleDashboard.tsx`
+**Problem:** Dashboard zeigt "Organisation nicht gefunden" wenn `useOrganization()` null zurueckgibt. Tester haben keine Organisation, daher sehen sie nur eine Fehlermeldung statt der Demo-Daten.
+**Loesung:** `useOrganization` mit Demo-Fallback versehen, der eine virtuelle Demo-Organisation zurueckgibt.
 
 ---
 
-### 6. usePermissions erweitern
+## PRIORITAET 2: Logik-Fehler und Tote Links
 
-**Datei:** `src/hooks/usePermissions.ts`
+### 2.1 Toter Link: "Plan upgraden"
+**Datei:** `src/pages/PropertyDetail.tsx` Zeile 364
+**Problem:** Button verlinkt auf `/upgrade` - diese Route existiert nicht. Fuehrt zu 404-Seite.
+**Loesung:** Link entfernen oder auf Einstellungen verweisen.
 
-Neue Eigenschaft hinzufügen:
-- `isTester: boolean` - Prüft ob Benutzer die Tester-Rolle hat
+### 2.2 window.location.href statt React Router
+**Datei:** `src/pages/UnitList.tsx` Zeile 341
+**Problem:** `window.location.href = ...` verursacht einen kompletten Seitenreload statt client-seitiger Navigation. Alle States gehen verloren, Filter werden zurueckgesetzt.
+**Loesung:** `useNavigate()` verwenden: `navigate(\`/einheiten/...\`)`.
 
----
+### 2.3 Filter "Aktiv" / "Mit Leerstand" funktionslos
+**Datei:** `src/pages/PropertyList.tsx` Zeilen 73-83
+**Problem:** Der Filter-Dropdown hat Optionen (Alle, Aktiv, Mit Leerstand), aber kein `onValueChange` das den Filter tatsaechlich anwendet. Der Wert wird ignoriert.
+**Loesung:** State-Variable fuer Filter einfuehren und `filteredProperties` entsprechend filtern.
 
-### 7. Demo-Indikator in der UI
+### 2.4 Export-Buttons ohne Funktion
+**Betroffene Seiten:**
+- `PropertyList.tsx`: "Export" Button (Zeile 90-93) - tut nichts
+- `TenantList.tsx`: "Export" Button (Zeile 120-123) - tut nichts
+**Problem:** Buttons sehen funktional aus, loesen aber keine Aktion aus. Benutzer erwarten eine CSV/Excel-Datei.
+**Loesung:** Entweder Export implementieren (CSV-Download) oder Buttons entfernen/deaktivieren mit Tooltip "Kommt bald".
 
-**Datei:** `src/components/layout/MainLayout.tsx`
+### 2.5 PropertyDetail Mieten-Berechnung inkonsistent
+**Datei:** `src/pages/PropertyDetail.tsx` Zeile 154
+**Problem:** Verwendet `heizungskosten_vorschuss`, aber die tenants kommen als verschachtelte Relation aus der `units`-Query. Der Feldname stimmt, aber `unit.tenants` ist ein Array das als `any[]` gecastet wird - fehleranfaellig.
+**Loesung:** Typsichere Tenant-Verarbeitung statt `as any[]`.
 
-Wenn Tester aktiv:
-- Banner oben: "Demo-Modus - Alle Änderungen sind nur virtuell"
-- Zeigt verbleibende Zeit (bereits implementiert in ProtectedRoute)
-
----
-
-## Technische Details
-
-### Datenfluss für Tester
-
-```text
-Tester klickt "Neue Liegenschaft"
-           ↓
-PropertyForm ruft createProperty auf
-           ↓
-useCreateProperty prüft isDemoMode
-           ↓
-isDemoMode = true
-           ↓
-DemoDataContext.addProperty()
-           ↓
-Lokaler State wird aktualisiert
-           ↓
-UI zeigt neue Liegenschaft
-           ↓
-Keine Datenbank-Änderung!
-```
-
-### Session-Ende
-
-```text
-30 Minuten vorbei
-        ↓
-ProtectedRoute logout
-        ↓
-Tester wird ausgeloggt
-        ↓
-Lokaler State (alle Demo-Änderungen) wird verworfen
-        ↓
-Nächster Login: Frische Demo-Daten
-```
+### 2.6 UnitList: Kein "Neue Einheit" Button
+**Datei:** `src/pages/UnitList.tsx`
+**Problem:** Anders als PropertyList und TenantList hat UnitList keinen direkten "Neue Einheit" Button. Einheiten koennen nur ueber CSV-Import oder ueber PropertyDetail erstellt werden. Das ist fuer Benutzer verwirrend.
+**Loesung:** Button "Neue Einheit" hinzufuegen der zur PropertyDetail-Seite navigiert oder einen Property-Auswahl-Dialog oeffnet.
 
 ---
 
-## Dateien die erstellt/geändert werden
+## PRIORITAET 3: Strukturelle Probleme
 
-| Datei | Aktion |
-|-------|--------|
-| `src/contexts/DemoDataContext.tsx` | Neu erstellen |
-| `src/data/mockData.ts` | Erweitern |
-| `src/hooks/usePermissions.ts` | isTester hinzufügen |
-| `src/hooks/useProperties.ts` | Demo-Fallback |
-| `src/hooks/useUnits.ts` | Demo-Fallback |
-| `src/hooks/useTenants.ts` | Demo-Fallback |
-| `src/hooks/useTransactions.ts` | Demo-Fallback |
-| `src/hooks/useExpenses.ts` | Demo-Fallback |
-| `src/hooks/usePayments.ts` | Demo-Fallback |
-| `src/hooks/useBankAccounts.ts` | Demo-Fallback |
-| `src/hooks/useMaintenanceTasks.ts` | Demo-Fallback |
-| `src/App.tsx` | DemoDataProvider einbinden |
-| `src/components/layout/MainLayout.tsx` | Demo-Banner |
+### 3.1 Dashboard dupliziert PropertyList
+**Datei:** `src/pages/SimpleDashboard.tsx`
+**Problem:** Das Dashboard hat eine eigene Liegenschafts-Erstellung und Unit-Verwaltung eingebaut (Zeilen 119-363). Das dupliziert die Funktionalitaet von PropertyList und PropertyDetail. Aenderungen muessen an zwei Stellen gepflegt werden.
+**Empfehlung:** Dashboard als Uebersicht belassen mit Statistiken und Widgets, aber die Liegenschafts-CRUD-Funktionen nur ueber die dedizierte PropertyList/PropertyDetail anbieten.
+
+### 3.2 TenantList: Klick oeffnet Bearbeitungsformular
+**Datei:** `src/pages/TenantList.tsx` Zeile 196
+**Problem:** Ein Klick auf einen Mieter navigiert direkt zu `/mieter/${tenant.id}/bearbeiten` (Bearbeitungsmodus). Es gibt keine Mieter-Detail-Ansicht (Read-Only). Benutzer koennten versehentlich Daten aendern.
+**Empfehlung:** Zuerst eine Detail-Ansicht zeigen mit einem separaten "Bearbeiten" Button.
+
+### 3.3 Settings: Property Manager sieht keine Bankkonten
+**Datei:** `src/pages/Settings.tsx` Zeile 54
+**Problem:** `canViewFinancials = userRole === 'admin' || userRole === 'finance'` schliesst Property Manager aus. Diese brauchen aber Zugang zu Bankkontoverwaltung.
+**Loesung:** Property Manager in die Bedingung aufnehmen.
+
+### 3.4 ComingSoon.tsx wird nie verwendet
+**Datei:** `src/pages/ComingSoon.tsx`
+**Problem:** Die Komponente existiert, wird aber nirgends eingebunden. Keine Route verweist darauf.
+**Empfehlung:** Entweder fuer Features verwenden die noch nicht fertig sind, oder Datei entfernen.
 
 ---
 
-## Vorteile dieses Ansatzes
+## PRIORITAET 4: Demo-Modus Luecken
 
-1. **Keine Datenbankänderungen** - Tester berührt nie echte Daten
-2. **Vollständige Funktionalität** - Tester kann alles ausprobieren
-3. **Automatische Bereinigung** - Nach Logout ist alles weg
-4. **Keine Konflikte** - Jeder Tester hat seine eigene virtuelle Umgebung
-5. **Einfache Wartung** - Demo-Daten zentral definiert
+### 4.1 Sidebar-Navigation fuer Tester nicht eingeschraenkt
+**Problem:** Tester sehen die volle Navigation inklusive Budgetplanung, Mahnwesen, Rechnungsfreigabe. Diese Seiten laden aber im Demo-Modus keine Daten (leere Seiten).
+**Loesung:** Entweder alle diese Hooks mit Demo-Daten versehen ODER nicht-implementierte Seiten fuer Tester ausblenden.
+
+### 4.2 Onboarding-Wizard fuer Tester stoerend
+**Datei:** `src/pages/SimpleDashboard.tsx` Zeile 124
+**Problem:** Tester ohne Demo-Properties (falls Demo-Fallback nicht greift) sehen den Onboarding-Wizard. Das ist verwirrend fuer einen Tester der die App testen will.
+**Loesung:** Onboarding-Wizard fuer Tester deaktivieren.
+
+### 4.3 Dokumenten-Upload im Demo-Modus
+**Problem:** Dokument-Upload (PropertyDetail, UnitDetail, Documents) ruft Supabase Storage auf. Im Demo-Modus wuerde das entweder fehlschlagen oder echte Dateien hochladen.
+**Loesung:** Upload im Demo-Modus abfangen und virtuell simulieren.
+
+### 4.4 SEPA-Export und Mahnversand im Demo-Modus
+**Problem:** Funktionen wie SEPA-Export und Mahnungsversand (Edge Functions) wuerden im Demo-Modus echte E-Mails senden oder fehlschlagen.
+**Loesung:** Im Demo-Modus mit Toast-Nachricht "Im Demo-Modus nicht verfuegbar" abfangen.
+
+---
+
+## PRIORITAET 5: UX-Verbesserungen
+
+### 5.1 Keine Breadcrumb-Navigation
+**Problem:** Es fehlt eine durchgaengige Breadcrumb-Navigation. Benutzer koennen z.B. von UnitDetail nicht direkt zur PropertyDetail zurueck (nur "Zurueck zur Uebersicht").
+
+### 5.2 Inkonsistente Status-Bezeichnungen
+**Problem:** Einheiten-Status wird teils als `vermietet` teils als `aktiv` bezeichnet:
+- `mockUnits` verwenden `status: 'vermietet'`  
+- Datenbank verwendet `status: 'aktiv'`  
+- Das fuehrt zu falschen Badge-Anzeigen im Demo-Modus
+
+### 5.3 Keine Bestaetigung bei Loeschaktionen auf Dashboard
+**Datei:** `src/pages/SimpleDashboard.tsx` Zeile 346
+**Problem:** `confirm()` (Browser-nativ) wird verwendet statt AlertDialog. Inkonsistent mit dem Rest der App (PropertyDetail verwendet AlertDialog korrekt).
+
+---
+
+## Empfohlene Reihenfolge der Umsetzung
+
+| Schritt | Aufgabe | Geschaetzter Aufwand |
+|---------|---------|---------------------|
+| 1 | Build-Fehler beheben (1.1 + 1.2) | Klein |
+| 2 | Demo-Hooks implementieren (1.3 + 1.4) | Gross |
+| 3 | Tote Links und kaputte Buttons (2.1-2.4) | Mittel |
+| 4 | Status-Bezeichnung vereinheitlichen (5.2) | Klein |
+| 5 | window.location.href fix (2.2) | Klein |
+| 6 | Demo-Modus Absicherung (4.1-4.4) | Mittel |
+| 7 | Settings Property Manager (3.3) | Klein |
+| 8 | UX-Verbesserungen (5.1, 5.3) | Mittel |
+| 9 | Strukturelle Bereinigung (3.1, 3.2, 3.4) | Gross |
+
+---
+
+## Naechster Schritt
+
+Ich empfehle, mit **Schritt 1 und 2** zu beginnen: Zuerst den Build-Fehler beheben, dann alle Demo-Hooks implementieren. Damit hat der Tester eine funktionierende virtuelle Umgebung. Soll ich mit Schritt 1 starten?
