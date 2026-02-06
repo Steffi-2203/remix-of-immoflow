@@ -16,7 +16,7 @@ export default function Accounting() {
   return (
     <MainLayout
       title="Finanzbuchhaltung"
-      subtitle="Doppelte Buchführung – Journal, Bilanz, GuV, AfA & UVA"
+      subtitle="Doppelte Buchführung nach österreichischem Recht – Journal, Bilanz, GuV, AfA & UVA (FinanzOnline)"
     >
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6 flex-wrap">
