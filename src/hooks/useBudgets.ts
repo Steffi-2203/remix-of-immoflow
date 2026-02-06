@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { mockBudgets } from '@/data/mockData';
 
 export interface PropertyBudget {
   id: string;
@@ -47,9 +49,29 @@ export interface BudgetFormData {
 }
 
 export function useBudgets(propertyId?: string, year?: number) {
+  const { isDemoMode, properties } = useDemoData();
+
   return useQuery({
-    queryKey: ['budgets', propertyId, year],
+    queryKey: ['budgets', propertyId, year, isDemoMode],
     queryFn: async () => {
+      if (isDemoMode) {
+        let budgets = mockBudgets.map(b => {
+          const prop = properties.find(p => p.id === b.property_id);
+          return {
+            ...b,
+            position_1_amount: b.position_1_amount ?? 0,
+            position_2_amount: b.position_2_amount ?? 0,
+            position_3_amount: b.position_3_amount ?? 0,
+            position_4_amount: b.position_4_amount ?? 0,
+            position_5_amount: b.position_5_amount ?? 0,
+            properties: prop ? { name: prop.name, address: prop.address } : undefined,
+          } as unknown as PropertyBudget;
+        });
+        if (propertyId) budgets = budgets.filter(b => b.property_id === propertyId);
+        if (year) budgets = budgets.filter(b => b.year === year);
+        return budgets;
+      }
+
       let query = supabase
         .from('property_budgets')
         .select(`

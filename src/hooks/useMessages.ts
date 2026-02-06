@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { mockMessages } from '@/data/mockData';
 
 export interface Message {
   id: string;
@@ -26,10 +28,19 @@ export interface Message {
 
 export function useMessages(status?: string) {
   const { user } = useAuth();
+  const { isDemoMode } = useDemoData();
 
   return useQuery({
-    queryKey: ['messages', user?.id, status],
+    queryKey: ['messages', user?.id, status, isDemoMode],
     queryFn: async () => {
+      if (isDemoMode) {
+        let messages = mockMessages as unknown as Message[];
+        if (status && status !== 'all') {
+          messages = messages.filter(m => m.status === status);
+        }
+        return messages;
+      }
+
       let query = supabase
         .from('messages')
         .select(`
@@ -47,7 +58,7 @@ export function useMessages(status?: string) {
       if (error) throw error;
       return data as Message[];
     },
-    enabled: !!user?.id,
+    enabled: isDemoMode || !!user?.id,
   });
 }
 

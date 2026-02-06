@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { extractFilePath } from '@/utils/storageUtils';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { mockDocuments } from '@/data/mockData';
 
 export type PropertyDocument = {
   id: string;
@@ -27,10 +29,17 @@ export const PROPERTY_DOCUMENT_TYPES = [
 ];
 
 export function usePropertyDocuments(propertyId: string | undefined) {
+  const { isDemoMode } = useDemoData();
+
   return useQuery({
-    queryKey: ['property-documents', propertyId],
+    queryKey: ['property-documents', propertyId, isDemoMode],
     queryFn: async () => {
       if (!propertyId) return [];
+
+      if (isDemoMode) {
+        return mockDocuments
+          .filter(d => d.property_id === propertyId) as unknown as PropertyDocument[];
+      }
       
       const { data, error } = await supabase
         .from('property_documents')
