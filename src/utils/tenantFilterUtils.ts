@@ -132,3 +132,59 @@ export function calculateMonthlyRent(tenant: TenantForFilter): number {
          Number(tenant.betriebskosten_vorschuss || 0) + 
          Number(tenant.heizungskosten_vorschuss || 0);
 }
+
+/**
+ * Berechnet die Anzahl der aktiven Monate eines Mieters in einem Jahr.
+ * Berücksichtigt Mietbeginn und Mietende anteilig.
+ * 
+ * Beispiel: Mietbeginn 01.04.2025 → 9 Monate in 2025
+ * Beispiel: Mietende 30.09.2025 → 9 Monate in 2025
+ * Beispiel: Mietbeginn 15.03.2025, Mietende 20.10.2025 → 8 Monate (März-Oktober)
+ */
+export function getActiveMonthsInYear(
+  tenant: TenantForFilter,
+  year: number
+): number {
+  // Mietbeginn bestimmen
+  const startMonth = tenant.mietbeginn 
+    ? Math.max(1, (() => {
+        const d = new Date(tenant.mietbeginn);
+        return d.getFullYear() < year ? 1 
+             : d.getFullYear() === year ? d.getMonth() + 1 
+             : 13; // nach dem Jahr → 0 Monate
+      })())
+    : 1;
+  
+  // Mietende bestimmen
+  const endMonth = tenant.mietende
+    ? Math.min(12, (() => {
+        const d = new Date(tenant.mietende);
+        return d.getFullYear() > year ? 12
+             : d.getFullYear() === year ? d.getMonth() + 1
+             : 0; // vor dem Jahr → 0 Monate
+      })())
+    : 12;
+  
+  return Math.max(0, endMonth - startMonth + 1);
+}
+
+/**
+ * Berechnet den proportionalen SOLL-Betrag eines Mieters für ein Jahr.
+ * Statt monthlyValue * 12 wird monthlyValue * activeMonths verwendet.
+ */
+export function calculateProportionalYearlySoll(
+  tenant: TenantForFilter,
+  year: number
+): { grundmiete: number; betriebskosten: number; heizungskosten: number; gesamt: number } {
+  const months = getActiveMonthsInYear(tenant, year);
+  const grundmiete = Number(tenant.grundmiete || 0) * months;
+  const betriebskosten = Number(tenant.betriebskosten_vorschuss || 0) * months;
+  const heizungskosten = Number(tenant.heizungskosten_vorschuss || 0) * months;
+  
+  return {
+    grundmiete,
+    betriebskosten,
+    heizungskosten,
+    gesamt: grundmiete + betriebskosten + heizungskosten,
+  };
+}
