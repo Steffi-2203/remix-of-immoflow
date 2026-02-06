@@ -30,6 +30,7 @@ import { useOrganization, useUpdateOrganization } from '@/hooks/useOrganization'
 import { useCreateSepaCollection } from '@/hooks/useSepaCollections';
 import { generateSepaXml, downloadSepaXml, validateCreditor, SepaCreditor, SepaDebtor, generateMessageId } from '@/utils/sepaExport';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
 import { format, addDays } from 'date-fns';
 
 interface SepaExportDialogProps {
@@ -139,7 +140,13 @@ export function SepaExportDialog({ open, onOpenChange }: SepaExportDialogProps) 
     }
   };
 
+  const { isDemoMode } = useDemoData();
+
   const handleExport = async () => {
+    if (isDemoMode) {
+      toast.info('SEPA-Export ist im Demo-Modus nicht verfügbar');
+      return;
+    }
     if (!isCreditorValid) {
       toast.error('Bitte alle Gläubigerdaten ausfüllen');
       return;
