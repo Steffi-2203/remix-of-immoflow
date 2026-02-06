@@ -38,7 +38,7 @@ export interface DemoUnit {
   floor: number | null;
   qm: number;
   mea: number;
-  status: 'vermietet' | 'leerstand' | 'eigennutzung' | 'aktiv';
+  status: 'aktiv' | 'leerstand' | 'eigennutzung';
   ausstattungskategorie?: string | null;
   mrg_scope?: string | null;
   nutzflaeche_mrg?: number | null;
@@ -287,7 +287,7 @@ export const mockUnits: DemoUnit[] = [
     floor: 0,
     qm: 120.5,
     mea: 122,
-    status: 'vermietet',
+    status: 'aktiv',
     created_at: '2023-01-15T10:00:00Z',
     updated_at: '2024-11-20T14:30:00Z',
     properties: { name: 'Mozartstraße 15' },
@@ -300,7 +300,7 @@ export const mockUnits: DemoUnit[] = [
     floor: 1,
     qm: 78.0,
     mea: 79,
-    status: 'vermietet',
+    status: 'aktiv',
     created_at: '2023-01-15T10:00:00Z',
     updated_at: '2024-11-20T14:30:00Z',
     properties: { name: 'Mozartstraße 15' },
@@ -326,7 +326,7 @@ export const mockUnits: DemoUnit[] = [
     floor: 2,
     qm: 92.0,
     mea: 93,
-    status: 'vermietet',
+    status: 'aktiv',
     created_at: '2023-01-15T10:00:00Z',
     updated_at: '2024-11-20T14:30:00Z',
     properties: { name: 'Mozartstraße 15' },
@@ -339,7 +339,7 @@ export const mockUnits: DemoUnit[] = [
     floor: -1,
     qm: 15.0,
     mea: 15,
-    status: 'vermietet',
+    status: 'aktiv',
     created_at: '2023-01-15T10:00:00Z',
     updated_at: '2024-11-20T14:30:00Z',
     properties: { name: 'Mozartstraße 15' },

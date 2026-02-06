@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,6 +79,7 @@ const mrgScopeStyles: Record<string, string> = {
 };
 
 export default function UnitList() {
+  const navigate = useNavigate();
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -337,7 +338,7 @@ export default function UnitList() {
                     <TableRow 
                       key={unit.id} 
                       className="hover:bg-muted/30 cursor-pointer"
-                      onClick={() => window.location.href = `/einheiten/${unit.property_id}/${unit.id}`}
+                      onClick={() => navigate(`/einheiten/${unit.property_id}/${unit.id}`)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">

@@ -361,7 +361,7 @@ export default function PropertyDetail() {
                   </Button>
                 </Link>
               ) : (
-                <Link to="/upgrade">
+                <Link to="/einstellungen">
                   <Button variant="secondary">
                     <Crown className="h-4 w-4 mr-2" />
                     Plan upgraden

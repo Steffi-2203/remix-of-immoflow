@@ -117,7 +117,7 @@ export default function TenantList() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" disabled title="Kommt bald">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

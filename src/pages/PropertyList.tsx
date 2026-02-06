@@ -21,15 +21,28 @@ export default function PropertyList() {
   const { data: properties, isLoading } = useProperties();
   const { data: allUnits } = useUnits();
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const filteredProperties = properties?.filter(
-    (p) =>
+  const filteredProperties = properties?.filter((p) => {
+    const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.address.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      p.address.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    if (statusFilter === 'all') return true;
+    
+    const units = allUnits?.filter((u) => u.property_id === p.id) || [];
+    if (statusFilter === 'active') {
+      return units.length > 0 && units.every((u) => u.status !== 'leerstand');
+    }
+    if (statusFilter === 'vacant') {
+      return units.some((u) => u.status === 'leerstand');
+    }
+    return true;
+  });
 
   const getUnitsForProperty = (propertyId: string) => {
     const units = allUnits?.filter((u) => u.property_id === propertyId) || [];
@@ -70,14 +83,14 @@ export default function PropertyList() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40">
               <Filter className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Filter" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Alle</SelectItem>
-              <SelectItem value="active">Aktiv</SelectItem>
+              <SelectItem value="active">Voll vermietet</SelectItem>
               <SelectItem value="vacant">Mit Leerstand</SelectItem>
             </SelectContent>
           </Select>
@@ -86,10 +99,6 @@ export default function PropertyList() {
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Importieren
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export
           </Button>
           <Link to="/liegenschaften/neu">
             <Button>
