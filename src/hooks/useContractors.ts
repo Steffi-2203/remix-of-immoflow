@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
+import { mockContractors } from '@/data/mockData';
 
 export interface Contractor {
   id: string;
@@ -46,9 +48,19 @@ export const SPECIALIZATIONS = [
 ] as const;
 
 export function useContractors(onlyActive = true) {
+  const { isDemoMode } = useDemoData();
+
   return useQuery({
-    queryKey: ['contractors', { onlyActive }],
+    queryKey: ['contractors', { onlyActive, isDemoMode }],
     queryFn: async () => {
+      if (isDemoMode) {
+        let contractors = mockContractors as unknown as Contractor[];
+        if (onlyActive) {
+          contractors = contractors.filter(c => c.is_active);
+        }
+        return contractors;
+      }
+
       let query = supabase
         .from('contractors')
         .select('*')
