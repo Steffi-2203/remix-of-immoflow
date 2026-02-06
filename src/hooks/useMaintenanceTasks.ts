@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export interface MaintenanceTask {
   id: string;
@@ -47,8 +48,9 @@ export function useMaintenanceTasks(filters?: {
   propertyId?: string;
 }) {
   const { user } = useAuth();
+  const { isDemoMode, maintenanceTasks: demoTasks } = useDemoData();
 
-  return useQuery({
+  const realQuery = useQuery({
     queryKey: ['maintenance-tasks', user?.id, filters],
     queryFn: async () => {
       let query = supabase
@@ -77,17 +79,40 @@ export function useMaintenanceTasks(filters?: {
       if (error) throw error;
       return data as MaintenanceTask[];
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    let filtered = [...demoTasks] as MaintenanceTask[];
+    if (filters?.status && filters.status !== 'all') {
+      filtered = filtered.filter(t => t.status === filters.status);
+    }
+    if (filters?.priority && filters.priority !== 'all') {
+      filtered = filtered.filter(t => t.priority === filters.priority);
+    }
+    if (filters?.category && filters.category !== 'all') {
+      filtered = filtered.filter(t => t.category === filters.category);
+    }
+    if (filters?.propertyId && filters.propertyId !== 'all') {
+      filtered = filtered.filter(t => t.property_id === filters.propertyId);
+    }
+    return { data: filtered, isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function useCreateMaintenanceTask() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isDemoMode, addMaintenanceTask } = useDemoData();
 
   return useMutation({
     mutationFn: async (task: CreateMaintenanceTask) => {
+      if (isDemoMode) {
+        return addMaintenanceTask(task as any);
+      }
       const { data, error } = await supabase
         .from('maintenance_tasks')
         .insert({
@@ -121,9 +146,14 @@ export function useCreateMaintenanceTask() {
 export function useUpdateMaintenanceTask() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isDemoMode, updateMaintenanceTask: updateDemoTask } = useDemoData();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<MaintenanceTask> & { id: string }) => {
+      if (isDemoMode) {
+        updateDemoTask(id, updates as any);
+        return { id, ...updates };
+      }
       const { data, error } = await supabase
         .from('maintenance_tasks')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -155,9 +185,14 @@ export function useUpdateMaintenanceTask() {
 export function useDeleteMaintenanceTask() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isDemoMode, deleteMaintenanceTask: deleteDemoTask } = useDemoData();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoTask(id);
+        return;
+      }
       const { error } = await supabase
         .from('maintenance_tasks')
         .delete()

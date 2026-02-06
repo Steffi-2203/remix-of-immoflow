@@ -2,13 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type BankAccount = Tables<'bank_accounts'>;
 export type BankAccountInsert = TablesInsert<'bank_accounts'>;
 export type BankAccountUpdate = TablesUpdate<'bank_accounts'>;
 
 export function useBankAccounts() {
-  return useQuery({
+  const { isDemoMode, bankAccounts: demoBankAccounts } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['bank_accounts'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -19,11 +22,20 @@ export function useBankAccounts() {
       if (error) throw error;
       return data as BankAccount[];
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return { data: demoBankAccounts as any, isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function useBankAccount(id?: string) {
-  return useQuery({
+  const { isDemoMode, bankAccounts: demoBankAccounts } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['bank_accounts', id],
     queryFn: async () => {
       if (!id) return null;
@@ -36,13 +48,25 @@ export function useBankAccount(id?: string) {
       if (error) throw error;
       return data as BankAccount;
     },
-    enabled: !!id,
+    enabled: !!id && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoBankAccounts.find(a => a.id === id) as any || null,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
-// Hook to calculate bank balance using the database function
 export function useBankBalance(accountId?: string, asOfDate?: string) {
-  return useQuery({
+  const { isDemoMode, bankAccounts: demoBankAccounts } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['bank_balance', accountId, asOfDate],
     queryFn: async () => {
       if (!accountId) return null;
@@ -56,15 +80,31 @@ export function useBankBalance(accountId?: string, asOfDate?: string) {
       if (error) throw error;
       return data as number;
     },
-    enabled: !!accountId,
+    enabled: !!accountId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    const account = demoBankAccounts.find(a => a.id === accountId);
+    return {
+      data: account?.current_balance ?? 0,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useCreateBankAccount() {
   const queryClient = useQueryClient();
+  const { isDemoMode, addBankAccount } = useDemoData();
   
   return useMutation({
     mutationFn: async (account: BankAccountInsert) => {
+      if (isDemoMode) {
+        return addBankAccount(account as any);
+      }
       const { data, error } = await supabase
         .from('bank_accounts')
         .insert(account)
@@ -87,9 +127,14 @@ export function useCreateBankAccount() {
 
 export function useUpdateBankAccount() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updateBankAccount: updateDemoBankAccount } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: BankAccountUpdate & { id: string }) => {
+      if (isDemoMode) {
+        updateDemoBankAccount(id, updates as any);
+        return { id, ...updates } as any;
+      }
       const { data, error } = await supabase
         .from('bank_accounts')
         .update(updates)
@@ -114,9 +159,14 @@ export function useUpdateBankAccount() {
 
 export function useDeleteBankAccount() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deleteBankAccount: deleteDemoBankAccount } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoBankAccount(id);
+        return;
+      }
       const { error } = await supabase
         .from('bank_accounts')
         .delete()

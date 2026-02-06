@@ -34,11 +34,16 @@ export interface DemoUnit {
   id: string;
   property_id: string;
   top_nummer: string;
-  typ: 'wohnung' | 'geschaeft' | 'garage' | 'lager' | 'sonstige';
+  type: 'wohnung' | 'geschaeft' | 'garage' | 'lager' | 'sonstige';
   floor: number | null;
   qm: number;
   mea: number;
-  status: 'vermietet' | 'leerstand' | 'eigennutzung';
+  status: 'vermietet' | 'leerstand' | 'eigennutzung' | 'aktiv';
+  ausstattungskategorie?: string | null;
+  mrg_scope?: string | null;
+  nutzflaeche_mrg?: number | null;
+  richtwertmiete_basis?: number | null;
+  [key: string]: any; // Allow additional vs_* fields
   created_at: string;
   updated_at: string;
   properties?: { name: string };
@@ -58,12 +63,13 @@ export interface DemoTenant {
   kaution_bezahlt: boolean;
   grundmiete: number;
   betriebskosten_vorschuss: number;
-  heizkosten_vorschuss: number;
+  heizungskosten_vorschuss: number;
+  vorschuss_gueltig_ab: string | null;
   sepa_mandat: boolean;
   iban: string | null;
   bic: string | null;
   mandat_reference: string | null;
-  status: 'aktiv' | 'beendet' | 'gekuendigt';
+  status: 'aktiv' | 'beendet' | 'gekuendigt' | 'leerstand';
   created_at: string;
   updated_at: string;
   units?: DemoUnit & { properties?: { name: string } };
@@ -277,7 +283,7 @@ export const mockUnits: DemoUnit[] = [
     id: 'demo-unit-1',
     property_id: 'demo-prop-1',
     top_nummer: 'Top 1',
-    typ: 'geschaeft',
+    type: 'geschaeft',
     floor: 0,
     qm: 120.5,
     mea: 122,
@@ -290,7 +296,7 @@ export const mockUnits: DemoUnit[] = [
     id: 'demo-unit-2',
     property_id: 'demo-prop-1',
     top_nummer: 'Top 2',
-    typ: 'wohnung',
+    type: 'wohnung',
     floor: 1,
     qm: 78.0,
     mea: 79,
@@ -303,7 +309,7 @@ export const mockUnits: DemoUnit[] = [
     id: 'demo-unit-3',
     property_id: 'demo-prop-1',
     top_nummer: 'Top 3',
-    typ: 'wohnung',
+    type: 'wohnung',
     floor: 1,
     qm: 65.5,
     mea: 66,
@@ -316,7 +322,7 @@ export const mockUnits: DemoUnit[] = [
     id: 'demo-unit-4',
     property_id: 'demo-prop-1',
     top_nummer: 'Top 4',
-    typ: 'wohnung',
+    type: 'wohnung',
     floor: 2,
     qm: 92.0,
     mea: 93,
@@ -329,7 +335,7 @@ export const mockUnits: DemoUnit[] = [
     id: 'demo-unit-5',
     property_id: 'demo-prop-1',
     top_nummer: 'Garage 1',
-    typ: 'garage',
+    type: 'garage',
     floor: -1,
     qm: 15.0,
     mea: 15,
@@ -355,7 +361,8 @@ export const mockTenants: DemoTenant[] = [
     kaution_bezahlt: true,
     grundmiete: 2850,
     betriebskosten_vorschuss: 420,
-    heizkosten_vorschuss: 280,
+    heizungskosten_vorschuss: 280,
+    vorschuss_gueltig_ab: null,
     sepa_mandat: true,
     iban: 'AT611904300234573201',
     bic: 'BKAUATWW',
@@ -377,7 +384,8 @@ export const mockTenants: DemoTenant[] = [
     kaution_bezahlt: true,
     grundmiete: 780,
     betriebskosten_vorschuss: 145,
-    heizkosten_vorschuss: 95,
+    heizungskosten_vorschuss: 95,
+    vorschuss_gueltig_ab: null,
     sepa_mandat: true,
     iban: 'AT483200000012345678',
     bic: 'RLNWATWW',
@@ -399,7 +407,8 @@ export const mockTenants: DemoTenant[] = [
     kaution_bezahlt: true,
     grundmiete: 920,
     betriebskosten_vorschuss: 185,
-    heizkosten_vorschuss: 125,
+    heizungskosten_vorschuss: 125,
+    vorschuss_gueltig_ab: null,
     sepa_mandat: false,
     iban: null,
     bic: null,
@@ -421,7 +430,8 @@ export const mockTenants: DemoTenant[] = [
     kaution_bezahlt: true,
     grundmiete: 150,
     betriebskosten_vorschuss: 25,
-    heizkosten_vorschuss: 0,
+    heizungskosten_vorschuss: 0,
+    vorschuss_gueltig_ab: null,
     sepa_mandat: true,
     iban: 'AT891400027011111111',
     bic: 'BAWAATWW',

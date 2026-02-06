@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type ExpenseCategory = 'betriebskosten_umlagefaehig' | 'instandhaltung' | 'sonstige_kosten';
 export type ExpenseType = 
@@ -60,7 +61,9 @@ export interface ExpenseUpdate extends Partial<ExpenseInsert> {
 }
 
 export function useExpenses(propertyId?: string, year?: number, month?: number) {
-  return useQuery({
+  const { isDemoMode, expenses: demoExpenses } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['expenses', propertyId, year, month],
     queryFn: async () => {
       let query = supabase
@@ -83,11 +86,24 @@ export function useExpenses(propertyId?: string, year?: number, month?: number) 
       if (error) throw error;
       return data as (Expense & { properties: { name: string } })[];
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    let filtered = [...demoExpenses] as any[];
+    if (propertyId) filtered = filtered.filter(e => e.property_id === propertyId);
+    if (year) filtered = filtered.filter(e => e.year === year);
+    if (month) filtered = filtered.filter(e => e.month === month);
+    return { data: filtered, isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function useExpensesByCategory(propertyId?: string, year?: number) {
-  return useQuery({
+  const { isDemoMode, expenses: demoExpenses } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['expenses', 'by-category', propertyId, year],
     queryFn: async () => {
       let query = supabase
@@ -119,14 +135,43 @@ export function useExpensesByCategory(propertyId?: string, year?: number) {
         total: expenses.reduce((sum, e) => sum + Number(e.betrag), 0),
       };
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    let filtered = [...demoExpenses] as Expense[];
+    if (propertyId) filtered = filtered.filter(e => e.property_id === propertyId) as Expense[];
+    if (year) filtered = filtered.filter(e => e.year === year) as Expense[];
+    
+    const betriebskosten = filtered.filter(e => e.category === 'betriebskosten_umlagefaehig');
+    const instandhaltung = filtered.filter(e => e.category === 'instandhaltung');
+    
+    return {
+      data: {
+        betriebskosten,
+        instandhaltung,
+        totalBetriebskosten: betriebskosten.reduce((sum, e) => sum + Number(e.betrag), 0),
+        totalInstandhaltung: instandhaltung.reduce((sum, e) => sum + Number(e.betrag), 0),
+        total: filtered.reduce((sum, e) => sum + Number(e.betrag), 0),
+      },
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useCreateExpense() {
   const queryClient = useQueryClient();
+  const { isDemoMode, addExpense } = useDemoData();
   
   return useMutation({
     mutationFn: async (expense: ExpenseInsert) => {
+      if (isDemoMode) {
+        return addExpense(expense as any);
+      }
       const { data, error } = await supabase
         .from('expenses')
         .insert(expense)
@@ -149,9 +194,14 @@ export function useCreateExpense() {
 
 export function useUpdateExpense() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updateExpense: updateDemoExpense } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: ExpenseUpdate) => {
+      if (isDemoMode) {
+        updateDemoExpense(id, updates as any);
+        return { id, ...updates };
+      }
       const { data, error } = await supabase
         .from('expenses')
         .update(updates)
@@ -175,9 +225,14 @@ export function useUpdateExpense() {
 
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deleteExpense: deleteDemoExpense } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoExpense(id);
+        return;
+      }
       const { error } = await supabase
         .from('expenses')
         .delete()
@@ -225,33 +280,12 @@ export const expenseTypeLabels: Record<ExpenseType, string> = {
   finanzierung: 'Finanzierung',
 };
 
-// Group expense types by category
 export const expenseTypesByCategory: Record<ExpenseCategory, ExpenseType[]> = {
   betriebskosten_umlagefaehig: [
-    'versicherung',
-    'grundsteuer',
-    'muellabfuhr',
-    'wasser_abwasser',
-    'heizung',
-    'strom_allgemein',
-    'hausbetreuung',
-    'lift',
-    'gartenpflege',
-    'schneeraeumung',
-    'verwaltung',
-    'ruecklage',
-    'sonstiges',
+    'versicherung', 'grundsteuer', 'muellabfuhr', 'wasser_abwasser',
+    'heizung', 'strom_allgemein', 'hausbetreuung', 'lift',
+    'gartenpflege', 'schneeraeumung', 'verwaltung', 'ruecklage', 'sonstiges',
   ],
-  instandhaltung: [
-    'reparatur',
-    'sanierung',
-    'sonstiges',
-  ],
-  sonstige_kosten: [
-    'makler',
-    'notar',
-    'grundbuch',
-    'finanzierung',
-    'sonstiges',
-  ],
+  instandhaltung: ['reparatur', 'sanierung', 'sonstiges'],
+  sonstige_kosten: ['makler', 'notar', 'grundbuch', 'finanzierung', 'sonstiges'],
 };

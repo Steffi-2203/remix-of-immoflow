@@ -2,13 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type Tenant = Tables<'tenants'>;
 export type TenantInsert = TablesInsert<'tenants'>;
 export type TenantUpdate = TablesUpdate<'tenants'>;
 
 export function useTenants() {
-  return useQuery({
+  const { isDemoMode, tenants: demoTenants, units: demoUnits, properties: demoProperties } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -19,11 +22,29 @@ export function useTenants() {
       if (error) throw error;
       return data;
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    // Enrich tenants with unit and property data
+    const enriched = demoTenants.map(t => {
+      const unit = demoUnits.find(u => u.id === t.unit_id);
+      const property = unit ? demoProperties.find(p => p.id === unit.property_id) : null;
+      return {
+        ...t,
+        units: unit ? { ...unit, properties: property ? { name: property.name } : null } : null,
+      };
+    });
+    return { data: enriched as any, isLoading: false, error: null, isError: false, refetch: () => Promise.resolve({} as any) };
+  }
+
+  return realQuery;
 }
 
 export function useTenantsByUnit(unitId?: string) {
-  return useQuery({
+  const { isDemoMode, tenants: demoTenants } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['tenants', 'unit', unitId],
     queryFn: async () => {
       if (!unitId) return [];
@@ -36,12 +57,25 @@ export function useTenantsByUnit(unitId?: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!unitId,
+    enabled: !!unitId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoTenants.filter(t => t.unit_id === unitId) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useTenant(id: string | undefined) {
-  return useQuery({
+  const { isDemoMode, tenants: demoTenants, units: demoUnits, properties: demoProperties } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['tenant', id],
     queryFn: async () => {
       if (!id) return null;
@@ -54,22 +88,41 @@ export function useTenant(id: string | undefined) {
       if (error) throw error;
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    const tenant = demoTenants.find(t => t.id === id);
+    if (!tenant) return { data: null, isLoading: false, error: null, isError: false };
+    const unit = demoUnits.find(u => u.id === tenant.unit_id);
+    const property = unit ? demoProperties.find(p => p.id === unit.property_id) : null;
+    return {
+      data: { ...tenant, units: unit ? { ...unit, properties: property ? { name: property.name } : null } : null } as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
 export function useCreateTenant() {
   const queryClient = useQueryClient();
+  const { isDemoMode, addTenant } = useDemoData();
   
   return useMutation({
     mutationFn: async (tenant: TenantInsert) => {
+      if (isDemoMode) {
+        return addTenant(tenant as any);
+      }
+
       // If the new tenant is "aktiv", first set all other active tenants of the same unit to "beendet"
       if (tenant.status === 'aktiv' && tenant.unit_id) {
         const { error: updateError } = await supabase
           .from('tenants')
           .update({ 
             status: 'beendet',
-            // Set mietende to day before new tenant's mietbeginn if not already set
             mietende: tenant.mietbeginn ? 
               new Date(new Date(tenant.mietbeginn).getTime() - 86400000).toISOString().split('T')[0] 
               : new Date().toISOString().split('T')[0]
@@ -105,10 +158,15 @@ export function useCreateTenant() {
 
 export function useUpdateTenant() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updateTenant: updateDemoTenant } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: TenantUpdate & { id: string }) => {
-      // If updating status to "aktiv", first deactivate all other active tenants of the same unit
+      if (isDemoMode) {
+        updateDemoTenant(id, updates as any);
+        return { id, ...updates };
+      }
+
       if (updates.status === 'aktiv' && updates.unit_id) {
         const { error: updateError } = await supabase
           .from('tenants')
@@ -132,7 +190,7 @@ export function useUpdateTenant() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['tenant', data.id] });
       toast.success('Mieter erfolgreich aktualisiert');
@@ -146,9 +204,14 @@ export function useUpdateTenant() {
 
 export function useDeleteTenant() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deleteTenant: deleteDemoTenant } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoTenant(id);
+        return;
+      }
       const { error } = await supabase
         .from('tenants')
         .delete()

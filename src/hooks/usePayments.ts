@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { allocatePayment, formatAllocationForDisplay, type InvoiceAmounts } from '@/lib/paymentAllocation';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 export type Payment = Tables<'payments'>;
 export type PaymentInsert = TablesInsert<'payments'>;
@@ -19,7 +20,9 @@ export interface PaymentWithAllocation extends Payment {
 }
 
 export function usePayments() {
-  return useQuery({
+  const { isDemoMode, payments: demoPayments } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['payments'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -30,11 +33,20 @@ export function usePayments() {
       if (error) throw error;
       return data;
     },
+    enabled: !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return { data: demoPayments as any, isLoading: false, error: null, isError: false };
+  }
+
+  return realQuery;
 }
 
 export function usePaymentsByTenant(tenantId?: string) {
-  return useQuery({
+  const { isDemoMode, payments: demoPayments } = useDemoData();
+
+  const realQuery = useQuery({
     queryKey: ['payments', 'tenant', tenantId],
     queryFn: async () => {
       if (!tenantId) return [];
@@ -47,31 +59,30 @@ export function usePaymentsByTenant(tenantId?: string) {
       if (error) throw error;
       return data;
     },
-    enabled: !!tenantId,
+    enabled: !!tenantId && !isDemoMode,
   });
+
+  if (isDemoMode) {
+    return {
+      data: demoPayments.filter(p => p.tenant_id === tenantId) as any,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
+  return realQuery;
 }
 
-/**
- * Zahlungen mit Zuordnung (BK → Heizung → Miete) für eine Rechnung
- */
 export function usePaymentsWithAllocation(invoiceId?: string) {
   return useQuery({
     queryKey: ['payments', 'allocation', invoiceId],
     queryFn: async () => {
       if (!invoiceId) return [];
       
-      // Hole Rechnung und zugehörige Zahlungen
       const [invoiceResult, paymentsResult] = await Promise.all([
-        supabase
-          .from('monthly_invoices')
-          .select('*')
-          .eq('id', invoiceId)
-          .single(),
-        supabase
-          .from('payments')
-          .select('*')
-          .eq('invoice_id', invoiceId)
-          .order('eingangs_datum', { ascending: true })
+        supabase.from('monthly_invoices').select('*').eq('id', invoiceId).single(),
+        supabase.from('payments').select('*').eq('invoice_id', invoiceId).order('eingangs_datum', { ascending: true })
       ]);
       
       if (invoiceResult.error) throw invoiceResult.error;
@@ -80,7 +91,6 @@ export function usePaymentsWithAllocation(invoiceId?: string) {
       const invoice = invoiceResult.data;
       const payments = paymentsResult.data || [];
       
-      // Berechne Zuordnung für jede Zahlung
       let remainingInvoice: InvoiceAmounts = {
         grundmiete: invoice.grundmiete,
         betriebskosten: invoice.betriebskosten,
@@ -91,7 +101,6 @@ export function usePaymentsWithAllocation(invoiceId?: string) {
       const paymentsWithAllocation: PaymentWithAllocation[] = payments.map(payment => {
         const result = allocatePayment(payment.betrag, remainingInvoice);
         
-        // Reduziere verbleibende Beträge
         remainingInvoice = {
           betriebskosten: Math.max(0, remainingInvoice.betriebskosten - result.allocation.betriebskosten_anteil / 1.10),
           heizungskosten: Math.max(0, remainingInvoice.heizungskosten - result.allocation.heizung_anteil / 1.20),
@@ -99,9 +108,7 @@ export function usePaymentsWithAllocation(invoiceId?: string) {
           gesamtbetrag: 0
         };
         remainingInvoice.gesamtbetrag = 
-          remainingInvoice.betriebskosten + 
-          remainingInvoice.heizungskosten + 
-          remainingInvoice.grundmiete;
+          remainingInvoice.betriebskosten + remainingInvoice.heizungskosten + remainingInvoice.grundmiete;
         
         return {
           ...payment,
@@ -123,9 +130,13 @@ export function usePaymentsWithAllocation(invoiceId?: string) {
 
 export function useCreatePayment() {
   const queryClient = useQueryClient();
+  const { isDemoMode, addPayment } = useDemoData();
   
   return useMutation({
     mutationFn: async (payment: PaymentInsert) => {
+      if (isDemoMode) {
+        return addPayment(payment as any);
+      }
       const { data, error } = await supabase
         .from('payments')
         .insert(payment)
@@ -134,7 +145,6 @@ export function useCreatePayment() {
       
       if (error) throw error;
       
-      // Wenn invoice_id vorhanden, berechne Zuordnung für Toast
       if (payment.invoice_id) {
         const { data: invoice } = await supabase
           .from('monthly_invoices')
@@ -175,9 +185,14 @@ export function useCreatePayment() {
 
 export function useUpdatePayment() {
   const queryClient = useQueryClient();
+  const { isDemoMode, updatePayment: updateDemoPayment } = useDemoData();
   
   return useMutation({
     mutationFn: async ({ id, ...updates }: PaymentUpdate & { id: string }) => {
+      if (isDemoMode) {
+        updateDemoPayment(id, updates as any);
+        return { id, ...updates };
+      }
       const { data, error } = await supabase
         .from('payments')
         .update(updates)
@@ -201,9 +216,14 @@ export function useUpdatePayment() {
 
 export function useDeletePayment() {
   const queryClient = useQueryClient();
+  const { isDemoMode, deletePayment: deleteDemoPayment } = useDemoData();
   
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isDemoMode) {
+        deleteDemoPayment(id);
+        return;
+      }
       const { error } = await supabase
         .from('payments')
         .delete()
