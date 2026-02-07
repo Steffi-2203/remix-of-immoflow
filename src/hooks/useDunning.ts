@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useDemoData } from '@/contexts/DemoDataContext';
+import { apiRequest } from '@/lib/queryClient';
 
 interface DunningRequest {
   invoiceId: string;
@@ -26,18 +26,22 @@ export function useSendDunning() {
         toast.info('Mahnungsversand ist im Demo-Modus nicht verfügbar');
         return { message: 'Demo-Modus' };
       }
-      const { data, error } = await supabase.functions.invoke('send-dunning', {
-        body: request,
+      const response = await apiRequest('POST', '/api/dunning/send', {
+        invoice_id: request.invoiceId,
+        dunning_level: request.dunningLevel,
+        tenant_email: request.tenantEmail,
+        tenant_name: request.tenantName,
+        property_name: request.propertyName,
+        unit_number: request.unitNumber,
+        amount: request.amount,
+        due_date: request.dueDate,
       });
-      
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['dunningOverview'] });
-      toast.success(data.message);
+      toast.success(data.message || 'Mahnung versendet');
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Fehler beim Versenden');
@@ -46,17 +50,16 @@ export function useSendDunning() {
   });
 }
 
-// Hook to get dunning status label
 export function getDunningStatusLabel(mahnstufe: number): string {
   switch (mahnstufe) {
     case 0: return 'Keine';
     case 1: return 'Zahlungserinnerung';
-    case 2: return 'Mahnung';
+    case 2: return '1. Mahnung';
+    case 3: return '2. Mahnung';
     default: return 'Unbekannt';
   }
 }
 
-// Hook to get next dunning action
 export function getNextDunningAction(mahnstufe: number): { level: 1 | 2; label: string } | null {
   switch (mahnstufe) {
     case 0: return { level: 1, label: 'Zahlungserinnerung senden' };

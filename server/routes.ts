@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql, and, inArray, desc } from "drizzle-orm";
+import { eq, sql, and, or, lt, inArray, desc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -2909,6 +2909,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(html);
     } catch (error) {
       res.status(500).json({ error: "Failed to generate settlement PDF" });
+    }
+  });
+
+  // ===== Dunning Overview (for Mahnwesen page) =====
+  app.get("/api/dunning-overview", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+
+      const overdueInvoices = await db.select({
+        invoice: schema.monthlyInvoices,
+        tenant: schema.tenants,
+        unit: schema.units,
+        property: schema.properties,
+      })
+        .from(schema.monthlyInvoices)
+        .innerJoin(schema.tenants, eq(schema.monthlyInvoices.tenantId, schema.tenants.id))
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(
+          eq(schema.properties.organizationId, profile.organizationId),
+          or(
+            eq(schema.monthlyInvoices.status, 'offen'),
+            eq(schema.monthlyInvoices.status, 'teilbezahlt'),
+            eq(schema.monthlyInvoices.status, 'ueberfaellig')
+          ),
+          lt(schema.monthlyInvoices.faelligAm, new Date().toISOString().split('T')[0])
+        ));
+
+      const tenantMap = new Map<string, any>();
+
+      for (const row of overdueInvoices) {
+        const tid = row.tenant.id;
+        if (!tenantMap.has(tid)) {
+          tenantMap.set(tid, {
+            tenantId: tid,
+            tenantName: `${row.tenant.firstName || ''} ${row.tenant.lastName || ''}`.trim(),
+            email: row.tenant.email || null,
+            phone: row.tenant.phone || null,
+            propertyId: row.property.id,
+            propertyName: row.property.name || '',
+            unitId: row.unit.id,
+            unitNumber: row.unit.topNummer || '',
+            invoices: [],
+            totalAmount: 0,
+            highestMahnstufe: 0,
+            oldestOverdue: row.invoice.faelligAm,
+          });
+        }
+        const entry = tenantMap.get(tid)!;
+        const invAmount = Number(row.invoice.gesamtbetrag || 0) - Number(row.invoice.paidAmount || 0);
+        entry.invoices.push({
+          id: row.invoice.id,
+          month: row.invoice.month,
+          year: row.invoice.year,
+          gesamtbetrag: Number(row.invoice.gesamtbetrag || 0),
+          faellig_am: row.invoice.faelligAm,
+          mahnstufe: row.invoice.mahnstufe || 0,
+          zahlungserinnerung_am: (row.invoice as any).zahlungserinnerungAm || null,
+          mahnung_am: (row.invoice as any).mahnungAm || null,
+        });
+        entry.totalAmount += invAmount;
+        if ((row.invoice.mahnstufe || 0) > entry.highestMahnstufe) {
+          entry.highestMahnstufe = row.invoice.mahnstufe || 0;
+        }
+        if (row.invoice.faelligAm && (!entry.oldestOverdue || row.invoice.faelligAm < entry.oldestOverdue)) {
+          entry.oldestOverdue = row.invoice.faelligAm;
+        }
+      }
+
+      const cases = Array.from(tenantMap.values());
+      const stats = {
+        totalCases: cases.length,
+        totalOpen: cases.filter(c => c.highestMahnstufe === 0).length,
+        totalReminded: cases.filter(c => c.highestMahnstufe === 1).length,
+        totalDunned: cases.filter(c => c.highestMahnstufe >= 2).length,
+        totalAmount: Math.round(cases.reduce((s, c) => s + c.totalAmount, 0) * 100) / 100,
+      };
+
+      res.json({ cases, stats });
+    } catch (error) {
+      console.error("Error fetching dunning overview:", error);
+      res.status(500).json({ error: "Fehler beim Laden der Mahnübersicht" });
+    }
+  });
+
+  // ===== Send Dunning Email =====
+  app.post("/api/dunning/send", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+      const body = snakeToCamel(req.body);
+      const { invoiceId, dunningLevel, tenantEmail, tenantName, propertyName, unitNumber, amount, dueDate } = body;
+
+      if (!invoiceId || !tenantEmail) {
+        return res.status(400).json({ error: "invoiceId und tenantEmail sind erforderlich" });
+      }
+
+      const invoiceWithOrg = await db.select({
+        invoice: schema.monthlyInvoices,
+        orgId: schema.properties.organizationId,
+      })
+        .from(schema.monthlyInvoices)
+        .innerJoin(schema.tenants, eq(schema.monthlyInvoices.tenantId, schema.tenants.id))
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(
+          eq(schema.monthlyInvoices.id, invoiceId),
+          eq(schema.properties.organizationId, profile.organizationId)
+        ))
+        .limit(1);
+      if (!invoiceWithOrg.length) return res.status(404).json({ error: "Rechnung nicht gefunden" });
+
+      const invoice = [invoiceWithOrg[0].invoice];
+      const newLevel = dunningLevel || ((invoice[0].mahnstufe || 0) + 1);
+
+      const levelLabels: Record<number, string> = { 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung' };
+      const levelLabel = levelLabels[newLevel] || 'Zahlungserinnerung';
+      const subject = `${levelLabel} - Offener Betrag für ${propertyName || 'Ihre Wohnung'}`;
+
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif;">
+          <h2>${levelLabel}</h2>
+          <p>Sehr geehrte(r) ${tenantName || 'Mieter/in'},</p>
+          <p>für Ihre Wohnung in der ${propertyName || ''} (${unitNumber || ''}) besteht noch ein offener Betrag:</p>
+          <p><strong>Offener Betrag: ${new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(amount || 0)}</strong></p>
+          ${newLevel >= 2 ? `<p>Gemäß § 1333 ABGB sind wir berechtigt, Verzugszinsen in Höhe von 4% p.a. zu berechnen.</p>` : ''}
+          ${newLevel >= 3 ? `<p><strong style="color: red;">Dies ist die letzte Mahnung vor Einleitung rechtlicher Schritte.</strong></p>` : ''}
+          <p>Mit freundlichen Grüßen,<br>Ihre Hausverwaltung</p>
+        </div>
+      `;
+
+      const { sendEmail } = await import("./lib/resend");
+      await sendEmail({ to: tenantEmail, subject, html: htmlBody });
+
+      await db.update(schema.monthlyInvoices).set({
+        mahnstufe: newLevel,
+        status: 'ueberfaellig',
+      }).where(eq(schema.monthlyInvoices.id, invoiceId));
+
+      res.json({ success: true, message: `${levelLabel} an ${tenantEmail} gesendet` });
+    } catch (error) {
+      console.error("Error sending dunning:", error);
+      res.status(500).json({ error: "Fehler beim Versenden der Mahnung" });
     }
   });
 

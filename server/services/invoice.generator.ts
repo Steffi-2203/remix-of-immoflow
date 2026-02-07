@@ -51,6 +51,7 @@ export interface InvoiceData {
   vortragHk: number;
   vortragSonstige: number;
   allocationDetail?: any;
+  isVacancy?: boolean;
 }
 
 export class InvoiceGenerator {
