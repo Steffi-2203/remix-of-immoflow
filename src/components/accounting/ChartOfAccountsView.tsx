@@ -1,4 +1,4 @@
-import { useChartOfAccounts } from '@/hooks/useChartOfAccounts';
+import { useDemoChartOfAccounts } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ const typeLabels: Record<string, { label: string; variant: 'default' | 'secondar
 };
 
 export function ChartOfAccountsView() {
-  const { data: accounts, isLoading } = useChartOfAccounts();
+  const { data: accounts, isLoading } = useDemoChartOfAccounts();
 
   // Group by type
   const grouped = (accounts || []).reduce((acc, account) => {

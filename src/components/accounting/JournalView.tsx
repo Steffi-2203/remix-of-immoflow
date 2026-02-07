@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useJournalEntries } from '@/hooks/useJournalEntries';
+import { useDemoJournalEntries } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -27,7 +27,7 @@ export function JournalView() {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data: entries, isLoading } = useJournalEntries(
+  const { data: entries, isLoading } = useDemoJournalEntries(
     sourceFilter !== 'all' ? { sourceType: sourceFilter } : undefined
   );
 

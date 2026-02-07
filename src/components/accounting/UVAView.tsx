@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useAccountBalances } from '@/hooks/useJournalEntries';
+import { useDemoAccountBalances } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -57,7 +57,7 @@ export function UVAView() {
     }
   }, [year, period, selectedPeriod]);
 
-  const { data: balances, isLoading } = useAccountBalances(startDate, endDate);
+  const { data: balances, isLoading } = useDemoAccountBalances(startDate, endDate);
 
   // Konten nach österreichischem HV-Kontenplan zuordnen
   const getAccountBalance = (accountNumber: string) => {

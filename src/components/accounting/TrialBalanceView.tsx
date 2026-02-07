@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAccountBalances } from '@/hooks/useJournalEntries';
+import { useDemoAccountBalances } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,7 +22,7 @@ export function TrialBalanceView() {
   const [startDate, setStartDate] = useState(`${currentYear}-01-01`);
   const [endDate, setEndDate] = useState(`${currentYear}-12-31`);
 
-  const { data: balances, isLoading } = useAccountBalances(startDate, endDate);
+  const { data: balances, isLoading } = useDemoAccountBalances(startDate, endDate);
 
   const totalDebit = (balances || []).reduce((s, b) => s + b.total_debit, 0);
   const totalCredit = (balances || []).reduce((s, b) => s + b.total_credit, 0);

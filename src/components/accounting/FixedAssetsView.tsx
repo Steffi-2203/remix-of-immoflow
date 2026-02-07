@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { useDemoFixedAssets } from '@/hooks/useDemoAccounting';
 
 const fmt = (v: number) => v.toLocaleString('de-AT', { minimumFractionDigits: 2 }) + ' €';
 
@@ -46,19 +47,7 @@ const assetTypes: Record<string, string> = {
   other: 'Sonstiges',
 };
 
-function useFixedAssets() {
-  return useQuery({
-    queryKey: ['fixed_assets'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('fixed_assets')
-        .select('*')
-        .order('acquisition_date', { ascending: false });
-      if (error) throw error;
-      return data as FixedAsset[];
-    },
-  });
-}
+// useFixedAssets is now replaced by useDemoFixedAssets
 
 function calcDepreciation(cost: number, residual: number, years: number) {
   const annual = years > 0 ? (cost - residual) / years : 0;
@@ -74,7 +63,7 @@ function calcBookValue(asset: FixedAsset): number {
 }
 
 export function FixedAssetsView() {
-  const { data: assets, isLoading } = useFixedAssets();
+  const { data: assets, isLoading } = useDemoFixedAssets();
   const [showCreate, setShowCreate] = useState(false);
   const queryClient = useQueryClient();
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAccountBalances } from '@/hooks/useJournalEntries';
+import { useDemoAccountBalances } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ export function BalanceSheetView() {
   const [stichtag, setStichtag] = useState(now.toISOString().slice(0, 10));
   const yearStart = stichtag.slice(0, 4) + '-01-01';
 
-  const { data: balances, isLoading } = useAccountBalances(yearStart, stichtag);
+  const { data: balances, isLoading } = useDemoAccountBalances(yearStart, stichtag);
 
   const assets = (balances || []).filter(b => b.account_type === 'asset');
   const liabilities = (balances || []).filter(b => b.account_type === 'liability');
