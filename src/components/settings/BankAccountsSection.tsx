@@ -50,7 +50,7 @@ export function BankAccountsSection() {
   const isLoading = accountsLoading || propertiesLoading;
 
   // Create a map of property ID to property for quick lookup
-  const propertyMap = new Map(properties?.map(p => [p.id, p]) || []);
+  const propertyMap = new Map(properties?.map(p => [p.id, p] as [string, typeof p]) || []);
 
   // Get properties that don't have a bank account yet
   const propertiesWithoutAccount = properties?.filter(

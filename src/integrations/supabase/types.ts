@@ -2119,6 +2119,7 @@ export type Database = {
           heizung_anteil_wohnung: number
           heizungskosten_gesamt: number
           id: string
+          management_type: string
           marktwert: number | null
           name: string
           postal_code: string
@@ -2147,6 +2148,7 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
+          management_type?: string
           marktwert?: number | null
           name: string
           postal_code: string
@@ -2175,6 +2177,7 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
+          management_type?: string
           marktwert?: number | null
           name?: string
           postal_code?: string

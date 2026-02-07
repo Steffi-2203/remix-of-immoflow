@@ -115,6 +115,7 @@ export function useCreateProperty() {
           richtwert_bundesland: null,
           stichtag_mrg: null,
           marktwert: null,
+          management_type: (property as any).management_type || 'mrg',
         });
         return newProperty;
       }

@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Loader2, AlertTriangle, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useCreateWegBusinessPlan,
@@ -24,6 +24,7 @@ import {
 } from '@/hooks/useWegBusinessPlan';
 import { usePropertyOwners } from '@/hooks/usePropertyOwners';
 import { useUnits } from '@/hooks/useUnits';
+import { useExpenses } from '@/hooks/useExpenses';
 import { generateWirtschaftsplanPdf } from '@/utils/wegVorschreibungPdfExport';
 
 interface BusinessPlanDialogProps {
@@ -35,6 +36,23 @@ interface BusinessPlanDialogProps {
 }
 
 const emptyItem = { category: 'betriebskosten' as const, description: '', annual_amount: '', tax_rate: '10', distribution_key: 'mea' as const };
+
+// Map expense_type to WEG business plan category
+const expenseTypeToCategory: Record<string, string> = {
+  versicherung: 'betriebskosten',
+  grundsteuer: 'betriebskosten',
+  muellabfuhr: 'betriebskosten',
+  wasser_abwasser: 'wasser',
+  heizung: 'heizung',
+  strom_allgemein: 'betriebskosten',
+  hausbetreuung: 'betriebskosten',
+  lift: 'betriebskosten',
+  gartenpflege: 'betriebskosten',
+  schneeraeumung: 'betriebskosten',
+  verwaltung: 'verwaltung',
+  ruecklage: 'ruecklage',
+  sonstiges: 'sonstiges',
+};
 
 function fmt(n: number) {
   return `€ ${n.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -53,6 +71,34 @@ export function BusinessPlanDialog({ open, onOpenChange, propertyId, organizatio
   const { data: existingItems = [] } = useWegBusinessPlanItems(existingPlan?.id);
   const { data: owners = [] } = usePropertyOwners(propertyId);
   const { data: units = [] } = useUnits(propertyId);
+
+  const previousYear = parseInt(year) - 1;
+  const { data: previousYearExpenses = [] } = useExpenses(propertyId, previousYear);
+
+  const loadFromPreviousYear = () => {
+    if (previousYearExpenses.length === 0) {
+      toast.error(`Keine Kosten für ${previousYear} gefunden`);
+      return;
+    }
+    // Group expenses by type and sum annual amounts
+    const grouped: Record<string, { total: number; label: string; category: string }> = {};
+    for (const exp of previousYearExpenses) {
+      const key = exp.expense_type || 'sonstiges';
+      if (!grouped[key]) {
+        grouped[key] = { total: 0, label: exp.bezeichnung || key, category: expenseTypeToCategory[key] || 'sonstiges' };
+      }
+      grouped[key].total += exp.betrag;
+    }
+    const items = Object.entries(grouped).map(([, v]) => ({
+      category: v.category as any,
+      description: v.label,
+      annual_amount: v.total.toFixed(2).replace('.', ','),
+      tax_rate: v.category === 'ruecklage' ? '0' : '10',
+      distribution_key: 'mea' as const,
+    }));
+    setLocalItems(items);
+    toast.success(`${items.length} Positionen aus ${previousYear} geladen`);
+  };
 
   const createPlan = useCreateWegBusinessPlan();
   const createItem = useCreateWegBusinessPlanItem();
@@ -241,9 +287,14 @@ export function BusinessPlanDialog({ open, onOpenChange, propertyId, organizatio
             <div className="flex items-center justify-between mb-2">
               <Label className="text-base font-semibold">Positionen</Label>
               {!isEdit && (
-                <Button variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-3 w-3 mr-1" /> Position
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={loadFromPreviousYear} disabled={!propertyId}>
+                    <TrendingUp className="h-3 w-3 mr-1" /> Aus Vorjahr ({previousYear})
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={addItem}>
+                    <Plus className="h-3 w-3 mr-1" /> Position
+                  </Button>
+                </div>
               )}
             </div>
 

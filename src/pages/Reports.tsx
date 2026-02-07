@@ -580,8 +580,8 @@ export default function Reports() {
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
   // Property value estimation
-  const totalQm = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + Number((p as any).totalQm || (p as any).total_qm || 0), 0) || 0
+  const totalQm: number = selectedPropertyId === 'all'
+    ? (properties as any[])?.reduce((sum: number, p: any) => sum + Number(p.totalQm || p.total_qm || 0), 0) || 0
     : Number((selectedProperty as any)?.totalQm || (selectedProperty as any)?.total_qm || 0);
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   
