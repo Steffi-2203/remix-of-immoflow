@@ -176,3 +176,82 @@ export function useDeleteDistributionKey() {
     },
   });
 }
+
+export function useDistributionKeysByProperty(propertyId: string | undefined) {
+  return useQuery({
+    queryKey: ['distribution-keys', 'property', propertyId],
+    queryFn: async () => {
+      if (!propertyId) return [];
+      const { data, error } = await supabase
+        .from('distribution_keys')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+      return data as DistributionKey[];
+    },
+    enabled: !!propertyId,
+  });
+}
+
+export function useCreatePropertyDistributionKey(propertyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      keyCode: string;
+      name: string;
+      description?: string;
+      inputType: string;
+      unit: string;
+      includedUnitTypes?: string[];
+    }) => {
+      const { data: result, error } = await supabase
+        .from('distribution_keys')
+        .insert({
+          key_code: data.keyCode,
+          name: data.name,
+          description: data.description || null,
+          input_type: data.inputType,
+          unit: data.unit,
+          is_system: false,
+          is_active: true,
+          sort_order: 100,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return result as DistributionKey;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
+      toast.success('Verteilerschlüssel erstellt');
+    },
+    onError: (error: Error) => {
+      toast.error('Fehler beim Erstellen', { description: error.message });
+    },
+  });
+}
+
+export function useDeletePropertyDistributionKey(propertyId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('distribution_keys')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['distribution-keys'] });
+      toast.success('Verteilerschlüssel gelöscht');
+    },
+    onError: (error: Error) => {
+      toast.error('Fehler beim Löschen', { description: error.message });
+    },
+  });
+}
