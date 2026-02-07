@@ -235,7 +235,7 @@ export default function TenantList() {
                   <TableRow 
                     key={tenant.id} 
                     className="hover:bg-muted/30 cursor-pointer"
-                    onClick={() => navigate(`/mieter/${tenant.id}/bearbeiten`)}
+                    onClick={() => navigate(`/mieter/${tenant.id}`)}
                   >
                     <TableCell>
                       <div>

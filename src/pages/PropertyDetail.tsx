@@ -224,6 +224,13 @@ export default function PropertyDetail() {
       title={property.name}
       subtitle={`${property.address}, ${property.postal_code} ${property.city}`}
     >
+      {/* Breadcrumb Navigation */}
+      <nav className="flex items-center gap-1 text-sm text-muted-foreground mb-6">
+        <Link to="/liegenschaften" className="hover:text-foreground transition-colors">Liegenschaften</Link>
+        <span>/</span>
+        <span className="text-foreground font-medium">{property.name}</span>
+      </nav>
+
       {/* Back Button & Actions */}
       <div className="flex items-center justify-between mb-6">
         <Link
