@@ -1536,9 +1536,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetYear = year || currentDate.getFullYear();
       const targetMonth = month || (currentDate.getMonth() + 1);
 
-      // Get all active tenants for the organization
+      // Get all active and vacancy tenants for the organization
       const tenants = await storage.getTenantsByOrganization(profile.organizationId);
       const activeTenants = tenants.filter(t => t.status === 'aktiv');
+      const vacancyTenants = tenants.filter(t => t.status === 'leerstand');
 
       const createdInvoices = [];
       const errors: string[] = [];
@@ -1684,10 +1685,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Generate vacancy invoices (Leerstand: BK+HK, no rent)
+      for (const tenant of vacancyTenants) {
+        try {
+          const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
+          const alreadyExists = existingInvoices.some(
+            inv => inv.month === targetMonth && inv.year === targetYear
+          );
+          if (alreadyExists) continue;
+
+          const unit = await storage.getUnit(tenant.unitId);
+          if (!unit) continue;
+
+          const bk = Number(unit.leerstandBk || tenant.betriebskostenVorschuss || 0);
+          const hk = Number(unit.leerstandHk || tenant.heizkostenVorschuss || 0);
+          if (bk === 0 && hk === 0) continue;
+
+          const ust10 = bk * 0.10;
+          const ust20 = hk * 0.20;
+          const totalUst = ust10 + ust20;
+          const gesamtbetrag = bk + hk + totalUst;
+          const faelligAm = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+
+          const invoiceData = {
+            tenantId: tenant.id,
+            unitId: tenant.unitId,
+            month: targetMonth,
+            year: targetYear,
+            grundmiete: '0',
+            betriebskosten: String(bk),
+            heizungskosten: String(hk),
+            wasserkosten: '0',
+            ust: String(totalUst.toFixed(2)),
+            gesamtbetrag: String(gesamtbetrag.toFixed(2)),
+            faelligAm,
+            status: 'offen' as const,
+            vortragMiete: '0',
+            vortragBk: '0',
+            vortragHk: '0',
+            isVacancy: true,
+          };
+
+          const newInvoice = await storage.createInvoice(invoiceData);
+          createdInvoices.push(newInvoice);
+        } catch (err) {
+          errors.push(`Leerstand-Fehler bei Einheit ${tenant.unitId}: ${err}`);
+        }
+      }
+
       res.json({
         success: true,
         created: createdInvoices.length,
-        skipped: activeTenants.length - createdInvoices.length - errors.length,
+        skipped: (activeTenants.length + vacancyTenants.length) - createdInvoices.length - errors.length,
         errors: errors.length,
         errorDetails: errors,
       });

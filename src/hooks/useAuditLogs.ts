@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface AuditLog {
   id: string;
@@ -28,28 +27,16 @@ export function useAuditLogs(filters?: AuditLogFilters) {
   return useQuery({
     queryKey: ['audit-logs', filters],
     queryFn: async () => {
-      let query = supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(filters?.limit ?? 100);
+      const params = new URLSearchParams();
+      if (filters?.tableName) params.set('table_name', filters.tableName);
+      if (filters?.action) params.set('action', filters.action);
+      if (filters?.limit) params.set('limit', String(filters.limit));
+      if (filters?.startDate) params.set('start_date', filters.startDate);
+      if (filters?.endDate) params.set('end_date', filters.endDate);
 
-      if (filters?.tableName) {
-        query = query.eq('table_name', filters.tableName);
-      }
-      if (filters?.action) {
-        query = query.eq('action', filters.action);
-      }
-      if (filters?.startDate) {
-        query = query.gte('created_at', filters.startDate);
-      }
-      if (filters?.endDate) {
-        query = query.lte('created_at', filters.endDate);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as AuditLog[];
+      const response = await fetch(`/api/audit-logs?${params.toString()}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Fehler beim Laden der Audit-Logs');
+      return response.json() as Promise<AuditLog[]>;
     },
   });
 }
