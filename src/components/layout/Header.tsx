@@ -1,4 +1,5 @@
-import { Bell, Search, User, LogOut, Settings, FlaskConical, Menu } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, User, LogOut, Settings, FlaskConical, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,8 @@ import { useIsAdmin } from '@/hooks/useAdmin';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { GlobalSearchDialog } from '@/components/search/GlobalSearchDialog';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -28,6 +31,19 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { data: isAdmin } = useIsAdmin();
   const isMobile = useIsMobile();
   const { openSidebar } = useSidebarContext();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Global keyboard shortcut: Cmd/Ctrl+K
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -64,23 +80,30 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Search - hidden on mobile */}
+        {/* Global Search */}
         <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Suchen..."
-            className="w-64 pl-9 bg-secondary border-0"
-          />
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center w-64 pl-9 pr-3 h-9 rounded-md bg-secondary text-sm text-muted-foreground hover:bg-secondary/80 transition-colors"
+          >
+            <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
+            <span>Suchen...</span>
+            <kbd className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded">⌘K</kbd>
+          </button>
         </div>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
-            3
-          </span>
-        </Button>
+        {/* Mobile search button */}
+        {isMobile && (
+          <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)}>
+            <Search className="h-5 w-5" />
+          </Button>
+        )}
+
+        {/* Notification Center */}
+        <NotificationCenter />
+
+        {/* Global Search Dialog */}
+        <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
         {/* User Menu */}
         <DropdownMenu>

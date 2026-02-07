@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, List, BarChart3, Scale, TrendingUp, Package, FileText } from 'lucide-react';
+import { BookOpen, List, BarChart3, Scale, TrendingUp, Package, FileText, FileSpreadsheet } from 'lucide-react';
 import { JournalView } from '@/components/accounting/JournalView';
 import { ChartOfAccountsView } from '@/components/accounting/ChartOfAccountsView';
 import { TrialBalanceView } from '@/components/accounting/TrialBalanceView';
@@ -9,6 +9,7 @@ import { BalanceSheetView } from '@/components/accounting/BalanceSheetView';
 import { ProfitLossView } from '@/components/accounting/ProfitLossView';
 import { FixedAssetsView } from '@/components/accounting/FixedAssetsView';
 import { UVAView } from '@/components/accounting/UVAView';
+import { BmdExportView } from '@/components/accounting/BmdExportView';
 
 export default function Accounting() {
   const [activeTab, setActiveTab] = useState('journal');
@@ -16,7 +17,7 @@ export default function Accounting() {
   return (
     <MainLayout
       title="Finanzbuchhaltung"
-      subtitle="Doppelte Buchführung nach österreichischem Recht – Journal, Bilanz, GuV, AfA & UVA (FinanzOnline)"
+      subtitle="Doppelte Buchführung nach österreichischem Recht – Journal, Bilanz, GuV, AfA, UVA & Export"
     >
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6 flex-wrap">
@@ -48,6 +49,10 @@ export default function Accounting() {
             <FileText className="h-4 w-4" />
             UVA
           </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            BMD/DATEV
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="journal">
@@ -70,6 +75,9 @@ export default function Accounting() {
         </TabsContent>
         <TabsContent value="uva">
           <UVAView />
+        </TabsContent>
+        <TabsContent value="export">
+          <BmdExportView />
         </TabsContent>
       </Tabs>
     </MainLayout>
