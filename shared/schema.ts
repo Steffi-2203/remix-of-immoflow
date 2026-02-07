@@ -1148,6 +1148,43 @@ export const insertWegMaintenanceItemSchema = createInsertSchema(wegMaintenanceI
 export type InsertWegMaintenanceItem = z.infer<typeof insertWegMaintenanceItemSchema>;
 export type WegMaintenanceItem = typeof wegMaintenanceItems.$inferSelect;
 
+// ====== WEG EIGENTÜMERWECHSEL (OWNER CHANGE - § 38 WEG 2002) ======
+export const ownerChangeRechtsgrundEnum = pgEnum('owner_change_rechtsgrund', ['kauf', 'schenkung', 'erbschaft', 'zwangsversteigerung', 'einbringung']);
+export const ownerChangeStatusEnum = pgEnum('owner_change_status', ['entwurf', 'grundbuch_eingetragen', 'abgeschlossen']);
+
+export const wegOwnerChanges = pgTable("weg_owner_changes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  previousOwnerId: uuid("previous_owner_id").references(() => owners.id).notNull(),
+  newOwnerId: uuid("new_owner_id").references(() => owners.id).notNull(),
+  transferDate: date("transfer_date").notNull(),
+  grundbuchDate: date("grundbuch_date"),
+  tzNumber: text("tz_number"),
+  kaufvertragDate: date("kaufvertrag_date"),
+  rechtsgrund: ownerChangeRechtsgrundEnum("rechtsgrund").default('kauf'),
+  status: ownerChangeStatusEnum("status").default('entwurf'),
+  meaShare: numeric("mea_share", { precision: 10, scale: 4 }),
+  nutzwert: numeric("nutzwert", { precision: 10, scale: 4 }),
+  reserveAmount: numeric("reserve_amount", { precision: 12, scale: 2 }).default('0'),
+  openDebtsAmount: numeric("open_debts_amount", { precision: 12, scale: 2 }).default('0'),
+  aliquotMonth: integer("aliquot_month"),
+  aliquotOldOwnerAmount: numeric("aliquot_old_owner_amount", { precision: 12, scale: 2 }).default('0'),
+  aliquotNewOwnerAmount: numeric("aliquot_new_owner_amount", { precision: 12, scale: 2 }).default('0'),
+  cancelledInvoiceCount: integer("cancelled_invoice_count").default(0),
+  newInvoiceCount: integer("new_invoice_count").default(0),
+  notes: text("notes"),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  executedAt: timestamp("executed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegOwnerChangeSchema = createInsertSchema(wegOwnerChanges).omit({ id: true, createdAt: true, updatedAt: true, executedAt: true });
+export type InsertWegOwnerChange = z.infer<typeof insertWegOwnerChangeSchema>;
+export type WegOwnerChange = typeof wegOwnerChanges.$inferSelect;
+
 // ====== VERSICHERUNGSPOLICEN (INSURANCE POLICIES) ======
 export const insurancePolicies = pgTable("insurance_policies", {
   id: uuid("id").defaultRandom().primaryKey(),

@@ -75,6 +75,17 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - **Instandhaltungsrücklage**: Reserve fund per § 31 WEG with per-owner/unit tracking
     - **Sonderumlagen**: Special assessments with MEA-based allocation
     - **Erhaltung & Verbesserung**: Maintenance tracking per § 28-29 WEG with categories (ordentliche/außerordentliche Verwaltung, Notmaßnahme), financing source tracking (Rücklage/Sonderumlage/Laufend)
+    - **Eigentümerwechsel**: Complete ownership transfer workflow per § 38/§ 39 WEG 2002 (`weg_owner_changes` table) with:
+      - 6-step wizard UI: unit/owner selection → new owner → transfer dates/Grundbuch data → Rechtsgrund → preview with aliquotierung → confirmation & execution
+      - Day-based aliquotierung per § 34 WEG (proration of transfer month by days)
+      - Transactional execution: atomic updates to unit owners (validTo/validFrom), invoice cancellation/aliquotierung, new invoice generation, reserve fund transfers, audit logging
+      - § 38 WEG Solidarhaftung warnings for past-due BK debts
+      - § 39 WEG reserve fund automatic transfer (no payout to previous owner)
+      - Rechtsgrund tracking: kauf/schenkung/erbschaft/zwangsversteigerung/einbringung
+      - Grundbuch data: TZ-Nummer, Eintragungsdatum, Kaufvertragsdatum
+      - PDF Übergabebestätigung export with aliquotierung breakdown and WEG compliance notes
+      - Owner change history table with status tracking (entwurf → grundbuch_eingetragen → abgeschlossen)
+      - API: `/api/weg/owner-changes`, `/api/weg/owner-changes/:id/preview`, `/api/weg/owner-changes/:id/execute`
     - Routes: `/weg`, API: `/api/weg/*`
 - **Insurance Management**: Policy tracking (Gebäudeversicherung, Haftpflicht, etc.) and claims management (Schadensmeldungen). Routes: `/versicherungen`, API: `/api/insurance/*`.
 - **Deadline Calendar**: Unified deadline/reminder system for contracts, insurance renewals, maintenance, settlements, and tax deadlines. Routes: `/fristen`, API: `/api/deadlines`.

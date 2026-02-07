@@ -14,7 +14,7 @@ import {
   Plus, Users, PiggyBank, Vote, Loader2, Calendar, Building2, Gavel,
   FileText, Wrench, AlertTriangle, Trash2, MapPin, Clock, CheckCircle2,
   CircleDot, ChevronRight, Euro, Shield, ArrowUpCircle, ArrowDownCircle,
-  Eye, Send, Download, Zap
+  Eye, Send, Download, Zap, ArrowRightLeft, Info, UserPlus
 } from 'lucide-react';
 import {
   useWegUnitOwners, useCreateWegUnitOwner, useDeleteWegUnitOwner,
@@ -28,9 +28,12 @@ import {
   useBudgetPlanPreview, useActivateBudgetPlan, useWegVorschreibungen,
   useWegSpecialAssessments, useCreateWegSpecialAssessment,
   useWegMaintenance, useCreateWegMaintenance, useUpdateWegMaintenance, useDeleteWegMaintenance,
+  useOwnerChanges, useCreateOwnerChange, useUpdateOwnerChange, useOwnerChangePreview, useExecuteOwnerChange,
   type BudgetDistribution,
+  type WegOwnerChange,
 } from '@/hooks/useWeg';
 import { downloadWegVorschreibungPdf } from '@/utils/wegVorschreibungPdfExport';
+import { downloadOwnerChangePdf } from '@/utils/wegOwnerChangePdfExport';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useQuery } from '@tanstack/react-query';
@@ -192,7 +195,7 @@ export default function WegManagement() {
             <TabsTrigger value="maintenance" data-testid="tab-maintenance"><Wrench className="h-4 w-4 mr-1" /> Erhaltung</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="owners"><OwnersTab propertyId={selectedPropertyId} orgId={orgId} /></TabsContent>
+          <TabsContent value="owners"><OwnersTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="assemblies"><AssembliesTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="votes"><VotesTab propertyId={selectedPropertyId} /></TabsContent>
           <TabsContent value="budget"><BudgetTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
@@ -204,7 +207,7 @@ export default function WegManagement() {
   );
 }
 
-function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | null }) {
+function OwnersTab({ propertyId, orgId, properties = [] }: { propertyId: string; orgId: string | null; properties?: any[] }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [unitId, setUnitId] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -212,6 +215,20 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
   const [nutzwert, setNutzwert] = useState('');
   const [validFrom, setValidFrom] = useState('');
   const [validTo, setValidTo] = useState('');
+
+  const [changeDialogOpen, setChangeDialogOpen] = useState(false);
+  const [changeStep, setChangeStep] = useState(1);
+  const [changeUnitId, setChangeUnitId] = useState('');
+  const [changePrevOwnerId, setChangePrevOwnerId] = useState('');
+  const [changeNewOwnerId, setChangeNewOwnerId] = useState('');
+  const [changeTransferDate, setChangeTransferDate] = useState('');
+  const [changeGrundbuchDate, setChangeGrundbuchDate] = useState('');
+  const [changeTzNumber, setChangeTzNumber] = useState('');
+  const [changeKaufvertragDate, setChangeKaufvertragDate] = useState('');
+  const [changeRechtsgrund, setChangeRechtsgrund] = useState('kauf');
+  const [changeNotes, setChangeNotes] = useState('');
+  const [createdChangeId, setCreatedChangeId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: unitOwners = [], isLoading } = useWegUnitOwners(propertyId || undefined);
   const { data: units = [] } = useQuery({
@@ -232,11 +249,21 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
     },
   });
 
+  const { data: ownerChanges = [] } = useOwnerChanges(propertyId || undefined);
+
   const createOwner = useCreateWegUnitOwner();
   const deleteOwner = useDeleteWegUnitOwner();
+  const createChange = useCreateOwnerChange();
+  const updateChange = useUpdateOwnerChange();
+  const executeChange = useExecuteOwnerChange();
+
+  const { data: preview, isLoading: previewLoading } = useOwnerChangePreview(
+    changeStep >= 5 && createdChangeId ? createdChangeId : undefined
+  );
 
   const totalMea = unitOwners.reduce((sum, uo) => sum + (uo.mea_share || 0), 0);
   const meaWarning = unitOwners.length > 0 && Math.abs(totalMea - 100) > 0.01;
+  const activeOwners = unitOwners.filter(uo => !uo.valid_to);
 
   const handleCreate = async () => {
     await createOwner.mutateAsync({
@@ -263,10 +290,61 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
     return o ? (o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim() || id) : id;
   };
 
+  const resetChangeWizard = () => {
+    setChangeStep(1); setChangeUnitId(''); setChangePrevOwnerId(''); setChangeNewOwnerId('');
+    setChangeTransferDate(''); setChangeGrundbuchDate(''); setChangeTzNumber('');
+    setChangeKaufvertragDate(''); setChangeRechtsgrund('kauf'); setChangeNotes('');
+    setCreatedChangeId(null);
+  };
+
+  const openChangeWizard = (unitOwnerId?: string) => {
+    resetChangeWizard();
+    if (unitOwnerId) {
+      const uo = unitOwners.find(u => u.id === unitOwnerId);
+      if (uo) {
+        setChangeUnitId(uo.unit_id);
+        setChangePrevOwnerId(uo.owner_id);
+      }
+    }
+    setChangeDialogOpen(true);
+  };
+
+  const handleCreateChange = async () => {
+    const result = await createChange.mutateAsync({
+      property_id: propertyId,
+      unit_id: changeUnitId,
+      previous_owner_id: changePrevOwnerId,
+      new_owner_id: changeNewOwnerId,
+      transfer_date: changeTransferDate,
+      grundbuch_date: changeGrundbuchDate || null,
+      tz_number: changeTzNumber || null,
+      kaufvertrag_date: changeKaufvertragDate || null,
+      rechtsgrund: changeRechtsgrund,
+      notes: changeNotes || null,
+    });
+    setCreatedChangeId(result.id);
+    setChangeStep(5);
+  };
+
+  const handleExecuteChange = async () => {
+    if (!createdChangeId) return;
+    await executeChange.mutateAsync(createdChangeId);
+    setChangeDialogOpen(false);
+    resetChangeWizard();
+  };
+
+  const rechtsgrundLabels: Record<string, string> = {
+    kauf: 'Kauf', schenkung: 'Schenkung', erbschaft: 'Erbschaft',
+    zwangsversteigerung: 'Zwangsversteigerung', einbringung: 'Einbringung',
+  };
+  const statusLabels: Record<string, string> = {
+    entwurf: 'Entwurf', grundbuch_eingetragen: 'Grundbuch eingetragen', abgeschlossen: 'Abgeschlossen',
+  };
+
   if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <Card>
@@ -281,9 +359,14 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
             </Badge>
           )}
         </div>
-        <Button onClick={() => setDialogOpen(true)} disabled={!propertyId} data-testid="button-add-owner">
-          <Plus className="h-4 w-4 mr-2" /> Eigent\u00FCmer zuordnen
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => openChangeWizard()} disabled={activeOwners.length === 0} data-testid="button-owner-change">
+            <ArrowRightLeft className="h-4 w-4 mr-2" /> Eigent\u00FCmerwechsel
+          </Button>
+          <Button onClick={() => setDialogOpen(true)} disabled={!propertyId} data-testid="button-add-owner">
+            <Plus className="h-4 w-4 mr-2" /> Eigent\u00FCmer zuordnen
+          </Button>
+        </div>
       </div>
 
       {isLoading ? <LoadingSpinner /> : unitOwners.length === 0 ? (
@@ -311,14 +394,66 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
                 <TableCell>{fmtDate(uo.valid_from)}</TableCell>
                 <TableCell>{fmtDate(uo.valid_to)}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" onClick={() => deleteOwner.mutate(uo.id)} data-testid={`button-delete-owner-${uo.id}`}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <div className="flex gap-1" style={{ visibility: 'visible' }}>
+                    {!uo.valid_to && (
+                      <Button variant="ghost" size="icon" onClick={() => openChangeWizard(uo.id)} title="Eigent\u00FCmerwechsel" data-testid={`button-change-owner-${uo.id}`}>
+                        <ArrowRightLeft className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => deleteOwner.mutate(uo.id)} data-testid={`button-delete-owner-${uo.id}`}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {ownerChanges.length > 0 && (
+        <div className="space-y-2">
+          <Button variant="ghost" onClick={() => setShowHistory(!showHistory)} data-testid="button-toggle-history">
+            <Clock className="h-4 w-4 mr-2" /> Eigent\u00FCmerwechsel-Historie ({ownerChanges.length})
+            <ChevronRight className={`h-4 w-4 ml-2 transition-transform ${showHistory ? 'rotate-90' : ''}`} />
+          </Button>
+          {showHistory && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Einheit</TableHead>
+                  <TableHead>Bisheriger Eigt.</TableHead>
+                  <TableHead>Neuer Eigt.</TableHead>
+                  <TableHead>\u00DCbergabe</TableHead>
+                  <TableHead>Rechtsgrund</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Storniert / Neu</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ownerChanges.map((oc: WegOwnerChange) => (
+                  <TableRow key={oc.id} data-testid={`row-change-${oc.id}`}>
+                    <TableCell className="font-medium">Top {oc.unit_top || '\u2014'}</TableCell>
+                    <TableCell>{oc.previous_owner_name || '\u2014'}</TableCell>
+                    <TableCell>{oc.new_owner_name || '\u2014'}</TableCell>
+                    <TableCell>{fmtDate(oc.transfer_date)}</TableCell>
+                    <TableCell>{rechtsgrundLabels[oc.rechtsgrund] || oc.rechtsgrund}</TableCell>
+                    <TableCell>
+                      <Badge variant={oc.status === 'abgeschlossen' ? 'default' : 'outline'}>
+                        {statusLabels[oc.status] || oc.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {oc.status === 'abgeschlossen' ? (
+                        <span className="text-sm">{oc.cancelled_invoice_count} / {oc.new_invoice_count}</span>
+                      ) : '\u2014'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -372,6 +507,274 @@ function OwnersTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
             <Button onClick={handleCreate} disabled={!unitId || !ownerId || !meaShare || createOwner.isPending} data-testid="button-save-owner">
               {createOwner.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Zuordnen
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={changeDialogOpen} onOpenChange={(open) => { if (!open) { setChangeDialogOpen(false); resetChangeWizard(); } else setChangeDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5" /> Eigent\u00FCmerwechsel gem. \u00A7 38 WEG
+            </DialogTitle>
+            <DialogDescription>
+              Schritt {changeStep} von {changeStep >= 5 ? 6 : 5} \u2013 {
+                changeStep === 1 ? 'Einheit & bisherigen Eigent\u00FCmer w\u00E4hlen' :
+                changeStep === 2 ? 'Neuen Eigent\u00FCmer w\u00E4hlen' :
+                changeStep === 3 ? '\u00DCbergabedatum & Grundbuchdaten' :
+                changeStep === 4 ? 'Rechtsgrund & Anmerkungen' :
+                changeStep === 5 ? 'Vorschau & Pr\u00FCfung' :
+                'Best\u00E4tigung & Durchf\u00FChrung'
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {changeStep === 1 && (
+              <>
+                <div className="space-y-2">
+                  <Label>Einheit (Top-Nummer)</Label>
+                  <Select value={changeUnitId} onValueChange={(v) => {
+                    setChangeUnitId(v);
+                    const uo = activeOwners.find(o => o.unit_id === v);
+                    if (uo) setChangePrevOwnerId(uo.owner_id);
+                  }}>
+                    <SelectTrigger data-testid="select-change-unit"><SelectValue placeholder="Einheit w\u00E4hlen..." /></SelectTrigger>
+                    <SelectContent>
+                      {units.filter((u: any) => activeOwners.some(uo => uo.unit_id === u.id)).map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name || u.unitNumber || u.topNummer || u.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {changePrevOwnerId && (
+                  <Card>
+                    <CardContent className="py-3 px-4">
+                      <p className="text-xs text-muted-foreground">Bisheriger Eigent\u00FCmer</p>
+                      <p className="font-medium" data-testid="text-prev-owner">{getOwnerName(changePrevOwnerId)}</p>
+                      {(() => {
+                        const uo = unitOwners.find(o => o.unit_id === changeUnitId && o.owner_id === changePrevOwnerId);
+                        return uo ? <p className="text-sm text-muted-foreground">MEA: {fmtPct(uo.mea_share)} | Nutzwert: {uo.nutzwert ?? '\u2014'}</p> : null;
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {changeStep === 2 && (
+              <div className="space-y-2">
+                <Label>Neuer Eigent\u00FCmer</Label>
+                <Select value={changeNewOwnerId} onValueChange={setChangeNewOwnerId}>
+                  <SelectTrigger data-testid="select-change-new-owner"><SelectValue placeholder="Neuen Eigent\u00FCmer w\u00E4hlen..." /></SelectTrigger>
+                  <SelectContent>
+                    {owners.filter((o: any) => o.id !== changePrevOwnerId).map((o: any) => (
+                      <SelectItem key={o.id} value={o.id}>{o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim()}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" /> Der neue Eigent\u00FCmer muss bereits im System angelegt sein.
+                </p>
+              </div>
+            )}
+
+            {changeStep === 3 && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>\u00DCbergabedatum (Stichtag)</Label>
+                  <Input type="date" value={changeTransferDate} onChange={e => setChangeTransferDate(e.target.value)} data-testid="input-transfer-date" />
+                  <p className="text-xs text-muted-foreground">Ab diesem Datum haftet der neue Eigent\u00FCmer.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Grundbuch-Eintragungsdatum</Label>
+                    <Input type="date" value={changeGrundbuchDate} onChange={e => setChangeGrundbuchDate(e.target.value)} data-testid="input-grundbuch-date" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>TZ-Nummer</Label>
+                    <Input value={changeTzNumber} onChange={e => setChangeTzNumber(e.target.value)} placeholder="z.B. TZ 1234/2026" data-testid="input-tz-number" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Kaufvertragsdatum (optional)</Label>
+                  <Input type="date" value={changeKaufvertragDate} onChange={e => setChangeKaufvertragDate(e.target.value)} data-testid="input-kaufvertrag-date" />
+                </div>
+              </div>
+            )}
+
+            {changeStep === 4 && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Rechtsgrund</Label>
+                  <Select value={changeRechtsgrund} onValueChange={setChangeRechtsgrund}>
+                    <SelectTrigger data-testid="select-rechtsgrund"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kauf">Kauf</SelectItem>
+                      <SelectItem value="schenkung">Schenkung</SelectItem>
+                      <SelectItem value="erbschaft">Erbschaft</SelectItem>
+                      <SelectItem value="zwangsversteigerung">Zwangsversteigerung</SelectItem>
+                      <SelectItem value="einbringung">Einbringung</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Anmerkungen</Label>
+                  <Textarea value={changeNotes} onChange={e => setChangeNotes(e.target.value)} placeholder="Optionale Anmerkungen zum Eigent\u00FCmerwechsel..." data-testid="input-change-notes" />
+                </div>
+              </div>
+            )}
+
+            {changeStep === 5 && (
+              previewLoading ? <LoadingSpinner /> : preview ? (
+                <div className="space-y-4">
+                  {preview.warnings.length > 0 && (
+                    <div className="space-y-2">
+                      {preview.warnings.map((w, i) => (
+                        <div key={i} className="flex gap-2 items-start rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 p-3">
+                          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                          <p className="text-sm text-amber-800 dark:text-amber-200" data-testid={`text-warning-${i}`}>{w}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card>
+                      <CardContent className="py-3 px-4 space-y-1">
+                        <p className="text-xs text-muted-foreground">Bisheriger Eigent\u00FCmer</p>
+                        <p className="font-medium">{preview.previous_owner?.name}</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="py-3 px-4 space-y-1">
+                        <p className="text-xs text-muted-foreground">Neuer Eigent\u00FCmer</p>
+                        <p className="font-medium">{preview.new_owner?.name}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader className="py-3 px-4">
+                      <CardTitle className="text-sm flex items-center gap-2"><Euro className="h-4 w-4" /> Aliquotierung (\u00A7 34 WEG)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-3 px-4">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <p className="text-muted-foreground">\u00DCbergabemonat:</p>
+                        <p>{preview.transfer.transfer_day}. des Monats</p>
+                        <p className="text-muted-foreground">Alter Eigent\u00FCmer (Monat):</p>
+                        <p>{preview.aliquotierung.old_owner_days_in_month} Tage \u2192 {fmt(preview.aliquotierung.aliquot_old_month)}</p>
+                        <p className="text-muted-foreground">Neuer Eigent\u00FCmer (Monat):</p>
+                        <p>{preview.aliquotierung.new_owner_days_in_month} Tage \u2192 {fmt(preview.aliquotierung.aliquot_new_month)}</p>
+                        <p className="text-muted-foreground">Monatliche Vorschreibung:</p>
+                        <p className="font-medium">{fmt(preview.aliquotierung.monthly_amount)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="py-3 px-4">
+                      <CardTitle className="text-sm flex items-center gap-2"><Shield className="h-4 w-4" /> Finanzielle Auswirkungen</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-3 px-4">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <p className="text-muted-foreground">Offene R\u00FCckst\u00E4nde:</p>
+                        <p className={preview.financials.past_due_amount > 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}>{fmt(preview.financials.past_due_amount)} ({preview.financials.past_due_invoices} Vorschr.)</p>
+                        <p className="text-muted-foreground">Zu stornierende Vorschr.:</p>
+                        <p>{preview.financials.future_invoices_to_cancel}</p>
+                        <p className="text-muted-foreground">R\u00FCcklagestand (Gesamt):</p>
+                        <p>{fmt(preview.financials.reserve_total)}</p>
+                        <p className="text-muted-foreground">R\u00FCcklagen-Anteil (Top):</p>
+                        <p>{fmt(preview.financials.reserve_share)} ({fmtPct(preview.financials.mea_ratio * 100)} MEA)</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="py-3 px-4">
+                      <CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4" /> Neue Vorschreibungen</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-3 px-4">
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        {preview.new_invoices.has_aliquot_month && (
+                          <>
+                            <p className="text-muted-foreground">Aliquoter Monat:</p>
+                            <p>{fmt(preview.new_invoices.first_month_aliquot || 0)}</p>
+                          </>
+                        )}
+                        <p className="text-muted-foreground">Volle Monate:</p>
+                        <p>{preview.new_invoices.count}{preview.new_invoices.has_aliquot_month ? ' (inkl. aliquot)' : ''} \u00D7 {fmt(preview.new_invoices.monthly_amount)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : <p className="text-sm text-muted-foreground text-center">Vorschau wird geladen...</p>
+            )}
+
+            {changeStep === 6 && (
+              <div className="space-y-4">
+                <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-700 p-4">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" /> Achtung: Diese Aktion kann nicht r\u00FCckg\u00E4ngig gemacht werden.
+                  </p>
+                  <ul className="mt-2 text-sm text-red-700 dark:text-red-300 space-y-1 list-disc pl-5">
+                    <li>Der bisherige Eigent\u00FCmer wird auf die Einheit beendet (validTo)</li>
+                    <li>Der neue Eigent\u00FCmer wird zugeordnet (\u00FCbernimmt MEA und Nutzwert)</li>
+                    <li>Zuk\u00FCnftige Vorschreibungen des Voreigent\u00FCmers werden storniert</li>
+                    <li>Neue Vorschreibungen f\u00FCr den neuen Eigent\u00FCmer werden erstellt</li>
+                    <li>R\u00FCcklagen-Anteil wird \u00FCbertragen</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-wrap gap-2">
+            {changeStep > 1 && changeStep < 6 && (
+              <Button variant="outline" onClick={() => setChangeStep(s => s - 1)} data-testid="button-change-back">Zur\u00FCck</Button>
+            )}
+            {changeStep === 6 && (
+              <Button variant="outline" onClick={() => setChangeStep(5)} data-testid="button-change-back-final">Zur\u00FCck zur Vorschau</Button>
+            )}
+            <div className="flex-1" />
+            <Button variant="outline" onClick={() => { setChangeDialogOpen(false); resetChangeWizard(); }} data-testid="button-change-cancel">Abbrechen</Button>
+            {changeStep < 4 && (
+              <Button onClick={() => setChangeStep(s => s + 1)} disabled={
+                (changeStep === 1 && (!changeUnitId || !changePrevOwnerId)) ||
+                (changeStep === 2 && !changeNewOwnerId) ||
+                (changeStep === 3 && !changeTransferDate)
+              } data-testid="button-change-next">Weiter</Button>
+            )}
+            {changeStep === 4 && (
+              <Button onClick={handleCreateChange} disabled={createChange.isPending} data-testid="button-change-create">
+                {createChange.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Vorschau anzeigen
+              </Button>
+            )}
+            {changeStep === 5 && preview && (
+              <Button variant="outline" onClick={() => {
+                const prop = properties.find((p: any) => p.id === propertyId);
+                downloadOwnerChangePdf({
+                  preview,
+                  propertyName: prop?.name || '',
+                  propertyAddress: prop?.address || '',
+                  propertyCity: prop?.city || '',
+                  rechtsgrund: changeRechtsgrund,
+                  grundbuchDate: changeGrundbuchDate,
+                  tzNumber: changeTzNumber,
+                  kaufvertragDate: changeKaufvertragDate,
+                });
+              }} data-testid="button-download-pdf">
+                <Download className="h-4 w-4 mr-2" /> PDF
+              </Button>
+            )}
+            {changeStep === 5 && (
+              <Button onClick={() => setChangeStep(6)} data-testid="button-change-confirm">Eigent\u00FCmerwechsel durchf\u00FChren</Button>
+            )}
+            {changeStep === 6 && (
+              <Button onClick={handleExecuteChange} disabled={executeChange.isPending} variant="default" data-testid="button-change-execute">
+                {executeChange.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Jetzt durchf\u00FChren
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

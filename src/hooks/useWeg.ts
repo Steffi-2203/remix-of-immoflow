@@ -629,3 +629,168 @@ export function useWegVorschreibungen(planId?: string) {
     enabled: !!planId,
   });
 }
+
+// ====== EIGENTÜMERWECHSEL (OWNER CHANGE) ======
+
+export interface WegOwnerChange {
+  id: string;
+  organization_id: string | null;
+  property_id: string;
+  unit_id: string;
+  previous_owner_id: string;
+  new_owner_id: string;
+  transfer_date: string;
+  grundbuch_date: string | null;
+  tz_number: string | null;
+  kaufvertrag_date: string | null;
+  rechtsgrund: 'kauf' | 'schenkung' | 'erbschaft' | 'zwangsversteigerung' | 'einbringung';
+  status: 'entwurf' | 'grundbuch_eingetragen' | 'abgeschlossen';
+  mea_share: string | null;
+  nutzwert: string | null;
+  reserve_amount: string;
+  open_debts_amount: string;
+  aliquot_month: number | null;
+  aliquot_old_owner_amount: string;
+  aliquot_new_owner_amount: string;
+  cancelled_invoice_count: number;
+  new_invoice_count: number;
+  notes: string | null;
+  created_by: string | null;
+  executed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  previous_owner_name?: string | null;
+  new_owner_name?: string | null;
+  unit_top?: string | null;
+}
+
+export interface OwnerChangePreview {
+  owner_change: any;
+  previous_owner: { id: string; name: string; email: string | null } | null;
+  new_owner: { id: string; name: string; email: string | null } | null;
+  unit: { id: string; top_nummer: string; type: string; nutzflaeche: string | null } | null;
+  transfer: {
+    transfer_date: string;
+    transfer_year: number;
+    transfer_month: number;
+    transfer_day: number;
+    days_in_transfer_month: number;
+    days_in_year: number;
+  };
+  aliquotierung: {
+    old_owner_days_in_month: number;
+    new_owner_days_in_month: number;
+    old_owner_days_in_year: number;
+    new_owner_days_in_year: number;
+    monthly_amount: number;
+    yearly_amount: number;
+    aliquot_old_month: number;
+    aliquot_new_month: number;
+    aliquot_old_year: number;
+    aliquot_new_year: number;
+  };
+  financials: {
+    open_debts_total: number;
+    past_due_invoices: number;
+    past_due_amount: number;
+    future_invoices_to_cancel: number;
+    reserve_total: number;
+    reserve_share: number;
+    mea_share: number;
+    mea_ratio: number;
+    total_mea: number;
+  };
+  new_invoices: {
+    remaining_months: number[];
+    count: number;
+    monthly_amount: number;
+    first_month_aliquot: number | null;
+    has_aliquot_month: boolean;
+  };
+  warnings: string[];
+}
+
+export function useOwnerChanges(propertyId?: string) {
+  return useQuery({
+    queryKey: ['/api/weg/owner-changes', propertyId],
+    queryFn: async () => {
+      const url = propertyId ? `/api/weg/owner-changes?propertyId=${propertyId}` : '/api/weg/owner-changes';
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<WegOwnerChange[]>;
+    },
+    enabled: !!propertyId,
+  });
+}
+
+export function useCreateOwnerChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest('POST', '/api/weg/owner-changes', data);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Fehler' }));
+        throw new Error(err.error || 'Fehler beim Erstellen');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['/api/weg/owner-changes'] });
+      toast.success('Eigentümerwechsel angelegt');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useUpdateOwnerChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest('PATCH', `/api/weg/owner-changes/${id}`, data);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Fehler' }));
+        throw new Error(err.error || 'Fehler beim Aktualisieren');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['/api/weg/owner-changes'] });
+      toast.success('Eigentümerwechsel aktualisiert');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useOwnerChangePreview(id?: string) {
+  return useQuery({
+    queryKey: ['/api/weg/owner-changes', id, 'preview'],
+    queryFn: async () => {
+      const res = await fetch(`/api/weg/owner-changes/${id}/preview`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler bei der Vorschau');
+      return res.json() as Promise<OwnerChangePreview>;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useExecuteOwnerChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest('POST', `/api/weg/owner-changes/${id}/execute`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Fehler' }));
+        throw new Error(err.error || 'Fehler beim Durchführen');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['/api/weg/owner-changes'] });
+      qc.invalidateQueries({ queryKey: ['/api/weg/unit-owners'] });
+      qc.invalidateQueries({ queryKey: ['/api/weg/budget-plans'] });
+      qc.invalidateQueries({ queryKey: ['/api/weg/reserve-fund'] });
+      toast.success(data.message || 'Eigentümerwechsel durchgeführt');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
