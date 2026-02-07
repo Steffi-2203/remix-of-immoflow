@@ -49,6 +49,8 @@ import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
 import AGB from "./pages/AGB";
+import BatchOperations from "./pages/BatchOperations";
+import OwnerPortal from "./pages/OwnerPortal";
 
 const queryClient = new QueryClient();
 
@@ -104,6 +106,8 @@ const App = () => (
             <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/hv-vertraege" element={<ProtectedRoute><DemoDataProvider><ManagementContracts /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/eigentuemerportal" element={<ProtectedRoute><DemoDataProvider><OwnerPortal /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/massenaktionen" element={<ProtectedRoute><DemoDataProvider><BatchOperations /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}
