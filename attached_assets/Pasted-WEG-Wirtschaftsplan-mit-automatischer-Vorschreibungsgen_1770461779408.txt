@@ -1,0 +1,83 @@
+WEG-Wirtschaftsplan mit automatischer Vorschreibungsgenerierung
+
+Implementiere einen vollständigen WEG-Wirtschaftsplan-Workflow nach österreichischem WEG 2002 (inkl. Novellen 2022/2024). Der Wirtschaftsplan ist die Grundlage für die monatlichen Vorschreibungen an die Wohnungseigentümer im Folgejahr.
+
+1. Wirtschaftsplan erstellen (§ 20 Abs 2 WEG)
+
+Ein Wirtschaftsplan wird pro Liegenschaft und Wirtschaftsjahr erstellt
+Er enthält folgende Positionen:
+Betriebskosten (aufgeschlüsselt nach Kostenarten: Wasser, Kanal, Müll, Versicherung, Hausbetreuung, Strom allgemein, Lift, Gartenpflege, etc.)
+Instandhaltungsrücklage (§ 31 WEG) – Mindestdotierung gemäß WEG-Novelle 2022: €0,90/m²/Monat (Staffelung nach Baujahr beachten)
+Verwaltungshonorar
+Heizkosten-Akonto (falls Zentralheizung)
+Sonstige Kosten (z.B. Aufzugswartung, Rauchfangkehrer)
+Jede Position hat: Bezeichnung, Jahresbetrag, Verteilungsschlüssel (Nutzwert/MEA, m², Verbrauch, Personenanzahl)
+Gesamtsumme des Wirtschaftsplans wird berechnet
+Status-Workflow: entwurf → beschlossen (nach Eigentümerversammlung) → aktiv
+2. Verteilung auf Eigentümer
+
+Pro Eigentümer/Einheit wird der individuelle Anteil berechnet:
+Jahresanteil = Gesamtkosten × (Nutzwert der Einheit / Gesamt-Nutzwert)
+Monatsanteil = Jahresanteil / 12
+Aufschlüsselung pro Eigentümer: BK-Anteil, Rücklage-Anteil, Heizkosten-Anteil, Verwaltung-Anteil
+UST-Berechnung: 10% auf BK (Wohnung), 20% auf Heizung, 20% auf Geschäft/Garage
+3. Automatische Vorschreibungsgenerierung
+
+Der User gibt einen Gültigkeitsbeginn ein (Default: 01.01. des Folgejahres)
+Beim Aktivieren des Wirtschaftsplans werden automatisch 12 monatliche Vorschreibungen generiert (Januar–Dezember)
+Jede Vorschreibung enthält:
+Eigentümer/Einheit-Referenz
+Monat/Jahr
+Betriebskosten-Vorschuss (netto + UST)
+Rücklagen-Beitrag
+Heizkosten-Vorschuss (netto + UST)
+Verwaltungshonorar-Anteil
+Gesamtbetrag brutto
+Fälligkeitsdatum (jeweils der 5. des Monats oder vom User konfigurierbar)
+Status: offen
+Die Vorschreibungen werden in die bestehende monthly_invoices-Tabelle eingefügt
+Bestehende alte Vorschreibungen für denselben Zeitraum werden NICHT überschrieben, sondern der User wird gewarnt
+4. PDF-Export der Vorschreibung
+
+Jede Einzelvorschreibung als druckfertiges PDF (jsPDF):
+Briefkopf mit Verwaltungsdaten (Logo, Adresse, Kontakt)
+Empfänger (Eigentümer Name + Adresse)
+Betreff: „Vorschreibung [Monat/Jahr] – [Liegenschaft]"
+Tabellarische Aufstellung:
+Position	Netto	UST %	UST	Brutto
+Betriebskosten	€XX	10%	€XX	€XX
+Heizkosten	€XX	20%	€XX	€XX
+Rücklage	€XX	-	-	€XX
+Verwaltung	€XX	20%	€XX	€XX
+Gesamt				€XX
+Zahlungsinformationen: IBAN, BIC, Verwendungszweck
+Fälligkeitsdatum
+Fußzeile mit rechtlichen Hinweisen
+Sammel-PDF: Alle Vorschreibungen eines Monats für eine Liegenschaft in einem PDF
+5. E-Mail-Versand
+
+Einzelversand oder Massenversand an alle Eigentümer einer Liegenschaft
+E-Mail enthält:
+Betreff: „Ihre Vorschreibung [Monat/Jahr] – [Liegenschaft]"
+Anrede mit Name
+Kurzer Text mit Zahlungsaufforderung und Fälligkeitsdatum
+Vorschreibungs-PDF als Anhang
+Versandstatus wird pro Vorschreibung gespeichert (versendet_am, versand_status)
+Nutze die bestehende Resend-Integration (Edge Function) für den E-Mail-Versand
+6. UI-Anforderungen
+
+Wirtschaftsplan-Übersicht: Liste aller Wirtschaftspläne pro Liegenschaft mit Status-Badge
+Wirtschaftsplan-Editor: Formular zum Anlegen/Bearbeiten mit:
+Kostenarten hinzufügen/entfernen
+Verteilungsschlüssel pro Position wählen
+Live-Vorschau der Verteilung auf alle Eigentümer
+Vorschreibungs-Vorschau: Bevor Vorschreibungen generiert werden, zeige eine Übersichtstabelle mit allen Eigentümern und deren monatlichen Beträgen zur Bestätigung
+Gültigkeitsbeginn-Eingabe: Datepicker mit Default 01.01. des Folgejahres
+Aktionen pro Vorschreibung: PDF herunterladen, per E-Mail senden, Status einsehen
+Sammelaktion: „Alle Vorschreibungen für [Monat] generieren & versenden"
+Wichtige Regeln:
+
+Vorschreibungen aus dem Wirtschaftsplan sind VORSCHÜSSE – die tatsächliche Abrechnung erfolgt nachträglich via BK-Abrechnung
+Rücklagenbeiträge sind NICHT umsatzsteuerpflichtig
+Der Wirtschaftsplan muss von der Eigentümerversammlung beschlossen werden, bevor Vorschreibungen generiert werden (Status-Check)
+Integration mit bestehendem Zahlungssystem: Eingehende Zahlungen müssen den generierten Vorschreibungen zuordenbar sein
