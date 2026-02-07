@@ -32,6 +32,7 @@ import {
   FileImage,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
+import { HeatingCostImportDialog } from '@/components/heating/HeatingCostImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
 import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
@@ -91,6 +92,7 @@ export default function PropertyDetail() {
   const [unitImportDialogOpen, setUnitImportDialogOpen] = useState(false);
   const [tenantImportDialogOpen, setTenantImportDialogOpen] = useState(false);
   const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
+  const [heatingImportOpen, setHeatingImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
@@ -392,6 +394,9 @@ export default function PropertyDetail() {
           <TabsTrigger value="maintenance">
             <Wrench className="h-4 w-4 mr-1" />
             Wartungsverträge
+          </TabsTrigger>
+          <TabsTrigger value="heating">
+            Heizkosten
           </TabsTrigger>
           <TabsTrigger value="documents">Dokumente</TabsTrigger>
         </TabsList>
@@ -940,6 +945,22 @@ export default function PropertyDetail() {
           {id && <MaintenanceContractsTab propertyId={id} />}
         </TabsContent>
 
+        <TabsContent value="heating" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-foreground">Heizkostenabrechnung</h3>
+              <p className="text-sm text-muted-foreground">Externe Heizkostendaten importieren (z.B. ISTA, Techem)</p>
+            </div>
+            <Button onClick={() => setHeatingImportOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              HK-Daten importieren
+            </Button>
+          </div>
+          <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
+            <p>Importieren Sie Verbrauchsdaten Ihres Heizkosten-Ableseunternehmens per CSV oder manuelle Eingabe.</p>
+          </div>
+        </TabsContent>
+
         <TabsContent value="documents" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-foreground">
@@ -1008,6 +1029,11 @@ export default function PropertyDetail() {
               queryClient.invalidateQueries({ queryKey: ['units', id] });
               queryClient.invalidateQueries({ queryKey: ['tenants'] });
             }}
+          />
+          <HeatingCostImportDialog
+            open={heatingImportOpen}
+            onOpenChange={setHeatingImportOpen}
+            propertyId={id}
           />
         </>
       )}

@@ -4,11 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, User } from 'lucide-react';
 import { useOwners, useDeleteOwner, Owner } from '@/hooks/useOwners';
 import { useProperties } from '@/hooks/useProperties';
 import { OwnerCard } from '@/components/owners/OwnerCard';
 import { OwnerForm } from '@/components/owners/OwnerForm';
+import { OwnerPayoutSection } from '@/components/owners/OwnerPayoutSection';
 
 export default function OwnerList() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,68 +69,79 @@ export default function OwnerList() {
             Neuer Eigentümer
           </Button>
         </div>
-        
-        <div className="flex flex-wrap gap-4 items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Suchen..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-search-owners"
-            />
-          </div>
-          
-          <Select value={filterProperty} onValueChange={setFilterProperty}>
-            <SelectTrigger className="w-[200px]" data-testid="select-filter-property">
-              <SelectValue placeholder="Alle Liegenschaften" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Alle Liegenschaften</SelectItem>
-              {properties?.map((property) => (
-                <SelectItem key={property.id} value={property.id}>
-                  {property.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-48 bg-muted animate-pulse rounded-lg" />
-            ))}
-          </div>
-        ) : filteredOwners.length === 0 ? (
-          <div className="text-center py-16">
-            <User className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-            <h3 className="text-lg font-medium mb-2">Keine Eigentümer gefunden</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchQuery || filterProperty !== 'all'
-                ? 'Versuchen Sie andere Filteroptionen'
-                : 'Legen Sie Ihren ersten Eigentümer an'}
-            </p>
-            {!searchQuery && filterProperty === 'all' && (
-              <Button onClick={() => setFormOpen(true)} data-testid="button-add-owner-empty">
-                <Plus className="h-4 w-4 mr-2" />
-                Eigentümer anlegen
-              </Button>
+
+        <Tabs defaultValue="owners">
+          <TabsList>
+            <TabsTrigger value="owners">Eigentümer</TabsTrigger>
+            <TabsTrigger value="payouts">Auszahlungen</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="owners" className="space-y-6">
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Suchen..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={filterProperty} onValueChange={setFilterProperty}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Alle Liegenschaften" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Liegenschaften</SelectItem>
+                  {properties?.map((property) => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-48 bg-muted animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : filteredOwners.length === 0 ? (
+              <div className="text-center py-16">
+                <User className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+                <h3 className="text-lg font-medium mb-2">Keine Eigentümer gefunden</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchQuery || filterProperty !== 'all'
+                    ? 'Versuchen Sie andere Filteroptionen'
+                    : 'Legen Sie Ihren ersten Eigentümer an'}
+                </p>
+                {!searchQuery && filterProperty === 'all' && (
+                  <Button onClick={() => setFormOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Eigentümer anlegen
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOwners.map((owner) => (
+                  <OwnerCard
+                    key={owner.id}
+                    owner={owner}
+                    onEdit={handleEdit}
+                    onDelete={setDeletingOwner}
+                  />
+                ))}
+              </div>
             )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredOwners.map((owner) => (
-              <OwnerCard
-                key={owner.id}
-                owner={owner}
-                onEdit={handleEdit}
-                onDelete={setDeletingOwner}
-              />
-            ))}
-          </div>
-        )}
+          </TabsContent>
+
+          <TabsContent value="payouts">
+            <OwnerPayoutSection />
+          </TabsContent>
+        </Tabs>
       </div>
       
       <OwnerForm

@@ -393,6 +393,7 @@ export type Database = {
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           datum: string
+          distribution_key_id: string | null
           expense_type: Database["public"]["Enums"]["expense_type"]
           id: string
           ist_umlagefaehig: boolean | null
@@ -414,6 +415,7 @@ export type Database = {
           category: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           datum: string
+          distribution_key_id?: string | null
           expense_type?: Database["public"]["Enums"]["expense_type"]
           id?: string
           ist_umlagefaehig?: boolean | null
@@ -435,6 +437,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           datum?: string
+          distribution_key_id?: string | null
           expense_type?: Database["public"]["Enums"]["expense_type"]
           id?: string
           ist_umlagefaehig?: boolean | null
@@ -448,6 +451,13 @@ export type Database = {
           year?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_distribution_key_id_fkey"
+            columns: ["distribution_key_id"]
+            isOneToOne: false
+            referencedRelation: "distribution_keys"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expenses_property_id_fkey"
             columns: ["property_id"]
@@ -548,6 +558,79 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      heating_cost_readings: {
+        Row: {
+          consumption: number
+          consumption_unit: string
+          cost_share: number
+          created_at: string
+          id: string
+          notes: string | null
+          organization_id: string | null
+          period_from: string
+          period_to: string
+          property_id: string
+          provider: string | null
+          source: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          consumption?: number
+          consumption_unit?: string
+          cost_share?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          period_from: string
+          period_to: string
+          property_id: string
+          provider?: string | null
+          source?: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          consumption?: number
+          consumption_unit?: string
+          cost_share?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          period_from?: string
+          period_to?: string
+          property_id?: string
+          provider?: string | null
+          source?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "heating_cost_readings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "heating_cost_readings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "heating_cost_readings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -1477,6 +1560,88 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      owner_payouts: {
+        Row: {
+          created_at: string
+          email_sent_at: string | null
+          id: string
+          management_fee: number
+          net_payout: number
+          notes: string | null
+          organization_id: string | null
+          owner_id: string
+          pdf_url: string | null
+          period_from: string
+          period_to: string
+          property_id: string
+          sepa_exported_at: string | null
+          status: string
+          total_expenses: number
+          total_income: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email_sent_at?: string | null
+          id?: string
+          management_fee?: number
+          net_payout?: number
+          notes?: string | null
+          organization_id?: string | null
+          owner_id: string
+          pdf_url?: string | null
+          period_from: string
+          period_to: string
+          property_id: string
+          sepa_exported_at?: string | null
+          status?: string
+          total_expenses?: number
+          total_income?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email_sent_at?: string | null
+          id?: string
+          management_fee?: number
+          net_payout?: number
+          notes?: string | null
+          organization_id?: string | null
+          owner_id?: string
+          pdf_url?: string | null
+          period_from?: string
+          period_to?: string
+          property_id?: string
+          sepa_exported_at?: string | null
+          status?: string
+          total_expenses?: number
+          total_income?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_payouts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owner_payouts_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "property_owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owner_payouts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
