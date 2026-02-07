@@ -93,8 +93,8 @@ export default function UnitList() {
   const { data: invoices } = useInvoices();
 
   const getProperty = (propertyId: string) => properties?.find((p) => p.id === propertyId);
-  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unitId === unitId && t.status === 'aktiv');
-  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unitId === unitId) || [];
+  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unit_id === unitId && t.status === 'aktiv');
+  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unit_id === unitId) || [];
 
   // Check if contract expires within 3 months
   const getContractExpirationInfo = (tenant: any) => {

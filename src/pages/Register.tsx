@@ -14,7 +14,7 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('invite');
   
-  const { isAuthenticated, loading, register } = useAuth();
+  const { isAuthenticated, loading, signUp } = useAuth();
   const { toast } = useToast();
 
   const [email, setEmail] = useState('');
@@ -63,12 +63,7 @@ export default function Register() {
     setIsSubmitting(true);
     
     try {
-      await register({
-        email,
-        password,
-        fullName: fullName || undefined,
-        token: inviteToken || undefined,
-      });
+      await signUp(email, password, fullName || undefined);
       
       toast({
         title: "Erfolgreich registriert",

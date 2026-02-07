@@ -36,11 +36,11 @@ export default function CostsHub() {
         </TabsList>
 
         <TabsContent value="expenses">
-          <ExpenseList embedded />
+          <ExpenseList />
         </TabsContent>
         {showApproval && (
           <TabsContent value="approval">
-            <InvoiceApproval embedded />
+            <InvoiceApproval />
           </TabsContent>
         )}
       </Tabs>

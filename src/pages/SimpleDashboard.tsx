@@ -67,8 +67,8 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
               onClick={async () => {
                 if (!newUnit.top_nummer) return;
                 await createUnit.mutateAsync({
-                  topNummer: newUnit.top_nummer,
-                  propertyId: propertyId,
+                  top_nummer: newUnit.top_nummer,
+                  property_id: propertyId,
                 });
                 setNewUnit({ top_nummer: '' });
                 setShowAddUnit(false);
@@ -326,7 +326,7 @@ export default function SimpleDashboard() {
                             {property.address}, {property.postal_code} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {property.total_units || 0} Einheiten • {property.rented_units || 0} vermietet • {property.total_qm || 0} m²
+                            {property.total_units || 0} Einheiten • {(property as any).rented_units || 0} vermietet • {property.total_qm || 0} m²
                           </p>
                         </div>
                       </div>

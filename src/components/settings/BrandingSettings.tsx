@@ -47,13 +47,14 @@ export function BrandingSettings() {
   useEffect(() => {
     if (organization) {
       form.reset({
-        brandName: organization.brandName || '',
-        logoUrl: organization.logoUrl || '',
-        primaryColor: organization.primaryColor || '',
-        supportEmail: organization.supportEmail || '',
+        brandName: (organization as any).brandName || (organization as any).brand_name || '',
+        logoUrl: (organization as any).logoUrl || (organization as any).logo_url || '',
+        primaryColor: (organization as any).primaryColor || (organization as any).primary_color || '',
+        supportEmail: (organization as any).supportEmail || (organization as any).support_email || '',
       });
-      if (organization.primaryColor) {
-        setPreviewColor(organization.primaryColor);
+      const color = (organization as any).primaryColor || (organization as any).primary_color;
+      if (color) {
+        setPreviewColor(color);
       }
     }
   }, [organization, form]);
@@ -65,11 +66,11 @@ export function BrandingSettings() {
     try {
       await updateOrganization.mutateAsync({
         id: organization.id,
-        brandName: data.brandName || null,
-        logoUrl: data.logoUrl || null,
-        primaryColor: data.primaryColor || null,
-        supportEmail: data.supportEmail || null,
-      });
+        brand_name: data.brandName || null,
+        logo_url: data.logoUrl || null,
+        primary_color: data.primaryColor || null,
+        support_email: data.supportEmail || null,
+      } as any);
       toast({
         title: 'Branding gespeichert',
         description: 'Ihre Branding-Einstellungen wurden aktualisiert.',

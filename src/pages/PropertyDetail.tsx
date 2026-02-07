@@ -819,7 +819,7 @@ export default function PropertyDetail() {
                   </TableHeader>
                   <TableBody>
                     {distributionKeys.map((key) => {
-                      const unitTypes = (key.includedUnitTypes as string[] | null) || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
+                      const unitTypes = ((key as any).includedUnitTypes || (key as any).included_unit_types) as string[] | null || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
                       const unitTypeLabels: Record<string, string> = {
                         wohnung: 'Whg',
                         geschaeft: 'Gesch',
@@ -830,11 +830,11 @@ export default function PropertyDetail() {
                       };
                       return (
                       <TableRow key={key.id} data-testid={`row-distribution-key-${key.id}`}>
-                        <TableCell className="font-mono text-sm">{key.keyCode}</TableCell>
+                        <TableCell className="font-mono text-sm">{key.key_code}</TableCell>
                         <TableCell>{key.name}</TableCell>
                         <TableCell>
                           <Badge variant="secondary">
-                            {inputTypeOptions.find(o => o.value === key.inputType)?.label || key.inputType}
+                            {inputTypeOptions.find(o => o.value === key.input_type)?.label || key.input_type}
                           </Badge>
                         </TableCell>
                         <TableCell>{key.unit}</TableCell>
