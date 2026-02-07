@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,49 +9,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenants } from '@/hooks/useTenants';
+import { useUnits } from '@/hooks/useUnits';
+import { useProperties } from '@/hooks/useProperties';
+import { useTenantPortalAccess, useCreateTenantPortalAccess, useToggleTenantPortalAccess } from '@/hooks/useTenantPortalAccess';
+import { useInvoices } from '@/hooks/useInvoices';
+import { usePayments } from '@/hooks/usePayments';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Home, Euro, FileText, MessageSquare, AlertTriangle,
-  Download, CheckCircle, Clock, Send, Info
-} from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-
-interface TenantInfo {
-  id: string;
-  name: string;
-  unit: string;
-  property: string;
-  address: string;
-  rentAmount: number;
-  contractStart: string;
-}
-
-interface Invoice {
-  id: string;
-  month: number;
-  year: number;
-  amount: number;
-  status: string;
-  dueDate: string;
-}
-
-interface Payment {
-  id: string;
-  date: string;
-  amount: number;
-  reference: string;
-}
-
-interface DamageReport {
-  id: string;
-  title: string;
-  description: string;
-  status: 'offen' | 'in_bearbeitung' | 'erledigt';
-  createdAt: string;
-}
+import {
+  Home, Euro, FileText, Send, AlertTriangle,
+  Download, CheckCircle, Clock, Info, Users, Plus, Shield
+} from 'lucide-react';
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(amount);
@@ -59,135 +33,199 @@ function formatCurrency(amount: number) {
 
 export default function TenantPortal() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [damageTitle, setDamageTitle] = useState('');
-  const [damageDescription, setDamageDescription] = useState('');
-  const [damageCategory, setDamageCategory] = useState('');
+  const { user } = useAuth();
+  const { data: tenants } = useTenants();
+  const { data: units } = useUnits();
+  const { data: properties } = useProperties();
+  const { data: portalAccess } = useTenantPortalAccess();
+  const createAccess = useCreateTenantPortalAccess();
+  const toggleAccess = useToggleTenantPortalAccess();
+  const { data: invoices } = useInvoices();
+  const { data: payments } = usePayments();
 
-  const mockTenant: TenantInfo = {
-    id: '1',
-    name: 'Max Mustermann',
-    unit: 'Top 1',
-    property: 'Musterhaus 1',
-    address: 'Musterstraße 1, 1010 Wien',
-    rentAmount: 850,
-    contractStart: '2020-01-01',
-  };
+  const [activeTab, setActiveTab] = useState('overview');
+  const [showGrantAccess, setShowGrantAccess] = useState(false);
+  const [selectedTenantId, setSelectedTenantId] = useState('');
+  const [accessEmail, setAccessEmail] = useState('');
 
-  const mockInvoices: Invoice[] = [
-    { id: '1', month: 1, year: 2026, amount: 850, status: 'bezahlt', dueDate: '2026-01-05' },
-    { id: '2', month: 12, year: 2025, amount: 850, status: 'bezahlt', dueDate: '2025-12-05' },
-    { id: '3', month: 11, year: 2025, amount: 850, status: 'bezahlt', dueDate: '2025-11-05' },
-  ];
+  // Check if the current user IS a tenant (portal view)
+  const [isTenantView, setIsTenantView] = useState(false);
+  const [tenantData, setTenantData] = useState<any>(null);
 
-  const mockPayments: Payment[] = [
-    { id: '1', date: '2026-01-03', amount: 850, reference: 'Miete Januar 2026' },
-    { id: '2', date: '2025-12-02', amount: 850, reference: 'Miete Dezember 2025' },
-    { id: '3', date: '2025-11-04', amount: 850, reference: 'Miete November 2025' },
-  ];
-
-  const mockDamageReports: DamageReport[] = [
-    { 
-      id: '1', 
-      title: 'Wasserhahn tropft', 
-      description: 'Der Wasserhahn in der Küche tropft seit einer Woche.',
-      status: 'in_bearbeitung',
-      createdAt: '2025-12-15'
-    },
-  ];
-
-  const handleSubmitDamageReport = () => {
-    if (!damageTitle || !damageDescription || !damageCategory) {
-      toast({
-        title: 'Fehler',
-        description: 'Bitte alle Felder ausfüllen',
-        variant: 'destructive',
-      });
-      return;
+  useEffect(() => {
+    if (!user || !portalAccess) return;
+    const myAccess = portalAccess.find(a => a.user_id === user.id);
+    if (myAccess) {
+      setIsTenantView(true);
+      const tenant = tenants?.find(t => t.id === myAccess.tenant_id);
+      setTenantData(tenant);
     }
-    toast({
-      title: 'Schadensmeldung gesendet',
-      description: 'Ihre Meldung wurde erfolgreich übermittelt.',
-    });
-    setDamageTitle('');
-    setDamageDescription('');
-    setDamageCategory('');
+  }, [user, portalAccess, tenants]);
+
+  const handleGrantAccess = async () => {
+    if (!selectedTenantId || !accessEmail) return;
+    await createAccess.mutateAsync({ tenant_id: selectedTenantId, email: accessEmail });
+    setShowGrantAccess(false);
+    setSelectedTenantId('');
+    setAccessEmail('');
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'bezahlt':
-        return <Badge className="bg-green-500">Bezahlt</Badge>;
-      case 'offen':
-        return <Badge className="bg-yellow-500">Offen</Badge>;
-      case 'ueberfaellig':
-        return <Badge className="bg-red-500">Überfällig</Badge>;
-      case 'in_bearbeitung':
-        return <Badge className="bg-blue-500">In Bearbeitung</Badge>;
-      case 'erledigt':
-        return <Badge className="bg-green-500">Erledigt</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
+  const activeTenants = tenants?.filter(t => t.status === 'aktiv') || [];
 
-  const balance = mockInvoices.filter(i => i.status !== 'bezahlt').reduce((sum, i) => sum + i.amount, 0);
-
-  return (
-    <MainLayout title="Mieterportal" subtitle="Self-Service für Mieter">
-      <div className="space-y-6">
-        <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
-          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="text-blue-800 dark:text-blue-200">
-            <strong>Demo-Ansicht:</strong> Dies ist eine Vorschau des Mieterportals. Für Produktiveinsatz ist eine separate Mieter-Authentifizierung erforderlich.
-          </AlertDescription>
-        </Alert>
-        
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Willkommen, {mockTenant.name}</h1>
-            <p className="text-muted-foreground">{mockTenant.property} - {mockTenant.unit}</p>
+  // Admin/Manager View: Manage portal access
+  if (!isTenantView) {
+    return (
+      <MainLayout title="Mieterportal" subtitle="Self-Service Zugang für Mieter verwalten">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold">Portal-Zugänge verwalten</h2>
+            </div>
+            <Button onClick={() => setShowGrantAccess(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Zugang einrichten
+            </Button>
           </div>
+
+          {!portalAccess || portalAccess.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Users className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium">Keine Portal-Zugänge</p>
+                <p className="text-muted-foreground text-sm">Richten Sie Zugänge ein, damit Mieter ihre Daten einsehen können.</p>
+                <Button className="mt-4" onClick={() => setShowGrantAccess(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> Ersten Zugang einrichten
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mieter</TableHead>
+                  <TableHead>E-Mail</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Letzter Login</TableHead>
+                  <TableHead>Aktiv</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {portalAccess.map(access => {
+                  const tenant = tenants?.find(t => t.id === access.tenant_id);
+                  return (
+                    <TableRow key={access.id}>
+                      <TableCell className="font-medium">
+                        {tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Unbekannt'}
+                      </TableCell>
+                      <TableCell>{access.email}</TableCell>
+                      <TableCell>
+                        {access.user_id ? (
+                          <Badge className="bg-green-100 text-green-800">Registriert</Badge>
+                        ) : (
+                          <Badge variant="outline">Ausstehend</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {access.last_login_at
+                          ? format(new Date(access.last_login_at), 'dd.MM.yyyy HH:mm', { locale: de })
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={access.is_active}
+                          onCheckedChange={(checked) => toggleAccess.mutate({ id: access.id, is_active: checked })}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
 
+        <Dialog open={showGrantAccess} onOpenChange={setShowGrantAccess}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Portal-Zugang einrichten</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Mieter</Label>
+                <Select value={selectedTenantId} onValueChange={(v) => {
+                  setSelectedTenantId(v);
+                  const tenant = activeTenants.find(t => t.id === v);
+                  if (tenant?.email) setAccessEmail(tenant.email);
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Mieter wählen..." /></SelectTrigger>
+                  <SelectContent>
+                    {activeTenants.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.first_name} {t.last_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>E-Mail für Portal-Zugang</Label>
+                <Input type="email" value={accessEmail} onChange={e => setAccessEmail(e.target.value)} placeholder="mieter@example.com" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowGrantAccess(false)}>Abbrechen</Button>
+              <Button onClick={handleGrantAccess} disabled={!selectedTenantId || !accessEmail}>Zugang erstellen</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </MainLayout>
+    );
+  }
+
+  // Tenant Self-Service View
+  const tenantUnit = tenantData ? units?.find(u => u.id === tenantData.unit_id) : null;
+  const tenantProperty = tenantUnit ? properties?.find(p => p.id === tenantUnit.property_id) : null;
+  const tenantInvoices = invoices?.filter(i => i.tenant_id === tenantData?.id) || [];
+  const tenantPayments = payments?.filter(p => p.tenant_id === tenantData?.id) || [];
+  const balance = tenantInvoices
+    .filter(i => i.status !== 'bezahlt')
+    .reduce((sum, i) => sum + (i.gesamtbetrag || 0), 0);
+
+  return (
+    <MainLayout title="Mein Portal" subtitle={tenantProperty ? `${tenantProperty.name} – Top ${tenantUnit?.top_nummer}` : ''}>
+      <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
-          <Card data-testid="card-tenant-unit">
+          <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                   <Home className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">{mockTenant.unit}</p>
-                  <p className="text-sm text-muted-foreground">{mockTenant.address}</p>
+                  <p className="font-medium">Top {tenantUnit?.top_nummer || '?'}</p>
+                  <p className="text-sm text-muted-foreground">{tenantProperty?.address}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          <Card data-testid="card-tenant-rent">
+          <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Euro className="h-5 w-5 text-green-500" />
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Euro className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">{formatCurrency(mockTenant.rentAmount)}</p>
+                  <p className="font-medium">{formatCurrency(tenantData?.grundmiete || 0)}</p>
                   <p className="text-sm text-muted-foreground">Monatliche Miete</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          <Card data-testid="card-tenant-balance">
+          <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${balance > 0 ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
-                  {balance > 0 ? (
-                    <AlertTriangle className="h-5 w-5 text-red-500" />
-                  ) : (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  )}
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${balance > 0 ? 'bg-destructive/10' : 'bg-primary/10'}`}>
+                  {balance > 0 ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-primary" />}
                 </div>
                 <div>
                   <p className="font-medium">{formatCurrency(balance)}</p>
@@ -198,19 +236,15 @@ export default function TenantPortal() {
           </Card>
         </div>
 
-        <Tabs defaultValue="invoices" className="space-y-4">
+        <Tabs defaultValue="invoices">
           <TabsList>
-            <TabsTrigger value="invoices" data-testid="tab-invoices">Vorschreibungen</TabsTrigger>
-            <TabsTrigger value="payments" data-testid="tab-payments">Zahlungen</TabsTrigger>
-            <TabsTrigger value="documents" data-testid="tab-documents">Dokumente</TabsTrigger>
-            <TabsTrigger value="damage" data-testid="tab-damage">Schadensmeldung</TabsTrigger>
+            <TabsTrigger value="invoices">Vorschreibungen</TabsTrigger>
+            <TabsTrigger value="payments">Zahlungen</TabsTrigger>
           </TabsList>
-
           <TabsContent value="invoices">
             <Card>
               <CardHeader>
-                <CardTitle>Ihre Vorschreibungen</CardTitle>
-                <CardDescription>Übersicht aller monatlichen Vorschreibungen</CardDescription>
+                <CardTitle>Meine Vorschreibungen</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -218,24 +252,18 @@ export default function TenantPortal() {
                     <TableRow>
                       <TableHead>Monat</TableHead>
                       <TableHead className="text-right">Betrag</TableHead>
-                      <TableHead>Fällig am</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockInvoices.map(invoice => (
-                      <TableRow key={invoice.id}>
-                        <TableCell className="font-medium">
-                          {format(new Date(invoice.year, invoice.month - 1), 'MMMM yyyy', { locale: de })}
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrency(invoice.amount)}</TableCell>
-                        <TableCell>{format(new Date(invoice.dueDate), 'dd.MM.yyyy')}</TableCell>
-                        <TableCell>{getStatusBadge(invoice.status)}</TableCell>
+                    {tenantInvoices.slice(0, 12).map(inv => (
+                      <TableRow key={inv.id}>
+                        <TableCell>{inv.month}/{inv.year}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(inv.gesamtbetrag || 0)}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm" data-testid={`button-download-invoice-${invoice.id}`}>
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <Badge variant={inv.status === 'bezahlt' ? 'default' : 'outline'}>
+                            {inv.status === 'bezahlt' ? 'Bezahlt' : 'Offen'}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -244,12 +272,10 @@ export default function TenantPortal() {
               </CardContent>
             </Card>
           </TabsContent>
-
           <TabsContent value="payments">
             <Card>
               <CardHeader>
-                <CardTitle>Ihre Zahlungen</CardTitle>
-                <CardDescription>Übersicht aller eingegangenen Zahlungen</CardDescription>
+                <CardTitle>Meine Zahlungen</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -261,158 +287,17 @@ export default function TenantPortal() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockPayments.map(payment => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{format(new Date(payment.date), 'dd.MM.yyyy')}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(payment.amount)}</TableCell>
-                        <TableCell>{payment.reference}</TableCell>
+                    {tenantPayments.slice(0, 12).map(pay => (
+                      <TableRow key={pay.id}>
+                        <TableCell>{format(new Date(pay.eingangs_datum), 'dd.MM.yyyy')}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(pay.betrag)}</TableCell>
+                        <TableCell>{pay.zahlungsart}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="documents">
-            <Card>
-              <CardHeader>
-                <CardTitle>Dokumente</CardTitle>
-                <CardDescription>Mietvertrag, Abrechnungen und weitere Dokumente</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Mietvertrag</p>
-                        <p className="text-sm text-muted-foreground">Abgeschlossen am {format(new Date(mockTenant.contractStart), 'dd.MM.yyyy')}</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" data-testid="button-download-contract">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Betriebskostenabrechnung 2024</p>
-                        <p className="text-sm text-muted-foreground">Erstellt am 15.03.2025</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" data-testid="button-download-settlement">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Übergabeprotokoll</p>
-                        <p className="text-sm text-muted-foreground">Vom {format(new Date(mockTenant.contractStart), 'dd.MM.yyyy')}</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" data-testid="button-download-protocol">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="damage">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Neue Schadensmeldung</CardTitle>
-                  <CardDescription>Melden Sie Schäden oder Mängel in Ihrer Wohnung</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="damage-category">Kategorie</Label>
-                    <Select value={damageCategory} onValueChange={setDamageCategory}>
-                      <SelectTrigger id="damage-category" data-testid="select-damage-category">
-                        <SelectValue placeholder="Kategorie wählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sanitaer">Sanitär</SelectItem>
-                        <SelectItem value="elektrik">Elektrik</SelectItem>
-                        <SelectItem value="heizung">Heizung</SelectItem>
-                        <SelectItem value="fenster">Fenster/Türen</SelectItem>
-                        <SelectItem value="feuchtigkeit">Feuchtigkeit</SelectItem>
-                        <SelectItem value="sonstiges">Sonstiges</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="damage-title">Titel</Label>
-                    <Input 
-                      id="damage-title"
-                      placeholder="Kurze Beschreibung des Schadens"
-                      value={damageTitle}
-                      onChange={(e) => setDamageTitle(e.target.value)}
-                      data-testid="input-damage-title"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="damage-description">Beschreibung</Label>
-                    <Textarea 
-                      id="damage-description"
-                      placeholder="Detaillierte Beschreibung des Schadens..."
-                      value={damageDescription}
-                      onChange={(e) => setDamageDescription(e.target.value)}
-                      rows={4}
-                      data-testid="textarea-damage-description"
-                    />
-                  </div>
-
-                  <Button onClick={handleSubmitDamageReport} className="w-full" data-testid="button-submit-damage">
-                    <Send className="h-4 w-4 mr-2" />
-                    Schadensmeldung senden
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Ihre Meldungen</CardTitle>
-                  <CardDescription>Status Ihrer Schadensmeldungen</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {mockDamageReports.length > 0 ? (
-                    <div className="space-y-3">
-                      {mockDamageReports.map(report => (
-                        <div key={report.id} className="p-3 bg-muted rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="font-medium">{report.title}</p>
-                            {getStatusBadge(report.status)}
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-2">{report.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Gemeldet am {format(new Date(report.createdAt), 'dd.MM.yyyy')}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                      <p>Keine offenen Meldungen</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </Tabs>
       </div>

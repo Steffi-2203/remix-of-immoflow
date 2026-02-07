@@ -38,9 +38,12 @@ import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
 import Budgets from "./pages/Budgets";
 import TenantDetail from "./pages/TenantDetail";
+import TenantPortal from "./pages/TenantPortal";
 import WegManagement from "./pages/WegManagement";
 import InsuranceManagement from "./pages/InsuranceManagement";
 import DeadlineCalendar from "./pages/DeadlineCalendar";
+import SerialLetters from "./pages/SerialLetters";
+import ManagementContracts from "./pages/ManagementContracts";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -96,6 +99,9 @@ const App = () => (
             <Route path="/weg" element={<ProtectedRoute><DemoDataProvider><WegManagement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/versicherungen" element={<ProtectedRoute><DemoDataProvider><InsuranceManagement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/fristen" element={<ProtectedRoute><DemoDataProvider><DeadlineCalendar /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/hv-vertraege" element={<ProtectedRoute><DemoDataProvider><ManagementContracts /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

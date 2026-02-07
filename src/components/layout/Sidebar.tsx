@@ -22,7 +22,10 @@ import {
   PiggyBank,
   Home,
   ShieldCheck,
-  CalendarClock
+  CalendarClock,
+  MailPlus,
+  FileSignature,
+  DoorOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -115,6 +118,21 @@ const navItems: NavItem[] = [
     label: 'Fristen & Termine',
     icon: CalendarClock,
     href: '/fristen'
+  },
+  {
+    label: 'Serienbriefe',
+    icon: MailPlus,
+    href: '/serienbriefe'
+  },
+  {
+    label: 'HV-Verträge',
+    icon: FileSignature,
+    href: '/hv-vertraege'
+  },
+  {
+    label: 'Mieterportal',
+    icon: DoorOpen,
+    href: '/mieterportal'
   },
   {
     label: 'Reports',
