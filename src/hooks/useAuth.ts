@@ -5,9 +5,14 @@ import { supabase } from '@/integrations/supabase/client';
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!supabase ? false : true);
 
   useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -28,6 +33,7 @@ export const useAuth = () => {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    if (!supabase) return { data: null, error: new Error('Backend nicht konfiguriert') as any };
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -36,6 +42,7 @@ export const useAuth = () => {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string, inviteToken?: string) => {
+    if (!supabase) return { data: null, error: new Error('Backend nicht konfiguriert') as any };
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -46,7 +53,6 @@ export const useAuth = () => {
         data: {
           full_name: fullName,
           company_name: companyName,
-          // invite_token tells the backend trigger NOT to create a new organization
           invite_token: inviteToken,
         },
       },
@@ -55,6 +61,7 @@ export const useAuth = () => {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (!supabase) return { error: null };
     const { error } = await supabase.auth.signOut();
     return { error };
   }, []);
