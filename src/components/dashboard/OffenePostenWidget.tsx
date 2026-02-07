@@ -36,7 +36,7 @@ export function OffenePostenWidget() {
     }
 
     const openInvoices = invoices.filter(inv => 
-      inv.status !== 'bezahlt'
+      (inv.status as string) !== 'bezahlt' && (inv.status as string) !== 'storniert'
     );
     const paidInvoices = invoices.filter(inv => inv.status === 'bezahlt');
     

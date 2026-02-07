@@ -89,7 +89,7 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
         await updateStatus.mutateAsync({
           id,
           status: batchAction as any,
-          bezahltAm: batchAction === 'bezahlt' ? new Date().toISOString().split('T')[0] : undefined,
+          bezahltAm: new Date().toISOString().split('T')[0],
         });
         ok++;
       } catch {
