@@ -25,7 +25,9 @@ import {
   CalendarClock,
   MailPlus,
   FileSignature,
-  DoorOpen
+  DoorOpen,
+  LayoutList,
+  UserCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -133,6 +135,16 @@ const navItems: NavItem[] = [
     label: 'Mieterportal',
     icon: DoorOpen,
     href: '/mieterportal'
+  },
+  {
+    label: 'Eigentümer-Portal',
+    icon: UserCheck,
+    href: '/eigentuemerportal'
+  },
+  {
+    label: 'Massenaktionen',
+    icon: LayoutList,
+    href: '/massenaktionen'
   },
   {
     label: 'Reports',

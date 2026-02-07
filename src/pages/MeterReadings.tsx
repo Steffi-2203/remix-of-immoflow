@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, Gauge } from 'lucide-react';
+import { Plus, Search, Gauge, Flame } from 'lucide-react';
 import { useMeters, useDeleteMeter, useLatestMeterReadings, Meter } from '@/hooks/useMeters';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -12,6 +12,8 @@ import { MeterCard } from '@/components/meters/MeterCard';
 import { MeterForm } from '@/components/meters/MeterForm';
 import { MeterReadingForm } from '@/components/meters/MeterReadingForm';
 import { MeterHistoryDialog } from '@/components/meters/MeterHistoryDialog';
+import { MeterConsumptionOverview } from '@/components/meters/MeterConsumptionOverview';
+import { HeatingCostImportDialog } from '@/components/heating/HeatingCostImportDialog';
 
 export default function MeterReadings() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,6 +24,7 @@ export default function MeterReadings() {
   const [deletingMeter, setDeletingMeter] = useState<Meter | null>(null);
   const [readingFormMeter, setReadingFormMeter] = useState<Meter | null>(null);
   const [historyMeter, setHistoryMeter] = useState<Meter | null>(null);
+  const [heatingImportOpen, setHeatingImportOpen] = useState(false);
   
   const { data: meters, isLoading } = useMeters();
   const { data: properties } = useProperties();
@@ -87,10 +90,18 @@ export default function MeterReadings() {
               Erfassen und verwalten Sie Ihre Verbrauchszähler
             </p>
           </div>
-          <Button onClick={() => setMeterFormOpen(true)} data-testid="button-add-meter">
-            <Plus className="h-4 w-4 mr-2" />
-            Neuer Zähler
-          </Button>
+          <div className="flex gap-2">
+            {filterProperty !== 'all' && (
+              <Button variant="outline" onClick={() => setHeatingImportOpen(true)}>
+                <Flame className="h-4 w-4 mr-2" />
+                HK-Import
+              </Button>
+            )}
+            <Button onClick={() => setMeterFormOpen(true)} data-testid="button-add-meter">
+              <Plus className="h-4 w-4 mr-2" />
+              Neuer Zähler
+            </Button>
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-4 items-center">
@@ -171,6 +182,11 @@ export default function MeterReadings() {
             ))}
           </div>
         )}
+
+        {/* Consumption Overview for selected property */}
+        {filterProperty !== 'all' && (
+          <MeterConsumptionOverview propertyId={filterProperty} />
+        )}
       </div>
       
       <MeterForm
@@ -192,6 +208,7 @@ export default function MeterReadings() {
       />
       
       <AlertDialog open={!!deletingMeter} onOpenChange={() => setDeletingMeter(null)}>
+        {/* ... existing dialog content stays the same ... */}
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Zähler löschen?</AlertDialogTitle>
@@ -211,6 +228,14 @@ export default function MeterReadings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {filterProperty !== 'all' && (
+        <HeatingCostImportDialog
+          open={heatingImportOpen}
+          onOpenChange={setHeatingImportOpen}
+          propertyId={filterProperty}
+        />
+      )}
     </MainLayout>
   );
 }
