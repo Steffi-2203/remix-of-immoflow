@@ -47,6 +47,9 @@ if is_file_input "${1:-}"; then
   [ -n "$RUN_ID" ] && UPSERT_ARGS="${UPSERT_ARGS} --run-id=${RUN_ID}"
 
   if [ "$MODE" = "--persist" ]; then
+    echo "--- Backup vor Persist ---"
+    bash tools/backup_invoices.sh "${TMP_DIR}/backups" "direkt_$(date +%Y%m%d)"
+    echo ""
     LINES=$(wc -l < "$INPUT_FILE")
     echo "ACHTUNG: Schreibe ~${LINES} Zeilen in die Datenbank..."
     node tools/upsert_missing_lines.js ${UPSERT_ARGS}
@@ -94,6 +97,9 @@ fi
 
 echo "--- Schritt 4: Upsert fehlende Zeilen (${MODE}) ---"
 if [ "$MODE" = "--persist" ]; then
+  echo "--- Backup vor Persist ---"
+  bash tools/backup_invoices.sh "${TMP_DIR}/backups" "${YEAR}_$(printf '%02d' $MONTH)"
+  echo ""
   echo "ACHTUNG: Schreibe ${MISSING_COUNT} Zeilen in die Datenbank..."
   node tools/upsert_missing_lines.js "$MISSING_FILE"
 else
