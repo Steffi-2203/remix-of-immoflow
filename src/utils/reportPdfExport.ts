@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getActiveTenantsForPeriod } from './tenantFilterUtils';
+import { calculateTenantSollIst, calculateSollIstTotals, type TenantSollIstResult } from './sollIstCalculation';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -193,13 +194,17 @@ export const generateRenditeReport = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
   selectedMonth?: number,
   expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF();
   const periodLabel = reportPeriod === 'yearly' 
     ? `Jahr ${selectedYear}` 
+    : reportPeriod === 'quarterly'
+    ? `Quartal ${selectedYear}`
+    : reportPeriod === 'halfyearly'
+    ? `Halbjahr ${selectedYear}`
     : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
@@ -268,11 +273,8 @@ export const generateRenditeReport = (
     // Combined maintenance costs (Banking + Belege)
     const instandhaltung = instandhaltungFromTransactions + instandhaltungFromExpenses;
 
-    // Nettoertrag = Mieteinnahmen - Instandhaltung
+    // Nettoertrag = Mieteinnahmen - Instandhaltung (absoluter Wert, keine Division)
     const nettoertrag = mieteinnahmen - instandhaltung;
-    const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
-    const estimatedValue = Number(property.total_qm) * 3000;
-    const yieldPercent = estimatedValue > 0 ? (annualNettoertrag / estimatedValue) * 100 : 0;
     const vacantUnits = propertyUnits.filter(u => u.status === 'leerstand').length;
     const occupancyRate = propertyUnits.length > 0 ? ((propertyUnits.length - vacantUnits) / propertyUnits.length) * 100 : 0;
     
@@ -283,7 +285,6 @@ export const generateRenditeReport = (
       formatCurrency(mieteinnahmen),
       formatCurrency(instandhaltung),
       formatCurrency(nettoertrag),
-      formatPercent(yieldPercent),
       formatPercent(occupancyRate),
     ];
   });
@@ -333,15 +334,11 @@ export const generateRenditeReport = (
   
   const totalInstandhaltung = totalInstandhaltungFromTransactions + totalInstandhaltungFromExpenses;
   const totalNettoertrag = totalMieteinnahmen - totalInstandhaltung;
-  const annualTotalNettoertrag = reportPeriod === 'monthly' ? totalNettoertrag * 12 : totalNettoertrag;
-  const totalValue = totalQm * 3000;
-  const totalYield = totalValue > 0 ? (annualTotalNettoertrag / totalValue) * 100 : 0;
-
   autoTable(doc, {
     startY: 45,
-    head: [['Liegenschaft', 'Fläche', 'Einheiten', 'Mieteinnahmen', 'Instandhaltung', 'Nettoertrag', 'Rendite p.a.', 'Belegung']],
+    head: [['Liegenschaft', 'Fläche', 'Einheiten', 'Mieteinnahmen', 'Instandhaltung', 'Nettoertrag', 'Belegung']],
     body: tableData,
-    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalMieteinnahmen), formatCurrency(totalInstandhaltung), formatCurrency(totalNettoertrag), formatPercent(totalYield), '-']],
+    foot: [['Gesamt', `${totalQm.toLocaleString('de-AT')} m²`, totalUnits.toString(), formatCurrency(totalMieteinnahmen), formatCurrency(totalInstandhaltung), formatCurrency(totalNettoertrag), '-']],
     theme: 'striped',
     headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
     footStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -353,7 +350,7 @@ export const generateRenditeReport = (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'italic');
   doc.setTextColor(100);
-  doc.text('Hinweis: Rendite = (Mieteinnahmen - Instandhaltungskosten) / Immobilienwert × 100', 14, y1 + 10);
+  doc.text('Hinweis: Nettoertrag = Mieteinnahmen - Instandhaltungskosten', 14, y1 + 10);
   doc.text('Instandhaltungskosten beinhalten Banking-Transaktionen und manuell erfasste Belege.', 14, y1 + 16);
   doc.text('Betriebskosten sind nicht enthalten, da diese auf die Mieter umgelegt werden.', 14, y1 + 22);
   doc.setTextColor(0);
@@ -403,7 +400,7 @@ export const generateLeerstandReport = (
       const property = properties.find(p => p.id === unit.property_id);
       return [
         property?.name || '-',
-        `Top ${unit.top_nummer}`,
+        `${unit.top_nummer}`,
         unitTypeLabels[unit.type] || unit.type,
         `${Number(unit.qm).toLocaleString('de-AT')} m²`,
         `${Number(unit.mea).toLocaleString('de-AT')}`,
@@ -467,13 +464,17 @@ export const generateUmsatzReport = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
   selectedMonth?: number,
   expenses?: ExpenseData[]
 ) => {
   const doc = new jsPDF('landscape');
   const periodLabel = reportPeriod === 'yearly' 
     ? `Jahr ${selectedYear}` 
+    : reportPeriod === 'quarterly'
+    ? `Quartal ${selectedYear}`
+    : reportPeriod === 'halfyearly'
+    ? `Halbjahr ${selectedYear}`
     : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
@@ -717,13 +718,44 @@ export const generateUstVoranmeldung = (
   categories: CategoryData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
-  selectedMonth?: number
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
+  selectedMonth?: number,
+  selectedQuarter?: number,
+  selectedHalfYear?: number
 ) => {
   const doc = new jsPDF();
-  const periodLabel = reportPeriod === 'yearly' 
-    ? `Jahr ${selectedYear}` 
-    : `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
+  
+  let periodLabel: string;
+  let startMonth: number;
+  let endMonth: number;
+  
+  switch (reportPeriod) {
+    case 'monthly':
+      periodLabel = `${monthNames[(selectedMonth || 1) - 1]} ${selectedYear}`;
+      startMonth = selectedMonth || 1;
+      endMonth = selectedMonth || 1;
+      break;
+    case 'quarterly':
+      const quarter = selectedQuarter || 1;
+      periodLabel = `Q${quarter}/${selectedYear} (${['Jan-Mär', 'Apr-Jun', 'Jul-Sep', 'Okt-Dez'][quarter - 1]})`;
+      startMonth = (quarter - 1) * 3 + 1;
+      endMonth = quarter * 3;
+      break;
+    case 'halfyearly':
+      const halfYear = selectedHalfYear || 1;
+      periodLabel = `${halfYear}. Halbjahr ${selectedYear} (${halfYear === 1 ? 'Jan-Jun' : 'Jul-Dez'})`;
+      startMonth = halfYear === 1 ? 1 : 7;
+      endMonth = halfYear === 1 ? 6 : 12;
+      break;
+    case 'yearly':
+    default:
+      periodLabel = `Jahr ${selectedYear}`;
+      startMonth = 1;
+      endMonth = 12;
+      break;
+  }
+  
+  const monthCount = endMonth - startMonth + 1;
   
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   
@@ -769,17 +801,22 @@ export const generateUstVoranmeldung = (
     const bk = Number(tenant.betriebskosten_vorschuss || 0);
     const heizung = Number(tenant.heizungskosten_vorschuss || 0);
     
-    // Bei yearly: Multiplikator für relevante Monate berechnen
+    // Multiplikator für relevante Monate im Zeitraum berechnen
     let multiplier = 1;
-    if (reportPeriod === 'yearly') {
-      // Berechne wie viele Monate der Mieter im Jahr aktiv war
+    if (reportPeriod !== 'monthly') {
+      // Berechne wie viele Monate der Mieter im gewählten Zeitraum aktiv war
       const mietbeginn = tenant.mietbeginn ? new Date(tenant.mietbeginn) : new Date(selectedYear, 0, 1);
       const mietende = tenant.mietende ? new Date(tenant.mietende) : new Date(selectedYear, 11, 31);
       
-      const startMonth = mietbeginn.getFullYear() < selectedYear ? 1 : mietbeginn.getMonth() + 1;
-      const endMonth = mietende.getFullYear() > selectedYear ? 12 : mietende.getMonth() + 1;
+      // Tenant-Aktivitätszeitraum
+      const tenantStartMonth = mietbeginn.getFullYear() < selectedYear ? 1 : mietbeginn.getMonth() + 1;
+      const tenantEndMonth = mietende.getFullYear() > selectedYear ? 12 : mietende.getMonth() + 1;
       
-      multiplier = Math.max(0, endMonth - startMonth + 1);
+      // Überlappung mit Berichtszeitraum berechnen
+      const effectiveStart = Math.max(tenantStartMonth, startMonth);
+      const effectiveEnd = Math.min(tenantEndMonth, endMonth);
+      
+      multiplier = Math.max(0, effectiveEnd - effectiveStart + 1);
     }
     
     bruttoGrundmiete += miete * multiplier;
@@ -1078,6 +1115,21 @@ export interface CombinedPaymentData {
   source: 'payments' | 'transactions';
 }
 
+// Interface for monthly invoices (Vorschreibungen)
+export interface MonthlyInvoiceData {
+  id: string;
+  tenantId?: string;
+  tenant_id?: string;
+  unitId?: string;
+  unit_id?: string;
+  year: number;
+  month: number;
+  grundmiete: number | string;
+  betriebskosten: number | string;
+  heizungskosten: number | string;
+  gesamtbetrag: number | string;
+}
+
 // ====== OFFENE POSTEN REPORT ======
 export const generateOffenePostenReport = (
   properties: PropertyData[],
@@ -1086,15 +1138,47 @@ export const generateOffenePostenReport = (
   combinedPayments: CombinedPaymentData[],
   selectedPropertyId: string,
   selectedYear: number,
-  reportPeriod: 'monthly' | 'yearly',
-  selectedMonth: number
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly',
+  selectedMonth: number,
+  selectedQuarter?: number,
+  selectedHalfYear?: number,
+  monthlyInvoices?: MonthlyInvoiceData[]
 ) => {
   const doc = new jsPDF('landscape');
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   
-  const periodLabel = reportPeriod === 'monthly' 
-    ? `${monthNames[selectedMonth - 1]} ${selectedYear}`
-    : `Jahr ${selectedYear}`;
+  // Calculate period range
+  let periodLabel: string;
+  let periodStartMonth: number;
+  let periodEndMonth: number;
+  
+  switch (reportPeriod) {
+    case 'monthly':
+      periodLabel = `${monthNames[selectedMonth - 1]} ${selectedYear}`;
+      periodStartMonth = selectedMonth;
+      periodEndMonth = selectedMonth;
+      break;
+    case 'quarterly':
+      const quarter = selectedQuarter || 1;
+      periodLabel = `Q${quarter}/${selectedYear} (${['Jan-Mär', 'Apr-Jun', 'Jul-Sep', 'Okt-Dez'][quarter - 1]})`;
+      periodStartMonth = (quarter - 1) * 3 + 1;
+      periodEndMonth = quarter * 3;
+      break;
+    case 'halfyearly':
+      const halfYear = selectedHalfYear || 1;
+      periodLabel = `${halfYear}. Halbjahr ${selectedYear} (${halfYear === 1 ? 'Jan-Jun' : 'Jul-Dez'})`;
+      periodStartMonth = halfYear === 1 ? 1 : 7;
+      periodEndMonth = halfYear === 1 ? 6 : 12;
+      break;
+    case 'yearly':
+    default:
+      periodLabel = `Jahr ${selectedYear}`;
+      periodStartMonth = 1;
+      periodEndMonth = 12;
+      break;
+  }
+  
+  const monthCount = periodEndMonth - periodStartMonth + 1;
   
   addHeader(
     doc, 
@@ -1115,21 +1199,9 @@ export const generateOffenePostenReport = (
     selectedYear,
     reportPeriod === 'monthly' ? selectedMonth : undefined
   );
-  const tenantIds = relevantTenants.map(t => t.id);
   
-  // Calculate month multiplier for SOLL
-  const monthMultiplier = reportPeriod === 'monthly' ? 1 : 12;
-
-  // Filter combined payments by period (uses 'date' and 'amount' fields)
-  const periodPayments = combinedPayments.filter(p => {
-    if (!tenantIds.includes(p.tenant_id)) return false;
-    const paymentDate = new Date(p.date);
-    const matchesYear = paymentDate.getFullYear() === selectedYear;
-    if (reportPeriod === 'yearly') {
-      return matchesYear;
-    }
-    return matchesYear && (paymentDate.getMonth() + 1) === selectedMonth;
-  });
+  // Month multiplier uses the calculated monthCount
+  const monthMultiplier = monthCount;
 
   // Calculate balance per tenant with MRG-konform allocation
   interface TenantBalance {
@@ -1164,36 +1236,197 @@ export const generateOffenePostenReport = (
     : new Date(selectedYear, 0, 1);
   const daysSincePeriodStart = Math.max(0, Math.floor((today.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)));
 
-  relevantTenants.forEach(tenant => {
-    const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
+  // Erweitert: Sammle ALLE Mieter mit Vorschreibungen im Zeitraum (inkl. ehemalige)
+  const tenantsWithInvoicesIds = new Set<string>();
+  (monthlyInvoices || []).forEach(inv => {
+    const invTenantId = inv.tenantId || inv.tenant_id;
+    if (invTenantId && 
+        inv.year === selectedYear && 
+        inv.month >= periodStartMonth && inv.month <= periodEndMonth &&
+        !(inv as any).isVacancy && !(inv as any).is_vacancy) {
+      // Prüfe Property-Filter
+      const tenant = tenants.find(t => t.id === invTenantId);
+      const unit = targetUnits.find(u => u.id === tenant?.unit_id);
+      if (unit) {
+        tenantsWithInvoicesIds.add(invTenantId);
+      }
+    }
+  });
+  
+  // Kombiniere relevantTenants mit Mietern die Vorschreibungen haben
+  const allRelevantTenantIds = new Set([
+    ...relevantTenants.map(t => t.id),
+    ...tenantsWithInvoicesIds
+  ]);
+  
+  // WICHTIG: Zahlungsfilterung NACH Bestimmung aller relevanten Mieter
+  // Filter combined payments by period and tenant (uses 'date' and 'amount' fields)
+  const periodPayments = combinedPayments.filter(p => {
+    // Support both camelCase and snake_case
+    const pAny = p as any;
+    const paymentTenantId = pAny.tenantId ?? pAny.tenant_id ?? p.tenant_id;
+    if (!paymentTenantId || !allRelevantTenantIds.has(paymentTenantId)) return false;
+    const paymentDate = new Date(p.date);
+    const matchesYear = paymentDate.getFullYear() === selectedYear;
+    const paymentMonth = paymentDate.getMonth() + 1;
+    // Check if payment falls within the period range
+    return matchesYear && paymentMonth >= periodStartMonth && paymentMonth <= periodEndMonth;
+  });
+  
+  // Finde alle zu verarbeitenden Mieter
+  const tenantsToProcess = Array.from(allRelevantTenantIds).map(tenantId => {
+    const fromRelevant = relevantTenants.find(t => t.id === tenantId);
+    if (fromRelevant) return fromRelevant;
+    return tenants.find(t => t.id === tenantId) || null;
+  }).filter((t): t is TenantData => t !== null);
+
+  tenantsToProcess.forEach(tenant => {
+    // Support both camelCase and snake_case for tenant_id
+    const tenantPayments = periodPayments.filter(p => {
+      const pAny = p as any;
+      return (pAny.tenantId ?? pAny.tenant_id ?? p.tenant_id) === tenant.id;
+    });
     
-    // SOLL from tenant data (MRG-konform: BK → HK → Miete)
-    const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
-    const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
-    const sollMiete = Number(tenant.grundmiete || 0) * monthMultiplier;
-    const sollBetrag = sollBk + sollHk + sollMiete;
+    // SOLL aus Vorschreibung (monthly_invoices) - bevorzugt über Mieter-Stammdaten
+    // Filtere Vorschreibungen für diesen Mieter und den Zeitraum
+    const tenantInvoices = (monthlyInvoices || []).filter(inv => {
+      const invTenantId = inv.tenantId || inv.tenant_id;
+      const matchesTenant = invTenantId === tenant.id;
+      const matchesYear = inv.year === selectedYear;
+      const matchesPeriod = inv.month >= periodStartMonth && inv.month <= periodEndMonth;
+      return matchesTenant && matchesYear && matchesPeriod;
+    });
+    
+    let sollBkNetto: number, sollHkNetto: number, sollMieteNetto: number, sollBetrag: number;
+    let sollBk: number, sollHk: number, sollMiete: number; // BRUTTO-Werte
+    // Österreichische USt-Sätze: BK 10%, HK 20%, Miete Wohnung 10%, Geschäft/Lager/Stellplatz 20%
+    let ustSatzBk = 10, ustSatzHk = 20, ustSatzMiete = 10;
+    
+    // Ermittle Nutzungsart für Miete-USt (Wohnung=10%, Geschäft/Lager/Stellplatz=20%)
+    const unit = targetUnits.find(u => u.id === tenant.unit_id);
+    const nutzungsart = (unit as any)?.nutzungsart || (unit as any)?.usage_type || 'wohnung';
+    const isGewerbe = ['geschaeft', 'gewerbe', 'lager', 'stellplatz', 'parkplatz', 'garage'].includes(nutzungsart.toLowerCase());
+    const defaultMieteUst = isGewerbe ? 20 : 10;
+    
+    if (tenantInvoices.length > 0) {
+      // SOLL aus Vorschreibungen - akkumuliere mit korrekten USt-Sätzen pro Rechnung
+      sollBkNetto = 0; sollHkNetto = 0; sollMieteNetto = 0;
+      sollBk = 0; sollHk = 0; sollMiete = 0;
+      sollBetrag = 0;
+      
+      tenantInvoices.forEach(invoice => {
+        const inv = invoice as any;
+        // NETTO-Werte aus Rechnung
+        const bkNetto = Number(inv.betriebskosten || 0);
+        const hkNetto = Number(inv.heizungskosten || 0);
+        const mieteNetto = Number(inv.grundmiete || 0);
+        
+        // USt-Sätze aus Rechnung (mit korrekten Defaults)
+        const invUstBk = Number(inv.ustSatzBk ?? inv.ust_satz_bk ?? 10);
+        const invUstHk = Number(inv.ustSatzHeizung ?? inv.ust_satz_heizung ?? 20);
+        const invUstMiete = Number(inv.ustSatzMiete ?? inv.ust_satz_miete ?? defaultMieteUst);
+        
+        // Akkumuliere NETTO
+        sollBkNetto += bkNetto;
+        sollHkNetto += hkNetto;
+        sollMieteNetto += mieteNetto;
+        
+        // Akkumuliere BRUTTO mit korrekten USt-Sätzen
+        sollBk += bkNetto * (1 + invUstBk / 100);
+        sollHk += hkNetto * (1 + invUstHk / 100);
+        sollMiete += mieteNetto * (1 + invUstMiete / 100);
+        
+        // Merke USt-Sätze für IST-Berechnung (letzte Rechnung)
+        ustSatzBk = invUstBk;
+        ustSatzHk = invUstHk;
+        ustSatzMiete = invUstMiete;
+        
+        sollBetrag += Number(inv.gesamtbetrag || 0);
+      });
+      
+      // Reconciliation: Wenn Summe der Komponenten-BRUTTO von gesamtbetrag abweicht,
+      // proportional anpassen (kann durch Rundung oder Sonderposten passieren)
+      const komponentenSumme = sollBk + sollHk + sollMiete;
+      if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollBetrag) > 0.01) {
+        const factor = sollBetrag / komponentenSumme;
+        sollBk *= factor;
+        sollHk *= factor;
+        sollMiete *= factor;
+      }
+    } else {
+      // Fallback: SOLL aus Mieter-Stammdaten (wenn keine Vorschreibung existiert)
+      sollBkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+      sollHkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+      sollMieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
+      // Berechne BRUTTO mit österreichischen USt-Sätzen
+      ustSatzMiete = defaultMieteUst; // Wohnung 10%, Gewerbe 20%
+      sollBk = sollBkNetto * (1 + ustSatzBk / 100);  // 10%
+      sollHk = sollHkNetto * (1 + ustSatzHk / 100);  // 20%
+      sollMiete = sollMieteNetto * (1 + ustSatzMiete / 100);
+      sollBetrag = sollBk + sollHk + sollMiete;
+    }
+    
+    const sollBetragNetto = sollBkNetto + sollHkNetto + sollMieteNetto;
     
     // IST from combined payments (uses 'amount' field)
     const habenBetrag = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     
-    // MRG-konforme Aufteilung: BK → HK → Miete
-    let remaining = habenBetrag;
-    const istBk = Math.min(remaining, sollBk);
-    remaining -= istBk;
-    const istHk = Math.min(remaining, sollHk);
-    remaining -= istHk;
-    const istMiete = Math.min(remaining, sollMiete);
-    remaining -= istMiete;
+    // MRG-konforme Aufteilung: BK → HK → Miete (gegen NETTO-Werte intern)
+    // Die Allokation erfolgt proportional zu den Netto-SOLL-Werten
+    // BUCHHALTÄRISCH KORREKT: Wenn voll bezahlt (habenBetrag >= sollBetrag), 
+    // dann IST = SOLL für jede Komponente (keine MRG-Allokation nötig)
+    let istBk: number;
+    let istHk: number;
+    let istMiete: number;
     
-    // Überzahlung (wenn mehr gezahlt als SOLL)
-    const ueberzahlung = remaining > 0 ? remaining : 0;
+    // WICHTIG: Nur als "voll bezahlt" behandeln wenn:
+    // 1. Es gibt einen positiven SOLL-Betrag (sollBetrag > 0.01)
+    // 2. Die Zahlung deckt mindestens den SOLL-Betrag
+    if (sollBetrag > 0.01 && habenBetrag >= sollBetrag - 0.01) {
+      // Voll bezahlt: IST = SOLL für alle Komponenten
+      istBk = sollBk;
+      istHk = sollHk;
+      istMiete = sollMiete;
+    } else if (habenBetrag < 0.01) {
+      // KEINE Zahlung erfolgt: IST = 0 für alle Komponenten
+      istBk = 0;
+      istHk = 0;
+      istMiete = 0;
+    } else {
+      // Unterzahlung: MRG-Allokation BK → HK → Miete auf NETTO-Basis
+      let remaining = habenBetrag;
+      const istBkNetto = Math.min(remaining, sollBkNetto);
+      remaining -= istBkNetto;
+      const istHkNetto = Math.min(remaining, sollHkNetto);
+      remaining -= istHkNetto;
+      const istMieteNetto = Math.min(remaining, sollMieteNetto);
+      
+      // IST BRUTTO für Anzeige: Anwendung der korrekten USt-Sätze auf die allozierten NETTO-Werte
+      istBk = istBkNetto * (1 + ustSatzBk / 100);
+      istHk = istHkNetto * (1 + ustSatzHk / 100);
+      istMiete = istMieteNetto * (1 + ustSatzMiete / 100);
+      
+      // Reconciliation: IST-Komponenten-Summe sollte = habenBetrag sein
+      const istKomponentenSumme = istBk + istHk + istMiete;
+      if (istKomponentenSumme > 0 && Math.abs(istKomponentenSumme - habenBetrag) > 0.01) {
+        const factor = habenBetrag / istKomponentenSumme;
+        istBk *= factor;
+        istHk *= factor;
+        istMiete *= factor;
+      }
+    }
     
+    // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL, nicht auf NETTO
+    // Damit wird der USt-Anteil nicht fälschlicherweise als Überzahlung gezählt
+    const ueberzahlung = habenBetrag > sollBetrag ? habenBetrag - sollBetrag : 0;
+    
+    // WICHTIG: Saldo = SOLL (brutto) - IST, positiv = Unterzahlung, negativ = Überzahlung
     const saldo = sollBetrag - habenBetrag;
 
     // Days overdue: only if there's unpaid amount and we're past the period start
     const daysOverdue = saldo > 0 && daysSincePeriodStart > 0 ? daysSincePeriodStart : 0;
 
-    const unit = targetUnits.find(u => u.id === tenant.unit_id);
+    // unit bereits oben ermittelt für Nutzungsart/USt
     const property = properties.find(p => p.id === unit?.property_id);
 
     // Include all tenants (not just those with SOLL > 0)
@@ -1215,6 +1448,95 @@ export const generateOffenePostenReport = (
       ueberzahlung,
       paymentCount: tenantPayments.length,
       daysOverdue,
+    });
+  });
+
+  // ====== LEERSTAND (Vacancy) SUPPORT ======
+  // Finde Leerstand-Vorschreibungen für den Zeitraum
+  const vacancyInvoices = (monthlyInvoices || []).filter(inv => 
+    (inv as any).isVacancy === true || (inv as any).is_vacancy === true
+  );
+  
+  const periodVacancyInvoices = vacancyInvoices.filter(inv =>
+    inv.year === selectedYear &&
+    inv.month >= periodStartMonth && inv.month <= periodEndMonth
+  );
+  
+  // Gruppiere nach Unit
+  const vacancyByUnit = new Map<string, typeof periodVacancyInvoices>();
+  periodVacancyInvoices.forEach(inv => {
+    const unitId = (inv as any).unitId ?? (inv as any).unit_id;
+    if (!unitId) return;
+    
+    // Filter by property if selected
+    const unit = targetUnits.find(u => u.id === unitId);
+    if (!unit) return;
+    
+    if (!vacancyByUnit.has(unitId)) {
+      vacancyByUnit.set(unitId, []);
+    }
+    vacancyByUnit.get(unitId)!.push(inv);
+  });
+  
+  // Erstelle Leerstand-Einträge
+  vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
+    const unit = targetUnits.find(u => u.id === unitId);
+    const property = properties.find(p => p.id === unit?.property_id);
+    
+    // SOLL BRUTTO aus gesamtbetrag (konsistent mit normalen Mietern)
+    const sollBetrag = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).gesamtbetrag ?? 0), 0);
+    
+    // SOLL Komponenten mit BRUTTO (NETTO + USt)
+    let sollBk = unitVacancyInvoices.reduce((sum, inv) => {
+      const netto = Number((inv as any).betriebskosten ?? 0);
+      const ustSatz = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+      return sum + netto * (1 + ustSatz / 100);
+    }, 0);
+    let sollHk = unitVacancyInvoices.reduce((sum, inv) => {
+      const netto = Number((inv as any).heizungskosten ?? 0);
+      const ustSatz = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+      return sum + netto * (1 + ustSatz / 100);
+    }, 0);
+    const sollMiete = 0;
+    
+    // Reconciliation: Komponenten an gesamtbetrag anpassen
+    const komponentenSumme = sollBk + sollHk;
+    if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollBetrag) > 0.01) {
+      const factor = sollBetrag / komponentenSumme;
+      sollBk *= factor;
+      sollHk *= factor;
+    }
+    
+    // IST aus paid_amount
+    const habenBetrag = unitVacancyInvoices.reduce((sum, inv) => 
+      sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
+    
+    // Proportionale Verteilung auf Komponenten
+    const istBk = sollBetrag > 0 ? (sollBk / sollBetrag) * habenBetrag : 0;
+    const istHk = sollBetrag > 0 ? (sollHk / sollBetrag) * habenBetrag : 0;
+    const istMiete = 0;
+    
+    const saldo = sollBetrag - habenBetrag;
+    
+    tenantBalances.push({
+      tenantId: `vacancy-${unitId}`,
+      tenantName: `Leerstand (${unitVacancyInvoices.length} Mon.)`,
+      unitId: unitId,
+      unitNummer: unit?.top_nummer || '-',
+      propertyName: property?.name || '-',
+      sollBk,
+      sollHk,
+      sollMiete,
+      sollBetrag,
+      istBk,
+      istHk,
+      istMiete,
+      habenBetrag,
+      saldo,
+      ueberzahlung: 0,
+      paymentCount: 0,
+      daysOverdue: 0,
     });
   });
 
@@ -1250,16 +1572,18 @@ export const generateOffenePostenReport = (
 
   // Table data with MRG-konform allocation
   const tableData = tenantBalances.map(tb => {
+    // Status basiert NUR auf Saldo (nicht auf dem separaten ueberzahlung-Feld)
+    // Saldo = BRUTTO-SOLL - IST: positiv = Unterzahlung, negativ = Überzahlung
     let statusLabel = 'Bezahlt';
     if (tb.saldo > 0.01) {
       statusLabel = 'Unterzahlung';
-    } else if (tb.saldo < -0.01 || tb.ueberzahlung > 0.01) {
+    } else if (tb.saldo < -0.01) {
       statusLabel = 'Überzahlung';
     }
     
     return [
       tb.propertyName,
-      `Top ${tb.unitNummer}`,
+      `${tb.unitNummer}`,
       tb.tenantName,
       // BK Soll/Ist
       formatCurrency(tb.sollBk),
@@ -1324,22 +1648,40 @@ export const generateOffenePostenReport = (
           data.cell.styles.textColor = [22, 163, 74];
         }
       }
-      // Color IST columns based on diff (red if less than SOLL)
+      // Color IST columns: grün wenn IST = SOLL (bezahlt), rot wenn IST < SOLL (Unterzahlung)
       if (data.section === 'body') {
         const row = data.row.index;
         const tb = tenantBalances[row];
         if (tb) {
+          const isBezahlt = tb.saldo <= 0.01; // Voll bezahlt oder Überzahlung
+          
           // BK Ist
-          if (data.column.index === 4 && tb.sollBk - tb.istBk > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 4) {
+            if (Math.abs(tb.sollBk - tb.istBk) <= 0.01 && tb.sollBk > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollBk - tb.istBk > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
           }
           // HK Ist
-          if (data.column.index === 6 && tb.sollHk - tb.istHk > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 6) {
+            if (Math.abs(tb.sollHk - tb.istHk) <= 0.01 && tb.sollHk > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollHk - tb.istHk > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
           }
           // Miete Ist
-          if (data.column.index === 8 && tb.sollMiete - tb.istMiete > 0.01) {
-            data.cell.styles.textColor = [239, 68, 68];
+          if (data.column.index === 8) {
+            if (Math.abs(tb.sollMiete - tb.istMiete) <= 0.01 && tb.sollMiete > 0) {
+              data.cell.styles.textColor = [22, 163, 74]; // Grün für match
+            } else if (tb.sollMiete - tb.istMiete > 0.01) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rot für Unterzahlung
+            }
+          }
+          // Saldo bei Bezahlt auch grün
+          if (data.column.index === 10 && isBezahlt) {
+            data.cell.styles.textColor = [22, 163, 74]; // Grün
           }
         }
       }
@@ -1801,7 +2143,7 @@ interface DetailReportParams {
   categories: CategoryData[];
   selectedPropertyId: string;
   selectedYear: number;
-  reportPeriod: 'monthly' | 'yearly';
+  reportPeriod: 'monthly' | 'quarterly' | 'halfyearly' | 'yearly';
   selectedMonth?: number;
   expenses?: ExpenseData[];
 }
@@ -1980,7 +2322,7 @@ export const generateDetailReport = ({
       .map(unitData => {
         const saldo = unitData.income - unitData.expenses;
         return [
-          `Top ${unitData.unit.top_nummer}`,
+          `${unitData.unit.top_nummer}`,
           unitData.tenant ? `${unitData.tenant.first_name} ${unitData.tenant.last_name}` : 'Leerstand',
           formatCurrency(unitData.income),
           formatCurrency(unitData.expenses),
@@ -2094,4 +2436,119 @@ export const generateDetailReport = ({
   }
 
   doc.save(`Detailbericht_${periodLabel.replace(' ', '_')}.pdf`);
+};
+
+// ====== KAUTION REPORT ======
+interface KautionTenantData {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
+  kaution: number;
+  kaution_bezahlt: boolean;
+  unit_id: string;
+  mietbeginn?: string | null;
+}
+
+interface KautionUnitData {
+  id: string;
+  top_nummer: string;
+  property_id: string;
+}
+
+interface KautionPropertyData {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export const generateKautionsReport = (
+  tenants: KautionTenantData[],
+  units: KautionUnitData[],
+  properties: KautionPropertyData[],
+  selectedPropertyId: string
+) => {
+  const doc = new jsPDF();
+  
+  const selectedProperty = properties.find(p => p.id === selectedPropertyId);
+  
+  addHeader(
+    doc, 
+    'Kautionsübersicht', 
+    `Stand: ${new Date().toLocaleDateString('de-AT')}`,
+    selectedPropertyId !== 'all' ? selectedProperty?.name : 'Alle Liegenschaften'
+  );
+
+  // Filter tenants with kaution_bezahlt = true
+  const tenantsWithKaution = tenants.filter(t => {
+    if (!t.kaution_bezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
+    
+    if (selectedPropertyId === 'all') return true;
+    
+    const unit = units.find(u => u.id === t.unit_id);
+    return unit?.property_id === selectedPropertyId;
+  });
+
+  // Sort by property, then by unit
+  const sortedTenants = tenantsWithKaution.sort((a, b) => {
+    const unitA = units.find(u => u.id === a.unit_id);
+    const unitB = units.find(u => u.id === b.unit_id);
+    const propA = properties.find(p => p.id === unitA?.property_id);
+    const propB = properties.find(p => p.id === unitB?.property_id);
+    
+    if (propA?.name !== propB?.name) {
+      return (propA?.name || '').localeCompare(propB?.name || '');
+    }
+    return (unitA?.top_nummer || '').localeCompare(unitB?.top_nummer || '');
+  });
+
+  // Calculate total
+  const totalKaution = sortedTenants.reduce((sum, t) => sum + Number(t.kaution), 0);
+
+  // Create table data
+  const tableData = sortedTenants.map(tenant => {
+    const unit = units.find(u => u.id === tenant.unit_id);
+    const property = properties.find(p => p.id === unit?.property_id);
+    
+    return [
+      property?.name || '-',
+      unit?.top_nummer || '-',
+      `${tenant.first_name} ${tenant.last_name}`,
+      tenant.mietbeginn ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT') : '-',
+      formatCurrency(Number(tenant.kaution)),
+    ];
+  });
+
+  // Add table
+  autoTable(doc, {
+    startY: 45,
+    head: [['Liegenschaft', 'Einheit', 'Mieter', 'Mietbeginn', 'Kaution']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
+    styles: { fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 45 },
+      1: { cellWidth: 25 },
+      2: { cellWidth: 50 },
+      3: { cellWidth: 30 },
+      4: { halign: 'right', cellWidth: 30 },
+    },
+  });
+
+  // Add summary
+  const finalY = (doc as any).lastAutoTable?.finalY + 15 || 200;
+  
+  doc.setFillColor(219, 234, 254);
+  doc.roundedRect(14, finalY, 180, 25, 3, 3, 'F');
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Zusammenfassung', 20, finalY + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Anzahl Mietkautionen: ${sortedTenants.length}`, 20, finalY + 18);
+  doc.text(`Gesamtsumme: ${formatCurrency(totalKaution)}`, 100, finalY + 18);
+
+  doc.save(`Kautionsuebersicht_${new Date().toISOString().split('T')[0]}.pdf`);
 };

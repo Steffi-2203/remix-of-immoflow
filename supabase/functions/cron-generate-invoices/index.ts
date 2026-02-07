@@ -773,18 +773,8 @@ serve(async (req: Request): Promise<Response> => {
         const pdfData = generateVorschreibungPdf(pdfParams);
         
         // Generate filename
-        // Sanitize: replace special chars with ASCII equivalents, then remove remaining non-ASCII
-        const sanitizedName = tenantName
-          .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/[ß]/g, 'ss')
-          .replace(/[^a-zA-Z0-9_\- ]/g, '')
-          .replace(/\s+/g, '_')
-          .replace(/_+/g, '_');
-        const sanitizedTop = unit.top_nummer
-          .replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/[ß]/g, 'ss')
-          .replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const sanitizedMonth = monthName
-          .replace(/[äÄ]/g, 'Ae').replace(/[öÖ]/g, 'Oe').replace(/[üÜ]/g, 'Ue').replace(/[ß]/g, 'ss');
-        const filename = `Vorschreibung_${sanitizedMonth}_${year}_Top${sanitizedTop}_${sanitizedName}.pdf`;
+        const sanitizedName = tenantName.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_');
+        const filename = `Vorschreibung_${monthName}_${year}_Top${unit.top_nummer}_${sanitizedName}.pdf`;
         const storagePath = `${tenant.id}/${filename}`;
 
         // Upload to storage

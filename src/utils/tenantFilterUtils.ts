@@ -5,20 +5,42 @@
 
 export interface TenantForFilter {
   id: string;
-  unit_id: string;
+  unit_id?: string;
+  unitId?: string;
   status: string;
-  mietbeginn: string | null;
+  mietbeginn?: string | null;
+  mietBeginn?: string | null;
   mietende?: string | null;
-  grundmiete?: number;
-  betriebskosten_vorschuss?: number;
-  heizungskosten_vorschuss?: number;
+  mietEnde?: string | null;
+  grundmiete?: number | string;
+  grundMiete?: number | string;
+  betriebskosten_vorschuss?: number | string;
+  betriebskostenVorschuss?: number | string;
+  heizungskosten_vorschuss?: number | string;
+  heizungskostenVorschuss?: number | string;
+  heizkostenVorschuss?: number | string;
   first_name?: string;
+  firstName?: string;
   last_name?: string;
+  lastName?: string;
+  vorname?: string;
+  nachname?: string;
 }
 
 interface UnitForFilter {
   id: string;
-  property_id: string;
+  property_id?: string;
+  propertyId?: string;
+}
+
+// Helper to get unit_id from tenant (supports both formats)
+function getTenantUnitId(t: TenantForFilter): string {
+  return t.unit_id ?? t.unitId ?? '';
+}
+
+// Helper to get property_id from unit (supports both formats)
+function getUnitPropertyId(u: UnitForFilter): string {
+  return u.property_id ?? u.propertyId ?? '';
 }
 
 /**
@@ -35,46 +57,56 @@ export function isTenantActiveInPeriod(
   periodYear: number,
   periodMonth?: number // undefined = yearly
 ): boolean {
-  // Leerstand ist nie relevant
-  if (tenant.status === 'leerstand') return false;
+  // Normalize status (support various formats)
+  const status = (tenant.status || '').toLowerCase().trim();
+  
+  // Leerstand/vacancy ist nie relevant
+  if (status === 'leerstand' || status === 'vacancy' || status === 'inactive') return false;
   
   // Mietbeginn prüfen - Mieter ist nur relevant wenn Mietbeginn <= Ende des Zeitraums
-  if (tenant.mietbeginn) {
-    const mietbeginn = new Date(tenant.mietbeginn);
-    const mietbeginnYear = mietbeginn.getFullYear();
-    const mietbeginnMonth = mietbeginn.getMonth() + 1;
-    
-    if (periodMonth === undefined) {
-      // Yearly: Mietbeginn muss im Jahr oder früher sein
-      if (mietbeginnYear > periodYear) return false;
-    } else {
-      // Monthly: Mietbeginn muss im Monat oder früher sein
-      if (mietbeginnYear > periodYear) return false;
-      if (mietbeginnYear === periodYear && mietbeginnMonth > periodMonth) return false;
+  const mietbeginnStr = tenant.mietbeginn || tenant.mietBeginn;
+  if (mietbeginnStr) {
+    const mietbeginn = new Date(mietbeginnStr);
+    if (!isNaN(mietbeginn.getTime())) {
+      const mietbeginnYear = mietbeginn.getFullYear();
+      const mietbeginnMonth = mietbeginn.getMonth() + 1;
+      
+      if (periodMonth === undefined) {
+        // Yearly: Mietbeginn muss im Jahr oder früher sein
+        if (mietbeginnYear > periodYear) return false;
+      } else {
+        // Monthly: Mietbeginn muss im Monat oder früher sein
+        if (mietbeginnYear > periodYear) return false;
+        if (mietbeginnYear === periodYear && mietbeginnMonth > periodMonth) return false;
+      }
     }
   }
   
-  // Aktive Mieter (mit gültigem Mietbeginn) sind relevant
-  if (tenant.status === 'aktiv') return true;
+  // Aktive Mieter sind relevant (support various status values)
+  if (status === 'aktiv' || status === 'active' || status === '') return true;
   
   // Beendete Mieter: Mietende muss im oder nach dem Zeitraum liegen
-  if (tenant.status === 'beendet' && tenant.mietende) {
-    const mietende = new Date(tenant.mietende);
-    const mietendeYear = mietende.getFullYear();
-    const mietendeMonth = mietende.getMonth() + 1;
-    
-    if (periodMonth === undefined) {
-      // Yearly: Mietende muss im Jahr oder später sein
-      return mietendeYear >= periodYear;
-    } else {
-      // Monthly: Mietende muss im Monat oder später sein
-      if (mietendeYear > periodYear) return true;
-      if (mietendeYear === periodYear && mietendeMonth >= periodMonth) return true;
-      return false;
+  const mietendeStr = tenant.mietende || tenant.mietEnde;
+  if ((status === 'beendet' || status === 'ended' || status === 'terminated') && mietendeStr) {
+    const mietende = new Date(mietendeStr);
+    if (!isNaN(mietende.getTime())) {
+      const mietendeYear = mietende.getFullYear();
+      const mietendeMonth = mietende.getMonth() + 1;
+      
+      if (periodMonth === undefined) {
+        // Yearly: Mietende muss im Jahr oder später sein
+        return mietendeYear >= periodYear;
+      } else {
+        // Monthly: Mietende muss im Monat oder später sein
+        if (mietendeYear > periodYear) return true;
+        if (mietendeYear === periodYear && mietendeMonth >= periodMonth) return true;
+        return false;
+      }
     }
   }
   
-  return false;
+  // Default: Mieter ohne expliziten Status als aktiv behandeln
+  return true;
 }
 
 /**
@@ -94,18 +126,18 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
   periodYear: number,
   periodMonth?: number
 ): T[] {
-  // Filter Units nach Property
+  // Filter Units nach Property (supports both property_id and propertyId)
   const relevantUnits = propertyId === 'all' 
     ? units 
-    : units.filter(u => u.property_id === propertyId);
+    : units.filter(u => getUnitPropertyId(u) === propertyId);
   
   const relevantTenants: T[] = [];
   
   // Für jede Unit: Finde Mieter die im Zeitraum aktiv waren
   relevantUnits.forEach(unit => {
-    // Alle Mieter dieser Unit die im Zeitraum aktiv waren
+    // Alle Mieter dieser Unit die im Zeitraum aktiv waren (supports both unit_id and unitId)
     const unitTenants = tenants.filter(t => 
-      t.unit_id === unit.id && isTenantActiveInPeriod(t, periodYear, periodMonth)
+      getTenantUnitId(t) === unit.id && isTenantActiveInPeriod(t, periodYear, periodMonth)
     );
     
     // Normalerweise sollte nur ein Mieter pro Unit im Zeitraum aktiv sein
@@ -126,65 +158,33 @@ export function getActiveTenantsForPeriod<T extends TenantForFilter>(
 
 /**
  * Berechnet die monatliche Gesamtmiete eines Mieters
+ * Supports both camelCase and snake_case field names
  */
 export function calculateMonthlyRent(tenant: TenantForFilter): number {
-  return Number(tenant.grundmiete || 0) + 
-         Number(tenant.betriebskosten_vorschuss || 0) + 
-         Number(tenant.heizungskosten_vorschuss || 0);
+  const grundmiete = Number(tenant.grundmiete || 0);
+  const bk = Number(tenant.betriebskosten_vorschuss ?? tenant.betriebskostenVorschuss ?? 0);
+  // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
+  const hk = Number(tenant.heizkostenVorschuss ?? tenant.heizungskosten_vorschuss ?? tenant.heizungskostenVorschuss ?? 0);
+  return grundmiete + bk + hk;
 }
 
 /**
- * Berechnet die Anzahl der aktiven Monate eines Mieters in einem Jahr.
- * Berücksichtigt Mietbeginn und Mietende anteilig.
- * 
- * Beispiel: Mietbeginn 01.04.2025 → 9 Monate in 2025
- * Beispiel: Mietende 30.09.2025 → 9 Monate in 2025
- * Beispiel: Mietbeginn 15.03.2025, Mietende 20.10.2025 → 8 Monate (März-Oktober)
+ * Helper to get tenant's first name (supports both formats)
  */
-export function getActiveMonthsInYear(
-  tenant: TenantForFilter,
-  year: number
-): number {
-  // Mietbeginn bestimmen
-  const startMonth = tenant.mietbeginn 
-    ? Math.max(1, (() => {
-        const d = new Date(tenant.mietbeginn);
-        return d.getFullYear() < year ? 1 
-             : d.getFullYear() === year ? d.getMonth() + 1 
-             : 13; // nach dem Jahr → 0 Monate
-      })())
-    : 1;
-  
-  // Mietende bestimmen
-  const endMonth = tenant.mietende
-    ? Math.min(12, (() => {
-        const d = new Date(tenant.mietende);
-        return d.getFullYear() > year ? 12
-             : d.getFullYear() === year ? d.getMonth() + 1
-             : 0; // vor dem Jahr → 0 Monate
-      })())
-    : 12;
-  
-  return Math.max(0, endMonth - startMonth + 1);
+export function getTenantFirstName(tenant: TenantForFilter): string {
+  return tenant.first_name ?? tenant.firstName ?? tenant.vorname ?? '';
 }
 
 /**
- * Berechnet den proportionalen SOLL-Betrag eines Mieters für ein Jahr.
- * Statt monthlyValue * 12 wird monthlyValue * activeMonths verwendet.
+ * Helper to get tenant's last name (supports both formats)
  */
-export function calculateProportionalYearlySoll(
-  tenant: TenantForFilter,
-  year: number
-): { grundmiete: number; betriebskosten: number; heizungskosten: number; gesamt: number } {
-  const months = getActiveMonthsInYear(tenant, year);
-  const grundmiete = Number(tenant.grundmiete || 0) * months;
-  const betriebskosten = Number(tenant.betriebskosten_vorschuss || 0) * months;
-  const heizungskosten = Number(tenant.heizungskosten_vorschuss || 0) * months;
-  
-  return {
-    grundmiete,
-    betriebskosten,
-    heizungskosten,
-    gesamt: grundmiete + betriebskosten + heizungskosten,
-  };
+export function getTenantLastName(tenant: TenantForFilter): string {
+  return tenant.last_name ?? tenant.lastName ?? tenant.nachname ?? '';
+}
+
+/**
+ * Helper to get tenant's full name
+ */
+export function getTenantFullName(tenant: TenantForFilter): string {
+  return `${getTenantFirstName(tenant)} ${getTenantLastName(tenant)}`.trim();
 }

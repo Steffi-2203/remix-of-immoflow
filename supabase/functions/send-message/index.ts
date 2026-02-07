@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -23,59 +25,9 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Validate authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      console.error("Missing or invalid authorization header");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized - Missing authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Create client with user's auth token for validation
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    // Verify the user's JWT token
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
-    
-    if (claimsError || !claimsData?.claims) {
-      console.error("Auth validation failed:", claimsError);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized - Invalid token" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
-    const userId = claimsData.claims.sub;
-    console.log("Authenticated user:", userId);
-
-    // Verify user belongs to an organization
-    const { data: profile, error: profileError } = await supabaseAuth
-      .from('profiles')
-      .select('organization_id, full_name')
-      .eq('id', userId)
-      .single();
-
-    if (profileError || !profile?.organization_id) {
-      console.error("Profile check failed:", profileError);
-      return new Response(
-        JSON.stringify({ error: "User not associated with an organization" }),
-        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
-    console.log("User organization:", profile.organization_id);
-
-    // Use service role client for database operations
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { messageId, recipientEmail, recipientName, subject, messageBody, senderName }: MessageRequest = await req.json();
 
@@ -108,7 +60,7 @@ ${messageBody}
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
           
           <p style="color: #6b7280; font-size: 12px;">
-            Diese Nachricht wurde von ${senderName || profile.full_name || 'Ihrer Hausverwaltung'} gesendet.
+            Diese Nachricht wurde von ${senderName || 'Ihrer Hausverwaltung'} gesendet.
           </p>
         </body>
       </html>
@@ -122,7 +74,7 @@ ${messageBody}
         "Authorization": `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: `${senderName || profile.full_name || 'Hausverwaltung'} <onboarding@resend.dev>`,
+        from: `${senderName || 'Hausverwaltung'} <onboarding@resend.dev>`,
         to: [recipientEmail],
         subject: subject,
         html: htmlContent,
