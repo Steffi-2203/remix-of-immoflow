@@ -28,18 +28,40 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Rundungsausgleich: Verteilt Cent-Differenzen auf Zeilen, damit die Summe
+ * exakt expectedTotal ergibt. Toleranz: < 0.01 € wird ignoriert.
+ * 
+ * Sortierung: Primär nach |amount| desc, sekundär nach lineType + unitId
+ * für deterministische Ergebnisse bei gleichen Beträgen.
+ * 
+ * Fail-fast: Wenn nach 2× lines.length Iterationen noch >= 0.01 € Differenz
+ * verbleibt, wird ein Fehler geworfen — das darf bei korrekten Eingaben nie
+ * passieren und deutet auf einen Logikfehler hin.
+ */
 function reconcileRounding(lines: any[], expectedTotal: number): void {
   const roundedSum = lines.reduce((s, l) => s + roundMoney(l.amount || 0), 0);
   let diff = roundMoney(expectedTotal - roundedSum);
   if (Math.abs(diff) < 0.01) return;
 
-  lines.sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0));
+  lines.sort((a, b) => {
+    const amtDiff = Math.abs(b.amount || 0) - Math.abs(a.amount || 0);
+    if (amtDiff !== 0) return amtDiff;
+    const ltCmp = (a.lineType || '').localeCompare(b.lineType || '');
+    if (ltCmp !== 0) return ltCmp;
+    return (a.unitId || '').localeCompare(b.unitId || '');
+  });
   let i = 0;
-  while (Math.abs(diff) >= 0.01 && i < lines.length * 2) {
+  const maxIterations = lines.length * 2;
+  while (Math.abs(diff) >= 0.01 && i < maxIterations) {
     const adjust = diff > 0 ? 0.01 : -0.01;
     lines[i % lines.length].amount = roundMoney(lines[i % lines.length].amount + adjust);
     diff = roundMoney(diff - adjust);
     i++;
+  }
+  if (Math.abs(diff) >= 0.01) {
+    console.error(`[reconcileRounding] FEHLER: Restdifferenz ${diff.toFixed(4)} € nach ${maxIterations} Iterationen. Expected=${expectedTotal}, Sum=${roundedSum}, Lines=${lines.length}`);
+    throw new Error(`Rundungsausgleich gescheitert: Restdifferenz ${diff.toFixed(4)} € (Toleranz: < 0.01 €)`);
   }
 }
 
@@ -251,7 +273,7 @@ export class BillingService {
           if (batch.length === 0) continue;
           
           const sortedBatch = [...batch].sort((a, b) => 
-            `${a.invoiceId}|${a.lineType}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.description}`)
+            `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`)
           );
           
           const values = sortedBatch.map(line => 

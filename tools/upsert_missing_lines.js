@@ -1,6 +1,14 @@
 import fs from 'fs';
 import pg from 'pg';
 
+/**
+ * Zentrale Rundung auf ganze Cent — identisch mit shared/utils.ts roundMoney/roundToCents.
+ * Direkt hier definiert, da dieses Tool als standalone JS ohne TS-Transpile läuft.
+ */
+function roundToCents(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 const args = process.argv.slice(2);
 const getArg = (name) => {
   const arg = args.find(a => a.startsWith(`--${name}=`));
@@ -63,8 +71,8 @@ if (csvFile || missingFile.endsWith('.csv')) {
     unitId: row.unitId || row.unit_id,
     lineType: row.lineType || row.line_type,
     description: row.description,
-    amount: parseFloat(row.amount),
-    taxRate: parseFloat(row.taxRate || row.tax_rate || 0)
+    amount: roundToCents(parseFloat(row.amount)),
+    taxRate: roundToCents(parseFloat(row.taxRate || row.tax_rate || 0))
   }));
 } else {
   missingLines = JSON.parse(fs.readFileSync(missingFile, 'utf8'));
@@ -123,7 +131,7 @@ for (const line of missingLines) {
 }
 
 resolved.sort((a, b) =>
-  `${a.invoiceId}|${a.lineType}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.description}`)
+  `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`)
 );
 
 const mergedKeys = [];
