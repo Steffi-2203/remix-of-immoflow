@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, gte, gt, sql, sum, isNull, or, ne } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 const router = Router();
@@ -1267,6 +1267,519 @@ router.post("/api/user-organizations/switch", async (req: Request, res: Response
   } catch (error) {
     console.error("Error switching organization:", error);
     res.status(500).json({ error: "Fehler beim Wechseln" });
+  }
+});
+
+// ====== WEG EIGENTÜMERWECHSEL (OWNER CHANGE - § 38 WEG 2002) ======
+
+router.get("/api/weg/owner-changes", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const propertyId = req.query.propertyId as string;
+    let conditions: any[] = [eq(schema.wegOwnerChanges.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegOwnerChanges.propertyId, propertyId));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegOwnerChanges).where(where).orderBy(desc(schema.wegOwnerChanges.createdAt));
+
+    const ownerIds = [...new Set(data.flatMap(d => [d.previousOwnerId, d.newOwnerId]))];
+    const unitIds = [...new Set(data.map(d => d.unitId))];
+    const ownersMap: Record<string, any> = {};
+    if (ownerIds.length) {
+      const owners = await db.select().from(schema.owners).where(inArray(schema.owners.id, ownerIds));
+      for (const o of owners) ownersMap[o.id] = o;
+    }
+    const unitsMap: Record<string, any> = {};
+    if (unitIds.length) {
+      const units = await db.select().from(schema.units).where(inArray(schema.units.id, unitIds));
+      for (const u of units) unitsMap[u.id] = u;
+    }
+
+    const enriched = data.map(d => ({
+      ...objectToSnakeCase(d),
+      previous_owner_name: ownersMap[d.previousOwnerId] ? `${ownersMap[d.previousOwnerId].firstName} ${ownersMap[d.previousOwnerId].lastName}` : null,
+      new_owner_name: ownersMap[d.newOwnerId] ? `${ownersMap[d.newOwnerId].firstName} ${ownersMap[d.newOwnerId].lastName}` : null,
+      unit_top: unitsMap[d.unitId]?.topNummer || null,
+    }));
+    res.json(enriched);
+  } catch (error) {
+    console.error("Error fetching owner changes:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/owner-changes", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+
+    const prop = await db.select().from(schema.properties).where(and(eq(schema.properties.id, body.propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!prop.length) return res.status(403).json({ error: "Zugriff verweigert" });
+
+    const currentUo = await db.select().from(schema.wegUnitOwners).where(and(
+      eq(schema.wegUnitOwners.unitId, body.unitId),
+      eq(schema.wegUnitOwners.propertyId, body.propertyId),
+      eq(schema.wegUnitOwners.organizationId, ctx.orgId),
+      or(isNull(schema.wegUnitOwners.validTo), gte(schema.wegUnitOwners.validTo, body.transferDate))
+    )).limit(1);
+
+    const [created] = await db.insert(schema.wegOwnerChanges).values({
+      organizationId: ctx.orgId,
+      propertyId: body.propertyId,
+      unitId: body.unitId,
+      previousOwnerId: body.previousOwnerId,
+      newOwnerId: body.newOwnerId,
+      transferDate: body.transferDate,
+      grundbuchDate: body.grundbuchDate || null,
+      tzNumber: body.tzNumber || null,
+      kaufvertragDate: body.kaufvertragDate || null,
+      rechtsgrund: body.rechtsgrund || 'kauf',
+      status: 'entwurf',
+      meaShare: currentUo.length ? String(currentUo[0].meaShare) : null,
+      nutzwert: currentUo.length ? String(currentUo[0].nutzwert) : null,
+      notes: body.notes || null,
+      createdBy: ctx.userId,
+    }).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating owner change:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.patch("/api/weg/owner-changes/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+
+    const existing = await db.select().from(schema.wegOwnerChanges).where(and(eq(schema.wegOwnerChanges.id, req.params.id), eq(schema.wegOwnerChanges.organizationId, ctx.orgId))).limit(1);
+    if (!existing.length) return res.status(404).json({ error: "Nicht gefunden" });
+    if (existing[0].status === 'abgeschlossen') return res.status(400).json({ error: "Abgeschlossener Eigentümerwechsel kann nicht bearbeitet werden" });
+
+    const updateData: any = { updatedAt: new Date() };
+    if (body.grundbuchDate !== undefined) updateData.grundbuchDate = body.grundbuchDate;
+    if (body.tzNumber !== undefined) updateData.tzNumber = body.tzNumber;
+    if (body.kaufvertragDate !== undefined) updateData.kaufvertragDate = body.kaufvertragDate;
+    if (body.rechtsgrund !== undefined) updateData.rechtsgrund = body.rechtsgrund;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.notes !== undefined) updateData.notes = body.notes;
+    if (body.transferDate !== undefined) updateData.transferDate = body.transferDate;
+
+    const [updated] = await db.update(schema.wegOwnerChanges).set(updateData).where(eq(schema.wegOwnerChanges.id, req.params.id)).returning();
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating owner change:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+router.get("/api/weg/owner-changes/:id/preview", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const [oc] = await db.select().from(schema.wegOwnerChanges).where(and(eq(schema.wegOwnerChanges.id, req.params.id), eq(schema.wegOwnerChanges.organizationId, ctx.orgId))).limit(1);
+    if (!oc) return res.status(404).json({ error: "Nicht gefunden" });
+
+    const transferDate = new Date(oc.transferDate);
+    const transferYear = transferDate.getFullYear();
+    const transferMonth = transferDate.getMonth() + 1;
+    const transferDay = transferDate.getDate();
+
+    const daysInTransferMonth = new Date(transferYear, transferMonth, 0).getDate();
+    const daysInYear = ((transferYear % 4 === 0 && transferYear % 100 !== 0) || transferYear % 400 === 0) ? 366 : 365;
+
+    const oldOwnerDaysInMonth = transferDay - 1;
+    const newOwnerDaysInMonth = daysInTransferMonth - oldOwnerDaysInMonth;
+
+    const dayOfYear = Math.floor((transferDate.getTime() - new Date(transferYear, 0, 1).getTime()) / 86400000);
+    const oldOwnerDaysInYear = dayOfYear;
+    const newOwnerDaysInYear = daysInYear - oldOwnerDaysInYear;
+
+    const activePlans = await db.select().from(schema.wegBudgetPlans).where(and(
+      eq(schema.wegBudgetPlans.propertyId, oc.propertyId),
+      eq(schema.wegBudgetPlans.organizationId, ctx.orgId),
+      eq(schema.wegBudgetPlans.status, 'aktiv'),
+      eq(schema.wegBudgetPlans.year, transferYear)
+    )).limit(1);
+
+    let monthlyAmount = 0;
+    let yearlyAmount = 0;
+    let bkMonat = 0, hkMonat = 0, ruecklageMonat = 0, verwaltungMonat = 0;
+
+    if (activePlans.length) {
+      const bp = activePlans[0];
+      const existingInvoices = await db.select().from(schema.monthlyInvoices).where(and(
+        eq(schema.monthlyInvoices.wegBudgetPlanId, bp.id),
+        eq(schema.monthlyInvoices.ownerId, oc.previousOwnerId),
+        eq(schema.monthlyInvoices.unitId, oc.unitId),
+      )).orderBy(schema.monthlyInvoices.month).limit(1);
+
+      if (existingInvoices.length) {
+        const inv = existingInvoices[0];
+        monthlyAmount = parseFloat(String(inv.gesamtbetrag || '0'));
+        bkMonat = parseFloat(String(inv.betriebskosten || '0'));
+        hkMonat = parseFloat(String(inv.heizungskosten || '0'));
+      }
+      yearlyAmount = monthlyAmount * 12;
+    }
+
+    const openInvoices = await db.select().from(schema.monthlyInvoices).where(and(
+      eq(schema.monthlyInvoices.ownerId, oc.previousOwnerId),
+      eq(schema.monthlyInvoices.unitId, oc.unitId),
+      eq(schema.monthlyInvoices.status, 'offen'),
+    ));
+
+    const openDebts = openInvoices.reduce((s, inv) => s + parseFloat(String(inv.gesamtbetrag || '0')), 0);
+
+    const futureInvoices = openInvoices.filter(inv => {
+      if (inv.year > transferYear) return true;
+      if (inv.year === transferYear && inv.month >= transferMonth) return true;
+      return false;
+    });
+
+    const pastDueInvoices = openInvoices.filter(inv => {
+      if (inv.year < transferYear) return true;
+      if (inv.year === transferYear && inv.month < transferMonth) return true;
+      return false;
+    });
+
+    const reserveEntries = await db.select().from(schema.wegReserveFund).where(and(
+      eq(schema.wegReserveFund.propertyId, oc.propertyId),
+      eq(schema.wegReserveFund.organizationId, ctx.orgId),
+    ));
+    const totalReserve = reserveEntries.reduce((s, e) => s + parseFloat(String(e.amount || '0')), 0);
+
+    const unitOwners = await db.select().from(schema.wegUnitOwners).where(and(
+      eq(schema.wegUnitOwners.propertyId, oc.propertyId),
+      eq(schema.wegUnitOwners.organizationId, ctx.orgId),
+      or(isNull(schema.wegUnitOwners.validTo), gte(schema.wegUnitOwners.validTo, oc.transferDate))
+    ));
+    const totalMea = unitOwners.reduce((s, uo) => s + parseFloat(String(uo.meaShare || '0')), 0);
+    const ownerMea = parseFloat(String(oc.meaShare || '0'));
+    const meaRatio = totalMea > 0 ? ownerMea / totalMea : 0;
+    const reserveShare = Math.round(totalReserve * meaRatio * 100) / 100;
+
+    const aliquotOldMonth = Math.round(monthlyAmount * oldOwnerDaysInMonth / daysInTransferMonth * 100) / 100;
+    const aliquotNewMonth = Math.round(monthlyAmount * newOwnerDaysInMonth / daysInTransferMonth * 100) / 100;
+
+    const aliquotOldYear = Math.round(yearlyAmount * oldOwnerDaysInYear / daysInYear * 100) / 100;
+    const aliquotNewYear = Math.round(yearlyAmount * newOwnerDaysInYear / daysInYear * 100) / 100;
+
+    const [prevOwner] = await db.select().from(schema.owners).where(eq(schema.owners.id, oc.previousOwnerId));
+    const [newOwner] = await db.select().from(schema.owners).where(eq(schema.owners.id, oc.newOwnerId));
+    const [unit] = await db.select().from(schema.units).where(eq(schema.units.id, oc.unitId));
+
+    const remainingMonths: number[] = [];
+    const startMonth = transferDay > 1 ? transferMonth + 1 : transferMonth;
+    for (let m = startMonth; m <= 12; m++) remainingMonths.push(m);
+
+    res.json({
+      owner_change: objectToSnakeCase(oc),
+      previous_owner: prevOwner ? { id: prevOwner.id, name: `${prevOwner.firstName} ${prevOwner.lastName}`, email: prevOwner.email } : null,
+      new_owner: newOwner ? { id: newOwner.id, name: `${newOwner.firstName} ${newOwner.lastName}`, email: newOwner.email } : null,
+      unit: unit ? { id: unit.id, top_nummer: unit.topNummer, type: unit.type, nutzflaeche: unit.nutzflaeche } : null,
+      transfer: {
+        transfer_date: oc.transferDate,
+        transfer_year: transferYear,
+        transfer_month: transferMonth,
+        transfer_day: transferDay,
+        days_in_transfer_month: daysInTransferMonth,
+        days_in_year: daysInYear,
+      },
+      aliquotierung: {
+        old_owner_days_in_month: oldOwnerDaysInMonth,
+        new_owner_days_in_month: newOwnerDaysInMonth,
+        old_owner_days_in_year: oldOwnerDaysInYear,
+        new_owner_days_in_year: newOwnerDaysInYear,
+        monthly_amount: monthlyAmount,
+        yearly_amount: yearlyAmount,
+        aliquot_old_month: aliquotOldMonth,
+        aliquot_new_month: aliquotNewMonth,
+        aliquot_old_year: aliquotOldYear,
+        aliquot_new_year: aliquotNewYear,
+      },
+      financials: {
+        open_debts_total: openDebts,
+        past_due_invoices: pastDueInvoices.length,
+        past_due_amount: pastDueInvoices.reduce((s, i) => s + parseFloat(String(i.gesamtbetrag || '0')), 0),
+        future_invoices_to_cancel: futureInvoices.length,
+        reserve_total: totalReserve,
+        reserve_share: reserveShare,
+        mea_share: ownerMea,
+        mea_ratio: meaRatio,
+        total_mea: totalMea,
+      },
+      new_invoices: {
+        remaining_months: remainingMonths,
+        count: remainingMonths.length,
+        monthly_amount: monthlyAmount,
+        first_month_aliquot: transferDay > 1 ? aliquotNewMonth : null,
+        has_aliquot_month: transferDay > 1,
+      },
+      warnings: [
+        ...(pastDueInvoices.length > 0 ? [`Solidarhaftung gem. § 38 WEG: ${pastDueInvoices.length} offene Rückstände des Voreigentümers (€ ${pastDueInvoices.reduce((s, i) => s + parseFloat(String(i.gesamtbetrag || '0')), 0).toFixed(2)}). Der neue Eigentümer haftet solidarisch für BK-Rückstände bis zu 3 Jahren.`] : []),
+        ...(reserveShare < 0 ? ['Rücklage unter Mindestdotierung'] : []),
+        ...(!activePlans.length ? ['Kein aktiver Wirtschaftsplan für das Übergabejahr vorhanden. Neue Vorschreibungen können nicht automatisch erstellt werden.'] : []),
+      ],
+    });
+  } catch (error) {
+    console.error("Error preview owner change:", error);
+    res.status(500).json({ error: "Fehler bei der Vorschau" });
+  }
+});
+
+router.post("/api/weg/owner-changes/:id/execute", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const [oc] = await db.select().from(schema.wegOwnerChanges).where(and(eq(schema.wegOwnerChanges.id, req.params.id), eq(schema.wegOwnerChanges.organizationId, ctx.orgId))).limit(1);
+    if (!oc) return res.status(404).json({ error: "Nicht gefunden" });
+    if (oc.status === 'abgeschlossen') return res.status(400).json({ error: "Eigentümerwechsel bereits durchgeführt" });
+
+    const dateParts = String(oc.transferDate).split('-');
+    const transferYear = parseInt(dateParts[0]);
+    const transferMonth = parseInt(dateParts[1]);
+    const transferDay = parseInt(dateParts[2]);
+    const daysInTransferMonth = new Date(transferYear, transferMonth, 0).getDate();
+
+    const result = await db.transaction(async (tx) => {
+      const currentUo = await tx.select().from(schema.wegUnitOwners).where(and(
+        eq(schema.wegUnitOwners.unitId, oc.unitId),
+        eq(schema.wegUnitOwners.ownerId, oc.previousOwnerId),
+        eq(schema.wegUnitOwners.organizationId, ctx.orgId),
+      ));
+
+      let meaShare = oc.meaShare || '0';
+      let nutzwert = oc.nutzwert || null;
+
+      if (currentUo.length) {
+        meaShare = String(currentUo[0].meaShare);
+        nutzwert = currentUo[0].nutzwert ? String(currentUo[0].nutzwert) : null;
+
+        const validToStr = `${transferYear}-${String(transferMonth).padStart(2, '0')}-${String(transferDay - 1 > 0 ? transferDay - 1 : 1).padStart(2, '0')}`;
+        await tx.update(schema.wegUnitOwners).set({
+          validTo: validToStr,
+          updatedAt: new Date(),
+        }).where(eq(schema.wegUnitOwners.id, currentUo[0].id));
+      }
+
+      await tx.insert(schema.wegUnitOwners).values({
+        organizationId: ctx.orgId,
+        propertyId: oc.propertyId,
+        unitId: oc.unitId,
+        ownerId: oc.newOwnerId,
+        meaShare,
+        nutzwert,
+        validFrom: oc.transferDate,
+        validTo: null,
+      });
+
+      let cancelledCount = 0;
+      const futureInvoices = await tx.select().from(schema.monthlyInvoices).where(and(
+        eq(schema.monthlyInvoices.ownerId, oc.previousOwnerId),
+        eq(schema.monthlyInvoices.unitId, oc.unitId),
+        eq(schema.monthlyInvoices.status, 'offen'),
+      ));
+
+      for (const inv of futureInvoices) {
+        const isAfterTransfer = inv.year > transferYear || (inv.year === transferYear && inv.month > transferMonth);
+        const isTransferMonth = inv.year === transferYear && inv.month === transferMonth;
+
+        if (isAfterTransfer) {
+          await tx.update(schema.monthlyInvoices).set({ status: 'storniert', updatedAt: new Date() }).where(eq(schema.monthlyInvoices.id, inv.id));
+          cancelledCount++;
+        } else if (isTransferMonth && transferDay > 1) {
+          const oldRatio = (transferDay - 1) / daysInTransferMonth;
+          const originalTotal = parseFloat(String(inv.gesamtbetrag || '0'));
+          const originalBk = parseFloat(String(inv.betriebskosten || '0'));
+          const originalHk = parseFloat(String(inv.heizungskosten || '0'));
+          const originalUst = parseFloat(String(inv.ust || '0'));
+
+          await tx.update(schema.monthlyInvoices).set({
+            betriebskosten: String(Math.round(originalBk * oldRatio * 100) / 100),
+            heizungskosten: String(Math.round(originalHk * oldRatio * 100) / 100),
+            ust: String(Math.round(originalUst * oldRatio * 100) / 100),
+            gesamtbetrag: String(Math.round(originalTotal * oldRatio * 100) / 100),
+            updatedAt: new Date(),
+          }).where(eq(schema.monthlyInvoices.id, inv.id));
+        }
+      }
+
+      let newInvoiceCount = 0;
+      const activePlans = await tx.select().from(schema.wegBudgetPlans).where(and(
+        eq(schema.wegBudgetPlans.propertyId, oc.propertyId),
+        eq(schema.wegBudgetPlans.organizationId, ctx.orgId),
+        eq(schema.wegBudgetPlans.status, 'aktiv'),
+        eq(schema.wegBudgetPlans.year, transferYear)
+      )).limit(1);
+
+      if (activePlans.length) {
+        const bp = activePlans[0];
+        const dueDay = bp.dueDay || 5;
+
+        const templateInvoice = await tx.select().from(schema.monthlyInvoices).where(and(
+          eq(schema.monthlyInvoices.wegBudgetPlanId, bp.id),
+          eq(schema.monthlyInvoices.ownerId, oc.previousOwnerId),
+          eq(schema.monthlyInvoices.unitId, oc.unitId),
+        )).orderBy(schema.monthlyInvoices.month).limit(1);
+
+        if (templateInvoice.length) {
+          const tmpl = templateInvoice[0];
+          const fullBk = parseFloat(String(tmpl.betriebskosten || '0'));
+          const fullHk = parseFloat(String(tmpl.heizungskosten || '0'));
+          const fullUst = parseFloat(String(tmpl.ust || '0'));
+          const fullTotal = parseFloat(String(tmpl.gesamtbetrag || '0'));
+
+          if (transferDay > 1) {
+            const newRatio = (daysInTransferMonth - transferDay + 1) / daysInTransferMonth;
+            const faelligAm = `${transferYear}-${String(transferMonth).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
+            await tx.insert(schema.monthlyInvoices).values({
+              unitId: oc.unitId,
+              tenantId: null,
+              year: transferYear,
+              month: transferMonth,
+              grundmiete: '0',
+              betriebskosten: String(Math.round(fullBk * newRatio * 100) / 100),
+              heizungskosten: String(Math.round(fullHk * newRatio * 100) / 100),
+              wasserkosten: '0',
+              ustSatzBk: tmpl.ustSatzBk,
+              ustSatzHeizung: tmpl.ustSatzHeizung,
+              ustSatzMiete: 0,
+              ustSatzWasser: 0,
+              ust: String(Math.round(fullUst * newRatio * 100) / 100),
+              gesamtbetrag: String(Math.round(fullTotal * newRatio * 100) / 100),
+              status: 'offen',
+              faelligAm,
+              isVacancy: false,
+              wegBudgetPlanId: bp.id,
+              ownerId: oc.newOwnerId,
+            });
+            newInvoiceCount++;
+          }
+
+          const startMonth = transferDay > 1 ? transferMonth + 1 : transferMonth;
+          for (let m = startMonth; m <= 12; m++) {
+            const faelligAm = `${transferYear}-${String(m).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
+            await tx.insert(schema.monthlyInvoices).values({
+              unitId: oc.unitId,
+              tenantId: null,
+              year: transferYear,
+              month: m,
+              grundmiete: '0',
+              betriebskosten: String(fullBk),
+              heizungskosten: String(fullHk),
+              wasserkosten: '0',
+              ustSatzBk: tmpl.ustSatzBk,
+              ustSatzHeizung: tmpl.ustSatzHeizung,
+              ustSatzMiete: 0,
+              ustSatzWasser: 0,
+              ust: String(fullUst),
+              gesamtbetrag: String(fullTotal),
+              status: 'offen',
+              faelligAm,
+              isVacancy: false,
+              wegBudgetPlanId: bp.id,
+              ownerId: oc.newOwnerId,
+            });
+            newInvoiceCount++;
+          }
+        }
+      }
+
+      const reserveEntries = await tx.select().from(schema.wegReserveFund).where(and(
+        eq(schema.wegReserveFund.propertyId, oc.propertyId),
+        eq(schema.wegReserveFund.organizationId, ctx.orgId),
+        eq(schema.wegReserveFund.ownerId, oc.previousOwnerId),
+        eq(schema.wegReserveFund.unitId, oc.unitId),
+      ));
+      const reserveAmount = reserveEntries.reduce((s, e) => s + parseFloat(String(e.amount || '0')), 0);
+
+      if (reserveAmount > 0) {
+        await tx.insert(schema.wegReserveFund).values({
+          organizationId: ctx.orgId,
+          propertyId: oc.propertyId,
+          year: transferYear,
+          month: transferMonth,
+          amount: String(-reserveAmount),
+          description: `Rücklagen-Übertrag Eigentümerwechsel an ${oc.newOwnerId} (Top ${oc.unitId})`,
+          entryType: 'uebertrag',
+          unitId: oc.unitId,
+          ownerId: oc.previousOwnerId,
+        });
+        await tx.insert(schema.wegReserveFund).values({
+          organizationId: ctx.orgId,
+          propertyId: oc.propertyId,
+          year: transferYear,
+          month: transferMonth,
+          amount: String(reserveAmount),
+          description: `Rücklagen-Übernahme Eigentümerwechsel von ${oc.previousOwnerId} (Top ${oc.unitId})`,
+          entryType: 'uebertrag',
+          unitId: oc.unitId,
+          ownerId: oc.newOwnerId,
+        });
+      }
+
+      const openDebtsAmount = futureInvoices
+        .filter(i => i.year < transferYear || (i.year === transferYear && i.month < transferMonth))
+        .reduce((s, i) => s + parseFloat(String(i.gesamtbetrag || '0')), 0);
+
+      const transferMonthInv = futureInvoices.find(i => i.year === transferYear && i.month === transferMonth);
+      const transferMonthTotal = parseFloat(String(transferMonthInv?.gesamtbetrag || '0'));
+      const aliquotOldMonth = transferDay > 1 ? Math.round(transferMonthTotal * (transferDay - 1) / daysInTransferMonth * 100) / 100 : 0;
+      const aliquotNewMonth = transferDay > 1 ? Math.round(transferMonthTotal * (daysInTransferMonth - transferDay + 1) / daysInTransferMonth * 100) / 100 : 0;
+
+      await tx.update(schema.wegOwnerChanges).set({
+        status: 'abgeschlossen',
+        executedAt: new Date(),
+        cancelledInvoiceCount: cancelledCount,
+        newInvoiceCount,
+        reserveAmount: String(reserveAmount),
+        openDebtsAmount: String(openDebtsAmount),
+        aliquotMonth: transferDay > 1 ? transferMonth : null,
+        aliquotOldOwnerAmount: String(aliquotOldMonth),
+        aliquotNewOwnerAmount: String(aliquotNewMonth),
+        updatedAt: new Date(),
+      }).where(eq(schema.wegOwnerChanges.id, oc.id));
+
+      await tx.insert(schema.auditLogs).values({
+        userId: ctx.userId,
+        tableName: 'weg_owner_changes',
+        recordId: oc.id,
+        action: 'execute_owner_change',
+        newData: {
+          previousOwnerId: oc.previousOwnerId,
+          newOwnerId: oc.newOwnerId,
+          unitId: oc.unitId,
+          transferDate: oc.transferDate,
+          cancelledInvoices: cancelledCount,
+          newInvoices: newInvoiceCount,
+          reserveTransfer: reserveAmount,
+        },
+        details: { rechtsgrund: oc.rechtsgrund, grundbuchDate: oc.grundbuchDate, tzNumber: oc.tzNumber },
+      });
+
+      return { cancelledCount, newInvoiceCount, reserveAmount };
+    });
+
+    res.json({
+      success: true,
+      message: `Eigentümerwechsel durchgeführt: ${result.cancelledCount} Vorschreibungen storniert, ${result.newInvoiceCount} neue erstellt`,
+      cancelled_invoices: result.cancelledCount,
+      new_invoices: result.newInvoiceCount,
+      reserve_transferred: result.reserveAmount,
+    });
+  } catch (error) {
+    console.error("Error executing owner change:", error);
+    res.status(500).json({ error: "Fehler beim Durchführen des Eigentümerwechsels" });
   }
 });
 

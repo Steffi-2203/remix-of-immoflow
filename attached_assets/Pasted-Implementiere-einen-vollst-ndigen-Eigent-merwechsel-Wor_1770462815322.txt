@@ -1,0 +1,101 @@
+Implementiere einen vollständigen Eigentümerwechsel-Workflow für WEG-Liegenschaften nach österreichischem WEG 2002 (inkl. Novellen 2022/2024) und ABGB. Der Eigentümerwechsel muss rechtlich korrekt die Übernahme aller Rechte und Pflichten abbilden und nahtlos neue Vorschreibungen für den neuen Eigentümer generieren.
+
+1. Eigentümerwechsel erfassen (§ 2 WEG, § 38 WEG)
+
+Erfassung folgender Daten:
+Einheit (Top-Nummer, Nutzwert/MEA)
+Bisheriger Eigentümer (automatisch aus bestehenden Daten)
+Neuer Eigentümer (Name, Adresse, E-Mail, Telefon, IBAN, BIC)
+Übergabedatum (= Stichtag, ab dem der neue Eigentümer haftet)
+Grundbuch-Eintragungsdatum (TZ-Nummer, da der Eigentumsübergang erst mit Verbücherung wirksam wird – § 431 ABGB)
+Kaufvertragsdatum (optional, für Dokumentation)
+Rechtsgrund: Kauf, Schenkung, Erbschaft, Zwangsversteigerung, Einbringung
+Status-Workflow: entwurf → grundbuch_eingetragen → abgeschlossen
+2. Rechtliche Auswirkungen automatisch abbilden
+
+§ 38 WEG – Haftung des neuen Eigentümers:
+
+Der neue Eigentümer haftet ab Grundbucheintragung für:
+Laufende Betriebskosten-Vorschüsse
+Rücklagenbeiträge (§ 31 WEG)
+Rückständige Beiträge des Voreigentümers (solidarische Haftung für BK-Rückstände bis zu 3 Jahren gemäß § 38 Abs 1 WEG)
+Automatische Berechnung offener Forderungen des Voreigentümers und Übernahme-Warnung
+§ 39 WEG – Rücklage:
+
+Der Anteil an der Instandhaltungsrücklage geht automatisch auf den neuen Eigentümer über
+Keine Auszahlung der Rücklage an den alten Eigentümer (ist Vermögen der WEG, nicht des einzelnen Eigentümers)
+Rücklagen-Anteil wird im System dem neuen Eigentümer zugeordnet
+BK-Abrechnung bei Eigentümerwechsel (§ 34 WEG):
+
+Für das Übergangsjahr wird die BK-Abrechnung tagesgenau aliquotiert:
+Alter Eigentümer: 01.01. bis Übergabedatum (exkl.)
+Neuer Eigentümer: Übergabedatum (inkl.) bis 31.12.
+Aliquotierung: Tage des jeweiligen Zeitraums / Gesamttage des Jahres × Jahres-Anteil
+3. Vorschreibungs-Generierung für neuen Eigentümer
+
+Ab dem Übergabedatum (oder dem 1. des Folgemonats, je nach Konfiguration) werden neue Vorschreibungen für den neuen Eigentümer erstellt
+Fälligkeit der neuen Vorschreibungen:
+Standard: 5. des jeweiligen Monats (oder vom User konfigurierbar)
+Erste Vorschreibung: Fällig zum nächsten regulären Fälligkeitstermin nach dem Übergabedatum
+Falls Übergabe mitten im Monat: Aliquotierung des Übergangsmonats (Tage neuer Eigentümer / Tage Monat × Monatsbetrag)
+Die Vorschreibung basiert auf dem aktiven Wirtschaftsplan und enthält:
+BK-Vorschuss (netto + UST)
+Rücklagenbeitrag (§ 31 WEG, nicht UST-pflichtig)
+Heizkosten-Akonto (falls zutreffend)
+Verwaltungshonorar-Anteil
+Gesamtbetrag brutto
+Alte Vorschreibungen des Voreigentümers werden ab Übergabedatum auf Status storniert gesetzt (falls noch offen und nicht fällig)
+Bereits fällige offene Vorschreibungen des Voreigentümers bleiben bestehen (→ Solidarhaftung § 38 WEG anzeigen)
+4. Abschlussrechnung Voreigentümer
+
+Automatisch generierte Abschlussrechnung für den bisherigen Eigentümer:
+Alle Zahlungen bis Übergabedatum
+Offene Forderungen (Rückstände)
+Aliquoter BK-Anteil bis Übergabedatum
+Kautionen (falls vorhanden – bei WEG eher selten)
+Saldo: Guthaben → Auszahlung / Schuld → Forderung
+Als PDF exportierbar
+5. PDF & E-Mail
+
+Übergabebestätigung PDF: Zusammenfassung des Eigentümerwechsels mit allen relevanten Daten
+Erste Vorschreibung PDF für neuen Eigentümer (Format wie bestehende Vorschreibungen)
+Willkommens-E-Mail an neuen Eigentümer mit:
+Begrüßung
+Liegenschafts-Informationen
+Monatlicher Vorschreibungsbetrag
+IBAN/BIC für Zahlungen
+Erste Vorschreibung als PDF-Anhang
+Ansprechpartner der Verwaltung
+Abschluss-E-Mail an alten Eigentümer mit Abschlussrechnung als PDF
+6. Audit-Trail & Dokumentation
+
+Jeder Eigentümerwechsel wird revisionssicher protokolliert:
+Wer hat den Wechsel erfasst?
+Wann wurde er grundbücherlich eingetragen?
+Welche Vorschreibungen wurden storniert/neu erstellt?
+Rücklagen-Übertrag dokumentiert
+Verknüpfung mit bestehendem audit_logs-System
+7. UI-Anforderungen
+
+Eigentümerwechsel-Dialog erreichbar über:
+Property-Detail → Eigentümer-Tab → Button „Eigentümerwechsel"
+Oder über die Einheit-Detail-Seite
+Wizard mit Schritten:
+Einheit & bisherigen Eigentümer auswählen
+Neuen Eigentümer eingeben (oder aus bestehenden Kontakten wählen)
+Übergabedatum & Grundbuchdaten eingeben
+Rechtsgrund auswählen
+Vorschau: Aliquotierung, erste Vorschreibung, offene Forderungen, Rücklagen-Stand
+Bestätigung & Durchführung
+Warnungen anzeigen bei:
+Offene Rückstände des Voreigentümers (→ § 38 WEG Solidarhaftung)
+Rücklage unter Mindestdotierung
+Laufende BK-Abrechnungsperiode noch nicht abgeschlossen
+Testdaten:
+
+Liegenschaft mit 5 Einheiten, Nutzwerte: 100, 80, 120, 60, 90 (Gesamt: 450)
+Aktiver Wirtschaftsplan mit Monatsvorschreibung €350 für Top 1 (Nutzwert 100)
+Eigentümerwechsel Top 1: Übergabe am 15.03., Grundbuch-Eintragung am 20.03.
+Voreigentümer hat €500 Rückstand aus Jänner + Februar
+Rücklagenstand gesamt: €50.000 (Anteil Top 1: €11.111)
+Prüfe: Aliquotierung März, neue Vorschreibungen ab April, Storno alte Vorschreibungen, Solidarhaftungs-Warnung
