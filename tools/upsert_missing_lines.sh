@@ -1,12 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TMP_DIR="tmp"
+mkdir -p "$TMP_DIR"
+
+usage() {
+  echo "Usage:"
+  echo "  Vollständiger Audit-Workflow:"
+  echo "    $0 YEAR MONTH [--persist]"
+  echo "    Beispiel: $0 2026 9 --persist"
+  echo ""
+  echo "  Direkt-Upsert aus CSV/JSON:"
+  echo "    $0 <datei.csv|datei.json> [RUN_ID] [--persist]"
+  echo "    Beispiel: $0 missing_lines.csv 88030ba3-... --persist"
+  echo ""
+  echo "  Standard: --dry-run (Vorschau ohne DB-Änderungen)"
+  exit 1
+}
+
+if [ $# -lt 1 ]; then
+  usage
+fi
+
+is_file_input() {
+  [[ "$1" == *.csv || "$1" == *.json ]] && [ -f "$1" ]
+}
+
+if is_file_input "${1:-}"; then
+  INPUT_FILE="$1"
+  RUN_ID="${2:-}"
+  MODE="${3:---dry-run}"
+
+  echo "=== ImmoflowMe Direkt-Upsert ==="
+  echo "Datei: ${INPUT_FILE}"
+  [ -n "$RUN_ID" ] && echo "RunId: ${RUN_ID}"
+  echo "Modus: ${MODE}"
+  echo ""
+
+  UPSERT_ARGS=""
+  if [[ "$INPUT_FILE" == *.csv ]]; then
+    UPSERT_ARGS="--csv=${INPUT_FILE}"
+  else
+    UPSERT_ARGS="--json=${INPUT_FILE}"
+  fi
+
+  [ -n "$RUN_ID" ] && UPSERT_ARGS="${UPSERT_ARGS} --run-id=${RUN_ID}"
+
+  if [ "$MODE" = "--persist" ]; then
+    LINES=$(wc -l < "$INPUT_FILE")
+    echo "ACHTUNG: Schreibe ~${LINES} Zeilen in die Datenbank..."
+    node tools/upsert_missing_lines.js ${UPSERT_ARGS}
+  else
+    echo "Vorschau:"
+    node tools/upsert_missing_lines.js ${UPSERT_ARGS} --dry-run
+  fi
+
+  echo ""
+  echo "=== Fertig ==="
+  exit 0
+fi
+
 YEAR="${1:-$(date +%Y)}"
 MONTH="${2:-$(date +%-m)}"
 MODE="${3:---dry-run}"
-TMP_DIR="tmp"
-
-mkdir -p "$TMP_DIR"
 
 echo "=== ImmoflowMe Vorschreibungs-Audit ==="
 echo "Periode: ${YEAR}-$(printf '%02d' $MONTH)"
@@ -33,12 +89,8 @@ node tools/export_db_lines.js "$RUN_ID" --out="$DB_FILE" || true
 echo ""
 
 echo "--- Schritt 3: Fehlende Zeilen finden ---"
-node tools/find_missing_lines.js "$DRYRUN_FILE" "$DB_FILE"
+node tools/find_missing_lines.js "$DRYRUN_FILE" "$DB_FILE" --out="$MISSING_FILE"
 echo ""
-
-if [ -f missing_lines.json ]; then
-  cp missing_lines.json "$MISSING_FILE"
-fi
 
 MISSING_COUNT=$(node -e "try{const d=require('./${MISSING_FILE}');console.log(d.length)}catch(e){console.log(0)}")
 
