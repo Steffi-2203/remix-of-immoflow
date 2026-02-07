@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 const router = Router();
@@ -415,6 +415,290 @@ router.delete("/api/weg/budget-lines/:id", async (req: Request, res: Response) =
   } catch (error) {
     console.error("Error deleting budget line:", error);
     res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
+// ====== WEG WIRTSCHAFTSPLAN PREVIEW & ACTIVATION ======
+
+router.get("/api/weg/budget-plans/:id/preview", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(404).json({ error: "Wirtschaftsplan nicht gefunden" });
+    const bp = plan[0];
+
+    const lines = await db.select().from(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.budgetPlanId, bp.id));
+
+    const unitOwners = await db.select().from(schema.wegUnitOwners).where(and(eq(schema.wegUnitOwners.propertyId, bp.propertyId), eq(schema.wegUnitOwners.organizationId, ctx.orgId)));
+    if (!unitOwners.length) return res.status(400).json({ error: "Keine Eigentümer für diese Liegenschaft hinterlegt" });
+
+    const unitIds = [...new Set(unitOwners.map(uo => uo.unitId))];
+    const ownerIds = [...new Set(unitOwners.map(uo => uo.ownerId))];
+
+    const unitsData = await db.select().from(schema.units).where(eq(schema.units.propertyId, bp.propertyId));
+    const ownersData = ownerIds.length > 0 ? await Promise.all(ownerIds.map(async (oid) => {
+      const [o] = await db.select().from(schema.owners).where(eq(schema.owners.id, oid));
+      return o;
+    })) : [];
+
+    const totalMea = unitOwners.reduce((s, uo) => s + parseFloat(String(uo.meaShare || '0')), 0);
+    if (totalMea <= 0) return res.status(400).json({ error: "Gesamt-MEA ist 0, bitte Anteile pflegen" });
+
+    const distributions: any[] = [];
+
+    for (const uo of unitOwners) {
+      const meaShare = parseFloat(String(uo.meaShare || '0'));
+      const ratio = meaShare / totalMea;
+      const unit = unitsData.find(u => u.id === uo.unitId);
+      const owner = ownersData.find(o => o && o.id === uo.ownerId);
+      const unitType = unit?.type || 'wohnung';
+
+      let bkNetto = 0;
+      let hkNetto = 0;
+      let sonstigesNetto = 0;
+      let ruecklage = 0;
+      let verwaltung = 0;
+
+      for (const line of lines) {
+        const lineAmount = parseFloat(String(line.amount || '0'));
+        const ownerShare = lineAmount * ratio;
+        const cat = (line.category || '').toLowerCase();
+
+        if (cat.includes('rücklage') || cat.includes('ruecklage') || cat.includes('rucklage')) {
+          ruecklage += ownerShare;
+        } else if (cat.includes('heiz') || cat.includes('wärme') || cat.includes('waerme')) {
+          hkNetto += ownerShare;
+        } else if (cat.includes('verwaltung') || cat.includes('honorar')) {
+          verwaltung += ownerShare;
+        } else if (cat.includes('betriebskosten') || cat.includes('wasser') || cat.includes('kanal') || cat.includes('müll') || cat.includes('muell') || cat.includes('versicherung') || cat.includes('hausbetreuung') || cat.includes('strom') || cat.includes('lift') || cat.includes('garten')) {
+          bkNetto += ownerShare;
+        } else {
+          sonstigesNetto += ownerShare;
+        }
+      }
+
+      const mgmtFee = parseFloat(String(bp.managementFee || '0')) * ratio;
+      verwaltung += mgmtFee;
+
+      const reserveContrib = parseFloat(String(bp.reserveContribution || '0')) * ratio;
+      ruecklage += reserveContrib;
+
+      const bkUstRate = (unitType === 'geschaeft' || unitType === 'garage') ? 20 : 10;
+      const hkUstRate = 20;
+      const verwUstRate = 20;
+
+      const bkUst = bkNetto * bkUstRate / 100;
+      const hkUst = hkNetto * hkUstRate / 100;
+      const verwUst = verwaltung * verwUstRate / 100;
+      const sonstigesUst = sonstigesNetto * 10 / 100;
+
+      const jahresTotal = bkNetto + bkUst + hkNetto + hkUst + ruecklage + verwaltung + verwUst + sonstigesNetto + sonstigesUst;
+      const monatsTotal = jahresTotal / 12;
+
+      distributions.push({
+        unit_owner_id: uo.id,
+        unit_id: uo.unitId,
+        owner_id: uo.ownerId,
+        unit_top: unit?.topNummer || '',
+        unit_type: unitType,
+        owner_name: owner ? `${owner.firstName} ${owner.lastName}` : 'Unbekannt',
+        owner_email: owner?.email || null,
+        mea_share: meaShare,
+        mea_ratio: ratio,
+        bk_netto_jahr: Math.round(bkNetto * 100) / 100,
+        bk_ust_rate: bkUstRate,
+        bk_ust_jahr: Math.round(bkUst * 100) / 100,
+        hk_netto_jahr: Math.round(hkNetto * 100) / 100,
+        hk_ust_rate: hkUstRate,
+        hk_ust_jahr: Math.round(hkUst * 100) / 100,
+        ruecklage_jahr: Math.round(ruecklage * 100) / 100,
+        verwaltung_netto_jahr: Math.round(verwaltung * 100) / 100,
+        verwaltung_ust_jahr: Math.round(verwUst * 100) / 100,
+        sonstiges_netto_jahr: Math.round(sonstigesNetto * 100) / 100,
+        sonstiges_ust_jahr: Math.round(sonstigesUst * 100) / 100,
+        jahres_total: Math.round(jahresTotal * 100) / 100,
+        monats_total: Math.round(monatsTotal * 100) / 100,
+      });
+    }
+
+    res.json({ plan: objectToSnakeCase(bp), distributions, total_mea: totalMea });
+  } catch (error) {
+    console.error("Error previewing budget plan:", error);
+    res.status(500).json({ error: "Fehler bei der Vorschau" });
+  }
+});
+
+router.post("/api/weg/budget-plans/:id/activate", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(404).json({ error: "Wirtschaftsplan nicht gefunden" });
+    const bp = plan[0];
+
+    if (bp.status !== 'beschlossen') {
+      return res.status(400).json({ error: "Wirtschaftsplan muss erst von der Eigentümerversammlung beschlossen werden (Status: beschlossen)" });
+    }
+
+    const existingInvoices = await db.select({ id: schema.monthlyInvoices.id }).from(schema.monthlyInvoices).where(eq(schema.monthlyInvoices.wegBudgetPlanId, bp.id)).limit(1);
+    if (existingInvoices.length > 0) {
+      return res.status(409).json({ error: "Für diesen Wirtschaftsplan wurden bereits Vorschreibungen generiert" });
+    }
+
+    const lines = await db.select().from(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.budgetPlanId, bp.id));
+    const unitOwners = await db.select().from(schema.wegUnitOwners).where(and(eq(schema.wegUnitOwners.propertyId, bp.propertyId), eq(schema.wegUnitOwners.organizationId, ctx.orgId)));
+
+    if (!unitOwners.length) return res.status(400).json({ error: "Keine Eigentümer hinterlegt" });
+
+    const unitsData = await db.select().from(schema.units).where(eq(schema.units.propertyId, bp.propertyId));
+    const totalMea = unitOwners.reduce((s, uo) => s + parseFloat(String(uo.meaShare || '0')), 0);
+    if (totalMea <= 0) return res.status(400).json({ error: "Gesamt-MEA ist 0" });
+
+    const dueDay = bp.dueDay || 5;
+    const year = bp.year;
+    const createdInvoices: any[] = [];
+
+    for (const uo of unitOwners) {
+      const meaShare = parseFloat(String(uo.meaShare || '0'));
+      const ratio = meaShare / totalMea;
+      const unit = unitsData.find(u => u.id === uo.unitId);
+      const unitType = unit?.type || 'wohnung';
+
+      let bkNetto = 0;
+      let hkNetto = 0;
+      let sonstigesNetto = 0;
+      let ruecklage = 0;
+      let verwaltung = 0;
+
+      for (const line of lines) {
+        const lineAmount = parseFloat(String(line.amount || '0'));
+        const ownerShare = lineAmount * ratio;
+        const cat = (line.category || '').toLowerCase();
+
+        if (cat.includes('rücklage') || cat.includes('ruecklage') || cat.includes('rucklage')) {
+          ruecklage += ownerShare;
+        } else if (cat.includes('heiz') || cat.includes('wärme') || cat.includes('waerme')) {
+          hkNetto += ownerShare;
+        } else if (cat.includes('verwaltung') || cat.includes('honorar')) {
+          verwaltung += ownerShare;
+        } else if (cat.includes('betriebskosten') || cat.includes('wasser') || cat.includes('kanal') || cat.includes('müll') || cat.includes('muell') || cat.includes('versicherung') || cat.includes('hausbetreuung') || cat.includes('strom') || cat.includes('lift') || cat.includes('garten')) {
+          bkNetto += ownerShare;
+        } else {
+          sonstigesNetto += ownerShare;
+        }
+      }
+
+      const mgmtFee = parseFloat(String(bp.managementFee || '0')) * ratio;
+      verwaltung += mgmtFee;
+      const reserveContrib = parseFloat(String(bp.reserveContribution || '0')) * ratio;
+      ruecklage += reserveContrib;
+
+      const bkUstRate = (unitType === 'geschaeft' || unitType === 'garage') ? 20 : 10;
+      const hkUstRate = 20;
+
+      const bkMonat = Math.round(bkNetto / 12 * 100) / 100;
+      const hkMonat = Math.round(hkNetto / 12 * 100) / 100;
+      const ruecklageMonat = Math.round(ruecklage / 12 * 100) / 100;
+      const verwMonat = Math.round(verwaltung / 12 * 100) / 100;
+      const sonstigesMonat = Math.round(sonstigesNetto / 12 * 100) / 100;
+
+      const bkUstMonat = Math.round(bkMonat * bkUstRate / 100 * 100) / 100;
+      const hkUstMonat = Math.round(hkMonat * hkUstRate / 100 * 100) / 100;
+      const verwUstMonat = Math.round(verwMonat * 20 / 100 * 100) / 100;
+      const sonstigesUstMonat = Math.round(sonstigesMonat * 10 / 100 * 100) / 100;
+
+      const totalUstMonat = bkUstMonat + hkUstMonat + verwUstMonat + sonstigesUstMonat;
+      const gesamtMonat = bkMonat + bkUstMonat + hkMonat + hkUstMonat + ruecklageMonat + verwMonat + verwUstMonat + sonstigesMonat + sonstigesUstMonat;
+
+      for (let month = 1; month <= 12; month++) {
+        const faelligAm = `${year}-${String(month).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
+
+        const [invoice] = await db.insert(schema.monthlyInvoices).values({
+          unitId: uo.unitId,
+          tenantId: null,
+          year,
+          month,
+          grundmiete: '0',
+          betriebskosten: String(bkMonat + sonstigesMonat + verwMonat),
+          heizungskosten: String(hkMonat),
+          wasserkosten: '0',
+          ustSatzBk: bkUstRate,
+          ustSatzHeizung: hkUstRate,
+          ustSatzMiete: 0,
+          ustSatzWasser: 0,
+          ust: String(totalUstMonat),
+          gesamtbetrag: String(Math.round(gesamtMonat * 100) / 100),
+          status: 'offen',
+          faelligAm,
+          isVacancy: false,
+          wegBudgetPlanId: bp.id,
+          ownerId: uo.ownerId,
+        }).returning();
+
+        createdInvoices.push(invoice);
+      }
+    }
+
+    await db.update(schema.wegBudgetPlans).set({
+      status: 'aktiv',
+      activatedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(schema.wegBudgetPlans.id, bp.id));
+
+    res.json({
+      success: true,
+      message: `${createdInvoices.length} Vorschreibungen für ${unitOwners.length} Eigentümer generiert`,
+      invoices_count: createdInvoices.length,
+      owners_count: unitOwners.length,
+    });
+  } catch (error) {
+    console.error("Error activating budget plan:", error);
+    res.status(500).json({ error: "Fehler beim Aktivieren" });
+  }
+});
+
+router.get("/api/weg/budget-plans/:id/vorschreibungen", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(404).json({ error: "Nicht gefunden" });
+
+    const invoices = await db.select().from(schema.monthlyInvoices).where(eq(schema.monthlyInvoices.wegBudgetPlanId, req.params.id)).orderBy(schema.monthlyInvoices.month);
+
+    const ownerIds = [...new Set(invoices.filter(i => i.ownerId).map(i => i.ownerId!))];
+    const unitIds = [...new Set(invoices.map(i => i.unitId))];
+
+    const ownersMap: Record<string, any> = {};
+    if (ownerIds.length > 0) {
+      const owners = await db.select().from(schema.owners).where(inArray(schema.owners.id, ownerIds));
+      for (const o of owners) ownersMap[o.id] = o;
+    }
+    const unitsMap: Record<string, any> = {};
+    if (unitIds.length > 0) {
+      const propertyId = plan[0].propertyId;
+      const units = await db.select().from(schema.units).where(and(inArray(schema.units.id, unitIds), eq(schema.units.propertyId, propertyId)));
+      for (const u of units) unitsMap[u.id] = u;
+    }
+
+    const enriched = invoices.map(inv => ({
+      ...objectToSnakeCase(inv),
+      owner_name: inv.ownerId && ownersMap[inv.ownerId] ? `${ownersMap[inv.ownerId].firstName} ${ownersMap[inv.ownerId].lastName}` : null,
+      unit_top: unitsMap[inv.unitId]?.topNummer || null,
+      unit_type: unitsMap[inv.unitId]?.type || null,
+    }));
+
+    res.json(enriched);
+  } catch (error) {
+    console.error("Error fetching Vorschreibungen:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
   }
 });
 
