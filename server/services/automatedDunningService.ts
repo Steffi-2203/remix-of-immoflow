@@ -2,6 +2,7 @@ import { db } from "../db";
 import { monthlyInvoices, tenants, units, properties, messages } from "@shared/schema";
 import { eq, and, lt, or, isNull, inArray } from "drizzle-orm";
 import { sendEmail } from "../lib/resend";
+import { roundMoney } from "@shared/utils";
 import { format, differenceInDays, addDays } from "date-fns";
 import { de } from "date-fns/locale";
 
@@ -88,7 +89,9 @@ export class AutomatedDunningService {
       const newDunningLevel = this.getDunningLevel(daysOverdue);
       
       if (newDunningLevel.level > currentLevel && row.tenant.email) {
-        const amount = Number(row.invoice.gesamtbetrag) || 0;
+        const invoiceTotal = Number(row.invoice.gesamtbetrag) || 0;
+        const paidAmount = Number(row.invoice.paidAmount) || 0;
+        const amount = roundMoney(invoiceTotal - paidAmount);
         const interest = this.calculateInterest(amount, daysOverdue);
         const fee = newDunningLevel.fee;
         
@@ -96,7 +99,7 @@ export class AutomatedDunningService {
           invoiceId: row.invoice.id,
           tenantId: row.tenant.id,
           tenantEmail: row.tenant.email,
-          tenantName: `${row.tenant.vorname || ''} ${row.tenant.nachname || ''}`.trim(),
+          tenantName: `${row.tenant.firstName || ''} ${row.tenant.lastName || ''}`.trim(),
           propertyName: row.property.name || '',
           unitNumber: row.unit.topNummer || '',
           currentLevel,

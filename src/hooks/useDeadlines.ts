@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface Deadline {
@@ -36,53 +36,60 @@ export function getCategoryLabel(cat: string): string {
 
 export function useDeadlines(filters?: { status?: string; category?: string; propertyId?: string }) {
   return useQuery({
-    queryKey: ['deadlines', filters],
+    queryKey: ['/api/deadlines', filters],
     queryFn: async () => {
-      let query = supabase.from('deadlines' as any).select('*').order('deadline_date', { ascending: true });
-      if (filters?.status) query = query.eq('status', filters.status);
-      if (filters?.category) query = query.eq('category', filters.category);
-      if (filters?.propertyId) query = query.eq('property_id', filters.propertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as Deadline[];
+      const params = new URLSearchParams();
+      if (filters?.status) params.set('status', filters.status);
+      if (filters?.category) params.set('category', filters.category);
+      if (filters?.propertyId) params.set('propertyId', filters.propertyId);
+      const qs = params.toString();
+      const res = await fetch(`/api/deadlines${qs ? `?${qs}` : ''}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<Deadline[]>;
     },
   });
 }
 
 export function useCreateDeadline() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (deadline: Omit<Deadline, 'id' | 'created_at' | 'updated_at' | 'reminder_sent_at'>) => {
-      const { data, error } = await supabase.from('deadlines' as any).insert(deadline as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/deadlines', deadline);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['deadlines'] }); toast.success('Frist erstellt'); },
-    onError: () => { toast.error('Fehler beim Erstellen'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/deadlines'] });
+      toast.success('Frist erstellt');
+    },
+    onError: () => toast.error('Fehler beim Erstellen'),
   });
 }
 
 export function useUpdateDeadline() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<Deadline>) => {
-      const { data, error } = await supabase.from('deadlines' as any).update(updates as any).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('PATCH', `/api/deadlines/${id}`, updates);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['deadlines'] }); toast.success('Frist aktualisiert'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/deadlines'] });
+      toast.success('Frist aktualisiert');
+    },
+    onError: () => toast.error('Fehler'),
   });
 }
 
 export function useDeleteDeadline() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('deadlines' as any).delete().eq('id', id);
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/deadlines/${id}`);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['deadlines'] }); toast.success('Frist gelöscht'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/deadlines'] });
+      toast.success('Frist gelöscht');
+    },
+    onError: () => toast.error('Fehler'),
   });
 }

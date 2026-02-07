@@ -934,3 +934,267 @@ export const whiteLabelLicenses = pgTable("white_label_licenses", {
 export const insertWhiteLabelLicenseSchema = createInsertSchema(whiteLabelLicenses).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWhiteLabelLicense = z.infer<typeof insertWhiteLabelLicenseSchema>;
 export type WhiteLabelLicense = typeof whiteLabelLicenses.$inferSelect;
+
+// ====== WEG VERSAMMLUNGEN (WEG ASSEMBLIES) ======
+export const wegAssemblies = pgTable("weg_assemblies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  title: text("title").notNull(),
+  assemblyDate: timestamp("assembly_date", { withTimezone: true }).notNull(),
+  location: text("location"),
+  protocolUrl: text("protocol_url"),
+  status: text("status").default('geplant'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegAssemblySchema = createInsertSchema(wegAssemblies).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegAssembly = z.infer<typeof insertWegAssemblySchema>;
+export type WegAssembly = typeof wegAssemblies.$inferSelect;
+
+// ====== WEG ABSTIMMUNGEN (WEG VOTES) ======
+export const wegVotes = pgTable("weg_votes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  assemblyId: uuid("assembly_id").references(() => wegAssemblies.id).notNull(),
+  topic: text("topic").notNull(),
+  description: text("description"),
+  votesYes: integer("votes_yes").default(0),
+  votesNo: integer("votes_no").default(0),
+  votesAbstain: integer("votes_abstain").default(0),
+  result: text("result"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegVoteSchema = createInsertSchema(wegVotes).omit({ id: true, createdAt: true });
+export type InsertWegVote = z.infer<typeof insertWegVoteSchema>;
+export type WegVote = typeof wegVotes.$inferSelect;
+
+// ====== WEG RÜCKLAGE (WEG RESERVE FUND) ======
+export const wegReserveFund = pgTable("weg_reserve_fund", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).default('0'),
+  description: text("description"),
+  entryType: text("entry_type").default('einzahlung'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegReserveFundSchema = createInsertSchema(wegReserveFund).omit({ id: true, createdAt: true });
+export type InsertWegReserveFund = z.infer<typeof insertWegReserveFundSchema>;
+export type WegReserveFund = typeof wegReserveFund.$inferSelect;
+
+// ====== VERSICHERUNGSPOLICEN (INSURANCE POLICIES) ======
+export const insurancePolicies = pgTable("insurance_policies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  insuranceType: text("insurance_type").default('gebaeudeversicherung'),
+  provider: text("provider").notNull(),
+  policyNumber: text("policy_number"),
+  coverageAmount: numeric("coverage_amount", { precision: 12, scale: 2 }),
+  annualPremium: numeric("annual_premium", { precision: 12, scale: 2 }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  autoRenew: boolean("auto_renew").default(true),
+  contactPerson: text("contact_person"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertInsurancePolicySchema = createInsertSchema(insurancePolicies).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInsurancePolicy = z.infer<typeof insertInsurancePolicySchema>;
+export type InsurancePolicy = typeof insurancePolicies.$inferSelect;
+
+// ====== VERSICHERUNGSSCHÄDEN (INSURANCE CLAIMS) ======
+export const insuranceClaims = pgTable("insurance_claims", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  insurancePolicyId: uuid("insurance_policy_id").references(() => insurancePolicies.id).notNull(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id),
+  claimDate: date("claim_date").notNull(),
+  description: text("description").notNull(),
+  damageAmount: numeric("damage_amount", { precision: 12, scale: 2 }),
+  reimbursedAmount: numeric("reimbursed_amount", { precision: 12, scale: 2 }).default('0'),
+  status: text("status").default('gemeldet'),
+  claimNumber: text("claim_number"),
+  documentUrl: text("document_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertInsuranceClaimSchema = createInsertSchema(insuranceClaims).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInsuranceClaim = z.infer<typeof insertInsuranceClaimSchema>;
+export type InsuranceClaim = typeof insuranceClaims.$inferSelect;
+
+// ====== FRISTEN (DEADLINES) ======
+export const deadlines = pgTable("deadlines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  deadlineDate: date("deadline_date").notNull(),
+  reminderDays: integer("reminder_days").default(14),
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+  category: text("category").default('sonstiges'),
+  sourceType: text("source_type"),
+  sourceId: uuid("source_id"),
+  isRecurring: boolean("is_recurring").default(false),
+  recurrenceMonths: integer("recurrence_months"),
+  status: text("status").default('offen'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDeadlineSchema = createInsertSchema(deadlines).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDeadline = z.infer<typeof insertDeadlineSchema>;
+export type Deadline = typeof deadlines.$inferSelect;
+
+// ====== BRIEFVORLAGEN (LETTER TEMPLATES) ======
+export const letterTemplates = pgTable("letter_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  name: text("name").notNull(),
+  category: text("category").default('allgemein'),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertLetterTemplateSchema = createInsertSchema(letterTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLetterTemplate = z.infer<typeof insertLetterTemplateSchema>;
+export type LetterTemplate = typeof letterTemplates.$inferSelect;
+
+// ====== SERIENBRIEFE (SERIAL LETTERS) ======
+export const serialLetters = pgTable("serial_letters", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id),
+  templateId: uuid("template_id").references(() => letterTemplates.id),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  recipientCount: integer("recipient_count").default(0),
+  sentVia: text("sent_via").default('pdf'),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertSerialLetterSchema = createInsertSchema(serialLetters).omit({ id: true, createdAt: true });
+export type InsertSerialLetter = z.infer<typeof insertSerialLetterSchema>;
+export type SerialLetter = typeof serialLetters.$inferSelect;
+
+// ====== VERWALTUNGSVERTRÄGE (MANAGEMENT CONTRACTS) ======
+export const managementContracts = pgTable("management_contracts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id),
+  ownerName: text("owner_name"),
+  contractType: text("contract_type").default('hausverwaltung'),
+  title: text("title").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date"),
+  autoRenew: boolean("auto_renew").default(true),
+  renewalMonths: integer("renewal_months").default(12),
+  noticePeriodMonths: integer("notice_period_months").default(3),
+  noticeDeadline: text("notice_deadline"),
+  monthlyFee: numeric("monthly_fee", { precision: 10, scale: 2 }),
+  feeType: text("fee_type").default('pro_einheit'),
+  notes: text("notes"),
+  documentUrl: text("document_url"),
+  status: text("status").default('aktiv'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertManagementContractSchema = createInsertSchema(managementContracts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertManagementContract = z.infer<typeof insertManagementContractSchema>;
+export type ManagementContract = typeof managementContracts.$inferSelect;
+
+// ====== HEIZKOSTENABLESUNGEN (HEATING COST READINGS) ======
+export const heatingCostReadings = pgTable("heating_cost_readings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  periodFrom: date("period_from").notNull(),
+  periodTo: date("period_to").notNull(),
+  consumption: numeric("consumption", { precision: 12, scale: 4 }).default('0'),
+  consumptionUnit: text("consumption_unit").default('kWh'),
+  costShare: numeric("cost_share", { precision: 12, scale: 2 }).default('0'),
+  source: text("source").default('manual'),
+  provider: text("provider"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertHeatingCostReadingSchema = createInsertSchema(heatingCostReadings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertHeatingCostReading = z.infer<typeof insertHeatingCostReadingSchema>;
+export type HeatingCostReading = typeof heatingCostReadings.$inferSelect;
+
+// ====== EIGENTÜMER-AUSZAHLUNGEN (OWNER PAYOUTS) ======
+export const ownerPayouts = pgTable("owner_payouts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  ownerId: uuid("owner_id").references(() => propertyOwners.id).notNull(),
+  periodFrom: date("period_from").notNull(),
+  periodTo: date("period_to").notNull(),
+  totalIncome: numeric("total_income", { precision: 12, scale: 2 }).default('0'),
+  totalExpenses: numeric("total_expenses", { precision: 12, scale: 2 }).default('0'),
+  managementFee: numeric("management_fee", { precision: 12, scale: 2 }).default('0'),
+  netPayout: numeric("net_payout", { precision: 12, scale: 2 }).default('0'),
+  status: text("status").default('entwurf'),
+  pdfUrl: text("pdf_url"),
+  sepaExportedAt: timestamp("sepa_exported_at", { withTimezone: true }),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertOwnerPayoutSchema = createInsertSchema(ownerPayouts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOwnerPayout = z.infer<typeof insertOwnerPayoutSchema>;
+export type OwnerPayout = typeof ownerPayouts.$inferSelect;
+
+// ====== BENUTZER-ORGANISATIONEN (USER ORGANIZATIONS) ======
+export const userOrganizations = pgTable("user_organizations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  role: text("role").default('viewer'),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({ id: true, createdAt: true });
+export type InsertUserOrganization = z.infer<typeof insertUserOrganizationSchema>;
+export type UserOrganization = typeof userOrganizations.$inferSelect;
+
+// ====== MIETERPORTAL-ZUGANG (TENANT PORTAL ACCESS) ======
+export const tenantPortalAccess = pgTable("tenant_portal_access", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  email: text("email").notNull(),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertTenantPortalAccessSchema = createInsertSchema(tenantPortalAccess).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTenantPortalAccess = z.infer<typeof insertTenantPortalAccessSchema>;
+export type TenantPortalAccess = typeof tenantPortalAccess.$inferSelect;

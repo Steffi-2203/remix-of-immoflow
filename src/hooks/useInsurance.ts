@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface InsurancePolicy {
@@ -43,101 +43,109 @@ export interface InsuranceClaim {
 
 export function useInsurancePolicies(propertyId?: string) {
   return useQuery({
-    queryKey: ['insurance-policies', propertyId],
+    queryKey: ['/api/insurance/policies', propertyId],
     queryFn: async () => {
-      let query = supabase.from('insurance_policies' as any).select('*').order('end_date', { ascending: true });
-      if (propertyId) query = query.eq('property_id', propertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as InsurancePolicy[];
+      const params = propertyId ? `?propertyId=${propertyId}` : '';
+      const res = await fetch(`/api/insurance/policies${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<InsurancePolicy[]>;
     },
   });
 }
 
 export function useCreateInsurancePolicy() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (policy: Omit<InsurancePolicy, 'id' | 'created_at' | 'updated_at'>) => {
-      const { data, error } = await supabase.from('insurance_policies' as any).insert(policy as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/insurance/policies', policy);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung angelegt'); },
-    onError: () => { toast.error('Fehler beim Anlegen'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/insurance/policies'] });
+      toast.success('Versicherung angelegt');
+    },
+    onError: () => toast.error('Fehler beim Anlegen'),
   });
 }
 
 export function useUpdateInsurancePolicy() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<InsurancePolicy>) => {
-      const { data, error } = await supabase.from('insurance_policies' as any).update(updates as any).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('PATCH', `/api/insurance/policies/${id}`, updates);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung aktualisiert'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/insurance/policies'] });
+      toast.success('Versicherung aktualisiert');
+    },
+    onError: () => toast.error('Fehler'),
   });
 }
 
 export function useDeleteInsurancePolicy() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('insurance_policies' as any).delete().eq('id', id);
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/insurance/policies/${id}`);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung gelöscht'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/insurance/policies'] });
+      toast.success('Versicherung gelöscht');
+    },
+    onError: () => toast.error('Fehler'),
   });
 }
 
 export function useInsuranceClaims(policyId?: string) {
   return useQuery({
-    queryKey: ['insurance-claims', policyId],
+    queryKey: ['/api/insurance/claims', policyId],
     queryFn: async () => {
-      let query = supabase.from('insurance_claims' as any).select('*').order('claim_date', { ascending: false });
-      if (policyId) query = query.eq('insurance_policy_id', policyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as InsuranceClaim[];
+      const params = policyId ? `?policyId=${policyId}` : '';
+      const res = await fetch(`/api/insurance/claims${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<InsuranceClaim[]>;
     },
   });
 }
 
 export function useAllInsuranceClaims() {
   return useQuery({
-    queryKey: ['insurance-claims-all'],
+    queryKey: ['/api/insurance/claims'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('insurance_claims' as any).select('*').order('claim_date', { ascending: false });
-      if (error) throw error;
-      return data as unknown as InsuranceClaim[];
+      const res = await fetch('/api/insurance/claims', { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<InsuranceClaim[]>;
     },
   });
 }
 
 export function useCreateInsuranceClaim() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (claim: Omit<InsuranceClaim, 'id' | 'created_at' | 'updated_at'>) => {
-      const { data, error } = await supabase.from('insurance_claims' as any).insert(claim as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/insurance/claims', claim);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-claims'] }); qc.invalidateQueries({ queryKey: ['insurance-claims-all'] }); toast.success('Schaden gemeldet'); },
-    onError: () => { toast.error('Fehler bei der Schadensmeldung'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/insurance/claims'] });
+      toast.success('Schadensmeldung erstellt');
+    },
+    onError: () => toast.error('Fehler beim Erstellen'),
   });
 }
 
 export function useUpdateInsuranceClaim() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<InsuranceClaim>) => {
-      const { data, error } = await supabase.from('insurance_claims' as any).update(updates as any).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('PATCH', `/api/insurance/claims/${id}`, updates);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-claims'] }); qc.invalidateQueries({ queryKey: ['insurance-claims-all'] }); toast.success('Status aktualisiert'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/insurance/claims'] });
+      toast.success('Schadensmeldung aktualisiert');
+    },
+    onError: () => toast.error('Fehler'),
   });
 }

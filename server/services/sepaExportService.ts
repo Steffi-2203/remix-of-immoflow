@@ -74,9 +74,9 @@ export class SepaExportService {
       .map(d => ({
         id: d.invoice.id,
         tenantId: d.tenant.id,
-        tenantName: `${d.tenant.vorname || ''} ${d.tenant.nachname || ''}`.trim() || 'Unbekannt',
+        tenantName: `${d.tenant.firstName || ''} ${d.tenant.lastName || ''}`.trim() || 'Unbekannt',
         iban: d.tenant.iban!.replace(/\s/g, ''),
-        bic: d.tenant.bic || 'NOTPROVIDED',
+        bic: d.tenant.bic || '',
         amount: Number(d.invoice.gesamtbetrag) || 0,
         reference: `Miete ${d.invoice.month}/${d.invoice.year} - ${d.property.name} ${d.unit.topNummer}`,
         endToEndId: this.generateEndToEndId(d.tenant.id, d.invoice.month, d.invoice.year),
@@ -89,7 +89,9 @@ export class SepaExportService {
     const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
     const messageId = this.generateMessageId();
     const creationDateTime = new Date().toISOString();
-    const requestedCollectionDate = format(new Date(), 'yyyy-MM-dd');
+    const collectionDate = new Date();
+    collectionDate.setDate(collectionDate.getDate() + 5);
+    const requestedCollectionDate = format(collectionDate, 'yyyy-MM-dd');
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -152,7 +154,7 @@ ${payments.map(p => `      <DrctDbtTxInf>
         <DrctDbtTx>
           <MndtRltdInf>
             <MndtId>MNDT-${p.tenantId.substr(0, 16)}</MndtId>
-            <DtOfSgntr>2020-01-01</DtOfSgntr>
+            <DtOfSgntr>${invoicesData.find(d => d.tenant.id === p.tenantId)?.tenant.sepaMandatDatum || format(new Date(), 'yyyy-MM-dd')}</DtOfSgntr>
           </MndtRltdInf>
         </DrctDbtTx>
         <DbtrAgt>

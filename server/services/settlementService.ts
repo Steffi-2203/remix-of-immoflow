@@ -101,7 +101,13 @@ export class SettlementService {
       ));
 
     const totalPrepayments = yearInvoices.reduce((sum, inv) => {
-      return sum + Number(inv.betriebskosten || 0) + Number(inv.heizungskosten || 0);
+      const bkPrescribed = Number(inv.betriebskosten || 0) + Number(inv.heizungskosten || 0);
+      const invoiceTotal = Number(inv.gesamtbetrag || 0);
+      const paidAmount = Number(inv.paidAmount || 0);
+      if (invoiceTotal <= 0) return sum;
+      const bkRatio = bkPrescribed / invoiceTotal;
+      const bkPaid = roundMoney(paidAmount * bkRatio);
+      return sum + bkPaid;
     }, 0);
 
     return roundMoney(totalPrepayments);
@@ -227,7 +233,10 @@ export class SettlementService {
 
     const unitIds = propertyUnits.map(u => u.id);
     const propertyTenants = await db.select().from(tenants)
-      .where(inArray(tenants.unitId, unitIds));
+      .where(and(
+        inArray(tenants.unitId, unitIds),
+        eq(tenants.status, 'aktiv')
+      ));
 
     const tenantResults: TenantSettlementResult[] = [];
 

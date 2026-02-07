@@ -32,3 +32,11 @@ export function useIsAdmin() {
     isLoading,
   };
 }
+
+export function useIsTester() {
+  const { data: role, isLoading } = useUserRole();
+  return {
+    isTester: role === ('tester' as AppRole),
+    isLoading,
+  };
+}

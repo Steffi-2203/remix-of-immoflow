@@ -100,10 +100,12 @@ export class InvoiceGenerator {
       }
     }
     
-    const ust = roundMoney(ustMiete + ustBk + ustHeizung + ustSonstige);
+    const wasserkosten = roundMoney(Number(tenant.wasserkostenVorschuss) || 0);
+    const ustWasser = roundMoney(this.calculateVatFromGross(wasserkosten, vatRates.ustSatzBk));
+    const ust = roundMoney(ustMiete + ustBk + ustHeizung + ustWasser + ustSonstige);
 
     const vortragGesamt = roundMoney((carryForward.vortragMiete || 0) + (carryForward.vortragBk || 0) + (carryForward.vortragHk || 0) + (carryForward.vortragSonstige || 0));
-    const gesamtbetrag = roundMoney(grundmiete + betriebskosten + heizungskosten + sonstigeSum + vortragGesamt);
+    const gesamtbetrag = roundMoney(grundmiete + betriebskosten + heizungskosten + wasserkosten + sonstigeSum + vortragGesamt);
 
     return {
       tenantId: tenant.id,

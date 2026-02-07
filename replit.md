@@ -66,9 +66,19 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - Modal blocking access upon demo expiration with upgrade/contact options
     - Routes: `/demo` (request), `/demo/activate` (activation), `/api/demo/*` (backend)
 
+- **WEG Management**: Assembly tracking (Eigentümerversammlungen), voting records (Abstimmungen), and reserve fund (Instandhaltungsrücklage) management. Routes: `/weg`, API: `/api/weg/*`.
+- **Insurance Management**: Policy tracking (Gebäudeversicherung, Haftpflicht, etc.) and claims management (Schadensmeldungen). Routes: `/versicherungen`, API: `/api/insurance/*`.
+- **Deadline Calendar**: Unified deadline/reminder system for contracts, insurance renewals, maintenance, settlements, and tax deadlines. Routes: `/fristen`, API: `/api/deadlines`.
+- **Serial Letters**: Template-based bulk letter generation with placeholder substitution for tenants. Routes: `/serienbriefe`, API: `/api/letter-templates`, `/api/serial-letters`.
+- **Management Contracts**: HV-Vertrag tracking with auto-renewal, notice periods, and fee management. Routes: `/hv-vertraege`, API: `/api/management-contracts`.
+- **Heating Cost Import**: External heating cost readings (ISTA/Techem) with CSV import support. API: `/api/heating-cost-readings`.
+- **Owner Payouts**: Eigentümer-Auszahlung calculation with income/expense/fee breakdown. API: `/api/owner-payouts`.
+- **Organization Switcher**: Multi-mandant support via `user_organizations` table for managing multiple HV organizations.
+- **Feature Routes Architecture**: New feature modules use a separate `server/routes/featureRoutes.ts` with snake_case↔camelCase auto-conversion between frontend and Drizzle ORM, organization-scoped access control on all CRUD operations.
+
 **System Design Choices:**
 - **Modular Structure**: The project is organized into `server/`, `shared/`, and `src/` directories for clear separation of backend, shared schemas, and frontend concerns.
-- **Drizzle ORM**: Used for type-safe database interactions and schema management, with over 30 tables covering organizations, users, properties, tenants, financials, settlements, maintenance, and MRG compliance.
+- **Drizzle ORM**: Used for type-safe database interactions and schema management, with 45+ tables covering organizations, users, properties, tenants, financials, settlements, maintenance, MRG compliance, WEG management, insurance, deadlines, serial letters, management contracts, heating cost readings, and owner payouts.
 - **Leases Table**: Dedicated `leases` table for rental contract history, linking tenants to units with start/end dates, rent amounts, and deposit tracking. Enables multiple sequential leases per unit.
 - **Payment Allocations**: `payment_allocations` table enables flexible 1:n payment-to-invoice mapping for partial payments, overpayments, and multi-invoice allocation.
 - **Migrated Functions**: Key business logic functions, originally Supabase Edge Functions, are now integrated directly into the Express.js backend for unified management.

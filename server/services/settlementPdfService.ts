@@ -89,15 +89,17 @@ export class SettlementPdfService {
       .leftJoin(distributionKeys, eq(expenses.distributionKeyId, distributionKeys.id))
       .where(and(
         eq(expenses.propertyId, settlement[0].propertyId),
-        eq(expenses.isOperatingCost, true),
+        eq(expenses.istUmlagefaehig, true),
         between(expenses.datum, 
           new Date(settlement[0].year, 0, 1).toISOString(),
           new Date(settlement[0].year, 11, 31).toISOString()
         )
       ));
 
-    const totalUnitArea = Number(firstDetail.unit.qm) || 50;
-    const propertyTotalArea = 500;
+    const totalUnitArea = Number(firstDetail.unit.flaeche) || 50;
+    const allUnits = await db.select().from(units)
+      .where(eq(units.propertyId, settlement[0].propertyId));
+    const propertyTotalArea = allUnits.reduce((sum, u) => sum + (Number(u.flaeche) || 0), 0) || totalUnitArea;
 
     return {
       property: {
@@ -107,7 +109,7 @@ export class SettlementPdfService {
         postalCode: property[0].plz || '',
       },
       tenant: {
-        name: `${firstDetail.tenant.vorname || ''} ${firstDetail.tenant.nachname || ''}`.trim(),
+        name: `${firstDetail.tenant.firstName || ''} ${firstDetail.tenant.lastName || ''}`.trim(),
         address: `${property[0].strasse}, ${property[0].plz} ${property[0].ort}`,
         unitNumber: firstDetail.unit.topNummer || '',
         qm: totalUnitArea,
@@ -126,10 +128,10 @@ export class SettlementPdfService {
         percentage: totalUnitArea / propertyTotalArea,
       })),
       summary: {
-        totalExpenses: Number(firstDetail.detail.totalExpenses) || 0,
-        tenantShare: Number(firstDetail.detail.tenantShare) || 0,
-        prepayments: Number(firstDetail.detail.prepayments) || 0,
-        balance: Number(firstDetail.detail.balance) || 0,
+        totalExpenses: Number(firstDetail.detail.ausgabenAnteil) || 0,
+        tenantShare: Number(firstDetail.detail.ausgabenAnteil) || 0,
+        prepayments: Number(firstDetail.detail.vorschuss) || 0,
+        balance: Number(firstDetail.detail.differenz) || 0,
       },
       organization: {
         name: 'Hausverwaltung',

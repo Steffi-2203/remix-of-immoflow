@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface OwnerPayout {
@@ -24,86 +24,56 @@ export interface OwnerPayout {
 
 export function useOwnerPayouts(propertyId?: string) {
   return useQuery({
-    queryKey: ['owner-payouts', propertyId],
+    queryKey: ['/api/owner-payouts', propertyId],
     queryFn: async () => {
-      let query = supabase
-        .from('owner_payouts' as any)
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (propertyId) query = query.eq('property_id', propertyId);
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as OwnerPayout[];
+      const params = propertyId ? `?propertyId=${propertyId}` : '';
+      const res = await fetch(`/api/owner-payouts${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<OwnerPayout[]>;
     },
   });
 }
 
 export function useCreateOwnerPayout() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (payout: Omit<OwnerPayout, 'id' | 'created_at' | 'updated_at' | 'pdf_url' | 'sepa_exported_at' | 'email_sent_at'>) => {
-      const { data, error } = await supabase
-        .from('owner_payouts' as any)
-        .insert(payout as any)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as unknown as OwnerPayout;
+      const res = await apiRequest('POST', '/api/owner-payouts', payout);
+      return res.json() as Promise<OwnerPayout>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['owner-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/owner-payouts'] });
       toast.success('Eigentümer-Abrechnung erstellt');
     },
-    onError: () => {
-      toast.error('Fehler beim Erstellen der Abrechnung');
-    },
+    onError: () => toast.error('Fehler beim Erstellen der Abrechnung'),
   });
 }
 
 export function useUpdateOwnerPayout() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<OwnerPayout>) => {
-      const { data, error } = await supabase
-        .from('owner_payouts' as any)
-        .update(updates as any)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data as unknown as OwnerPayout;
+      const res = await apiRequest('PATCH', `/api/owner-payouts/${id}`, updates);
+      return res.json() as Promise<OwnerPayout>;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['owner-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/owner-payouts'] });
       toast.success('Abrechnung aktualisiert');
     },
-    onError: () => {
-      toast.error('Fehler beim Aktualisieren');
-    },
+    onError: () => toast.error('Fehler beim Aktualisieren'),
   });
 }
 
 export function useDeleteOwnerPayout() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('owner_payouts' as any)
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/owner-payouts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['owner-payouts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/owner-payouts'] });
       toast.success('Abrechnung gelöscht');
     },
-    onError: () => {
-      toast.error('Fehler beim Löschen');
-    },
+    onError: () => toast.error('Fehler beim Löschen'),
   });
 }

@@ -114,8 +114,8 @@ export class OwnerReportingService {
             ));
 
           for (const inv of invoices) {
-            rentIncome += Number(inv.hauptmiete) || 0;
-            operatingCostsIncome += (Number(inv.betriebskosten) || 0) + (Number(inv.heizkosten) || 0);
+            rentIncome += Number(inv.grundmiete) || 0;
+            operatingCostsIncome += (Number(inv.betriebskosten) || 0) + (Number(inv.heizungskosten) || 0);
             
             if (inv.status !== 'bezahlt') {
               totalReceivables += Number(inv.gesamtbetrag) || 0;
