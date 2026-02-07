@@ -66,7 +66,16 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - Modal blocking access upon demo expiration with upgrade/contact options
     - Routes: `/demo` (request), `/demo/activate` (activation), `/api/demo/*` (backend)
 
-- **WEG Management**: Assembly tracking (Eigentümerversammlungen), voting records (Abstimmungen), and reserve fund (Instandhaltungsrücklage) management. Routes: `/weg`, API: `/api/weg/*`.
+- **WEG Management** (Wohnungseigentumsgesetz 2002): Comprehensive WEG compliance with:
+    - **Eigentümer & MEA**: Unit-owner assignments with Miteigentumsanteile (co-ownership shares) per § 2 WEG (`weg_unit_owners` table)
+    - **Versammlungen**: Assembly tracking with types (ordentlich/außerordentlich/Umlaufbeschluss), invitation deadline compliance per § 25 Abs 2 (14-day rule), quorum tracking, protocol management
+    - **Tagesordnungspunkte (TOPs)**: Agenda items per assembly with numbering and categories
+    - **Abstimmungen**: MEA-weighted voting per § 24 WEG with required majority types (einfach >50%, qualifiziert >66.67%, einstimmig 100%), per-owner vote recording (`weg_owner_votes`)
+    - **Wirtschaftsplan**: Annual budget plans per § 31 WEG with line items, allocation keys, and reserve contribution tracking
+    - **Instandhaltungsrücklage**: Reserve fund per § 31 WEG with per-owner/unit tracking
+    - **Sonderumlagen**: Special assessments with MEA-based allocation
+    - **Erhaltung & Verbesserung**: Maintenance tracking per § 28-29 WEG with categories (ordentliche/außerordentliche Verwaltung, Notmaßnahme), financing source tracking (Rücklage/Sonderumlage/Laufend)
+    - Routes: `/weg`, API: `/api/weg/*`
 - **Insurance Management**: Policy tracking (Gebäudeversicherung, Haftpflicht, etc.) and claims management (Schadensmeldungen). Routes: `/versicherungen`, API: `/api/insurance/*`.
 - **Deadline Calendar**: Unified deadline/reminder system for contracts, insurance renewals, maintenance, settlements, and tax deadlines. Routes: `/fristen`, API: `/api/deadlines`.
 - **Serial Letters**: Template-based bulk letter generation with placeholder substitution for tenants. Routes: `/serienbriefe`, API: `/api/letter-templates`, `/api/serial-letters`.

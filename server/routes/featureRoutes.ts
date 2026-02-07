@@ -165,6 +165,369 @@ router.post("/api/weg/reserve-fund", async (req: Request, res: Response) => {
   }
 });
 
+// ====== WEG UNIT OWNERS (§ 2 WEG 2002 - Miteigentumsanteile) ======
+
+router.get("/api/weg/unit-owners", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const propertyId = req.query.propertyId as string;
+    let conditions: any[] = [eq(schema.wegUnitOwners.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegUnitOwners.propertyId, propertyId));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegUnitOwners).where(where).orderBy(schema.wegUnitOwners.createdAt);
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching unit owners:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/unit-owners", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [created] = await db.insert(schema.wegUnitOwners).values({ ...body, organizationId: ctx.orgId }).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating unit owner:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.patch("/api/weg/unit-owners/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [updated] = await db.update(schema.wegUnitOwners).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegUnitOwners.id, req.params.id), eq(schema.wegUnitOwners.organizationId, ctx.orgId))).returning();
+    if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating unit owner:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+router.delete("/api/weg/unit-owners/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const [deleted] = await db.delete(schema.wegUnitOwners).where(and(eq(schema.wegUnitOwners.id, req.params.id), eq(schema.wegUnitOwners.organizationId, ctx.orgId))).returning();
+    if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting unit owner:", error);
+    res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
+// ====== WEG AGENDA ITEMS (TOPs) ======
+
+router.get("/api/weg/agenda-items", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const assemblyId = req.query.assemblyId as string;
+    if (!assemblyId) return res.status(400).json({ error: "assemblyId erforderlich" });
+    const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
+    if (!assembly.length) return res.status(404).json({ error: "Versammlung nicht gefunden" });
+    const data = await db.select().from(schema.wegAgendaItems).where(eq(schema.wegAgendaItems.assemblyId, assemblyId)).orderBy(schema.wegAgendaItems.topNumber);
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching agenda items:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/agenda-items", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, body.assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
+    if (!assembly.length) return res.status(404).json({ error: "Versammlung nicht gefunden" });
+    const [created] = await db.insert(schema.wegAgendaItems).values(body).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating agenda item:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.delete("/api/weg/agenda-items/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const item = await db.select().from(schema.wegAgendaItems).where(eq(schema.wegAgendaItems.id, req.params.id)).limit(1);
+    if (!item.length) return res.status(404).json({ error: "Nicht gefunden" });
+    const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, item[0].assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
+    if (!assembly.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const [deleted] = await db.delete(schema.wegAgendaItems).where(eq(schema.wegAgendaItems.id, req.params.id)).returning();
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting agenda item:", error);
+    res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
+// ====== WEG OWNER VOTES (per-owner vote recording) ======
+
+router.get("/api/weg/owner-votes", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const voteId = req.query.voteId as string;
+    if (!voteId) return res.status(400).json({ error: "voteId erforderlich" });
+    const vote = await db.select().from(schema.wegVotes).where(eq(schema.wegVotes.id, voteId)).limit(1);
+    if (!vote.length) return res.status(404).json({ error: "Abstimmung nicht gefunden" });
+    const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, vote[0].assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
+    if (!assembly.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const data = await db.select().from(schema.wegOwnerVotes).where(eq(schema.wegOwnerVotes.voteId, voteId)).orderBy(schema.wegOwnerVotes.createdAt);
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching owner votes:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/owner-votes", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const vote = await db.select().from(schema.wegVotes).where(eq(schema.wegVotes.id, body.voteId)).limit(1);
+    if (!vote.length) return res.status(404).json({ error: "Abstimmung nicht gefunden" });
+    const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, vote[0].assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
+    if (!assembly.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const [created] = await db.insert(schema.wegOwnerVotes).values(body).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating owner vote:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+// ====== WEG BUDGET PLANS (Wirtschaftsplan § 31 WEG 2002) ======
+
+router.get("/api/weg/budget-plans", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const propertyId = req.query.propertyId as string;
+    let conditions: any[] = [eq(schema.wegBudgetPlans.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegBudgetPlans.propertyId, propertyId));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegBudgetPlans).where(where).orderBy(desc(schema.wegBudgetPlans.year));
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching budget plans:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/budget-plans", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [created] = await db.insert(schema.wegBudgetPlans).values({ ...body, organizationId: ctx.orgId }).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating budget plan:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.patch("/api/weg/budget-plans/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [updated] = await db.update(schema.wegBudgetPlans).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).returning();
+    if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating budget plan:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+// ====== WEG BUDGET LINES ======
+
+router.get("/api/weg/budget-lines", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const budgetPlanId = req.query.budgetPlanId as string;
+    if (!budgetPlanId) return res.status(400).json({ error: "budgetPlanId erforderlich" });
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, budgetPlanId), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const data = await db.select().from(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.budgetPlanId, budgetPlanId)).orderBy(schema.wegBudgetLines.createdAt);
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching budget lines:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/budget-lines", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, body.budgetPlanId), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const [created] = await db.insert(schema.wegBudgetLines).values(body).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating budget line:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.delete("/api/weg/budget-lines/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const line = await db.select().from(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.id, req.params.id)).limit(1);
+    if (!line.length) return res.status(404).json({ error: "Nicht gefunden" });
+    const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, line[0].budgetPlanId), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
+    if (!plan.length) return res.status(403).json({ error: "Zugriff verweigert" });
+    const [deleted] = await db.delete(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.id, req.params.id)).returning();
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting budget line:", error);
+    res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
+// ====== WEG SPECIAL ASSESSMENTS (Sonderumlagen) ======
+
+router.get("/api/weg/special-assessments", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const propertyId = req.query.propertyId as string;
+    let conditions: any[] = [eq(schema.wegSpecialAssessments.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegSpecialAssessments.propertyId, propertyId));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegSpecialAssessments).where(where).orderBy(desc(schema.wegSpecialAssessments.createdAt));
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching special assessments:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/special-assessments", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [created] = await db.insert(schema.wegSpecialAssessments).values({ ...body, organizationId: ctx.orgId }).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating special assessment:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.patch("/api/weg/special-assessments/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [updated] = await db.update(schema.wegSpecialAssessments).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegSpecialAssessments.id, req.params.id), eq(schema.wegSpecialAssessments.organizationId, ctx.orgId))).returning();
+    if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating special assessment:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+// ====== WEG MAINTENANCE ITEMS (§ 28-29 WEG 2002) ======
+
+router.get("/api/weg/maintenance", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const propertyId = req.query.propertyId as string;
+    let conditions: any[] = [eq(schema.wegMaintenanceItems.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegMaintenanceItems.propertyId, propertyId));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegMaintenanceItems).where(where).orderBy(desc(schema.wegMaintenanceItems.createdAt));
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching maintenance items:", error);
+    res.status(500).json({ error: "Fehler beim Laden" });
+  }
+});
+
+router.post("/api/weg/maintenance", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [created] = await db.insert(schema.wegMaintenanceItems).values({ ...body, organizationId: ctx.orgId }).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating maintenance item:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen" });
+  }
+});
+
+router.patch("/api/weg/maintenance/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const [updated] = await db.update(schema.wegMaintenanceItems).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegMaintenanceItems.id, req.params.id), eq(schema.wegMaintenanceItems.organizationId, ctx.orgId))).returning();
+    if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating maintenance item:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+router.delete("/api/weg/maintenance/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const [deleted] = await db.delete(schema.wegMaintenanceItems).where(and(eq(schema.wegMaintenanceItems.id, req.params.id), eq(schema.wegMaintenanceItems.organizationId, ctx.orgId))).returning();
+    if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting maintenance item:", error);
+    res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
 // ====== INSURANCE POLICIES ======
 
 router.get("/api/insurance/policies", async (req: Request, res: Response) => {
