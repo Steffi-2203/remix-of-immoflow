@@ -42,9 +42,16 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      await signIn(email, password);
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast({
+          title: "Anmeldung fehlgeschlagen",
+          description: error.message || "Ungültige E-Mail oder Passwort",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Navigation happens via useEffect when isAuthenticated changes
     } catch (error: any) {
       toast({
         title: "Anmeldung fehlgeschlagen",
