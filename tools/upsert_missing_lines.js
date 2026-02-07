@@ -1,16 +1,73 @@
 import fs from 'fs';
 import pg from 'pg';
 
-const missingFile = process.argv[2] || 'missing_lines.json';
-const dryRun = process.argv.includes('--dry-run');
+const args = process.argv.slice(2);
+const getArg = (name) => {
+  const arg = args.find(a => a.startsWith(`--${name}=`));
+  return arg ? arg.split("=").slice(1).join("=") : null;
+};
+const positional = args.filter(a => !a.startsWith("--"));
+const dryRun = args.includes('--dry-run');
+
+const csvFile = getArg("csv");
+const jsonFile = getArg("json") || positional[0];
+const runIdOverride = getArg("run-id");
+const dbUrl = getArg("database-url") || process.env.DATABASE_URL;
+const missingFile = csvFile || jsonFile || 'missing_lines.json';
 
 if (!fs.existsSync(missingFile)) {
   console.error(`Datei nicht gefunden: ${missingFile}`);
-  console.error('Erstelle zuerst mit: node tools/find_missing_lines.js');
+  console.error('Usage: node tools/upsert_missing_lines.js [missing_lines.json] [--dry-run]');
+  console.error('   or: node tools/upsert_missing_lines.js --csv=missing_lines.csv [--run-id=RUN_ID] [--dry-run]');
+  console.error('   or: node tools/upsert_missing_lines.js --json=missing_lines.json [--database-url=...] [--dry-run]');
   process.exit(1);
 }
 
-const missingLines = JSON.parse(fs.readFileSync(missingFile, 'utf8'));
+function parseCsvLine(line) {
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current.trim());
+  return fields;
+}
+
+function parseCsv(content) {
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCsvLine(lines[0]);
+  return lines.slice(1).map(line => {
+    const values = parseCsvLine(line);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = values[i] || ''; });
+    return obj;
+  });
+}
+
+let missingLines;
+if (csvFile || missingFile.endsWith('.csv')) {
+  const csvContent = fs.readFileSync(missingFile, 'utf8');
+  missingLines = parseCsv(csvContent).map(row => ({
+    tenantId: row.tenantId || row.tenant_id,
+    unitId: row.unitId || row.unit_id,
+    lineType: row.lineType || row.line_type,
+    description: row.description,
+    amount: parseFloat(row.amount),
+    taxRate: parseFloat(row.taxRate || row.tax_rate || 0)
+  }));
+} else {
+  missingLines = JSON.parse(fs.readFileSync(missingFile, 'utf8'));
+}
 
 if (missingLines.length === 0) {
   console.log('Keine fehlenden Zeilen - nichts zu tun.');
@@ -19,7 +76,7 @@ if (missingLines.length === 0) {
 
 console.log(`${dryRun ? '[DRY-RUN] ' : ''}Fehlende Zeilen: ${missingLines.length}`);
 
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+const client = new pg.Client({ connectionString: dbUrl });
 await client.connect();
 
 const affectedTenants = [...new Set(missingLines.map(l => l.tenantId))];
