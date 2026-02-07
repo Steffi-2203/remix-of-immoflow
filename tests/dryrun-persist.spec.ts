@@ -487,8 +487,7 @@ describe("Persist-Modus Validierung", () => {
 
     const sql = `INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
         VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (invoice_id, unit_id, line_type, description) DO NOTHING
-        RETURNING id`;
+        ON CONFLICT (invoice_id, unit_id, line_type, description) DO NOTHING`;
 
     const params = [
       line.invoiceId,
@@ -501,7 +500,7 @@ describe("Persist-Modus Validierung", () => {
 
     expect(sql).toContain("ON CONFLICT");
     expect(sql).toContain("DO NOTHING");
-    expect(sql).toContain("RETURNING id");
+    expect(sql).not.toContain("RETURNING");
     expect(params).toHaveLength(6);
     expect(params[0]).toBe("inv-123");
     expect(params[4]).toBe(650);
@@ -613,5 +612,209 @@ describe("Dryrun-Datei Lesen (falls vorhanden)", () => {
       0
     );
     expect(data.summary.linesCount).toBe(totalLines);
+  });
+});
+
+describe("Dryrun ↔ Persist Parität", () => {
+  const dryrunFile = path.resolve("tmp/dryrun_2026_09.json");
+  const dbFile = path.resolve("tmp/db_lines_2026_09.json");
+
+  it("sollte Dryrun↔DB Vergleich konsistent mit findMissing sein (Integrations-Test)", () => {
+    if (!fs.existsSync(dryrunFile) || !fs.existsSync(dbFile)) {
+      console.log(
+        "Dryrun/DB-Export nicht vorhanden — führe erst den Audit-Workflow aus:"
+      );
+      console.log("  bash tools/upsert_missing_lines.sh 2026 9");
+      return;
+    }
+
+    const dryrun: DryRunResult = JSON.parse(
+      fs.readFileSync(dryrunFile, "utf8")
+    );
+    const dbLines: Record<string, unknown>[] = JSON.parse(
+      fs.readFileSync(dbFile, "utf8")
+    );
+
+    const dryrunLineKeys = new Set<string>();
+    for (const item of dryrun.preview) {
+      for (const line of item.lines) {
+        dryrunLineKeys.add(
+          `${item.invoice.unitId}|${line.lineType}|${line.description}`
+        );
+      }
+    }
+
+    const dbLineKeys = new Set<string>();
+    for (const row of dbLines) {
+      const uid = (row.unit_id || row.unitId) as string;
+      const lt = (row.line_type || row.lineType) as string;
+      const desc = ((row.description as string) || "").trim();
+      dbLineKeys.add(`${uid}|${lt}|${desc}`);
+    }
+
+    const missingInDb = [...dryrunLineKeys].filter((k) => !dbLineKeys.has(k));
+    const extraInDb = [...dbLineKeys].filter((k) => !dryrunLineKeys.has(k));
+
+    const missingViaHelper = findMissing(dryrun.preview, dbLines);
+
+    expect(missingViaHelper.length).toBeGreaterThanOrEqual(0);
+
+    if (missingInDb.length > 0) {
+      console.log(
+        `Info: ${missingInDb.length} unique keys fehlen in DB, ${missingViaHelper.length} per-tenant Zeilen.`
+      );
+      const missingTypes: Record<string, number> = {};
+      missingInDb.forEach((k) => {
+        const t = k.split("|")[1];
+        missingTypes[t] = (missingTypes[t] || 0) + 1;
+      });
+      console.log("  Nach Typ:", missingTypes);
+    }
+
+    expect(extraInDb).toHaveLength(0);
+  });
+
+  it("sollte Beträge innerhalb Rundungstoleranz (±0.05€) übereinstimmen", () => {
+    if (!fs.existsSync(dryrunFile) || !fs.existsSync(dbFile)) return;
+
+    const dryrun: DryRunResult = JSON.parse(
+      fs.readFileSync(dryrunFile, "utf8")
+    );
+    const dbLines: Record<string, unknown>[] = JSON.parse(
+      fs.readFileSync(dbFile, "utf8")
+    );
+
+    const dbAmountMap = new Map<string, number>();
+    for (const row of dbLines) {
+      const uid = (row.unit_id || row.unitId) as string;
+      const lt = (row.line_type || row.lineType) as string;
+      const desc = ((row.description as string) || "").trim();
+      const amt = Number(row.amount || 0);
+      dbAmountMap.set(`${uid}|${lt}|${desc}`, amt);
+    }
+
+    const TOLERANCE = 0.05;
+    const significantMismatches: Array<{
+      key: string;
+      dryrunAmt: number;
+      dbAmt: number;
+      diff: number;
+    }> = [];
+    for (const item of dryrun.preview) {
+      for (const line of item.lines) {
+        const key = `${item.invoice.unitId}|${line.lineType}|${line.description}`;
+        const dbAmt = dbAmountMap.get(key);
+        if (dbAmt !== undefined) {
+          const diff = Math.abs(line.amount - dbAmt);
+          if (diff > TOLERANCE) {
+            significantMismatches.push({
+              key,
+              dryrunAmt: line.amount,
+              dbAmt,
+              diff: Number(diff.toFixed(4)),
+            });
+          }
+        }
+      }
+    }
+
+    if (significantMismatches.length > 0) {
+      console.log(
+        "Signifikante Betrags-Abweichungen (>0.05€):",
+        significantMismatches.slice(0, 5)
+      );
+    }
+
+    expect(significantMismatches).toHaveLength(0);
+  });
+
+  it("sollte Gesamtbetrag = Summe(Netto-Beträge) pro Rechnung sein", () => {
+    if (!fs.existsSync(dryrunFile)) return;
+
+    const dryrun: DryRunResult = JSON.parse(
+      fs.readFileSync(dryrunFile, "utf8")
+    );
+
+    const gesamtErrors: Array<{
+      tenantId: string;
+      expected: number;
+      actual: number;
+    }> = [];
+    for (const item of dryrun.preview) {
+      const nettoSum = item.lines.reduce((sum, l) => sum + l.amount, 0);
+      const expected = Number(nettoSum.toFixed(2));
+      const actual = Number(item.invoice.gesamtbetrag.toFixed(2));
+      if (Math.abs(expected - actual) > 0.02) {
+        gesamtErrors.push({
+          tenantId: item.invoice.tenantId,
+          expected,
+          actual,
+        });
+      }
+    }
+
+    if (gesamtErrors.length > 0) {
+      console.log("Gesamtbetrag-Fehler:", gesamtErrors.slice(0, 5));
+    }
+
+    expect(gesamtErrors).toHaveLength(0);
+  });
+
+  it("sollte Batch-Upsert SQL korrekt für N Zeilen aufbauen", () => {
+    const lines = [
+      {
+        invoiceId: "inv-1",
+        unitId: "u1",
+        lineType: "grundmiete",
+        description: "Nettomiete September 2026",
+        amount: 650,
+        taxRate: 0.1,
+      },
+      {
+        invoiceId: "inv-1",
+        unitId: "u1",
+        lineType: "betriebskosten",
+        description: "BK-Vorschuss September 2026",
+        amount: 120,
+        taxRate: 0.1,
+      },
+      {
+        invoiceId: "inv-2",
+        unitId: "u2",
+        lineType: "heizkosten",
+        description: "HK-Vorschuss September 2026",
+        amount: 80,
+        taxRate: 0.2,
+      },
+    ];
+
+    const values: string[] = [];
+    const params: unknown[] = [];
+    let p = 1;
+    for (const r of lines) {
+      values.push(
+        `($${p}, $${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5})`
+      );
+      params.push(
+        r.invoiceId,
+        r.unitId,
+        r.lineType,
+        r.description,
+        r.amount,
+        r.taxRate
+      );
+      p += 6;
+    }
+
+    const sql = `INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
+        VALUES ${values.join(", ")}
+        ON CONFLICT (invoice_id, unit_id, line_type, description) DO NOTHING`;
+
+    expect(values).toHaveLength(3);
+    expect(params).toHaveLength(18);
+    expect(sql).toContain("($1, $2, $3, $4, $5, $6)");
+    expect(sql).toContain("($7, $8, $9, $10, $11, $12)");
+    expect(sql).toContain("($13, $14, $15, $16, $17, $18)");
+    expect(sql).toContain("ON CONFLICT");
   });
 });

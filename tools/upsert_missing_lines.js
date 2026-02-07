@@ -13,6 +13,7 @@ const csvFile = getArg("csv");
 const jsonFile = getArg("json") || positional[0];
 const runIdOverride = getArg("run-id");
 const dbUrl = getArg("database-url") || process.env.DATABASE_URL;
+const batchSize = parseInt(getArg("batch-size") || "50");
 const missingFile = csvFile || jsonFile || 'missing_lines.json';
 
 if (!fs.existsSync(missingFile)) {
@@ -102,55 +103,56 @@ let inserted = 0;
 let skipped = 0;
 let errors = [];
 
+const monthNames = {
+  'Jänner': 1, 'Februar': 2, 'März': 3, 'April': 4, 'Mai': 5, 'Juni': 6,
+  'Juli': 7, 'August': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Dezember': 12
+};
+
+const resolved = [];
 for (const line of missingLines) {
   const period = line.description.match(/(\w+)\s+(\d{4})$/);
-  if (!period) {
-    errors.push({ line, reason: 'Periode nicht erkannt' });
-    continue;
-  }
-  
-  const monthNames = {
-    'Jänner': 1, 'Februar': 2, 'März': 3, 'April': 4, 'Mai': 5, 'Juni': 6,
-    'Juli': 7, 'August': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Dezember': 12
-  };
-  
+  if (!period) { errors.push({ line, reason: 'Periode nicht erkannt' }); continue; }
   const month = monthNames[period[1]];
   const year = parseInt(period[2]);
-  
-  if (!month) {
-    errors.push({ line, reason: `Unbekannter Monat: ${period[1]}` });
-    continue;
-  }
-  
+  if (!month) { errors.push({ line, reason: `Unbekannter Monat: ${period[1]}` }); continue; }
   const key = `${line.tenantId}|${year}|${month}`;
   const invoice = invoiceMap.get(key);
-  
-  if (!invoice) {
-    errors.push({ line, reason: `Invoice nicht gefunden: ${key}` });
-    continue;
-  }
+  if (!invoice) { errors.push({ line, reason: `Invoice nicht gefunden: ${key}` }); continue; }
+  resolved.push({ ...line, invoiceId: invoice.invoiceId, unitId: invoice.unitId });
+}
 
-  if (dryRun) {
-    console.log(`  [DRY] INSERT: ${line.lineType} ${line.description} €${line.amount}`);
+if (dryRun) {
+  for (const r of resolved) {
+    console.log(`  [DRY] INSERT: ${r.lineType} ${r.description} €${r.amount}`);
     inserted++;
-  } else {
+  }
+} else {
+  for (let i = 0; i < resolved.length; i += batchSize) {
+    const batch = resolved.slice(i, i + batchSize);
+    const values = [];
+    const params = [];
+    let p = 1;
+    for (const r of batch) {
+      values.push(`($${p}, $${p+1}, $${p+2}, $${p+3}, $${p+4}, $${p+5})`);
+      params.push(r.invoiceId, r.unitId, r.lineType, r.description, r.amount, r.taxRate);
+      p += 6;
+    }
     try {
       const result = await client.query(`
         INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ${values.join(', ')}
         ON CONFLICT (invoice_id, unit_id, line_type, description) DO NOTHING
-        RETURNING id
-      `, [invoice.invoiceId, invoice.unitId, line.lineType, line.description, line.amount, line.taxRate]);
-      
-      if (result.rowCount > 0) {
-        inserted++;
-      } else {
-        skipped++;
-      }
+      `, params);
+      inserted += result.rowCount;
+      skipped += batch.length - result.rowCount;
     } catch (err) {
-      errors.push({ line, reason: err.message });
+      errors.push({ batch: batch.map(r => r.description), reason: err.message });
+      skipped += batch.length;
     }
+    const progress = Math.min(i + batchSize, resolved.length);
+    process.stderr.write(`\r  Batch ${Math.ceil((i + batchSize) / batchSize)}/${Math.ceil(resolved.length / batchSize)} — ${progress}/${resolved.length} Zeilen`);
   }
+  process.stderr.write('\n');
 }
 
 await client.end();
