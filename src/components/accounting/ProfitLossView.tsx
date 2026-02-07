@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAccountBalances } from '@/hooks/useJournalEntries';
+import { useDemoAccountBalances } from '@/hooks/useDemoAccounting';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ export function ProfitLossView() {
   const [startDate, setStartDate] = useState(now.getFullYear() + '-01-01');
   const [endDate, setEndDate] = useState(now.toISOString().slice(0, 10));
 
-  const { data: balances, isLoading } = useAccountBalances(startDate, endDate);
+  const { data: balances, isLoading } = useDemoAccountBalances(startDate, endDate);
 
   const incomeAccounts = (balances || []).filter(b => b.account_type === 'income');
   const expenseAccounts = (balances || []).filter(b => b.account_type === 'expense');
