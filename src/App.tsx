@@ -8,6 +8,7 @@ import { AdminRoute } from "@/components/auth/AdminRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CookieConsent } from "@/components/CookieConsent";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
+import { ActiveOrganizationProvider } from "@/contexts/ActiveOrganizationContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
@@ -54,6 +55,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
+      <ActiveOrganizationProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -121,6 +123,7 @@ const App = () => (
           <CookieConsent />
         </BrowserRouter>
       </TooltipProvider>
+      </ActiveOrganizationProvider>
     </QueryClientProvider>
   </ErrorBoundary>
 );

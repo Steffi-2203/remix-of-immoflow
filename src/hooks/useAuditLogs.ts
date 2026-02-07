@@ -11,6 +11,8 @@ export interface AuditLog {
   new_data: Record<string, unknown> | null;
   ip_address: unknown;
   user_agent: string | null;
+  hash: string | null;
+  previous_hash: string | null;
   created_at: string;
 }
 

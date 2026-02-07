@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
+import { OrganizationSwitcher } from './OrganizationSwitcher';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -57,6 +58,9 @@ export function Header({ title, subtitle }: HeaderProps) {
           <h1 className="text-lg md:text-xl font-semibold text-foreground">{title}</h1>
           {subtitle && <p className="text-xs md:text-sm text-muted-foreground">{subtitle}</p>}
         </div>
+        
+        {/* Organization Switcher */}
+        {!isMobile && <OrganizationSwitcher />}
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">

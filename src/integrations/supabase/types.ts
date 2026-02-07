@@ -63,10 +63,12 @@ export type Database = {
         Row: {
           action: string
           created_at: string
+          hash: string | null
           id: string
           ip_address: unknown
           new_data: Json | null
           old_data: Json | null
+          previous_hash: string | null
           record_id: string | null
           table_name: string
           user_agent: string | null
@@ -75,10 +77,12 @@ export type Database = {
         Insert: {
           action: string
           created_at?: string
+          hash?: string | null
           id?: string
           ip_address?: unknown
           new_data?: Json | null
           old_data?: Json | null
+          previous_hash?: string | null
           record_id?: string | null
           table_name: string
           user_agent?: string | null
@@ -87,10 +91,12 @@ export type Database = {
         Update: {
           action?: string
           created_at?: string
+          hash?: string | null
           id?: string
           ip_address?: unknown
           new_data?: Json | null
           old_data?: Json | null
+          previous_hash?: string | null
           record_id?: string | null
           table_name?: string
           user_agent?: string | null
@@ -3660,6 +3666,41 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_organizations: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          organization_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          organization_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          organization_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_organizations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
