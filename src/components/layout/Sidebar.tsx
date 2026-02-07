@@ -19,7 +19,10 @@ import {
   Wrench,
   MessageSquare,
   HardHat,
-  PiggyBank
+  PiggyBank,
+  Home,
+  ShieldCheck,
+  CalendarClock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -97,6 +100,21 @@ const navItems: NavItem[] = [
     label: 'Dokumente',
     icon: FileStack,
     href: '/dokumente'
+  },
+  {
+    label: 'WEG-Verwaltung',
+    icon: Home,
+    href: '/weg'
+  },
+  {
+    label: 'Versicherungen',
+    icon: ShieldCheck,
+    href: '/versicherungen'
+  },
+  {
+    label: 'Fristen & Termine',
+    icon: CalendarClock,
+    href: '/fristen'
   },
   {
     label: 'Reports',

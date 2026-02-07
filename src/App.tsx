@@ -38,6 +38,9 @@ import MessagesPage from "./pages/Messages";
 import TeamManagement from "./pages/TeamManagement";
 import Budgets from "./pages/Budgets";
 import TenantDetail from "./pages/TenantDetail";
+import WegManagement from "./pages/WegManagement";
+import InsuranceManagement from "./pages/InsuranceManagement";
+import DeadlineCalendar from "./pages/DeadlineCalendar";
 import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
@@ -90,6 +93,9 @@ const App = () => (
             <Route path="/budgets" element={<ProtectedRoute><DemoDataProvider><Budgets /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><DemoDataProvider><TeamManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/weg" element={<ProtectedRoute><DemoDataProvider><WegManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/versicherungen" element={<ProtectedRoute><DemoDataProvider><InsuranceManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/fristen" element={<ProtectedRoute><DemoDataProvider><DeadlineCalendar /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

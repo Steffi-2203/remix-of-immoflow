@@ -1,0 +1,143 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+export interface InsurancePolicy {
+  id: string;
+  organization_id: string | null;
+  property_id: string;
+  insurance_type: string;
+  provider: string;
+  policy_number: string | null;
+  coverage_amount: number | null;
+  annual_premium: number | null;
+  start_date: string;
+  end_date: string | null;
+  auto_renew: boolean;
+  contact_person: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  document_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InsuranceClaim {
+  id: string;
+  organization_id: string | null;
+  insurance_policy_id: string;
+  property_id: string;
+  unit_id: string | null;
+  claim_date: string;
+  description: string;
+  damage_amount: number | null;
+  reimbursed_amount: number | null;
+  status: 'gemeldet' | 'in_bearbeitung' | 'genehmigt' | 'abgelehnt' | 'erledigt';
+  claim_number: string | null;
+  document_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useInsurancePolicies(propertyId?: string) {
+  return useQuery({
+    queryKey: ['insurance-policies', propertyId],
+    queryFn: async () => {
+      let query = supabase.from('insurance_policies' as any).select('*').order('end_date', { ascending: true });
+      if (propertyId) query = query.eq('property_id', propertyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as unknown as InsurancePolicy[];
+    },
+  });
+}
+
+export function useCreateInsurancePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (policy: Omit<InsurancePolicy, 'id' | 'created_at' | 'updated_at'>) => {
+      const { data, error } = await supabase.from('insurance_policies' as any).insert(policy as any).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung angelegt'); },
+    onError: () => { toast.error('Fehler beim Anlegen'); },
+  });
+}
+
+export function useUpdateInsurancePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<InsurancePolicy>) => {
+      const { data, error } = await supabase.from('insurance_policies' as any).update(updates as any).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung aktualisiert'); },
+    onError: () => { toast.error('Fehler'); },
+  });
+}
+
+export function useDeleteInsurancePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('insurance_policies' as any).delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-policies'] }); toast.success('Versicherung gelöscht'); },
+    onError: () => { toast.error('Fehler'); },
+  });
+}
+
+export function useInsuranceClaims(policyId?: string) {
+  return useQuery({
+    queryKey: ['insurance-claims', policyId],
+    queryFn: async () => {
+      let query = supabase.from('insurance_claims' as any).select('*').order('claim_date', { ascending: false });
+      if (policyId) query = query.eq('insurance_policy_id', policyId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as unknown as InsuranceClaim[];
+    },
+  });
+}
+
+export function useAllInsuranceClaims() {
+  return useQuery({
+    queryKey: ['insurance-claims-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('insurance_claims' as any).select('*').order('claim_date', { ascending: false });
+      if (error) throw error;
+      return data as unknown as InsuranceClaim[];
+    },
+  });
+}
+
+export function useCreateInsuranceClaim() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (claim: Omit<InsuranceClaim, 'id' | 'created_at' | 'updated_at'>) => {
+      const { data, error } = await supabase.from('insurance_claims' as any).insert(claim as any).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-claims'] }); qc.invalidateQueries({ queryKey: ['insurance-claims-all'] }); toast.success('Schaden gemeldet'); },
+    onError: () => { toast.error('Fehler bei der Schadensmeldung'); },
+  });
+}
+
+export function useUpdateInsuranceClaim() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<InsuranceClaim>) => {
+      const { data, error } = await supabase.from('insurance_claims' as any).update(updates as any).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insurance-claims'] }); qc.invalidateQueries({ queryKey: ['insurance-claims-all'] }); toast.success('Status aktualisiert'); },
+    onError: () => { toast.error('Fehler'); },
+  });
+}

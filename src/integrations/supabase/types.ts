@@ -321,6 +321,78 @@ export type Database = {
           },
         ]
       }
+      deadlines: {
+        Row: {
+          category: string
+          created_at: string
+          deadline_date: string
+          description: string | null
+          id: string
+          is_recurring: boolean
+          organization_id: string | null
+          property_id: string | null
+          recurrence_months: number | null
+          reminder_days: number
+          reminder_sent_at: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          deadline_date: string
+          description?: string | null
+          id?: string
+          is_recurring?: boolean
+          organization_id?: string | null
+          property_id?: string | null
+          recurrence_months?: number | null
+          reminder_days?: number
+          reminder_sent_at?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deadline_date?: string
+          description?: string | null
+          id?: string
+          is_recurring?: boolean
+          organization_id?: string | null
+          property_id?: string | null
+          recurrence_months?: number | null
+          reminder_days?: number
+          reminder_sent_at?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deadlines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deadlines_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       distribution_keys: {
         Row: {
           created_at: string
@@ -631,6 +703,167 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_claims: {
+        Row: {
+          claim_date: string
+          claim_number: string | null
+          created_at: string
+          damage_amount: number | null
+          description: string
+          document_url: string | null
+          id: string
+          insurance_policy_id: string
+          notes: string | null
+          organization_id: string | null
+          property_id: string
+          reimbursed_amount: number | null
+          status: string
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          claim_date: string
+          claim_number?: string | null
+          created_at?: string
+          damage_amount?: number | null
+          description: string
+          document_url?: string | null
+          id?: string
+          insurance_policy_id: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id: string
+          reimbursed_amount?: number | null
+          status?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          claim_date?: string
+          claim_number?: string | null
+          created_at?: string
+          damage_amount?: number | null
+          description?: string
+          document_url?: string | null
+          id?: string
+          insurance_policy_id?: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string
+          reimbursed_amount?: number | null
+          status?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_claims_insurance_policy_id_fkey"
+            columns: ["insurance_policy_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_claims_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_claims_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_claims_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      insurance_policies: {
+        Row: {
+          annual_premium: number | null
+          auto_renew: boolean
+          contact_email: string | null
+          contact_person: string | null
+          contact_phone: string | null
+          coverage_amount: number | null
+          created_at: string
+          document_url: string | null
+          end_date: string | null
+          id: string
+          insurance_type: string
+          notes: string | null
+          organization_id: string | null
+          policy_number: string | null
+          property_id: string
+          provider: string
+          start_date: string
+          updated_at: string
+        }
+        Insert: {
+          annual_premium?: number | null
+          auto_renew?: boolean
+          contact_email?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          coverage_amount?: number | null
+          created_at?: string
+          document_url?: string | null
+          end_date?: string | null
+          id?: string
+          insurance_type?: string
+          notes?: string | null
+          organization_id?: string | null
+          policy_number?: string | null
+          property_id: string
+          provider: string
+          start_date: string
+          updated_at?: string
+        }
+        Update: {
+          annual_premium?: number | null
+          auto_renew?: boolean
+          contact_email?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          coverage_amount?: number | null
+          created_at?: string
+          document_url?: string | null
+          end_date?: string | null
+          id?: string
+          insurance_type?: string
+          notes?: string | null
+          organization_id?: string | null
+          policy_number?: string | null
+          property_id?: string
+          provider?: string
+          start_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "insurance_policies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "insurance_policies_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
@@ -3217,6 +3450,158 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      weg_assemblies: {
+        Row: {
+          assembly_date: string
+          created_at: string
+          id: string
+          location: string | null
+          notes: string | null
+          organization_id: string | null
+          property_id: string
+          protocol_url: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assembly_date: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          property_id: string
+          protocol_url?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assembly_date?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string
+          protocol_url?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_assemblies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_assemblies_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weg_reserve_fund: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          entry_type: string
+          id: string
+          month: number
+          organization_id: string | null
+          property_id: string
+          year: number
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          month: number
+          organization_id?: string | null
+          property_id: string
+          year: number
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          entry_type?: string
+          id?: string
+          month?: number
+          organization_id?: string | null
+          property_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_reserve_fund_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_reserve_fund_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weg_votes: {
+        Row: {
+          assembly_id: string
+          created_at: string
+          description: string | null
+          id: string
+          result: string | null
+          topic: string
+          votes_abstain: number
+          votes_no: number
+          votes_yes: number
+        }
+        Insert: {
+          assembly_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          result?: string | null
+          topic: string
+          votes_abstain?: number
+          votes_no?: number
+          votes_yes?: number
+        }
+        Update: {
+          assembly_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          result?: string | null
+          topic?: string
+          votes_abstain?: number
+          votes_no?: number
+          votes_yes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_votes_assembly_id_fkey"
+            columns: ["assembly_id"]
+            isOneToOne: false
+            referencedRelation: "weg_assemblies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
