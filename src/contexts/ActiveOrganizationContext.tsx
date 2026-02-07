@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
 interface OrgMembership {
@@ -42,28 +41,24 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
     queryFn: async () => {
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('user_organizations')
-        .select('id, organization_id, role, is_default, organizations(id, name)')
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Error fetching user organizations:', error);
+      const response = await fetch('/api/user-organizations', { credentials: 'include' });
+      if (!response.ok) {
+        console.error('Error fetching user organizations');
         return [];
       }
+      const data = await response.json();
 
       return (data || []).map((d: any) => ({
         id: d.id,
         organization_id: d.organization_id,
         role: d.role,
         is_default: d.is_default,
-        organization: d.organizations,
+        organization: d.organization || { id: d.organization_id, name: '' },
       })) as OrgMembership[];
     },
     enabled: !!user,
   });
 
-  // Auto-select default org
   useEffect(() => {
     if (memberships.length === 0) return;
 
@@ -82,7 +77,6 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
   const switchOrganization = useCallback((orgId: string) => {
     setActiveOrgId(orgId);
     localStorage.setItem('activeOrgId', orgId);
-    // Invalidate all queries so data reloads for the new org
     queryClient.invalidateQueries();
   }, [queryClient]);
 
