@@ -1,0 +1,44 @@
+Teste die WEG-Verwaltung (Wohnungseigentümergemeinschaft) nach aktuellem österreichischem WEG 2002 inkl. Novellen 2022 und 2024. Folgende Szenarien müssen abgedeckt sein:
+
+1. Vorschreibungen (§ 32 WEG)
+
+Erstelle monatliche Vorschreibungen für alle Wohnungseigentümer einer Liegenschaft
+Aufteilung nach Nutzwert (Miteigentumsanteilen) gemäß § 32 Abs 1 WEG
+Vorschreibung muss enthalten: Betriebskosten-Anteil, Rücklagen-Beitrag, ggf. Heizkosten
+Prüfe, dass die Summe aller Anteile exakt 100% ergibt
+2. Betriebskostenabrechnung (§ 34 WEG)
+
+Jährliche BK-Abrechnung mit Aufschlüsselung nach Kostenarten
+Verteilung nach Nutzwert (Standard) oder abweichendem Verteilungsschlüssel (z.B. Verbrauch bei Heizung)
+Gegenüberstellung: Vorschüsse vs. tatsächliche Kosten → Guthaben oder Nachzahlung pro Eigentümer
+UST-Ausweisung (10% Betriebskosten, 20% Heizung) gemäß österreichischem Steuerrecht
+3. Instandhaltungsrücklage (§ 31 WEG) – KRITISCH
+
+Rücklage wird aus den monatlichen Vorschreibungen der Eigentümer gespeist (Einzahlungen)
+Bei Instandhaltungsmaßnahmen (z.B. Dachsanierung, Liftreparatur) wird der Betrag aus der bestehenden Rücklage entnommen, NICHT direkt den Eigentümern verrechnet
+Teste folgenden Flow:
+Rücklage hat Stand von z.B. €50.000
+Instandhaltungsauftrag über €15.000 wird erstellt
+Nach Freigabe (Eigentümerbeschluss) wird der Betrag aus der Rücklage entnommen
+Neuer Rücklagenstand: €35.000
+Die Entnahme erscheint im Rücklagen-Journal mit Typ "entnahme"
+Prüfe: Wenn Rücklage nicht ausreicht → Sonderumlage oder Fehler/Warnung
+Gemäß WEG-Novelle 2022: Mindest-Rücklagendotierung von €0,90/m² Nutzfläche/Monat (ab Baujahr-abhängig gestaffelt)
+4. Eigentümerversammlung & Beschlüsse (§ 24-25 WEG)
+
+Erstelle eine Eigentümerversammlung mit Tagesordnung
+Abstimmung über Instandhaltungsmaßnahme (Mehrheit nach Miteigentumsanteilen)
+Ergebnis: angenommen/abgelehnt/vertagt
+Nur bei Beschluss "angenommen" darf die Rücklagen-Entnahme erfolgen
+5. Zusammenspiel prüfen
+
+Vorschreibung → Einzahlung Rücklage → Beschluss → Entnahme aus Rücklage → aktualisierter Stand
+Audit-Trail: Jede Rücklagenbewegung muss im revisionssicheren Log erscheinen
+Die Betriebskostenabrechnung darf Instandhaltungskosten, die aus der Rücklage finanziert wurden, NICHT nochmal den Eigentümern belasten (keine Doppelverrechnung)
+Testdaten:
+
+Liegenschaft mit mind. 5 Einheiten (gemischt: Wohnung, Geschäft, Garage)
+Unterschiedliche Nutzwerte/MEA
+Rücklagenstand: €50.000
+Geplante Instandhaltung: Dachsanierung €15.000, Liftwartung €3.500
+Prüfe Mindest-Rücklagendotierung nach WEG-Novelle 2022
