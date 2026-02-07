@@ -53,6 +53,42 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ message: "Unauthorized" });
 }
 
+function requireRole(...allowedRoles: string[]) {
+  return async (req: any, res: Response, next: NextFunction) => {
+    const roles = await getUserRoles(req);
+    if (roles.includes('admin')) return next();
+    if (allowedRoles.some(r => roles.includes(r))) return next();
+    return res.status(403).json({ error: "Keine Berechtigung für diese Aktion" });
+  };
+}
+
+function requireMutationAccess() {
+  return async (req: any, res: Response, next: NextFunction) => {
+    const roles = await getUserRoles(req);
+    if (roles.includes('admin')) return next();
+    if (roles.includes('viewer') || roles.includes('tester')) {
+      return res.status(403).json({ error: "Nur-Lese-Zugriff: Keine Berechtigung für Änderungen" });
+    }
+    return next();
+  };
+}
+
+function requireFinanceAccess() {
+  return async (req: any, res: Response, next: NextFunction) => {
+    const roles = await getUserRoles(req);
+    if (roles.includes('admin') || roles.includes('finance')) return next();
+    return res.status(403).json({ error: "Keine Berechtigung für Finanzoperationen" });
+  };
+}
+
+function requireAdminAccess() {
+  return async (req: any, res: Response, next: NextFunction) => {
+    const roles = await getUserRoles(req);
+    if (roles.includes('admin')) return next();
+    return res.status(403).json({ error: "Nur Administratoren haben Zugriff" });
+  };
+}
+
 function maskPersonalData(data: any): any {
   if (!data) return data;
   
@@ -174,7 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Only admins can update organization
       const roles = await getUserRoles(req);
-      if (!roles.some((r: any) => r.role === 'admin')) {
+      if (!roles.includes('admin')) {
         return res.status(403).json({ error: "Admin required" });
       }
       
@@ -305,7 +341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/settlements", isAuthenticated, async (req: any, res) => {
+  app.post("/api/settlements", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
@@ -391,7 +427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/settlements/:id/finalize", isAuthenticated, async (req: any, res) => {
+  app.post("/api/settlements/:id/finalize", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       await storage.updateSettlement(req.params.id, {
         status: 'abgeschlossen',
@@ -405,7 +441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Update tenant advances after BK-Abrechnung (MRG-konform)
   // Formel: (BK gesamt + HK gesamt) / 12 × 1,03 = neue monatliche Vorschreibung
-  app.post("/api/advances/update", isAuthenticated, async (req: any, res) => {
+  app.post("/api/advances/update", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const { propertyId, totalBkKosten, totalHkKosten, units, totals } = req.body;
@@ -450,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/properties", isAuthenticated, async (req: any, res) => {
+  app.post("/api/properties", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -509,7 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/properties/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/properties/:id", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const existingProperty = await storage.getProperty(req.params.id);
@@ -531,7 +567,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/properties/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/properties/:id", isAuthenticated, requireRole('property_manager'), async (req, res) => {
     try {
       await storage.deleteProperty(req.params.id);
       res.json({ success: true });
@@ -540,7 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/property-managers", isAuthenticated, async (req: any, res) => {
+  app.post("/api/property-managers", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -560,7 +596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/property-managers/:propertyId", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/property-managers/:propertyId", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -588,7 +624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments", isAuthenticated, async (req: any, res) => {
+  app.post("/api/payments", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
@@ -629,7 +665,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/payments/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const existingPayment = await storage.getPayment(req.params.id);
@@ -660,7 +696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/payments/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req, res) => {
     try {
       await storage.deletePayment(req.params.id);
       res.json({ success: true });
@@ -704,7 +740,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/transactions", isAuthenticated, async (req: any, res) => {
+  app.post("/api/transactions", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
@@ -746,7 +782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/transactions/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/transactions/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req, res) => {
     try {
       await storage.deleteTransactionSplits(req.params.id);
       await storage.deleteExpensesByTransactionId(req.params.id);
@@ -757,7 +793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
+  app.post("/api/expenses", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
@@ -798,7 +834,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/expenses/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const existingExpense = await storage.getExpense(req.params.id);
@@ -832,7 +868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/expenses/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req, res) => {
     try {
       await storage.deleteExpense(req.params.id);
       res.json({ success: true });
@@ -857,7 +893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/account-categories", isAuthenticated, async (req: any, res) => {
+  app.post("/api/account-categories", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -880,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/account-categories/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -902,7 +938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/account-categories/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       await storage.deleteAccountCategory(req.params.id);
       res.status(204).send();
@@ -953,7 +989,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/units", isAuthenticated, async (req: any, res) => {
+  app.post("/api/units", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const body = snakeToCamel(req.body);
@@ -985,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/units/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/units/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const unit = await storage.getUnit(req.params.id);
@@ -1075,7 +1111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/units/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/units/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const unit = await storage.getUnit(req.params.id);
@@ -1093,7 +1129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/tenants/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const tenant = await storage.getTenant(req.params.id);
@@ -1114,7 +1150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tenants", isAuthenticated, async (req: any, res) => {
+  app.post("/api/tenants", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const body = snakeToCamel(req.body);
@@ -1194,7 +1230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
+  app.post("/api/tenants/:tenantId/rent-history", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const tenant = await storage.getTenant(req.params.tenantId);
@@ -1259,7 +1295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/leases", isAuthenticated, async (req: any, res) => {
+  app.post("/api/leases", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const validatedData = schema.insertLeaseSchema.parse(req.body);
       const lease = await storage.createLease(validatedData);
@@ -1273,7 +1309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/leases/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/leases/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const lease = await storage.updateLease(req.params.id, req.body);
       if (!lease) {
@@ -1307,7 +1343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payment-allocations", isAuthenticated, async (req: any, res) => {
+  app.post("/api/payment-allocations", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const validatedData = schema.insertPaymentAllocationSchema.parse(req.body);
       const allocation = await storage.createPaymentAllocation(validatedData);
@@ -1321,7 +1357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/payment-allocations/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/payment-allocations/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       await storage.deletePaymentAllocation(req.params.id);
       res.status(204).send();
@@ -1368,7 +1404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invoices", isAuthenticated, async (req: any, res) => {
+  app.post("/api/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
@@ -1396,7 +1432,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/invoices/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const existingInvoice = await storage.getInvoice(req.params.id);
@@ -1427,7 +1463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/invoices/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/invoices/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req, res) => {
     try {
       await storage.deleteInvoice(req.params.id);
       res.json({ success: true });
@@ -1437,7 +1473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dry-run invoice generation (preview without persisting)
-  app.post("/api/invoices/dry-run", isAuthenticated, async (req: any, res) => {
+  app.post("/api/invoices/dry-run", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -1524,7 +1560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate monthly invoices (Vorschreibungen) for all active tenants
-  app.post("/api/functions/generate-monthly-invoices", isAuthenticated, async (req: any, res) => {
+  app.post("/api/functions/generate-monthly-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -1541,26 +1577,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeTenants = tenants.filter(t => t.status === 'aktiv');
       const vacancyTenants = tenants.filter(t => t.status === 'leerstand');
 
+      // Pre-load all units and properties to avoid N+1 queries
+      const allTenants = [...activeTenants, ...vacancyTenants];
+      const unitIds = [...new Set(allTenants.map(t => t.unitId).filter(Boolean))];
+      const unitMap = new Map<string, any>();
+      const propertyMap = new Map<string, any>();
+      for (const uid of unitIds) {
+        const unit = await storage.getUnit(uid);
+        if (unit) {
+          unitMap.set(uid, unit);
+          if (!propertyMap.has(unit.propertyId)) {
+            const prop = await storage.getProperty(unit.propertyId);
+            if (prop) propertyMap.set(unit.propertyId, prop);
+          }
+        }
+      }
+
+      // Pre-load existing invoices for all tenants in target period (batch check)
+      const existingInvoiceSet = new Set<string>();
+      for (const tenant of allTenants) {
+        const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
+        if (existingInvoices.some(inv => inv.month === targetMonth && inv.year === targetYear)) {
+          existingInvoiceSet.add(tenant.id);
+        }
+      }
+
       const createdInvoices = [];
       const errors: string[] = [];
 
       for (const tenant of activeTenants) {
         try {
-          // Check if invoice already exists for this month
-          const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
-          const alreadyExists = existingInvoices.some(
-            inv => inv.month === targetMonth && inv.year === targetYear
-          );
+          if (existingInvoiceSet.has(tenant.id)) continue;
 
-          if (alreadyExists) {
-            continue; // Skip if already exists
-          }
-
-          // Get unit for property info
-          const unit = await storage.getUnit(tenant.unitId);
+          const unit = unitMap.get(tenant.unitId);
           if (!unit) continue;
 
-          const property = await storage.getProperty(unit.propertyId);
+          const property = propertyMap.get(unit.propertyId);
           if (!property) continue;
 
           // Calculate amounts from tenant data
@@ -1688,13 +1740,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate vacancy invoices (Leerstand: BK+HK, no rent)
       for (const tenant of vacancyTenants) {
         try {
-          const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
-          const alreadyExists = existingInvoices.some(
-            inv => inv.month === targetMonth && inv.year === targetYear
-          );
-          if (alreadyExists) continue;
+          if (existingInvoiceSet.has(tenant.id)) continue;
 
-          const unit = await storage.getUnit(tenant.unitId);
+          const unit = unitMap.get(tenant.unitId);
           if (!unit) continue;
 
           const bk = Number(unit.leerstandBk || tenant.betriebskostenVorschuss || 0);
@@ -2075,7 +2123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bank-accounts", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -2099,7 +2147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const account = await storage.getBankAccount(req.params.id);
@@ -2127,7 +2175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const account = await storage.getBankAccount(req.params.id);
@@ -2257,7 +2305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Jahresübertrag: Endbestand 31.12. wird Anfangsbestand 01.01. des Folgejahres
-  app.post("/api/bank-accounts/:id/carry-over", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bank-accounts/:id/carry-over", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const account = await storage.getBankAccount(req.params.id);
@@ -2369,7 +2417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/distribution-keys", isAuthenticated, async (req: any, res) => {
+  app.post("/api/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const userId = req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -2400,7 +2448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const userId = req.session?.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -2416,7 +2464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -2459,7 +2507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: any, res) => {
+  app.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const property = await storage.getProperty(req.params.propertyId);
@@ -2522,7 +2570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/units/:unitId/distribution-values", isAuthenticated, async (req: any, res) => {
+  app.post("/api/units/:unitId/distribution-values", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const unit = await storage.getUnit(req.params.unitId);
@@ -2550,7 +2598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const unit = await storage.getUnit(req.params.unitId);
@@ -2644,7 +2692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/invites", isAuthenticated, async (req: any, res) => {
+  app.post("/api/invites", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -2785,7 +2833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/invites/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/invites/:id", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -2855,7 +2903,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/organization/members/:memberId/roles", isAuthenticated, async (req: any, res) => {
+  app.post("/api/organization/members/:memberId/roles", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
     try {
       const userEmail = req.session?.email;
       const profile = await storage.getProfileByEmail(userEmail);
@@ -2882,7 +2930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/run-simulation", isAuthenticated, async (req, res) => {
+  app.post("/api/admin/run-simulation", isAuthenticated, requireAdminAccess(), async (req, res) => {
     try {
       const result = await runSimulation();
       res.json({ 
@@ -2899,7 +2947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== SEPA Export Routes =====
-  app.post("/api/sepa/direct-debit", isAuthenticated, async (req: any, res) => {
+  app.post("/api/sepa/direct-debit", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -2923,7 +2971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sepa/credit-transfer", isAuthenticated, async (req: any, res) => {
+  app.post("/api/sepa/credit-transfer", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -3047,7 +3095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Send Dunning Email =====
-  app.post("/api/dunning/send", isAuthenticated, async (req: any, res) => {
+  app.post("/api/dunning/send", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -3123,7 +3171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/dunning/process", isAuthenticated, async (req: any, res) => {
+  app.post("/api/dunning/process", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -3155,7 +3203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/vpi/apply", isAuthenticated, async (req: any, res) => {
+  app.post("/api/vpi/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -3190,7 +3238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/maintenance/send-reminders", isAuthenticated, async (req: any, res) => {
+  app.post("/api/maintenance/send-reminders", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -3394,7 +3442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Storage Endpoints =====
-  app.post("/api/storage/signed-url", isAuthenticated, async (req: any, res) => {
+  app.post("/api/storage/signed-url", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
     try {
       const normalizedBody = snakeToCamel(req.body);
       const { bucket, filePath, expiresIn } = normalizedBody;
@@ -3408,7 +3456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/storage/upload", isAuthenticated, async (req: any, res) => {
+  app.post("/api/storage/upload", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
     try {
       // Placeholder for file upload - would integrate with Object Storage in production
       res.json({ 
@@ -3506,7 +3554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/key-inventory", isAuthenticated, async (req: any, res) => {
+  app.post("/api/key-inventory", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const body = snakeToCamel(req.body);
       const result = await db.insert(schema.keyInventory).values({
@@ -3538,7 +3586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/key-inventory/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const body = snakeToCamel(req.body);
@@ -3580,7 +3628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/key-inventory/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { id } = req.params;
       await db.delete(schema.keyInventory).where(eq(schema.keyInventory.id, id));
@@ -3626,7 +3674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, async (req: any, res) => {
+  app.post("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { keyInventoryId } = req.params;
       const body = snakeToCamel(req.body);
@@ -3671,7 +3719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== MieWeG Indexation Calculator =====
-  app.post("/api/mieweg-calculate", isAuthenticated, async (req: any, res) => {
+  app.post("/api/mieweg-calculate", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const body = snakeToCamel(req.body);
       const { miewegIndexationService } = await import('./services/miewegIndexationService');
@@ -3785,7 +3833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/budgets", isAuthenticated, async (req: any, res) => {
+  app.post("/api/budgets", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
@@ -3827,7 +3875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const body = snakeToCamel(req.body);
@@ -3862,7 +3910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/budgets/:id/status", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const orgId = req.session.organizationId;
@@ -3893,7 +3941,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const orgId = req.session.organizationId;
@@ -3990,7 +4038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
+  app.post("/api/properties/:propertyId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { propertyId } = req.params;
       const orgId = req.session.organizationId;
@@ -4021,7 +4069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const orgId = req.session.organizationId;
@@ -4080,7 +4128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any, res) => {
+  app.post("/api/tenants/:tenantId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { tenantId } = req.params;
       const orgId = req.session.organizationId;
@@ -4120,7 +4168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tenant-documents/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/tenant-documents/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const { id } = req.params;
       const orgId = req.session.organizationId;
@@ -4133,7 +4181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Banking Sync - Transactions to Payments =====
-  app.post("/api/sync/transactions-to-payments", isAuthenticated, async (req: any, res) => {
+  app.post("/api/sync/transactions-to-payments", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const orgId = req.session.organizationId;
       
@@ -4254,7 +4302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Endpoint to reallocate all existing payments to invoices (update invoice status)
-  app.post("/api/sync/payments-to-invoices", isAuthenticated, async (req: any, res) => {
+  app.post("/api/sync/payments-to-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const orgId = req.session.organizationId;
       
@@ -4431,7 +4479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Send demo invitation directly
-  app.post("/api/admin/demo/invite", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/admin/demo/invite", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       
@@ -4493,7 +4541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: Delete a demo invitation
-  app.delete("/api/admin/demo/invites/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/admin/demo/invites/:id", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const { id } = req.params;
@@ -4535,7 +4583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   });
 
-  app.post("/api/ocr/tenant", isAuthenticated, (req: Request, res: Response, next: any) => {
+  app.post("/api/ocr/tenant", isAuthenticated, requireRole("property_manager"), (req: Request, res: Response, next: any) => {
     ocrUpload.single('file')(req, res, (err: any) => {
       if (err) {
         console.error('Multer upload error:', err);
@@ -4816,7 +4864,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   const validInquiryStatuses = ['neu', 'kontaktiert', 'demo_vereinbart', 'verhandlung', 'abgeschlossen', 'abgelehnt'];
   const validLicenseStatuses = ['aktiv', 'gekuendigt', 'pausiert', 'abgelaufen'];
 
-  app.patch("/api/admin/white-label/inquiries/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/admin/white-label/inquiries/:id", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const { id } = req.params;
@@ -4858,7 +4906,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   });
 
   // Admin: Delete White Label inquiry
-  app.delete("/api/admin/white-label/inquiries/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/admin/white-label/inquiries/:id", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const { id } = req.params;
@@ -4912,7 +4960,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   });
 
   // Admin: Create White Label license
-  app.post("/api/admin/white-label/licenses", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/admin/white-label/licenses", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       
@@ -4987,7 +5035,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   });
 
   // Admin: Update White Label license
-  app.patch("/api/admin/white-label/licenses/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/admin/white-label/licenses/:id", isAuthenticated, requireAdminAccess(), async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId!;
       const { id } = req.params;

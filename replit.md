@@ -23,7 +23,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
 - **Email**: Resend integration for notifications and invitations.
 - **Routing**: `react-router-dom` for frontend, Express for backend API.
 - **State Management**: TanStack Query (React Query) for data fetching and caching.
-- **API Security**: Authentication and organization-based multi-tenancy are implemented across routes with strict ownership checks via relationship traversal (e.g., tenant→unit→property→org).
+- **API Security**: Authentication and organization-based multi-tenancy are implemented across routes with strict ownership checks via relationship traversal (e.g., tenant→unit→property→org). Backend role-based authorization middleware (`requireRole`, `requireMutationAccess`, `requireFinanceAccess`, `requireAdminAccess`) enforces permissions on all 120+ mutation routes (POST/PATCH/DELETE). Viewers and testers are blocked from mutations server-side.
 - **Data Integrity**: Soft-delete functionality using `deletedAt` timestamps for key entities and `Zod` validation for all POST/PATCH API endpoints ensure data consistency and security.
 - **MRG Compliance**:
     - Six standard MRG-compliant distribution keys (Nutzfläche, Einheiten, Personen, Pauschal, Verbrauch, Sondernutzung) are managed for operating cost allocation.
@@ -46,7 +46,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui components for
     - **Export Formats**: BMD NTCS CSV and DATEV ASCII export formats for accounting software integration.
     - **FinanzOnline Integration**: USt-Voranmeldung XML generation (Form U30) with Austrian tax authority compliance.
     - **Document Management**: Metadata-based document storage with category system and access control.
-- **Unit Testing Infrastructure**: Comprehensive test suite with 94+ tests covering:
+- **Unit Testing Infrastructure**: Comprehensive test suite with 70+ tests (7 test files) covering:
     - MRG payment allocation (BK→HK→Miete priority)
     - Settlement calculations with vacancy logic per §21 MRG
     - MieWeG rent indexation (Hälfteregelung, 2026/2027 caps)
