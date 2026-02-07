@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 interface DunningRequest {
   invoiceId: string;
@@ -16,24 +18,25 @@ interface DunningRequest {
 
 export function useSendDunning() {
   const queryClient = useQueryClient();
+  const { isDemoMode } = useDemoData();
   
   return useMutation({
     mutationFn: async (request: DunningRequest) => {
-      const response = await fetch('/api/functions/send-dunning', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(request),
+      if (isDemoMode) {
+        toast.info('Mahnungsversand ist im Demo-Modus nicht verfügbar');
+        return { message: 'Demo-Modus' };
+      }
+      const { data, error } = await supabase.functions.invoke('send-dunning', {
+        body: request,
       });
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Fehler beim Versenden');
-      }
-      return response.json();
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['dunningOverview'] });
       toast.success(data.message);
     },
     onError: (error) => {

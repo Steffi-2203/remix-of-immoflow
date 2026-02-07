@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { normalizeFields } from '@/utils/fieldNormalizer';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface AuditLog {
   id: string;
@@ -11,6 +11,8 @@ export interface AuditLog {
   new_data: Record<string, unknown> | null;
   ip_address: unknown;
   user_agent: string | null;
+  hash: string | null;
+  previous_hash: string | null;
   created_at: string;
 }
 
@@ -22,26 +24,32 @@ export interface AuditLogFilters {
   endDate?: string;
 }
 
-function normalizeAuditLog(log: any) {
-  return normalizeFields(log);
-}
-
 export function useAuditLogs(filters?: AuditLogFilters) {
   return useQuery({
     queryKey: ['audit-logs', filters],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filters?.tableName) params.set('table_name', filters.tableName);
-      if (filters?.action) params.set('action', filters.action);
-      if (filters?.limit) params.set('limit', String(filters.limit));
-      if (filters?.startDate) params.set('start_date', filters.startDate);
-      if (filters?.endDate) params.set('end_date', filters.endDate);
-      
-      const url = `/api/audit-logs${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await fetch(url, { credentials: 'include' });
-      if (!response.ok) throw new Error('Failed to fetch audit logs');
-      const data = await response.json();
-      return Array.isArray(data) ? data.map(normalizeAuditLog) : [normalizeAuditLog(data)] as AuditLog[];
+      let query = supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(filters?.limit ?? 100);
+
+      if (filters?.tableName) {
+        query = query.eq('table_name', filters.tableName);
+      }
+      if (filters?.action) {
+        query = query.eq('action', filters.action);
+      }
+      if (filters?.startDate) {
+        query = query.gte('created_at', filters.startDate);
+      }
+      if (filters?.endDate) {
+        query = query.lte('created_at', filters.endDate);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as AuditLog[];
     },
   });
 }

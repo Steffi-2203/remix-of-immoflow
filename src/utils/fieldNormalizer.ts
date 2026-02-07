@@ -436,27 +436,21 @@ export function hasSonstigeKosten(sonstigeKosten: SonstigeKosten | null | undefi
 /**
  * Calculate total rent including grundmiete and all sonstigeKosten items
  */
-export function calculateTotalRent(tenant: {
-  grundmiete?: number | string | null;
-  betriebskostenVorschuss?: number | string | null;
-  heizungskostenVorschuss?: number | string | null;
-  wasserkostenVorschuss?: number | string | null;
-  warmwasserkostenVorschuss?: number | string | null;
-  sonstigeKosten?: SonstigeKosten | null;
-}): number {
+export function calculateTotalRent(tenant: Record<string, any>): number {
   const grundmiete = Number(tenant.grundmiete) || 0;
   
+  const sonstige = tenant.sonstigeKosten ?? tenant.sonstige_kosten;
   // If sonstigeKosten has data (keys present), use it; otherwise fall back to legacy fields
-  if (hasSonstigeKosten(tenant.sonstigeKosten)) {
-    const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstigeKosten);
+  if (hasSonstigeKosten(sonstige)) {
+    const sonstigeTotal = calculateSonstigeKostenTotal(sonstige);
     return grundmiete + sonstigeTotal;
   }
   
-  // Legacy fallback for old data
-  const bk = Number(tenant.betriebskostenVorschuss) || 0;
-  const hk = Number(tenant.heizungskostenVorschuss) || 0;
-  const wk = Number(tenant.wasserkostenVorschuss) || 0;
-  const wwk = Number(tenant.warmwasserkostenVorschuss) || 0;
+  // Legacy fallback for old data - support both camelCase and snake_case
+  const bk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss) || 0;
+  const hk = Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss) || 0;
+  const wk = Number(tenant.wasserkostenVorschuss ?? tenant.wasserkosten_vorschuss) || 0;
+  const wwk = Number(tenant.warmwasserkostenVorschuss ?? tenant.warmwasserkosten_vorschuss) || 0;
   
   return grundmiete + bk + hk + wk + wwk;
 }

@@ -382,7 +382,7 @@ export default function Documents() {
                 key={property.id}
                 propertyId={property.id}
                 propertyName={property.name}
-                propertyAddress={`${property.address}, ${property.postalCode} ${property.city}`}
+                propertyAddress={`${property.address}, ${(property as any).postal_code || (property as any).postalCode} ${property.city}`}
                 searchQuery={searchQuery}
                 onUploadClick={() => handleUploadClick('property', property.id)}
               />

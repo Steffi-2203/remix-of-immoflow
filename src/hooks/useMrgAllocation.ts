@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useTenants } from './useTenants';
 import { useUnits } from './useUnits';
 import { useCombinedPayments } from './useCombinedPayments';
-import { useInvoices } from './useInvoices';
 import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 
 /**
@@ -45,7 +44,7 @@ export interface TenantAllocation {
   // Saldo
   ueberzahlung: number;
   unterzahlung: number;
-  saldo: number;  // positiv = Unterzahlung (offene Forderung), negativ = Überzahlung
+  saldo: number;  // positiv = Überzahlung, negativ = Unterzahlung
   // Mahnstatus
   oldestOverdueDays: number;
   mahnstatus: 'aktuell' | 'Zahlungserinnerung' | '1. Mahnung' | '2. Mahnung';
@@ -75,19 +74,12 @@ export interface MrgAllocationResult {
 /**
  * Berechnet MRG-konforme Zahlungsaufteilung für einen Mieter
  * Priorität: BK → HK → Miete
- * 
- * @param sollBk - Betriebskosten SOLL (netto)
- * @param sollHk - Heizkosten SOLL (netto)
- * @param sollMiete - Miete SOLL (netto)
- * @param totalIst - Tatsächliche Zahlung (brutto)
- * @param totalSollBrutto - Gesamtbetrag inkl. USt (optional, für korrekte Überzahlungsberechnung)
  */
 export function calculateMrgAllocation(
   sollBk: number,
   sollHk: number,
   sollMiete: number,
-  totalIst: number,
-  totalSollBrutto?: number
+  totalIst: number
 ): {
   istBk: number;
   istHk: number;
@@ -107,16 +99,14 @@ export function calculateMrgAllocation(
   const istMiete = Math.min(remaining, sollMiete);
   remaining -= istMiete;
   
-  // WICHTIG: Überzahlung basiert auf BRUTTO-SOLL (gesamtbetrag inkl. USt)
-  // Wenn totalSollBrutto übergeben wird, verwende diesen für die Berechnung
-  // Sonst verwende die Summe der Netto-Werte (Fallback)
-  const sollGesamt = totalSollBrutto ?? (sollBk + sollHk + sollMiete);
+  // Überzahlung (wenn mehr gezahlt als Gesamt-SOLL)
+  const ueberzahlung = remaining > 0 ? remaining : 0;
   
-  // Überzahlung = Zahlung > Brutto-SOLL (echte Überzahlung, nicht nur USt-Anteil)
-  const ueberzahlung = totalIst > sollGesamt ? totalIst - sollGesamt : 0;
-  
-  // Unterzahlung = Brutto-SOLL > Zahlung
-  const unterzahlung = sollGesamt > totalIst ? sollGesamt - totalIst : 0;
+  // Unterzahlung pro Komponente
+  const diffBk = sollBk - istBk;
+  const diffHk = sollHk - istHk;
+  const diffMiete = sollMiete - istMiete;
+  const unterzahlung = diffBk + diffHk + diffMiete;
   
   return { istBk, istHk, istMiete, ueberzahlung, unterzahlung };
 }
@@ -133,9 +123,8 @@ export function useMrgAllocation(
   const { data: tenants, isLoading: tenantsLoading } = useTenants();
   const { data: units, isLoading: unitsLoading } = useUnits();
   const { data: combinedPayments, isLoading: paymentsLoading } = useCombinedPayments();
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices();
 
-  const isLoading = tenantsLoading || unitsLoading || paymentsLoading || invoicesLoading;
+  const isLoading = tenantsLoading || unitsLoading || paymentsLoading;
 
   const result = useMemo(() => {
     if (!tenants || !units || !combinedPayments) {
@@ -153,10 +142,10 @@ export function useMrgAllocation(
     const now = new Date();
     const dayOfMonth = now.getDate();
 
-    // Filter units by property (support both camelCase and snake_case)
+    // Filter units by property
     const propertyUnitIds = selectedPropertyId === 'all'
       ? null
-      : units.filter(u => (u.propertyId ?? u.property_id) === selectedPropertyId).map(u => u.id);
+      : units.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
 
     const relevantUnits = propertyUnitIds
       ? units.filter(u => propertyUnitIds.includes(u.id))
@@ -171,70 +160,42 @@ export function useMrgAllocation(
       month
     );
 
-    // Filter payments for this period (support both camelCase and snake_case)
+    // Filter payments for this period
     const periodPayments = combinedPayments.filter(p => {
       const date = new Date(p.date);
       if (date.getFullYear() !== year || date.getMonth() + 1 !== month) return false;
       
       // Filter by property if selected
       if (propertyUnitIds) {
-        const tenantId = p.tenantId ?? p.tenant_id;
-        const tenant = tenants.find(t => t.id === tenantId);
-        const unitId = tenant?.unitId ?? tenant?.unit_id;
-        return tenant && propertyUnitIds.includes(unitId);
+        const tenant = tenants.find(t => t.id === p.tenant_id);
+        return tenant && propertyUnitIds.includes(tenant.unit_id);
       }
       return true;
     });
 
-    const allocations: TenantAllocation[] = activeTenants.map(tenant => {
-      // SOLL: Bevorzugt aus Vorschreibung (monthlyInvoice) für den spezifischen Monat
-      // Fallback auf Mieter-Stammdaten nur wenn keine Vorschreibung existiert
-      const tenantInvoice = invoices?.find(inv => 
-        (inv.tenantId ?? inv.tenant_id) === tenant.id && 
-        inv.year === year && 
-        inv.month === month
-      );
-      
-      let sollBk: number, sollHk: number, sollMiete: number;
-      let totalSollBrutto: number; // Gesamtbetrag inkl. USt für Saldo
-      
-      if (tenantInvoice) {
-        // Vorschreibung vorhanden - verwende diese (inkl. aller Änderungen)
-        // Support both camelCase and snake_case invoice field names
-        const inv = tenantInvoice as any;
-        sollBk = Number(inv.betriebskosten ?? inv.betriebskostenVorschuss ?? inv.betriebskosten_vorschuss ?? 0);
-        sollHk = Number(inv.heizkosten ?? inv.heizkostenVorschuss ?? inv.heizkosten_vorschuss ?? inv.heizungskosten ?? inv.heizungskosten_vorschuss ?? 0);
-        sollMiete = Number(inv.grundmiete || 0);
-        // WICHTIG: Verwende gesamtbetrag (brutto) für Saldo, da Zahlungen brutto sind
-        totalSollBrutto = Number(inv.gesamtbetrag ?? 0);
-      } else {
-        // Fallback auf Mieter-Stammdaten (support both camelCase and snake_case)
-        // Schema uses heizkostenVorschuss (without "ungs"), also support alternative spellings
-        sollBk = Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0);
-        sollHk = Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0);
-        sollMiete = Number(tenant.grundmiete || 0);
-        // Fallback: Berechne Brutto mit geschätztem USt-Satz (10% auf alles)
-        totalSollBrutto = (sollBk + sollHk + sollMiete) * 1.1;
-      }
-      
+    const allocations: TenantAllocation[] = activeTenants.map((tenant: any) => {
+      // SOLL from tenant data
+      const sollBk = Number(tenant.betriebskosten_vorschuss || 0);
+      const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
+      const sollMiete = Number(tenant.grundmiete || 0);
       const totalSoll = sollBk + sollHk + sollMiete;
 
       // IST from combined payments for this tenant and period
-      const tenantPayments = periodPayments.filter(p => (p.tenantId ?? p.tenant_id) === tenant.id);
+      const tenantPayments = periodPayments.filter(p => p.tenant_id === tenant.id);
       const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // MRG-konforme Aufteilung (mit Brutto-SOLL für korrekte Überzahlungsberechnung)
+      // MRG-konforme Aufteilung
       const { istBk, istHk, istMiete, ueberzahlung, unterzahlung } = 
-        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst, totalSollBrutto);
+        calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst);
 
       // Differenzen
       const diffBk = sollBk - istBk;
       const diffHk = sollHk - istHk;
       const diffMiete = sollMiete - istMiete;
 
-      // Saldo: SOLL (brutto) - IST = positiv = Unterzahlung, negativ = Überzahlung
-      // WICHTIG: Verwende totalSollBrutto (gesamtbetrag inkl. USt), da Zahlungen brutto sind
-      const saldo = totalSollBrutto - totalIst;
+      // Saldo: positiv = Unterzahlung (offene Forderung), negativ = Überzahlung (Guthaben)
+      // Standard österreichische Buchhaltung: Saldo = SOLL - IST
+      const saldo = totalSoll - totalIst;
 
       // Days overdue: if we're past the 5th of the month and saldo is positive (underpayment)
       const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
@@ -260,27 +221,26 @@ export function useMrgAllocation(
         status = 'teilbezahlt';
       }
 
-      const tenantUnitId = tenant.unitId ?? tenant.unit_id;
-      const unit = units.find(u => u.id === tenantUnitId) || null;
+      const unit = units.find(u => u.id === tenant.unit_id) || null;
 
       return {
         tenant: {
           id: tenant.id,
-          first_name: tenant.firstName ?? tenant.first_name,
-          last_name: tenant.lastName ?? tenant.last_name,
-          unit_id: tenantUnitId,
-          grundmiete: Number(tenant.grundmiete || 0),
-          betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0),
-          heizungskosten_vorschuss: Number(tenant.heizkostenVorschuss ?? tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0),
+          first_name: tenant.first_name,
+          last_name: tenant.last_name,
+          unit_id: tenant.unit_id,
+          grundmiete: tenant.grundmiete,
+          betriebskosten_vorschuss: tenant.betriebskosten_vorschuss,
+          heizungskosten_vorschuss: tenant.heizungskosten_vorschuss,
           status: tenant.status,
           mietbeginn: tenant.mietbeginn,
           mietende: tenant.mietende,
         },
         unit: unit ? {
           id: unit.id,
-          top_nummer: unit.topNummer ?? unit.top_nummer,
+          top_nummer: unit.top_nummer,
           type: unit.type,
-          property_id: unit.propertyId ?? unit.property_id,
+          property_id: unit.property_id,
         } : null,
         sollBk,
         sollHk,
@@ -301,110 +261,6 @@ export function useMrgAllocation(
         status,
       };
     });
-
-    // ====== LEERSTAND (Vacancy) SUPPORT ======
-    // Finde Einheiten mit Leerstand-Vorschreibungen für diesen Monat
-    const vacancyInvoices = invoices?.filter(inv => 
-      (inv as any).isVacancy === true || (inv as any).is_vacancy === true
-    ) || [];
-    
-    // Filter für diesen Monat
-    const monthVacancyInvoices = vacancyInvoices.filter(inv => 
-      inv.year === year && inv.month === month
-    );
-    
-    // Gruppiere nach Unit
-    const vacancyByUnit = new Map<string, typeof monthVacancyInvoices>();
-    monthVacancyInvoices.forEach(inv => {
-      const unitId = (inv as any).unitId ?? (inv as any).unit_id;
-      if (!unitId) return;
-      
-      // Filter by property if selected
-      if (propertyUnitIds && !propertyUnitIds.includes(unitId)) return;
-      
-      if (!vacancyByUnit.has(unitId)) {
-        vacancyByUnit.set(unitId, []);
-      }
-      vacancyByUnit.get(unitId)!.push(inv);
-    });
-    
-    // Erstelle Leerstand-Allocations
-    const vacancyAllocations: TenantAllocation[] = [];
-    vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
-      const unit = units.find(u => u.id === unitId);
-      if (!unit) return;
-      
-      // SOLL aus Leerstand-Vorschreibungen
-      const sollBk = unitVacancyInvoices.reduce((sum, inv) => {
-        const invAny = inv as any;
-        return sum + Number(invAny.betriebskosten ?? invAny.betriebskostenVorschuss ?? 0);
-      }, 0);
-      const sollHk = unitVacancyInvoices.reduce((sum, inv) => {
-        const invAny = inv as any;
-        return sum + Number(invAny.heizungskosten ?? invAny.heizkostenVorschuss ?? invAny.heizkosten ?? 0);
-      }, 0);
-      const sollMiete = 0;
-      const totalSoll = sollBk + sollHk;
-      
-      // IST: Nutze paid_amount aus Vorschreibungen
-      const totalPaid = unitVacancyInvoices.reduce((sum, inv) => {
-        const paid = Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0);
-        return sum + paid;
-      }, 0);
-      
-      // Proportionale Verteilung
-      const sollTotal = sollBk + sollHk;
-      const istBk = sollTotal > 0 ? (sollBk / sollTotal) * totalPaid : 0;
-      const istHk = sollTotal > 0 ? (sollHk / sollTotal) * totalPaid : 0;
-      const istMiete = 0;
-      const totalIst = istBk + istHk;
-      
-      const diffBk = sollBk - istBk;
-      const diffHk = sollHk - istHk;
-      const diffMiete = 0;
-      const saldo = totalSoll - totalIst;
-      
-      vacancyAllocations.push({
-        tenant: {
-          id: `vacancy-${unitId}-${year}-${month}`,
-          first_name: 'Leerstand',
-          last_name: `(${unit.topNummer ?? unit.top_nummer})`,
-          unit_id: unitId,
-          grundmiete: 0,
-          betriebskosten_vorschuss: sollBk,
-          heizungskosten_vorschuss: sollHk,
-          status: 'leerstand',
-          mietbeginn: '',
-          mietende: null,
-        },
-        unit: {
-          id: unit.id,
-          top_nummer: (unit as any).topNummer ?? (unit as any).top_nummer,
-          type: (unit as any).type,
-          property_id: (unit as any).propertyId ?? (unit as any).property_id,
-        },
-        sollBk,
-        sollHk,
-        sollMiete,
-        totalSoll,
-        istBk,
-        istHk,
-        istMiete,
-        totalIst,
-        diffBk,
-        diffHk,
-        diffMiete,
-        ueberzahlung: 0,
-        unterzahlung: saldo > 0 ? saldo : 0,
-        saldo,
-        oldestOverdueDays: 0,
-        mahnstatus: 'aktuell',
-        status: saldo > 0 ? 'offen' : 'vollstaendig',
-      });
-    });
-    
-    // Füge Leerstand-Allocations hinzu
-    allocations.push(...vacancyAllocations);
 
     // Sort by saldo ascending (most debt first)
     allocations.sort((a, b) => a.saldo - b.saldo);
@@ -475,20 +331,18 @@ export function calculateMrgAllocationsFromData(
     const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
     const sollMiete = Number(tenant.grundmiete || 0);
     const totalSoll = sollBk + sollHk + sollMiete;
-    // Brutto = Netto + geschätzte USt (10% auf alles)
-    const totalSollBrutto = totalSoll * 1.1;
 
     const tenantPayments = payments.filter(p => p.tenant_id === tenant.id);
     const totalIst = tenantPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     const { istBk, istHk, istMiete, ueberzahlung, unterzahlung } = 
-      calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst, totalSollBrutto);
+      calculateMrgAllocation(sollBk, sollHk, sollMiete, totalIst);
 
     const diffBk = sollBk - istBk;
     const diffHk = sollHk - istHk;
     const diffMiete = sollMiete - istMiete;
-    // Saldo: SOLL (brutto) - IST = positiv = Unterzahlung, negativ = Überzahlung
-    const saldo = totalSollBrutto - totalIst;
+    // Saldo: positiv = Unterzahlung (offene Forderung), negativ = Überzahlung
+    const saldo = totalSoll - totalIst;
 
     const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
     const daysOverdue = isCurrentMonth && saldo > 0 && dayOfMonth > 5 ? dayOfMonth - 5 : 0;

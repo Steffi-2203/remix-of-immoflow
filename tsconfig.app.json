@@ -26,5 +26,5 @@
       "@assets/*": ["./attached_assets/*"]
     }
   },
-  "include": ["src", "shared"]
+  "include": ["src"]
 }

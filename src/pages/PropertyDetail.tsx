@@ -32,6 +32,7 @@ import {
   FileImage,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
+import { HeatingCostImportDialog } from '@/components/heating/HeatingCostImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
 import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
@@ -91,6 +92,7 @@ export default function PropertyDetail() {
   const [unitImportDialogOpen, setUnitImportDialogOpen] = useState(false);
   const [tenantImportDialogOpen, setTenantImportDialogOpen] = useState(false);
   const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
+  const [heatingImportOpen, setHeatingImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
@@ -224,6 +226,13 @@ export default function PropertyDetail() {
       title={property.name}
       subtitle={`${property.address}, ${property.postal_code} ${property.city}`}
     >
+      {/* Breadcrumb Navigation */}
+      <nav className="flex items-center gap-1 text-sm text-muted-foreground mb-6">
+        <Link to="/liegenschaften" className="hover:text-foreground transition-colors">Liegenschaften</Link>
+        <span>/</span>
+        <span className="text-foreground font-medium">{property.name}</span>
+      </nav>
+
       {/* Back Button & Actions */}
       <div className="flex items-center justify-between mb-6">
         <Link
@@ -386,6 +395,9 @@ export default function PropertyDetail() {
             <Wrench className="h-4 w-4 mr-1" />
             Wartungsverträge
           </TabsTrigger>
+          <TabsTrigger value="heating">
+            Heizkosten
+          </TabsTrigger>
           <TabsTrigger value="documents">Dokumente</TabsTrigger>
         </TabsList>
 
@@ -418,10 +430,10 @@ export default function PropertyDetail() {
                   </Button>
                 </Link>
               ) : (
-                <Link to="/upgrade">
+                <Link to="/einstellungen">
                   <Button variant="secondary">
                     <Crown className="h-4 w-4 mr-2" />
-                    Plan upgraden
+                    Einstellungen
                   </Button>
                 </Link>
               )}
@@ -551,10 +563,10 @@ export default function PropertyDetail() {
                   </Button>
                 </Link>
               ) : (
-                <Link to="/upgrade">
+                <Link to="/einstellungen">
                   <Button variant="secondary">
                     <Crown className="h-4 w-4 mr-2" />
-                    Plan upgraden für mehr Einheiten
+                    Einstellungen
                   </Button>
                 </Link>
               )}
@@ -819,7 +831,7 @@ export default function PropertyDetail() {
                   </TableHeader>
                   <TableBody>
                     {distributionKeys.map((key) => {
-                      const unitTypes = (key.includedUnitTypes as string[] | null) || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
+                      const unitTypes = ((key as any).includedUnitTypes || (key as any).included_unit_types) as string[] | null || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
                       const unitTypeLabels: Record<string, string> = {
                         wohnung: 'Whg',
                         geschaeft: 'Gesch',
@@ -830,11 +842,11 @@ export default function PropertyDetail() {
                       };
                       return (
                       <TableRow key={key.id} data-testid={`row-distribution-key-${key.id}`}>
-                        <TableCell className="font-mono text-sm">{key.keyCode}</TableCell>
+                        <TableCell className="font-mono text-sm">{key.key_code}</TableCell>
                         <TableCell>{key.name}</TableCell>
                         <TableCell>
                           <Badge variant="secondary">
-                            {inputTypeOptions.find(o => o.value === key.inputType)?.label || key.inputType}
+                            {inputTypeOptions.find(o => o.value === key.input_type)?.label || key.input_type}
                           </Badge>
                         </TableCell>
                         <TableCell>{key.unit}</TableCell>
@@ -933,6 +945,22 @@ export default function PropertyDetail() {
           {id && <MaintenanceContractsTab propertyId={id} />}
         </TabsContent>
 
+        <TabsContent value="heating" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-foreground">Heizkostenabrechnung</h3>
+              <p className="text-sm text-muted-foreground">Externe Heizkostendaten importieren (z.B. ISTA, Techem)</p>
+            </div>
+            <Button onClick={() => setHeatingImportOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              HK-Daten importieren
+            </Button>
+          </div>
+          <div className="rounded-lg border bg-muted/50 p-8 text-center text-muted-foreground">
+            <p>Importieren Sie Verbrauchsdaten Ihres Heizkosten-Ableseunternehmens per CSV oder manuelle Eingabe.</p>
+          </div>
+        </TabsContent>
+
         <TabsContent value="documents" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-foreground">
@@ -1001,6 +1029,11 @@ export default function PropertyDetail() {
               queryClient.invalidateQueries({ queryKey: ['units', id] });
               queryClient.invalidateQueries({ queryKey: ['tenants'] });
             }}
+          />
+          <HeatingCostImportDialog
+            open={heatingImportOpen}
+            onOpenChange={setHeatingImportOpen}
+            propertyId={id}
           />
         </>
       )}
