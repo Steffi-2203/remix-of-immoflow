@@ -40,7 +40,7 @@ export function ActiveOrganizationProvider({ children }: { children: ReactNode }
   const { data: memberships = [], isLoading } = useQuery({
     queryKey: ['user-organizations', user?.id],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user || !supabase) return [];
 
       const { data, error } = await supabase
         .from('user_organizations')
