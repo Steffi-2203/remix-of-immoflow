@@ -1,17 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export function useLetterTemplates() {
   return useQuery({
-    queryKey: ['letter-templates'],
+    queryKey: ['/api/letter-templates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('letter_templates')
-        .select('*')
-        .order('category', { ascending: true });
-      if (error) throw error;
-      return data;
+      const res = await fetch('/api/letter-templates', { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json();
     },
   });
 }
@@ -26,16 +23,11 @@ export function useCreateLetterTemplate() {
       body: string;
       organization_id: string;
     }) => {
-      const { data, error } = await supabase
-        .from('letter_templates')
-        .insert(template)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/letter-templates', template);
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['letter-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/letter-templates'] });
       toast.success('Vorlage gespeichert');
     },
     onError: () => toast.error('Fehler beim Speichern'),
@@ -46,11 +38,10 @@ export function useDeleteLetterTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('letter_templates').delete().eq('id', id);
-      if (error) throw error;
+      await apiRequest('DELETE', `/api/letter-templates/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['letter-templates'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/letter-templates'] });
       toast.success('Vorlage gelöscht');
     },
     onError: () => toast.error('Fehler beim Löschen'),
@@ -59,14 +50,11 @@ export function useDeleteLetterTemplate() {
 
 export function useSerialLetters() {
   return useQuery({
-    queryKey: ['serial-letters'],
+    queryKey: ['/api/serial-letters'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('serial_letters')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
+      const res = await fetch('/api/serial-letters', { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json();
     },
   });
 }
@@ -84,16 +72,11 @@ export function useCreateSerialLetter() {
       sent_via: string;
       sent_at?: string;
     }) => {
-      const { data, error } = await supabase
-        .from('serial_letters')
-        .insert(letter)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/serial-letters', letter);
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['serial-letters'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/serial-letters'] });
       toast.success('Serienbrief erstellt');
     },
     onError: () => toast.error('Fehler beim Erstellen'),

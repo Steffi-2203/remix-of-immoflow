@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { toast } from 'sonner';
 
 export interface WegAssembly {
@@ -42,106 +42,96 @@ export interface ReserveFundEntry {
 
 export function useWegAssemblies(propertyId?: string) {
   return useQuery({
-    queryKey: ['weg-assemblies', propertyId],
+    queryKey: ['/api/weg/assemblies', propertyId],
     queryFn: async () => {
-      let query = supabase
-        .from('weg_assemblies' as any)
-        .select('*')
-        .order('assembly_date', { ascending: false });
-      if (propertyId) query = query.eq('property_id', propertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as WegAssembly[];
+      const params = propertyId ? `?propertyId=${propertyId}` : '';
+      const res = await fetch(`/api/weg/assemblies${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<WegAssembly[]>;
     },
   });
 }
 
 export function useCreateWegAssembly() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (assembly: Omit<WegAssembly, 'id' | 'created_at' | 'updated_at'>) => {
-      const { data, error } = await supabase.from('weg_assemblies' as any).insert(assembly as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/weg/assemblies', assembly);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['weg-assemblies'] }); toast.success('Versammlung erstellt'); },
-    onError: () => { toast.error('Fehler beim Erstellen'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/weg/assemblies'] });
+      toast.success('Versammlung erstellt');
+    },
+    onError: () => toast.error('Fehler beim Erstellen'),
   });
 }
 
 export function useUpdateWegAssembly() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<WegAssembly>) => {
-      const { data, error } = await supabase.from('weg_assemblies' as any).update(updates as any).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('PATCH', `/api/weg/assemblies/${id}`, updates);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['weg-assemblies'] }); toast.success('Versammlung aktualisiert'); },
-    onError: () => { toast.error('Fehler beim Aktualisieren'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/weg/assemblies'] });
+      toast.success('Versammlung aktualisiert');
+    },
+    onError: () => toast.error('Fehler beim Aktualisieren'),
   });
 }
 
 export function useWegVotes(assemblyId?: string) {
   return useQuery({
-    queryKey: ['weg-votes', assemblyId],
+    queryKey: ['/api/weg/votes', assemblyId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('weg_votes' as any).select('*').eq('assembly_id', assemblyId).order('created_at');
-      if (error) throw error;
-      return data as unknown as WegVote[];
+      const res = await fetch(`/api/weg/votes?assemblyId=${assemblyId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<WegVote[]>;
     },
     enabled: !!assemblyId,
   });
 }
 
 export function useCreateWegVote() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (vote: Omit<WegVote, 'id' | 'created_at'>) => {
-      const { data, error } = await supabase.from('weg_votes' as any).insert(vote as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/weg/votes', vote);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['weg-votes'] }); toast.success('Abstimmung gespeichert'); },
-    onError: () => { toast.error('Fehler'); },
-  });
-}
-
-export function useUpdateWegVote() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string } & Partial<WegVote>) => {
-      const { data, error } = await supabase.from('weg_votes' as any).update(updates as any).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/weg/votes'] });
+      toast.success('Abstimmung gespeichert');
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['weg-votes'] }); },
-    onError: () => { toast.error('Fehler'); },
+    onError: () => toast.error('Fehler beim Speichern'),
   });
 }
 
 export function useReserveFund(propertyId?: string) {
   return useQuery({
-    queryKey: ['weg-reserve-fund', propertyId],
+    queryKey: ['/api/weg/reserve-fund', propertyId],
     queryFn: async () => {
-      let query = supabase.from('weg_reserve_fund' as any).select('*').order('year', { ascending: false }).order('month', { ascending: false });
-      if (propertyId) query = query.eq('property_id', propertyId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as unknown as ReserveFundEntry[];
+      const params = propertyId ? `?propertyId=${propertyId}` : '';
+      const res = await fetch(`/api/weg/reserve-fund${params}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<ReserveFundEntry[]>;
     },
   });
 }
 
 export function useCreateReserveFundEntry() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (entry: Omit<ReserveFundEntry, 'id' | 'created_at'>) => {
-      const { data, error } = await supabase.from('weg_reserve_fund' as any).insert(entry as any).select().single();
-      if (error) throw error;
-      return data;
+      const res = await apiRequest('POST', '/api/weg/reserve-fund', entry);
+      return res.json();
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['weg-reserve-fund'] }); toast.success('Eintrag gespeichert'); },
-    onError: () => { toast.error('Fehler'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/weg/reserve-fund'] });
+      toast.success('Rücklage-Eintrag erstellt');
+    },
+    onError: () => toast.error('Fehler beim Erstellen'),
   });
 }

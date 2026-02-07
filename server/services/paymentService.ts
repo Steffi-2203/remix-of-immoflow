@@ -86,11 +86,13 @@ export class PaymentService {
         remaining = roundMoney(remaining - apply);
         appliedTotal = roundMoney(appliedTotal + apply);
 
-        const selectSql = `SELECT id, gesamtbetrag, COALESCE(paid_amount,0) AS paid_amount, version FROM monthly_invoices WHERE id = '${inv.id}'`;
+        const invId = inv.id as string;
+        const selectSql = `SELECT id, gesamtbetrag, COALESCE(paid_amount,0) AS paid_amount, version FROM monthly_invoices WHERE id = $1`;
         const updateSqlBuilder = (_newValues: any, oldVersion: number) => {
           const status = newPaid >= total ? "bezahlt" : newPaid > 0 ? "teilbezahlt" : "offen";
           return {
-            sql: `UPDATE monthly_invoices SET paid_amount = ${newPaid}, status = '${status}', version = ${oldVersion + 1}, updated_at = now() WHERE id = '${inv.id}' AND version = ${oldVersion}`
+            sql: `UPDATE monthly_invoices SET paid_amount = $1, status = $2, version = $3, updated_at = now() WHERE id = $4 AND version = $5`,
+            params: [newPaid, status, oldVersion + 1, invId, oldVersion]
           };
         };
 
