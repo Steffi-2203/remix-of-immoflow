@@ -935,16 +935,45 @@ export const insertWhiteLabelLicenseSchema = createInsertSchema(whiteLabelLicens
 export type InsertWhiteLabelLicense = z.infer<typeof insertWhiteLabelLicenseSchema>;
 export type WhiteLabelLicense = typeof whiteLabelLicenses.$inferSelect;
 
-// ====== WEG VERSAMMLUNGEN (WEG ASSEMBLIES) ======
+// ====== WEG EINHEITEN-EIGENTÜMER (UNIT OWNERS with MEA - § 2 WEG 2002) ======
+export const wegUnitOwners = pgTable("weg_unit_owners", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  meaShare: numeric("mea_share", { precision: 10, scale: 4 }).notNull(),
+  nutzwert: numeric("nutzwert", { precision: 10, scale: 4 }),
+  validFrom: date("valid_from"),
+  validTo: date("valid_to"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegUnitOwnerSchema = createInsertSchema(wegUnitOwners).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegUnitOwner = z.infer<typeof insertWegUnitOwnerSchema>;
+export type WegUnitOwner = typeof wegUnitOwners.$inferSelect;
+
+// ====== WEG VERSAMMLUNGEN (WEG ASSEMBLIES - § 24-25 WEG 2002) ======
 export const wegAssemblies = pgTable("weg_assemblies", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
   propertyId: uuid("property_id").references(() => properties.id).notNull(),
   title: text("title").notNull(),
+  assemblyType: text("assembly_type").default('ordentlich'),
   assemblyDate: timestamp("assembly_date", { withTimezone: true }).notNull(),
   location: text("location"),
+  invitationSentAt: timestamp("invitation_sent_at", { withTimezone: true }),
+  invitationDeadline: timestamp("invitation_deadline", { withTimezone: true }),
+  isCircularResolution: boolean("is_circular_resolution").default(false),
+  circularDeadline: timestamp("circular_deadline", { withTimezone: true }),
   protocolUrl: text("protocol_url"),
+  protocolNumber: text("protocol_number"),
   status: text("status").default('geplant'),
+  totalMeaPresent: numeric("total_mea_present", { precision: 10, scale: 4 }),
+  totalMeaProperty: numeric("total_mea_property", { precision: 10, scale: 4 }),
+  quorumReached: boolean("quorum_reached"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -954,16 +983,39 @@ export const insertWegAssemblySchema = createInsertSchema(wegAssemblies).omit({ 
 export type InsertWegAssembly = z.infer<typeof insertWegAssemblySchema>;
 export type WegAssembly = typeof wegAssemblies.$inferSelect;
 
-// ====== WEG ABSTIMMUNGEN (WEG VOTES) ======
+// ====== WEG TAGESORDNUNGSPUNKTE (AGENDA ITEMS / TOPs) ======
+export const wegAgendaItems = pgTable("weg_agenda_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  assemblyId: uuid("assembly_id").references(() => wegAssemblies.id).notNull(),
+  topNumber: integer("top_number").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category").default('sonstiges'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegAgendaItemSchema = createInsertSchema(wegAgendaItems).omit({ id: true, createdAt: true });
+export type InsertWegAgendaItem = z.infer<typeof insertWegAgendaItemSchema>;
+export type WegAgendaItem = typeof wegAgendaItems.$inferSelect;
+
+// ====== WEG ABSTIMMUNGEN (WEG VOTES - § 24 WEG 2002) ======
 export const wegVotes = pgTable("weg_votes", {
   id: uuid("id").defaultRandom().primaryKey(),
   assemblyId: uuid("assembly_id").references(() => wegAssemblies.id).notNull(),
+  agendaItemId: uuid("agenda_item_id").references(() => wegAgendaItems.id),
   topic: text("topic").notNull(),
   description: text("description"),
+  requiredMajority: text("required_majority").default('einfach'),
   votesYes: integer("votes_yes").default(0),
   votesNo: integer("votes_no").default(0),
   votesAbstain: integer("votes_abstain").default(0),
+  meaVotesYes: numeric("mea_votes_yes", { precision: 10, scale: 4 }).default('0'),
+  meaVotesNo: numeric("mea_votes_no", { precision: 10, scale: 4 }).default('0'),
+  meaVotesAbstain: numeric("mea_votes_abstain", { precision: 10, scale: 4 }).default('0'),
+  totalMea: numeric("total_mea", { precision: 10, scale: 4 }),
   result: text("result"),
+  resultBasis: text("result_basis").default('mea'),
+  isCircularVote: boolean("is_circular_vote").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -971,7 +1023,23 @@ export const insertWegVoteSchema = createInsertSchema(wegVotes).omit({ id: true,
 export type InsertWegVote = z.infer<typeof insertWegVoteSchema>;
 export type WegVote = typeof wegVotes.$inferSelect;
 
-// ====== WEG RÜCKLAGE (WEG RESERVE FUND) ======
+// ====== WEG EIGENTÜMER-EINZELSTIMMEN (PER-OWNER VOTES) ======
+export const wegOwnerVotes = pgTable("weg_owner_votes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  voteId: uuid("vote_id").references(() => wegVotes.id).notNull(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id),
+  voteValue: text("vote_value").notNull(),
+  meaWeight: numeric("mea_weight", { precision: 10, scale: 4 }),
+  votedAt: timestamp("voted_at", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegOwnerVoteSchema = createInsertSchema(wegOwnerVotes).omit({ id: true, createdAt: true });
+export type InsertWegOwnerVote = z.infer<typeof insertWegOwnerVoteSchema>;
+export type WegOwnerVote = typeof wegOwnerVotes.$inferSelect;
+
+// ====== WEG RÜCKLAGE (WEG RESERVE FUND - § 31 WEG 2002) ======
 export const wegReserveFund = pgTable("weg_reserve_fund", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
@@ -981,12 +1049,97 @@ export const wegReserveFund = pgTable("weg_reserve_fund", {
   amount: numeric("amount", { precision: 12, scale: 2 }).default('0'),
   description: text("description"),
   entryType: text("entry_type").default('einzahlung'),
+  unitId: uuid("unit_id").references(() => units.id),
+  ownerId: uuid("owner_id").references(() => owners.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertWegReserveFundSchema = createInsertSchema(wegReserveFund).omit({ id: true, createdAt: true });
 export type InsertWegReserveFund = z.infer<typeof insertWegReserveFundSchema>;
 export type WegReserveFund = typeof wegReserveFund.$inferSelect;
+
+// ====== WEG WIRTSCHAFTSPLAN (BUDGET PLAN - § 31 WEG 2002) ======
+export const wegBudgetPlans = pgTable("weg_budget_plans", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  year: integer("year").notNull(),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).default('0'),
+  reserveContribution: numeric("reserve_contribution", { precision: 12, scale: 2 }).default('0'),
+  status: text("status").default('entwurf'),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedByVoteId: uuid("approved_by_vote_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegBudgetPlanSchema = createInsertSchema(wegBudgetPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegBudgetPlan = z.infer<typeof insertWegBudgetPlanSchema>;
+export type WegBudgetPlan = typeof wegBudgetPlans.$inferSelect;
+
+// ====== WEG WIRTSCHAFTSPLAN-POSITIONEN (BUDGET LINES) ======
+export const wegBudgetLines = pgTable("weg_budget_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  budgetPlanId: uuid("budget_plan_id").references(() => wegBudgetPlans.id).notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  amount: numeric("amount", { precision: 12, scale: 2 }).default('0'),
+  allocationKey: text("allocation_key").default('mea'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegBudgetLineSchema = createInsertSchema(wegBudgetLines).omit({ id: true, createdAt: true });
+export type InsertWegBudgetLine = z.infer<typeof insertWegBudgetLineSchema>;
+export type WegBudgetLine = typeof wegBudgetLines.$inferSelect;
+
+// ====== WEG SONDERUMLAGEN (SPECIAL ASSESSMENTS) ======
+export const wegSpecialAssessments = pgTable("weg_special_assessments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  allocationKey: text("allocation_key").default('mea'),
+  dueDate: date("due_date"),
+  approvedByVoteId: uuid("approved_by_vote_id"),
+  status: text("status").default('beschlossen'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegSpecialAssessmentSchema = createInsertSchema(wegSpecialAssessments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegSpecialAssessment = z.infer<typeof insertWegSpecialAssessmentSchema>;
+export type WegSpecialAssessment = typeof wegSpecialAssessments.$inferSelect;
+
+// ====== WEG ERHALTUNG & VERBESSERUNG (MAINTENANCE - § 28-29 WEG 2002) ======
+export const wegMaintenanceItems = pgTable("weg_maintenance_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category").default('ordentliche_verwaltung'),
+  priority: text("priority").default('normal'),
+  estimatedCost: numeric("estimated_cost", { precision: 12, scale: 2 }),
+  actualCost: numeric("actual_cost", { precision: 12, scale: 2 }),
+  financingSource: text("financing_source").default('ruecklage'),
+  specialAssessmentId: uuid("special_assessment_id").references(() => wegSpecialAssessments.id),
+  approvedByVoteId: uuid("approved_by_vote_id"),
+  status: text("status").default('geplant'),
+  startDate: date("start_date"),
+  completionDate: date("completion_date"),
+  contractorName: text("contractor_name"),
+  contractorContact: text("contractor_contact"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegMaintenanceItemSchema = createInsertSchema(wegMaintenanceItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegMaintenanceItem = z.infer<typeof insertWegMaintenanceItemSchema>;
+export type WegMaintenanceItem = typeof wegMaintenanceItems.$inferSelect;
 
 // ====== VERSICHERUNGSPOLICEN (INSURANCE POLICIES) ======
 export const insurancePolicies = pgTable("insurance_policies", {
