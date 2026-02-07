@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { 
   Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Loader2, Search, 
   Building, User, Euro, Brain, Sparkles, Trash2, Plus, Wallet, TrendingUp, TrendingDown,
-  PiggyBank, Calculator, FileText, Edit2, BarChart3, Pencil, CreditCard
+  PiggyBank, Calculator, FileText, Edit2, BarChart3, Pencil, CreditCard, Download
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subYears } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -39,6 +39,7 @@ import { SepaExportDialog } from '@/components/banking/SepaExportDialog';
 import { SepaCollectionHistory } from '@/components/banking/SepaCollectionHistory';
 import { categorizeTransaction, CategoryInfo } from '@/lib/transactionCategorizer';
 import { BudgetPositionSelect } from '@/components/budgets/BudgetPositionSelect';
+import { CamtImport, type CamtImportLine } from '@/components/banking/CamtImport';
 
 interface ImportTransaction extends ParsedTransaction {
   id: string;
@@ -649,6 +650,10 @@ export default function Banking() {
               <Sparkles className="h-4 w-4 mr-1" />
               Kontoauszug-Scan
             </TabsTrigger>
+            <TabsTrigger value="camt">
+              <Download className="h-4 w-4 mr-1" />
+              CAMT-Import
+            </TabsTrigger>
             <TabsTrigger value="import">
               <Upload className="h-4 w-4 mr-1" />
               CSV Import
@@ -1103,6 +1108,32 @@ export default function Banking() {
                 </p>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* CAMT Import Tab */}
+          <TabsContent value="camt" className="space-y-4">
+            <CamtImport
+              units={units.map((u: any) => ({ id: u.id, top_nummer: u.topNummer || u.top_nummer || '', property_id: u.propertyId || u.property_id || '' }))}
+              tenants={tenants.map((t: any) => ({ id: t.id, first_name: t.firstName || t.first_name || '', last_name: t.lastName || t.last_name || '', unit_id: t.unitId || t.unit_id || '', iban: t.iban }))}
+              learnedPatterns={learnedMatches.map(m => ({ id: m.id, pattern: m.pattern, unit_id: m.unit_id, tenant_id: m.tenant_id, match_count: m.match_count ?? null }))}
+              bankAccountId={selectedBankAccountId}
+              onImport={async (lines) => {
+                const transactions = lines.map(l => ({
+                  datum: l.date,
+                  betrag: l.amount,
+                  beschreibung: l.description || l.bookingText || '',
+                  referenz: l.reference || '',
+                  auftraggeber_empfaenger: l.counterpartName || '',
+                  iban: l.counterpartIban || '',
+                  bank_account_id: selectedBankAccountId,
+                  unit_id: l.matchedUnitId,
+                  tenant_id: l.matchedTenantId,
+                  property_id: l.matchedPropertyId,
+                  organization_id: organization?.id || null,
+                }));
+                await createTransactions.mutateAsync(transactions as any);
+              }}
+            />
           </TabsContent>
 
           {/* Import Tab */}
