@@ -15,12 +15,7 @@
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["./shared/*"]
-    }
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "server", "shared", "drizzle.config.ts"]
+  "include": ["vite.config.ts"]
 }

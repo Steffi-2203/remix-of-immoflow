@@ -12,7 +12,7 @@ import immoflowLogo from '@/assets/immoflowme-logo.png';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, loading, login } = useAuth();
+  const { isAuthenticated, loading, signIn } = useAuth();
   const { toast } = useToast();
   
   const [email, setEmail] = useState('');
@@ -42,7 +42,7 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      await login(email, password);
+      await signIn(email, password);
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error: any) {

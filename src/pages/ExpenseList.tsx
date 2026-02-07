@@ -124,7 +124,7 @@ export default function ExpenseList() {
       cat.name.toLowerCase().includes(expenseTypeName) ||
       expenseTypeName.includes(cat.name.toLowerCase())
     );
-    return matchingCategory?.default_distribution_key_id || '';
+    return (matchingCategory as any)?.default_distribution_key_id || '';
   };
 
   const handleExpenseTypeChange = (value: ExpenseType) => {
@@ -194,14 +194,14 @@ export default function ExpenseList() {
     const searchLower = searchQuery.toLowerCase();
     return (
       expense.bezeichnung.toLowerCase().includes(searchLower) ||
-      expense.belegNummer?.toLowerCase().includes(searchLower) ||
+      expense.beleg_nummer?.toLowerCase().includes(searchLower) ||
       (expense as any).properties?.name?.toLowerCase().includes(searchLower)
     );
   });
   
   // Count unmatched expenses with suggestions for auto-match
   const unmatchedWithSuggestions = expensesWithMatches.filter(
-    e => !e.transactionId && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
+    e => !e.transaction_id && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
   );
   
   const handleAutoMatchAll = () => {
@@ -418,15 +418,15 @@ export default function ExpenseList() {
   const openEditDialog = (expense: Expense & { properties?: { name: string }, belegUrl?: string }) => {
     setEditingExpense(expense);
     setEditForm({
-      property_id: expense.propertyId,
+      property_id: expense.property_id,
       category: expense.category,
-      expense_type: expense.expenseType || '',
+      expense_type: (expense.expense_type || 'sonstiges') as ExpenseType,
       bezeichnung: expense.bezeichnung,
       betrag: expense.betrag.toString().replace('.', ','),
       datum: expense.datum,
-      beleg_nummer: expense.belegNummer || '',
+      beleg_nummer: expense.beleg_nummer || '',
       notizen: expense.notizen || '',
-      beleg_url: expense.belegUrl || '',
+      beleg_url: (expense as any).beleg_url || '',
     });
     setEditSelectedFile(null);
     setEditDialogOpen(true);
@@ -1400,7 +1400,7 @@ export default function ExpenseList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expenseTypeLabels[expense.expenseType as ExpenseType]}
+                        {expenseTypeLabels[expense.expense_type as ExpenseType]}
                       </TableCell>
                       <TableCell>
                         <TransactionMatchBadge
@@ -1410,7 +1410,7 @@ export default function ExpenseList() {
                         />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expense.belegNummer || '-'}
+                        {expense.beleg_nummer || '-'}
                       </TableCell>
                       <TableCell>
                         {(expense as any).beleg_url ? (

@@ -293,11 +293,11 @@ export default function Reports() {
   // Filter data by selected property
   const units = selectedPropertyId === 'all' 
     ? allUnits 
-    : allUnits?.filter(u => u.propertyId === selectedPropertyId);
+    : allUnits?.filter(u => u.property_id === selectedPropertyId);
   
   const expenses = selectedPropertyId === 'all'
     ? allExpenses
-    : allExpenses?.filter(e => e.propertyId === selectedPropertyId);
+    : allExpenses?.filter(e => e.property_id === selectedPropertyId);
 
   // Get unit IDs for filtering invoices
   const unitIds = units?.map(u => u.id) || [];
@@ -305,8 +305,8 @@ export default function Reports() {
     ? allInvoices
     : allInvoices?.filter(inv => {
       // Look up unit via tenant for invoice filtering
-      const tenant = allTenants?.find(t => t.id === inv.tenantId);
-      return tenant && unitIds.includes(tenant.unitId);
+      const tenant = allTenants?.find(t => t.id === inv.tenant_id);
+      return tenant && unitIds.includes(tenant.unit_id);
     });
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
@@ -428,7 +428,7 @@ export default function Reports() {
     
     periodCombinedPayments.forEach(p => {
       // Finde den Mieter für diese Zahlung (supports both tenantId and tenant_id)
-      const paymentTenantId = p.tenantId ?? p.tenant_id;
+      const paymentTenantId = (p as any).tenantId ?? p.tenant_id;
       const tenant = allTenants?.find(t => t.id === paymentTenantId);
       if (!tenant) {
         // Wenn kein Mieter gefunden, zähle alles als Miete
@@ -445,7 +445,7 @@ export default function Reports() {
       // WICHTIG: SOLL-Beträge aus Vorschreibung (monthlyInvoice) statt Mieter-Stammdaten!
       // Die Vorschreibung enthält die tatsächlichen Soll-Beträge für den spezifischen Monat
       const invoice = allInvoices?.find(inv => 
-        (inv.tenantId ?? inv.tenant_id) === paymentTenantId && 
+        ((inv as any).tenantId ?? inv.tenant_id) === paymentTenantId && 
         inv.year === paymentYear && 
         inv.month === paymentMonth
       );
@@ -497,7 +497,7 @@ export default function Reports() {
   // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
   const paymentsByTenant = new Map<string, number>();
   periodCombinedPayments.forEach(p => {
-    const paymentTenantId = p.tenantId ?? p.tenant_id;
+    const paymentTenantId = (p as any).tenantId ?? p.tenant_id;
     const current = paymentsByTenant.get(paymentTenantId) || 0;
     paymentsByTenant.set(paymentTenantId, current + Number(p.amount));
   });
@@ -581,8 +581,8 @@ export default function Reports() {
 
   // Property value estimation
   const totalQm = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + Number(p.totalQm || 0), 0) || 0
-    : Number(selectedProperty?.totalQm || 0);
+    ? properties?.reduce((sum, p) => sum + Number((p as any).totalQm || (p as any).total_qm || 0), 0) || 0
+    : Number((selectedProperty as any)?.totalQm || (selectedProperty as any)?.total_qm || 0);
   const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   
   // Rendite basierend auf Transaktionen (Mieteinnahmen aus kategorisierten Transaktionen)
@@ -706,14 +706,14 @@ export default function Reports() {
     allInvoices?.forEach(inv => {
       if (inv.year === selectedYear && 
           inv.month >= periodStartMonth && inv.month <= periodEndMonth &&
-          inv.tenantId &&
+          inv.tenant_id &&
           !(inv as any).isVacancy && !(inv as any).is_vacancy) {
         // Prüfe Property-Filter
-        const tenant = allTenants?.find(t => t.id === inv.tenantId);
-        const unit = allUnits?.find(u => u.id === tenant?.unitId);
-        const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+        const tenant = allTenants?.find(t => t.id === inv.tenant_id);
+        const unit = allUnits?.find(u => u.id === tenant?.unit_id);
+        const unitPropertyId = (unit as any)?.propertyId ?? unit?.property_id;
         if (selectedPropertyId === 'all' || unitPropertyId === selectedPropertyId) {
-          tenantsWithInvoices.add(inv.tenantId);
+          tenantsWithInvoices.add(inv.tenant_id);
         }
       }
     });
@@ -756,7 +756,7 @@ export default function Reports() {
       // SOLL-Werte: Bevorzugt aus Vorschreibungen (monthlyInvoices) für den Zeitraum
       // Fallback auf Mieterdaten nur wenn keine Vorschreibung existiert
       const tenantInvoices = allInvoices?.filter(inv => 
-        inv.tenantId === tenant.id &&
+        inv.tenant_id === tenant.id &&
         inv.year === selectedYear &&
         inv.month >= periodStartMonth && inv.month <= periodEndMonth
       ) || [];
@@ -1228,9 +1228,9 @@ export default function Reports() {
           // WICHTIG: Alle Felder inkl. USt-Sätze übergeben für konsistente Berechnung
           const invoicesData = (allInvoices || []).map(inv => ({
             id: inv.id,
-            tenantId: inv.tenantId,
+            tenantId: inv.tenant_id,
             tenant_id: inv.tenant_id,
-            unitId: inv.unitId,
+            unitId: inv.unit_id,
             unit_id: inv.unit_id,
             year: inv.year,
             month: inv.month,
@@ -1446,7 +1446,7 @@ export default function Reports() {
 
         {selectedPropertyId !== 'all' && selectedProperty && (
           <span className="text-sm text-muted-foreground">
-            {Number(selectedProperty.totalQm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
+            {Number((selectedProperty as any).totalQm || (selectedProperty as any).total_qm || 0).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
           </span>
         )}
 

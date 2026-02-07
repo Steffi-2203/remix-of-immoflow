@@ -580,12 +580,12 @@ export default function TenantForm() {
                             <SelectValue placeholder="Schlüssel wählen" />
                           </SelectTrigger>
                           <SelectContent>
-                            {distributionKeys?.filter(k => k.isActive).map((key) => (
+                            {distributionKeys?.filter(k => k.is_active).map((key) => (
                               <SelectItem key={key.id} value={key.name}>
                                 {key.name}
                               </SelectItem>
                             ))}
-                            {(!distributionKeys || distributionKeys.filter(k => k.isActive).length === 0) && (
+                            {(!distributionKeys || distributionKeys.filter(k => k.is_active).length === 0) && (
                               <SelectItem value="Direktwert">Direktwert</SelectItem>
                             )}
                           </SelectContent>

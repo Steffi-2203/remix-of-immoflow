@@ -66,8 +66,7 @@ export function AccountCategorySettings() {
       parent_id: null,
       is_system: false,
       organization_id: null,
-      default_distribution_key_id: newCategory.default_distribution_key_id,
-    });
+    } as any);
     
     setNewCategory({ name: '', type: 'expense', default_distribution_key_id: null });
     setDialogOpen(false);
@@ -80,8 +79,7 @@ export function AccountCategorySettings() {
       id: editingCategory.id,
       name: editingCategory.name,
       type: editingCategory.type,
-      default_distribution_key_id: editingCategory.default_distribution_key_id,
-    });
+    } as any);
     
     setEditingCategory(null);
   };
@@ -95,7 +93,7 @@ export function AccountCategorySettings() {
   const getDistributionKeyName = (keyId: string | null) => {
     if (!keyId) return '—';
     const key = distributionKeys.find(k => k.id === keyId);
-    return key?.name || key?.keyCode || '—';
+    return key?.name || key?.key_code || '—';
   };
 
   if (isLoading) {
@@ -147,7 +145,7 @@ export function AccountCategorySettings() {
                 <TableRow key={category.id} data-testid={`row-category-${category.id}`}>
                   <TableCell className="font-medium">{category.name}</TableCell>
                   <TableCell>{categoryTypeLabels[category.type] || category.type}</TableCell>
-                  <TableCell>{getDistributionKeyName(category.default_distribution_key_id)}</TableCell>
+                  <TableCell>{getDistributionKeyName((category as any).default_distribution_key_id)}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button
@@ -157,7 +155,7 @@ export function AccountCategorySettings() {
                           id: category.id,
                           name: category.name,
                           type: category.type,
-                          default_distribution_key_id: category.default_distribution_key_id,
+                          default_distribution_key_id: (category as any).default_distribution_key_id,
                         })}
                         disabled={category.is_system}
                         data-testid={`button-edit-category-${category.id}`}
@@ -233,7 +231,7 @@ export function AccountCategorySettings() {
                     <SelectItem value="none">Kein Standard</SelectItem>
                     {distributionKeys.map((key) => (
                       <SelectItem key={key.id} value={key.id}>
-                        {key.name || key.keyCode}
+                        {key.name || key.key_code}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -308,7 +306,7 @@ export function AccountCategorySettings() {
                       <SelectItem value="none">Kein Standard</SelectItem>
                       {distributionKeys.map((key) => (
                         <SelectItem key={key.id} value={key.id}>
-                          {key.name || key.keyCode}
+                          {key.name || key.key_code}
                         </SelectItem>
                       ))}
                     </SelectContent>

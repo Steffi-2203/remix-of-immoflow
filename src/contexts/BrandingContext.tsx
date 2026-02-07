@@ -28,10 +28,10 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     }
 
     return {
-      brandName: organization?.brandName || DEFAULT_BRANDING.brandName,
-      logoUrl: organization?.logoUrl || DEFAULT_BRANDING.logoUrl,
-      primaryColor: organization?.primaryColor || DEFAULT_BRANDING.primaryColor,
-      supportEmail: organization?.supportEmail || DEFAULT_BRANDING.supportEmail,
+      brandName: (organization as any)?.brandName || (organization as any)?.brand_name || DEFAULT_BRANDING.brandName,
+      logoUrl: (organization as any)?.logoUrl || (organization as any)?.logo_url || DEFAULT_BRANDING.logoUrl,
+      primaryColor: (organization as any)?.primaryColor || (organization as any)?.primary_color || DEFAULT_BRANDING.primaryColor,
+      supportEmail: (organization as any)?.supportEmail || (organization as any)?.support_email || DEFAULT_BRANDING.supportEmail,
       isLoading: false,
     };
   }, [organization, isLoading]);

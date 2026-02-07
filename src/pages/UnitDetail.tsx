@@ -448,14 +448,23 @@ export default function UnitDetail() {
       title={`${unit.top_nummer} - ${unitTypeLabels[unit.type] || unit.type}`}
       subtitle={`${property.name}, ${property.address}`}
     >
-      {/* Back Button & Actions */}
+      {/* Breadcrumb Navigation */}
+      <nav className="flex items-center gap-1 text-sm text-muted-foreground mb-6 flex-wrap">
+        <Link to="/liegenschaften" className="hover:text-foreground transition-colors">Liegenschaften</Link>
+        <span>/</span>
+        <Link to={`/liegenschaften/${propertyId}`} className="hover:text-foreground transition-colors">{property.name}</Link>
+        <span>/</span>
+        <span className="text-foreground font-medium">{unit.top_nummer}</span>
+      </nav>
+
+      {/* Actions */}
       <div className="flex items-center justify-between mb-6">
         <Link
-          to="/einheiten"
+          to={`/liegenschaften/${propertyId}`}
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Zurück zur Übersicht
+          Zurück zur Liegenschaft
         </Link>
         <div className="flex items-center gap-2">
           <Link to={`/liegenschaften/${propertyId}/einheiten/${unitId}/bearbeiten`}>

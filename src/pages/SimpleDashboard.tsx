@@ -23,6 +23,17 @@ import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
 import { useFeatureTour } from "@/hooks/useFeatureTour";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function UnitsSection({ propertyId }: { propertyId: string }) {
   const { data: units, isLoading } = useUnits(propertyId);
@@ -67,8 +78,8 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
               onClick={async () => {
                 if (!newUnit.top_nummer) return;
                 await createUnit.mutateAsync({
-                  topNummer: newUnit.top_nummer,
-                  propertyId: propertyId,
+                  top_nummer: newUnit.top_nummer,
+                  property_id: propertyId,
                 });
                 setNewUnit({ top_nummer: '' });
                 setShowAddUnit(false);
@@ -326,23 +337,36 @@ export default function SimpleDashboard() {
                             {property.address}, {property.postal_code} {property.city}
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
-                            {property.total_units || 0} Einheiten • {property.rented_units || 0} vermietet • {property.total_qm || 0} m²
+                            {property.total_units || 0} Einheiten • {(property as any).rented_units || 0} vermietet • {property.total_qm || 0} m²
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Liegenschaft wirklich löschen?')) {
-                            deleteProperty.mutate(property.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Liegenschaft löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Diese Aktion kann nicht rückgängig gemacht werden. Alle zugehörigen Einheiten und Mieter werden ebenfalls gelöscht.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteProperty.mutate(property.id)}>
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
 
                     {selectedProperty === property.id && (

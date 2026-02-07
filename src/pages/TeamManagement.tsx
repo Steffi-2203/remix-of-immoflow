@@ -18,7 +18,7 @@ import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
 import { PropertyAssignmentDialog } from '@/components/settings/PropertyAssignmentDialog';
 import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
-type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer';
+type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
 
 const ROLE_OPTIONS: { value: AppRole; label: string; description: string; permissions: string }[] = [
   { value: 'admin', label: 'Admin', description: 'Voller Zugriff auf alle Funktionen', permissions: 'Voller Zugriff' },
@@ -97,7 +97,7 @@ export default function TeamManagement() {
 
   const handleEditRole = (member: TeamMember) => {
     setEditingMember(member);
-    setSelectedRole(member.role || '');
+    setSelectedRole(member.role || '' as any);
   };
 
   const handleSaveRole = async () => {
@@ -350,7 +350,7 @@ export default function TeamManagement() {
                           <Badge variant="secondary">{ROLE_LABELS[invite.role]}</Badge>
                         </TableCell>
                         <TableCell>
-                          {format(new Date(invite.expiresAt), 'dd.MM.yyyy', { locale: de })}
+                          {format(new Date(invite.expires_at), 'dd.MM.yyyy', { locale: de })}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
