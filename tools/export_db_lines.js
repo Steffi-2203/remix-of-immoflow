@@ -7,13 +7,30 @@ const getArg = (name) => {
   return arg ? arg.split("=")[1] : null;
 };
 
-const runId = getArg("run-id") || args.find(a => !a.startsWith("--"));
+const runFileArg = getArg("run-file");
+let runId = getArg("run-id") || args.find(a => !a.startsWith("--"));
 const outputFile = getArg("out") || getArg("output") || "db_lines.json";
 const yearArg = getArg("year");
 const monthArg = getArg("month");
 
+if (runFileArg) {
+  try {
+    const fileData = JSON.parse(fs.readFileSync(runFileArg, 'utf8'));
+    runId = fileData.runId;
+    if (!runId) {
+      console.error(`FEHLER: Kein runId in ${runFileArg} gefunden.`);
+      process.exit(1);
+    }
+    console.error(`RunId aus ${runFileArg}: ${runId}`);
+  } catch (e) {
+    console.error(`FEHLER: Kann ${runFileArg} nicht lesen: ${e.message}`);
+    process.exit(1);
+  }
+}
+
 if (!runId && !yearArg) {
   console.error('Usage: node tools/export_db_lines.js <run_id> [--out=output.json]');
+  console.error('   or: node tools/export_db_lines.js --run-file=generate.json [--out=output.json]');
   console.error('   or: node tools/export_db_lines.js --year=2026 --month=9 [--out=output.json]');
   process.exit(1);
 }
