@@ -33,7 +33,6 @@ export default function Impressum() {
             <div className="space-y-2">
               <p className="font-medium text-foreground">Stephania Pfeffer - ImmoFlowMe</p>
               <p>Einzelunternehmen</p>
-              <p className="mt-2">Tollet 70<br />4710 Tollet, Österreich</p>
             </div>
           </section>
 

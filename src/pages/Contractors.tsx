@@ -11,7 +11,7 @@ import { useContractors, useDeleteContractor, Contractor, SPECIALIZATIONS } from
 import { ContractorCard } from '@/components/contractors/ContractorCard';
 import { ContractorForm } from '@/components/contractors/ContractorForm';
 
-export default function Contractors({ embedded = false }: { embedded?: boolean }) {
+export default function Contractors() {
   const [showInactive, setShowInactive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSpec, setFilterSpec] = useState<string>('all');
@@ -55,8 +55,8 @@ export default function Contractors({ embedded = false }: { embedded?: boolean }
     setEditingContractor(null);
   };
   
-  const content = (
-    <>
+  return (
+    <MainLayout title="Handwerker" subtitle="Verwaltung Ihrer Handwerker und Dienstleister">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -175,14 +175,6 @@ export default function Contractors({ embedded = false }: { embedded?: boolean }
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout title="Handwerker" subtitle="Verwaltung Ihrer Handwerker und Dienstleister">
-      {content}
     </MainLayout>
   );
 }

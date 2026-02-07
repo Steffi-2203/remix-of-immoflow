@@ -161,92 +161,6 @@ export type Database = {
           },
         ]
       }
-      booking_number_sequences: {
-        Row: {
-          current_number: number
-          current_year: number
-          id: string
-          organization_id: string
-        }
-        Insert: {
-          current_number?: number
-          current_year?: number
-          id?: string
-          organization_id: string
-        }
-        Update: {
-          current_number?: number
-          current_year?: number
-          id?: string
-          organization_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "booking_number_sequences_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: true
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chart_of_accounts: {
-        Row: {
-          account_number: string
-          account_type: string
-          created_at: string
-          description: string | null
-          id: string
-          is_active: boolean
-          is_system: boolean
-          name: string
-          organization_id: string | null
-          parent_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          account_number: string
-          account_type: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          is_system?: boolean
-          name: string
-          organization_id?: string | null
-          parent_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          account_number?: string
-          account_type?: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          is_system?: boolean
-          name?: string
-          organization_id?: string | null
-          parent_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chart_of_accounts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "chart_of_accounts_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "chart_of_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       contractors: {
         Row: {
           address: string | null
@@ -467,235 +381,6 @@ export type Database = {
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions_safe"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      fixed_assets: {
-        Row: {
-          acquisition_cost: number
-          acquisition_date: string
-          annual_depreciation: number | null
-          asset_type: string
-          created_at: string
-          depreciation_method: string
-          description: string | null
-          id: string
-          is_active: boolean
-          monthly_depreciation: number | null
-          name: string
-          notes: string | null
-          organization_id: string
-          property_id: string | null
-          residual_value: number
-          sold_amount: number | null
-          sold_at: string | null
-          updated_at: string
-          useful_life_years: number
-        }
-        Insert: {
-          acquisition_cost: number
-          acquisition_date: string
-          annual_depreciation?: number | null
-          asset_type: string
-          created_at?: string
-          depreciation_method?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          monthly_depreciation?: number | null
-          name: string
-          notes?: string | null
-          organization_id: string
-          property_id?: string | null
-          residual_value?: number
-          sold_amount?: number | null
-          sold_at?: string | null
-          updated_at?: string
-          useful_life_years?: number
-        }
-        Update: {
-          acquisition_cost?: number
-          acquisition_date?: string
-          annual_depreciation?: number | null
-          asset_type?: string
-          created_at?: string
-          depreciation_method?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          monthly_depreciation?: number | null
-          name?: string
-          notes?: string | null
-          organization_id?: string
-          property_id?: string | null
-          residual_value?: number
-          sold_amount?: number | null
-          sold_at?: string | null
-          updated_at?: string
-          useful_life_years?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fixed_assets_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fixed_assets_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      journal_entries: {
-        Row: {
-          beleg_nummer: string | null
-          beleg_url: string | null
-          booking_number: string
-          created_at: string
-          created_by: string | null
-          description: string
-          entry_date: string
-          id: string
-          is_storno: boolean
-          organization_id: string
-          property_id: string | null
-          source_id: string | null
-          source_type: string | null
-          storno_of: string | null
-          tenant_id: string | null
-          unit_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          beleg_nummer?: string | null
-          beleg_url?: string | null
-          booking_number: string
-          created_at?: string
-          created_by?: string | null
-          description: string
-          entry_date: string
-          id?: string
-          is_storno?: boolean
-          organization_id: string
-          property_id?: string | null
-          source_id?: string | null
-          source_type?: string | null
-          storno_of?: string | null
-          tenant_id?: string | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          beleg_nummer?: string | null
-          beleg_url?: string | null
-          booking_number?: string
-          created_at?: string
-          created_by?: string | null
-          description?: string
-          entry_date?: string
-          id?: string
-          is_storno?: boolean
-          organization_id?: string
-          property_id?: string | null
-          source_id?: string | null
-          source_type?: string | null
-          storno_of?: string | null
-          tenant_id?: string | null
-          unit_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "journal_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entries_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entries_storno_of_fkey"
-            columns: ["storno_of"]
-            isOneToOne: false
-            referencedRelation: "journal_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entries_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entries_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants_safe"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entries_unit_id_fkey"
-            columns: ["unit_id"]
-            isOneToOne: false
-            referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      journal_entry_lines: {
-        Row: {
-          account_id: string
-          created_at: string
-          credit: number
-          debit: number
-          description: string | null
-          id: string
-          journal_entry_id: string
-        }
-        Insert: {
-          account_id: string
-          created_at?: string
-          credit?: number
-          debit?: number
-          description?: string | null
-          id?: string
-          journal_entry_id: string
-        }
-        Update: {
-          account_id?: string
-          created_at?: string
-          credit?: number
-          debit?: number
-          description?: string | null
-          id?: string
-          journal_entry_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "journal_entry_lines_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "chart_of_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_entry_lines_journal_entry_id_fkey"
-            columns: ["journal_entry_id"]
-            isOneToOne: false
-            referencedRelation: "journal_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -1538,7 +1223,6 @@ export type Database = {
       }
       profiles: {
         Row: {
-          access_expires_at: string | null
           created_at: string
           email: string | null
           full_name: string | null
@@ -1547,7 +1231,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          access_expires_at?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -1556,7 +1239,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          access_expires_at?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -1593,7 +1275,6 @@ export type Database = {
           heizung_anteil_wohnung: number
           heizungskosten_gesamt: number
           id: string
-          marktwert: number | null
           name: string
           postal_code: string
           richtwert_bundesland: string | null
@@ -1621,7 +1302,6 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
-          marktwert?: number | null
           name: string
           postal_code: string
           richtwert_bundesland?: string | null
@@ -1649,7 +1329,6 @@ export type Database = {
           heizung_anteil_wohnung?: number
           heizungskosten_gesamt?: number
           id?: string
-          marktwert?: number | null
           name?: string
           postal_code?: string
           richtwert_bundesland?: string | null
@@ -1868,73 +1547,6 @@ export type Database = {
           },
         ]
       }
-      rent_adjustments: {
-        Row: {
-          adjustment_date: string
-          applied_by: string | null
-          change_percent: number
-          clause_id: string
-          created_at: string
-          id: string
-          new_grundmiete: number
-          new_index_value: number
-          notes: string | null
-          old_grundmiete: number
-          old_index_value: number
-          tenant_id: string
-        }
-        Insert: {
-          adjustment_date: string
-          applied_by?: string | null
-          change_percent: number
-          clause_id: string
-          created_at?: string
-          id?: string
-          new_grundmiete: number
-          new_index_value: number
-          notes?: string | null
-          old_grundmiete: number
-          old_index_value: number
-          tenant_id: string
-        }
-        Update: {
-          adjustment_date?: string
-          applied_by?: string | null
-          change_percent?: number
-          clause_id?: string
-          created_at?: string
-          id?: string
-          new_grundmiete?: number
-          new_index_value?: number
-          notes?: string | null
-          old_grundmiete?: number
-          old_index_value?: number
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "rent_adjustments_clause_id_fkey"
-            columns: ["clause_id"]
-            isOneToOne: false
-            referencedRelation: "rent_index_clauses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "rent_adjustments_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "rent_adjustments_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants_safe"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       rent_expectations: {
         Row: {
           created_at: string | null
@@ -1982,63 +1594,6 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      rent_index_clauses: {
-        Row: {
-          base_index_date: string
-          base_index_value: number
-          created_at: string
-          current_index_value: number | null
-          id: string
-          index_type: string
-          is_active: boolean
-          notes: string | null
-          tenant_id: string
-          threshold_percent: number
-          updated_at: string
-        }
-        Insert: {
-          base_index_date: string
-          base_index_value: number
-          created_at?: string
-          current_index_value?: number | null
-          id?: string
-          index_type?: string
-          is_active?: boolean
-          notes?: string | null
-          tenant_id: string
-          threshold_percent?: number
-          updated_at?: string
-        }
-        Update: {
-          base_index_date?: string
-          base_index_value?: number
-          created_at?: string
-          current_index_value?: number | null
-          id?: string
-          index_type?: string
-          is_active?: boolean
-          notes?: string | null
-          tenant_id?: string
-          threshold_percent?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "rent_index_clauses_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "rent_index_clauses_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -2381,78 +1936,6 @@ export type Database = {
             columns: ["maintenance_task_id"]
             isOneToOne: false
             referencedRelation: "maintenance_tasks"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tenant_deposits: {
-        Row: {
-          bank_account: string | null
-          created_at: string
-          deduction_notes: string | null
-          deductions: number | null
-          deposit_amount: number
-          deposit_paid_date: string | null
-          deposit_returned_amount: number | null
-          deposit_returned_date: string | null
-          deposit_type: string
-          id: string
-          interest_accrued: number | null
-          interest_rate: number | null
-          last_interest_calc_date: string | null
-          notes: string | null
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          bank_account?: string | null
-          created_at?: string
-          deduction_notes?: string | null
-          deductions?: number | null
-          deposit_amount?: number
-          deposit_paid_date?: string | null
-          deposit_returned_amount?: number | null
-          deposit_returned_date?: string | null
-          deposit_type?: string
-          id?: string
-          interest_accrued?: number | null
-          interest_rate?: number | null
-          last_interest_calc_date?: string | null
-          notes?: string | null
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          bank_account?: string | null
-          created_at?: string
-          deduction_notes?: string | null
-          deductions?: number | null
-          deposit_amount?: number
-          deposit_paid_date?: string | null
-          deposit_returned_amount?: number | null
-          deposit_returned_date?: string | null
-          deposit_type?: string
-          id?: string
-          interest_accrued?: number | null
-          interest_rate?: number | null
-          last_interest_calc_date?: string | null
-          notes?: string | null
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_deposits_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_deposits_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
         ]
@@ -3263,26 +2746,6 @@ export type Database = {
           },
         ]
       }
-      uva_data: {
-        Row: {
-          jahr: number | null
-          monat: number | null
-          netto_aufwaende: number | null
-          netto_umsaetze: number | null
-          organization_id: string | null
-          ust_betrag: number | null
-          vorsteuer_betrag: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "journal_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Functions: {
       calculate_bank_balance: {
@@ -3318,10 +2781,9 @@ export type Database = {
         Args: { _access_type: string; _record_id?: string; _table_name: string }
         Returns: undefined
       }
-      next_booking_number: { Args: { _org_id: string }; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
+      app_role: "admin" | "property_manager" | "finance" | "viewer"
       ausstattungskategorie: "A" | "B" | "C" | "D"
       expense_category:
         | "betriebskosten_umlagefaehig"
@@ -3517,7 +2979,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "property_manager", "finance", "viewer", "tester"],
+      app_role: ["admin", "property_manager", "finance", "viewer"],
       ausstattungskategorie: ["A", "B", "C", "D"],
       expense_category: [
         "betriebskosten_umlagefaehig",

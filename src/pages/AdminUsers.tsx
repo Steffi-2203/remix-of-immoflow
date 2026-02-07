@@ -60,7 +60,6 @@ const ROLE_LABELS: Record<AppRole, string> = {
   finance: 'Finance',
   property_manager: 'Property Manager',
   viewer: 'Viewer',
-  tester: 'Tester',
 };
 
 const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
@@ -68,7 +67,6 @@ const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   finance: 'Zugriff auf Finanzdaten (IBAN, BIC, Bankkonten)',
   property_manager: 'Standardverwaltung ohne sensible Bankdaten',
   viewer: 'Nur Lesezugriff mit maskierten sensiblen Daten',
-  tester: 'Zeitlich begrenzt (1 Stunde), nur Leserechte',
 };
 
 export default function AdminUsers() {

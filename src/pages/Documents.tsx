@@ -250,7 +250,7 @@ export default function Documents() {
   ) || [];
 
   const filteredUnits = allUnits?.filter(u =>
-    selectedProperty === 'all' || u.property_id === selectedProperty
+    selectedProperty === 'all' || u.propertyId === selectedProperty
   ) || [];
 
   const filteredTenantDocs = tenantDocuments.filter(doc =>
@@ -382,7 +382,7 @@ export default function Documents() {
                 key={property.id}
                 propertyId={property.id}
                 propertyName={property.name}
-                propertyAddress={`${property.address}, ${property.postal_code} ${property.city}`}
+                propertyAddress={`${property.address}, ${property.postalCode} ${property.city}`}
                 searchQuery={searchQuery}
                 onUploadClick={() => handleUploadClick('property', property.id)}
               />
@@ -399,12 +399,12 @@ export default function Documents() {
             </div>
           ) : (
             filteredUnits.map((unit) => {
-              const property = properties?.find(p => p.id === unit.property_id);
+              const property = properties?.find(p => p.id === unit.propertyId);
               return (
                 <UnitDocumentsSection
                   key={unit.id}
                   unitId={unit.id}
-                  unitName={unit.top_nummer}
+                  unitName={unit.topNummer}
                   propertyName={property?.name || ''}
                   unitDetails={`${unit.qm} m² • ${unit.type}`}
                   searchQuery={searchQuery}

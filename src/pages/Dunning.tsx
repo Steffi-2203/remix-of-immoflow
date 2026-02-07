@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,20 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { AlertCircle, Mail, Clock, Euro, Users, AlertTriangle, CheckCircle, Send, FileDown, Phone, MoreHorizontal, Pencil } from 'lucide-react';
+import { AlertCircle, Mail, Clock, Euro, Users, AlertTriangle, CheckCircle, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useDunningOverview, getDaysOverdue, DunningCase } from '@/hooks/useDunningOverview';
 import { useSendDunning, getDunningStatusLabel, getNextDunningAction } from '@/hooks/useDunning';
 import { useProperties } from '@/hooks/useProperties';
-import { useDemoData } from '@/contexts/DemoDataContext';
-import { toast } from 'sonner';
-import { generateDunningPdf } from '@/utils/dunningPdfExport';
-import { supabase } from '@/integrations/supabase/client';
 
-export default function Dunning({ embedded = false }: { embedded?: boolean }) {
-  const navigate = useNavigate();
+export default function Dunning() {
   const [filterMahnstufe, setFilterMahnstufe] = useState<string>('all');
   const [filterProperty, setFilterProperty] = useState<string>('all');
   
@@ -41,13 +34,7 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
     return true;
   });
   
-  const { isDemoMode } = useDemoData();
-
   const handleSendDunning = async (dunningCase: DunningCase) => {
-    if (isDemoMode) {
-      toast.info('Mahnversand ist im Demo-Modus nicht verfügbar');
-      return;
-    }
     const nextAction = getNextDunningAction(dunningCase.highestMahnstufe);
     if (!nextAction || !dunningCase.email) return;
     
@@ -68,61 +55,6 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
       invoiceYear: oldestInvoice.year,
     });
   };
-
-  const handleDownloadPdf = (dunningCase: DunningCase, level: 1 | 2) => {
-    const oldestInvoice = dunningCase.invoices[0];
-    if (!oldestInvoice) return;
-    generateDunningPdf({
-      tenantName: dunningCase.tenantName,
-      propertyName: dunningCase.propertyName,
-      unitNumber: dunningCase.unitNumber,
-      amount: dunningCase.totalAmount,
-      dueDate: oldestInvoice.faellig_am,
-      invoiceMonth: oldestInvoice.month,
-      invoiceYear: oldestInvoice.year,
-      dunningLevel: level,
-    });
-    toast.success('PDF wurde heruntergeladen');
-  };
-
-  const handleMarkManualDunning = async (dunningCase: DunningCase, level: 1 | 2) => {
-    if (isDemoMode) {
-      toast.info('Im Demo-Modus nicht verfügbar');
-      return;
-    }
-    const oldestInvoice = dunningCase.invoices[0];
-    if (!oldestInvoice) return;
-
-    const updateData: Record<string, unknown> = { mahnstufe: level };
-    if (level === 1) {
-      updateData.zahlungserinnerung_am = new Date().toISOString();
-    } else {
-      updateData.mahnung_am = new Date().toISOString();
-    }
-
-    const { error } = await supabase
-      .from('monthly_invoices')
-      .update(updateData)
-      .eq('id', oldestInvoice.id);
-
-    if (error) {
-      toast.error('Fehler beim Aktualisieren');
-      return;
-    }
-    toast.success(level === 1 ? 'Als brieflich erinnert markiert' : 'Als brieflich gemahnt markiert');
-  };
-
-  const handlePhoneNote = (dunningCase: DunningCase) => {
-    if (dunningCase.phone) {
-      toast.info(`Telefonnummer: ${dunningCase.phone}`, { duration: 8000 });
-    } else {
-      toast.warning('Keine Telefonnummer hinterlegt – bitte Mieterdaten ergänzen');
-    }
-  };
-
-  const handleEditTenant = (dunningCase: DunningCase) => {
-    navigate(`/mieter/${dunningCase.tenantId}/bearbeiten`);
-  };
   
   const getMahnstufeColor = (stufe: number) => {
     switch (stufe) {
@@ -133,8 +65,8 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
     }
   };
   
-  const content = (
-    <>
+  return (
+    <MainLayout title="Mahnwesen" subtitle="Übersicht und Verwaltung offener Zahlungen">
       <div className="space-y-6">
         {/* Header */}
         <div>
@@ -292,13 +224,8 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
                         <TableCell>
                           <div>
                             <p className="font-medium">{dunningCase.tenantName}</p>
-                            {dunningCase.email ? (
+                            {dunningCase.email && (
                               <p className="text-xs text-muted-foreground">{dunningCase.email}</p>
-                            ) : (
-                              <p className="text-xs text-destructive flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" />
-                                Keine E-Mail hinterlegt
-                              </p>
                             )}
                           </div>
                         </TableCell>
@@ -324,63 +251,38 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {/* Primary action: Email if available */}
-                            {nextAction && dunningCase.email ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant={dunningCase.highestMahnstufe === 0 ? 'outline' : 'destructive'}
-                                    onClick={() => handleSendDunning(dunningCase)}
-                                    disabled={sendDunning.isPending}
-                                  >
-                                    <Send className="h-4 w-4 mr-1" />
-                                    {nextAction.label}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>E-Mail an {dunningCase.email} senden</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : !nextAction ? (
-                              <Badge variant="secondary">Abgeschlossen</Badge>
-                            ) : null}
-
-                            {/* Fallback / additional actions dropdown */}
-                            {nextAction && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleDownloadPdf(dunningCase, nextAction.level)}>
-                                    <FileDown className="h-4 w-4 mr-2" />
-                                    {nextAction.level === 1 ? 'Erinnerung' : 'Mahnung'} als PDF
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleMarkManualDunning(dunningCase, nextAction.level)}>
-                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                    Als brieflich versendet markieren
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handlePhoneNote(dunningCase)}>
-                                    <Phone className="h-4 w-4 mr-2" />
-                                    Telefonisch erinnern
-                                    {dunningCase.phone && (
-                                      <span className="ml-auto text-xs text-muted-foreground">{dunningCase.phone}</span>
-                                    )}
-                                  </DropdownMenuItem>
-                                  {!dunningCase.email && (
-                                    <DropdownMenuItem onClick={() => handleEditTenant(dunningCase)}>
-                                      <Pencil className="h-4 w-4 mr-2" />
-                                      E-Mail nachtragen
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
+                          {nextAction && dunningCase.email ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant={dunningCase.highestMahnstufe === 0 ? 'outline' : 'destructive'}
+                                  onClick={() => handleSendDunning(dunningCase)}
+                                  disabled={sendDunning.isPending}
+                                >
+                                  <Send className="h-4 w-4 mr-1" />
+                                  {nextAction.label}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>E-Mail an {dunningCase.email} senden</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : !dunningCase.email ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-muted-foreground">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Keine E-Mail
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Mieter hat keine E-Mail-Adresse hinterlegt</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Badge variant="secondary">Abgeschlossen</Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -391,14 +293,6 @@ export default function Dunning({ embedded = false }: { embedded?: boolean }) {
           </CardContent>
         </Card>
       </div>
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout title="Mahnwesen" subtitle="Übersicht und Verwaltung offener Zahlungen">
-      {content}
     </MainLayout>
   );
 }

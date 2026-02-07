@@ -71,7 +71,7 @@ const STATUS_CONFIG = {
   },
 };
 
-export default function InvoiceApprovalPage({ embedded = false }: { embedded?: boolean }) {
+export default function InvoiceApprovalPage() {
   const permissions = usePermissions();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('pending');
@@ -89,17 +89,13 @@ export default function InvoiceApprovalPage({ embedded = false }: { embedded?: b
   const [rejectionReason, setRejectionReason] = useState('');
 
   if (!permissions.canApproveInvoices && !permissions.isAdmin) {
-    const noAccess = (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">
-          Sie haben keine Berechtigung für diese Seite.
-        </p>
-      </div>
-    );
-    if (embedded) return noAccess;
     return (
       <MainLayout title="Keine Berechtigung" subtitle="">
-        {noAccess}
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">
+            Sie haben keine Berechtigung für diese Seite.
+          </p>
+        </div>
       </MainLayout>
     );
   }
@@ -352,8 +348,11 @@ export default function InvoiceApprovalPage({ embedded = false }: { embedded?: b
     );
   };
 
-  const content = (
-    <>
+  return (
+    <MainLayout
+      title="Rechnungsfreigabe"
+      subtitle="Wartungsrechnungen mit Vier-Augen-Prinzip prüfen und verwalten"
+    >
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -477,17 +476,6 @@ export default function InvoiceApprovalPage({ embedded = false }: { embedded?: b
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout
-      title="Rechnungsfreigabe"
-      subtitle="Wartungsrechnungen mit Vier-Augen-Prinzip prüfen und verwalten"
-    >
-      {content}
     </MainLayout>
   );
 }

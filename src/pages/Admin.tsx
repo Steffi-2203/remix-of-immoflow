@@ -24,16 +24,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -57,8 +47,11 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { apiRequest } from '@/lib/queryClient';
+import { DemoInviteManager } from '@/components/admin/DemoInviteManager';
+import { WhiteLabelInquiryManager } from '@/components/admin/WhiteLabelInquiryManager';
+import { WhiteLabelLicenseManager } from '@/components/admin/WhiteLabelLicenseManager';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -104,15 +97,10 @@ export default function Admin() {
     
     setIsUpdating(true);
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({ 
-          subscription_tier: editTier as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedOrg.id);
-
-      if (error) throw error;
+      await apiRequest('PATCH', `/api/admin/organizations/${selectedOrg.id}`, { 
+        subscription_tier: editTier,
+        updated_at: new Date().toISOString()
+      });
       
       toast.success('Plan wurde aktualisiert');
       setShowEditDialog(false);
@@ -125,20 +113,14 @@ export default function Admin() {
     }
   };
 
-  const [cancelConfirmOrg, setCancelConfirmOrg] = useState<AdminOrganization | null>(null);
-
   const handleCancelSubscription = async (org: AdminOrganization) => {
+    if (!confirm(`Abo für "${org.name}" wirklich kündigen?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({ 
-          subscription_status: 'cancelled' as any,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', org.id);
-
-      if (error) throw error;
+      await apiRequest('PATCH', `/api/admin/organizations/${org.id}`, { 
+        subscription_status: 'cancelled',
+        updated_at: new Date().toISOString()
+      });
       
       toast.success('Abo wurde gekündigt');
       refetch();
@@ -231,6 +213,15 @@ export default function Admin() {
           </Card>
         </div>
 
+        {/* Demo Invitations */}
+        <DemoInviteManager />
+
+        {/* White Label Inquiries */}
+        <WhiteLabelInquiryManager />
+
+        {/* White Label Licenses */}
+        <WhiteLabelLicenseManager />
+
         {/* Organizations Table */}
         <Card>
           <CardHeader>
@@ -316,7 +307,7 @@ export default function Admin() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => setCancelConfirmOrg(org)}
+                                onClick={() => handleCancelSubscription(org)}
                               >
                                 <XCircle className="h-4 w-4 text-destructive" />
                               </Button>
@@ -420,32 +411,6 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Cancel Subscription Confirmation */}
-      <AlertDialog open={!!cancelConfirmOrg} onOpenChange={(open) => !open && setCancelConfirmOrg(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Abo wirklich kündigen?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Das Abo für &quot;{cancelConfirmOrg?.name}&quot; wird gekündigt. Diese Aktion kann nicht rückgängig gemacht werden.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (cancelConfirmOrg) {
-                  handleCancelSubscription(cancelConfirmOrg);
-                  setCancelConfirmOrg(null);
-                }
-              }}
-            >
-              Abo kündigen
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </MainLayout>
   );
 }

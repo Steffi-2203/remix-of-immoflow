@@ -63,6 +63,8 @@ import {
   type Expense
 } from '@/hooks/useExpenses';
 import { useProperties } from '@/hooks/useProperties';
+import { useDistributionKeys } from '@/hooks/useDistributionKeys';
+import { useAccountCategories } from '@/hooks/useAccountCategories';
 import { useOCRInvoice } from '@/hooks/useOCRInvoice';
 import { useExpenseTransactionMatch, useAutoMatchExpenses } from '@/hooks/useExpenseTransactionMatch';
 import { PdfPageSelector } from '@/components/ocr/PdfPageSelector';
@@ -71,8 +73,8 @@ import { BatchResultsSummary, BatchResultItem } from '@/components/ocr/BatchResu
 import { TransactionMatchBadge } from '@/components/expenses/TransactionMatchBadge';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 // Parse euro amounts with German/Austrian format (comma as decimal separator)
 function parseEuroAmount(raw: string): number | null {
@@ -86,14 +88,14 @@ function parseEuroAmount(raw: string): number | null {
   return isFinite(num) && num >= 0 ? num : null;
 }
 
-export default function ExpenseList({ embedded = false }: { embedded?: boolean }) {
+export default function ExpenseList() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
   const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedYear, setSelectedYear] = useState(2025); // Default to 2025 for simulation data
   const [selectedProperty, setSelectedProperty] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
@@ -109,6 +111,29 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
     beleg_nummer: '',
     notizen: '',
     budget_position: null as number | null,
+    distribution_key_id: '' as string,
+  };
+
+  const { data: distributionKeys = [] } = useDistributionKeys();
+  const { data: accountCategories = [] } = useAccountCategories();
+  
+  const findDefaultDistributionKey = (expenseType: ExpenseType): string => {
+    const expenseTypeName = expenseTypeLabels[expenseType]?.toLowerCase() || '';
+    const matchingCategory = accountCategories.find(cat => 
+      cat.name.toLowerCase() === expenseTypeName ||
+      cat.name.toLowerCase().includes(expenseTypeName) ||
+      expenseTypeName.includes(cat.name.toLowerCase())
+    );
+    return matchingCategory?.default_distribution_key_id || '';
+  };
+
+  const handleExpenseTypeChange = (value: ExpenseType) => {
+    const defaultKeyId = findDefaultDistributionKey(value);
+    setNewExpense(prev => ({
+      ...prev,
+      expense_type: value,
+      distribution_key_id: defaultKeyId || prev.distribution_key_id,
+    }));
   };
   
   const [newExpense, setNewExpense] = useState(initialExpenseState);
@@ -169,14 +194,14 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
     const searchLower = searchQuery.toLowerCase();
     return (
       expense.bezeichnung.toLowerCase().includes(searchLower) ||
-      expense.beleg_nummer?.toLowerCase().includes(searchLower) ||
+      expense.belegNummer?.toLowerCase().includes(searchLower) ||
       (expense as any).properties?.name?.toLowerCase().includes(searchLower)
     );
   });
   
   // Count unmatched expenses with suggestions for auto-match
   const unmatchedWithSuggestions = expensesWithMatches.filter(
-    e => !e.transaction_id && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
+    e => !e.transactionId && e.suggestedMatches.length > 0 && e.suggestedMatches[0].confidence >= 0.7
   );
   
   const handleAutoMatchAll = () => {
@@ -219,25 +244,40 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const filePath = `${propertyId}/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from('expense-receipts')
-      .upload(filePath, file);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'expense-receipts');
+      formData.append('path', filePath);
 
-    if (error) {
+      const response = await fetch('/api/storage/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Upload error:', errorData);
+        toast({
+          title: 'Upload fehlgeschlagen',
+          description: errorData.error || 'Upload fehlgeschlagen',
+          variant: 'destructive',
+        });
+        return null;
+      }
+
+      const data = await response.json();
+      return data.publicUrl;
+    } catch (error: any) {
       console.error('Upload error:', error);
       toast({
         title: 'Upload fehlgeschlagen',
-        description: error.message,
+        description: error.message || 'Upload fehlgeschlagen',
         variant: 'destructive',
       });
       return null;
     }
-
-    const { data: urlData } = supabase.storage
-      .from('expense-receipts')
-      .getPublicUrl(filePath);
-
-    return urlData.publicUrl;
   };
 
   // Reset dialog state
@@ -351,6 +391,7 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
         year: bookingYear,
         month: bookingMonth,
         beleg_url,
+        distributionKeyId: newExpense.distribution_key_id || undefined,
         budget_position: newExpense.category === 'instandhaltung' ? newExpense.budget_position : undefined,
       } as any);
 
@@ -374,18 +415,18 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
   };
 
   // Open edit dialog
-  const openEditDialog = (expense: Expense & { properties?: { name: string }, beleg_url?: string }) => {
+  const openEditDialog = (expense: Expense & { properties?: { name: string }, belegUrl?: string }) => {
     setEditingExpense(expense);
     setEditForm({
-      property_id: expense.property_id,
+      property_id: expense.propertyId,
       category: expense.category,
-      expense_type: expense.expense_type,
+      expense_type: expense.expenseType || '',
       bezeichnung: expense.bezeichnung,
       betrag: expense.betrag.toString().replace('.', ','),
       datum: expense.datum,
-      beleg_nummer: expense.beleg_nummer || '',
+      beleg_nummer: expense.belegNummer || '',
       notizen: expense.notizen || '',
-      beleg_url: expense.beleg_url || '',
+      beleg_url: expense.belegUrl || '',
     });
     setEditSelectedFile(null);
     setEditDialogOpen(true);
@@ -510,22 +551,21 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
         const base64 = imageDataUrl.split(',')[1];
         const mimeType = 'image/png';
         
-        // Call the OCR function directly with the converted image
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error('Nicht angemeldet');
-        }
-        
-        const { data, error } = await supabase.functions.invoke('ocr-invoice', {
-          body: {
-            imageBase64: base64,
-            mimeType: mimeType,
-          },
+        // Call the OCR function with the converted image
+        const response = await fetch('/api/functions/ocr-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ imageBase64: base64, mimeType }),
         });
         
-        if (error) throw new Error(error.message);
-        if (data?.error) throw new Error(data.error);
-        result = data.data;
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+        }
+        
+        const ocrResponse = await response.json();
+        result = ocrResponse.data;
       } else {
         // Use the hook for regular files
         result = await ocrInvoice.mutateAsync(file);
@@ -676,16 +716,20 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
           const imageDataUrl = canvas.toDataURL('image/png');
           const base64 = imageDataUrl.split(',')[1];
           
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) throw new Error('Nicht angemeldet');
-          
-          const { data, error } = await supabase.functions.invoke('ocr-invoice', {
-            body: { imageBase64: base64, mimeType: 'image/png' },
+          const response = await fetch('/api/functions/ocr-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ imageBase64: base64, mimeType: 'image/png' }),
           });
           
-          if (error) throw new Error(error.message);
-          if (data?.error) throw new Error(data.error);
-          result = data.data;
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'OCR-Analyse fehlgeschlagen');
+          }
+          
+          const ocrResponse = await response.json();
+          result = ocrResponse.data;
         }
       } else {
         result = await ocrInvoice.mutateAsync(item.file);
@@ -780,8 +824,11 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
-  const content = (
-    <>
+  return (
+    <MainLayout
+      title="Buchhaltung"
+      subtitle="Kosten erfassen und kategorisieren"
+    >
       {/* Batch Results Summary Dialog */}
       <BatchResultsSummary
         open={batchSummaryOpen}
@@ -990,7 +1037,7 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
                   <Label>Art</Label>
                   <Select
                     value={newExpense.expense_type}
-                    onValueChange={(value: ExpenseType) => setNewExpense(prev => ({ ...prev, expense_type: value }))}
+                    onValueChange={handleExpenseTypeChange}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1003,6 +1050,30 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
                   </Select>
                 </div>
               </div>
+
+              {newExpense.category === 'betriebskosten_umlagefaehig' && (
+                <div className="space-y-2">
+                  <Label>Verteilungsschlüssel</Label>
+                  <Select
+                    value={newExpense.distribution_key_id}
+                    onValueChange={(value) => setNewExpense(prev => ({ ...prev, distribution_key_id: value }))}
+                  >
+                    <SelectTrigger data-testid="select-distribution-key">
+                      <SelectValue placeholder="Schlüssel auswählen..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {distributionKeys.map(key => (
+                        <SelectItem key={key.id} value={key.id}>
+                          {key.name} {key.unit && `(${key.unit})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Bestimmt, wie diese Ausgabe auf die Mieter verteilt wird
+                  </p>
+                </div>
+              )}
 
               {/* Budget Position Select - only for Instandhaltung with property */}
               {newExpense.category === 'instandhaltung' && newExpense.property_id && (
@@ -1329,7 +1400,7 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expenseTypeLabels[expense.expense_type]}
+                        {expenseTypeLabels[expense.expenseType as ExpenseType]}
                       </TableCell>
                       <TableCell>
                         <TransactionMatchBadge
@@ -1339,7 +1410,7 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
                         />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {expense.beleg_nummer || '-'}
+                        {expense.belegNummer || '-'}
                       </TableCell>
                       <TableCell>
                         {(expense as any).beleg_url ? (
@@ -1595,17 +1666,6 @@ export default function ExpenseList({ embedded = false }: { embedded?: boolean }
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout
-      title="Buchhaltung"
-      subtitle="Kosten erfassen und kategorisieren"
-    >
-      {content}
     </MainLayout>
   );
 }
