@@ -17,7 +17,7 @@ import { useOrganization } from '@/hooks/useOrganization';
 import { useLetterTemplates, useCreateLetterTemplate, useDeleteLetterTemplate, useSerialLetters, useCreateSerialLetter } from '@/hooks/useLetterTemplates';
 import { generateSerialLetterPdf } from '@/utils/serialLetterPdfExport';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { apiRequest } from '@/lib/queryClient';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
@@ -154,18 +154,16 @@ export default function SerialLetters() {
       }
 
       if (sendVia === 'email' || sendVia === 'both') {
-        // Send emails via edge function
         for (const t of propertyTenants) {
           if (t.email) {
-            await supabase.functions.invoke('send-message', {
-              body: {
-                to: t.email,
-                subject,
-                body: body
-                  .replace(/\{\{name\}\}/g, `${t.first_name} ${t.last_name}`)
-                  .replace(/\{\{einheit\}\}/g, `Top ${t.unit?.top_nummer || '?'}`)
-                  .replace(/\{\{datum\}\}/g, format(new Date(), 'dd.MM.yyyy')),
-              },
+            const personalizedBody = body
+              .replace(/\{\{name\}\}/g, `${t.first_name} ${t.last_name}`)
+              .replace(/\{\{einheit\}\}/g, `Top ${t.unit?.top_nummer || '?'}`)
+              .replace(/\{\{datum\}\}/g, format(new Date(), 'dd.MM.yyyy'));
+            await apiRequest('POST', '/api/functions/send-message', {
+              recipientEmail: t.email,
+              subject,
+              messageBody: personalizedBody,
             });
           }
         }

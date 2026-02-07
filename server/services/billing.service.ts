@@ -64,6 +64,10 @@ export class BillingService {
       sql`${tenants.unitId} IN (${sql.join(unitIds.map(id => sql`${id}`), sql`, `)}) AND ${tenants.status} = 'aktiv'`
     );
 
+    const vacancyTenants = await db.select().from(tenants).where(
+      sql`${tenants.unitId} IN (${sql.join(unitIds.map(id => sql`${id}`), sql`, `)}) AND ${tenants.status} = 'leerstand'`
+    );
+
     const carryForwardMap = new Map<string, any>();
     if (isJanuary) {
       for (const t of tenantsData) {
@@ -77,12 +81,61 @@ export class BillingService {
       return invoiceGenerator.buildInvoiceData(t, unitType, year, month, dueDate, carryForward);
     });
 
+    for (const vt of vacancyTenants) {
+      const unit = unitsData.find(u => u.id === vt.unitId);
+      const unitType = unitTypeMap.get(vt.unitId || '') || 'wohnung';
+      const vatRates = invoiceGenerator.getVatRates(unitType);
+      const bk = roundMoney(Number(unit?.leerstandBk ?? vt.betriebskostenVorschuss) || 0);
+      const hk = roundMoney(Number(unit?.leerstandHk ?? vt.heizkostenVorschuss) || 0);
+      const ust = roundMoney(
+        invoiceGenerator.calculateVatFromGross(bk, vatRates.ustSatzBk) +
+        invoiceGenerator.calculateVatFromGross(hk, vatRates.ustSatzHeizung)
+      );
+      const gesamtbetrag = roundMoney(bk + hk);
+      invoicesToCreate.push({
+        tenantId: vt.id,
+        unitId: vt.unitId,
+        year,
+        month,
+        grundmiete: 0,
+        betriebskosten: bk,
+        heizungskosten: hk,
+        gesamtbetrag,
+        ust,
+        ustSatzMiete: vatRates.ustSatzMiete,
+        ustSatzBk: vatRates.ustSatzBk,
+        ustSatzHeizung: vatRates.ustSatzHeizung,
+        status: "offen" as const,
+        faelligAm: dueDate,
+        vortragMiete: 0,
+        vortragBk: 0,
+        vortragHk: 0,
+        vortragSonstige: 0,
+        isVacancy: true,
+      });
+    }
+
     if (dryRun) {
       const preview = [];
       for (const inv of invoicesToCreate) {
         const id = `preview-${inv.tenantId}-${inv.year}-${inv.month}`;
         const vatRates = invoiceGenerator.getVatRates(unitTypeFromTenant(inv.unitId, unitTypeMap));
-        const tenant = tenantsData.find(x => x.id === inv.tenantId);
+        const isVacancyPreview = (inv as any).isVacancy === true;
+        let tenant = tenantsData.find(x => x.id === inv.tenantId);
+        if (!tenant && isVacancyPreview) {
+          const vt = vacancyTenants.find(x => x.id === inv.tenantId);
+          if (vt) {
+            const unit = unitsData.find(u => u.id === vt.unitId);
+            tenant = {
+              ...vt,
+              grundmiete: '0',
+              betriebskostenVorschuss: String(unit?.leerstandBk ?? vt.betriebskostenVorschuss ?? '0'),
+              heizkostenVorschuss: String(unit?.leerstandHk ?? vt.heizkostenVorschuss ?? '0'),
+              wasserkostenVorschuss: '0',
+              sonstigeKosten: null,
+            } as typeof tenants.$inferSelect;
+          }
+        }
         if (tenant) {
           const rawLines = invoiceGenerator.buildInvoiceLines(id, tenant, vatRates, month, year);
           const validLines = rawLines.filter(l => roundMoney(l.amount) > 0 && l.lineType && l.invoiceId);
@@ -114,9 +167,10 @@ export class BillingService {
       const createdInvoices = await db.transaction(async (tx) => {
         const insertedInvoices: any[] = [];
         for (const inv of invoicesToCreate) {
+          const isVacancy = (inv as any).isVacancy === true;
           const res = await tx.execute(sql`
-            INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, grundmiete, betriebskosten, heizungskosten, gesamtbetrag, ust, ust_satz_miete, ust_satz_bk, ust_satz_heizung, status, faellig_am, vortrag_miete, vortrag_bk, vortrag_hk, vortrag_sonstige, run_id, created_at)
-            VALUES (gen_random_uuid(), ${inv.tenantId}, ${inv.unitId}, ${inv.year}, ${inv.month}, ${inv.grundmiete}, ${inv.betriebskosten}, ${inv.heizungskosten}, ${inv.gesamtbetrag}, ${inv.ust}, ${inv.ustSatzMiete}, ${inv.ustSatzBk}, ${inv.ustSatzHeizung}, ${inv.status}, ${inv.faelligAm}, ${inv.vortragMiete}, ${inv.vortragBk}, ${inv.vortragHk}, ${inv.vortragSonstige}, ${runId}::uuid, now())
+            INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, grundmiete, betriebskosten, heizungskosten, gesamtbetrag, ust, ust_satz_miete, ust_satz_bk, ust_satz_heizung, status, faellig_am, vortrag_miete, vortrag_bk, vortrag_hk, vortrag_sonstige, is_vacancy, run_id, created_at)
+            VALUES (gen_random_uuid(), ${inv.tenantId}, ${inv.unitId}, ${inv.year}, ${inv.month}, ${inv.grundmiete}, ${inv.betriebskosten}, ${inv.heizungskosten}, ${inv.gesamtbetrag}, ${inv.ust}, ${inv.ustSatzMiete}, ${inv.ustSatzBk}, ${inv.ustSatzHeizung}, ${inv.status}, ${inv.faelligAm}, ${inv.vortragMiete}, ${inv.vortragBk}, ${inv.vortragHk}, ${inv.vortragSonstige}, ${isVacancy}, ${runId}::uuid, now())
             ON CONFLICT (tenant_id, year, month) DO NOTHING
             RETURNING *
           `);
@@ -128,8 +182,24 @@ export class BillingService {
         const allLines: any[] = [];
         let skippedLines: { type: string; reason: string }[] = [];
         
+        const vacancyTenantOverrides = new Map<string, typeof tenants.$inferSelect>();
+        for (const vt of vacancyTenants) {
+          const unit = unitsData.find(u => u.id === vt.unitId);
+          vacancyTenantOverrides.set(vt.id, {
+            ...vt,
+            grundmiete: '0',
+            betriebskostenVorschuss: String(unit?.leerstandBk ?? vt.betriebskostenVorschuss ?? '0'),
+            heizkostenVorschuss: String(unit?.leerstandHk ?? vt.heizkostenVorschuss ?? '0'),
+            wasserkostenVorschuss: '0',
+            sonstigeKosten: null,
+          } as typeof tenants.$inferSelect);
+        }
+        const allTenantsForLookup = [...tenantsData, ...vacancyTenants];
         for (const inv of insertedInvoices) {
-          const tenant = tenantsData.find(t => t.id === inv.tenant_id);
+          const isVacancyInv = inv.is_vacancy === true;
+          const tenant = isVacancyInv
+            ? vacancyTenantOverrides.get(inv.tenant_id)
+            : tenantsData.find(t => t.id === inv.tenant_id);
           if (!tenant) continue;
           const unitType = unitTypeMap.get(inv.unit_id || '') || 'wohnung';
           const vatRates = invoiceGenerator.getVatRates(unitType);
