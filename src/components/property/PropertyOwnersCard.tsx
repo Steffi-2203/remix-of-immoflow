@@ -41,7 +41,8 @@ import {
   Loader2,
   Star,
   Building2,
-  ShieldCheck
+  ShieldCheck,
+  ArrowRightLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -54,6 +55,8 @@ import {
 } from '@/hooks/usePropertyOwners';
 import { useHasFinanceAccess } from '@/hooks/useUserRole';
 import { maskIban, maskEmail, isMasked } from '@/lib/dataMasking';
+import { OwnershipTransferWizard } from '@/components/weg/OwnershipTransferWizard';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface PropertyOwnersCardProps {
   propertyId: string;
@@ -91,9 +94,12 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
   const updateOwner = useUpdatePropertyOwner();
   const deleteOwner = useDeletePropertyOwner();
   const { hasAccess: hasFinanceAccess } = useHasFinanceAccess();
+  const { data: organization } = useOrganization();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [transferWizardOpen, setTransferWizardOpen] = useState(false);
+  const [transferOwnerId, setTransferOwnerId] = useState<string | undefined>();
   const [editingOwner, setEditingOwner] = useState<PropertyOwner | null>(null);
   const [ownerToDelete, setOwnerToDelete] = useState<PropertyOwner | null>(null);
   const [formData, setFormData] = useState<OwnerFormData>(emptyFormData);
@@ -319,6 +325,14 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Eigentümerwechsel"
+                          onClick={() => { setTransferOwnerId(owner.id); setTransferWizardOpen(true); }}
+                        >
+                          <ArrowRightLeft className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -467,6 +481,17 @@ export function PropertyOwnersCard({ propertyId }: PropertyOwnersCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Ownership Transfer Wizard */}
+      {transferWizardOpen && (
+        <OwnershipTransferWizard
+          open={transferWizardOpen}
+          onOpenChange={setTransferWizardOpen}
+          propertyId={propertyId}
+          organizationId={organization?.id || null}
+          preselectedOwnerId={transferOwnerId}
+        />
+      )}
     </>
   );
 }

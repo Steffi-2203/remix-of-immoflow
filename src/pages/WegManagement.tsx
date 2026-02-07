@@ -10,10 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, PiggyBank, Vote, Loader2, Calendar } from 'lucide-react';
+import { Plus, Users, PiggyBank, Vote, Loader2, Calendar, FileSpreadsheet, ArrowRightLeft } from 'lucide-react';
 import { useWegAssemblies, useCreateWegAssembly, useUpdateWegAssembly, useWegVotes, useCreateWegVote, useReserveFund, useCreateReserveFundEntry } from '@/hooks/useWeg';
+import { useWegBusinessPlans, statusLabels as planStatusLabels } from '@/hooks/useWegBusinessPlan';
+import { useOwnershipTransfers, transferStatusLabels, legalReasonLabels } from '@/hooks/useOwnershipTransfer';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
+import { BusinessPlanDialog } from '@/components/weg/BusinessPlanDialog';
+import { OwnershipTransferWizard } from '@/components/weg/OwnershipTransferWizard';
 
 const statusLabels: Record<string, string> = { geplant: 'Geplant', durchgefuehrt: 'Durchgeführt', protokolliert: 'Protokolliert' };
 const statusStyles: Record<string, string> = { geplant: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', durchgefuehrt: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', protokolliert: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
@@ -25,8 +29,11 @@ export default function WegManagement() {
   const [assemblyDialogOpen, setAssemblyDialogOpen] = useState(false);
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
   const [reserveDialogOpen, setReserveDialogOpen] = useState(false);
+  const [businessPlanDialogOpen, setBusinessPlanDialogOpen] = useState(false);
+  const [transferWizardOpen, setTransferWizardOpen] = useState(false);
   const [selectedAssemblyId, setSelectedAssemblyId] = useState<string | null>(null);
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
 
   // Assembly form
   const [aTitle, setATitle] = useState('');
@@ -60,6 +67,9 @@ export default function WegManagement() {
   const updateAssembly = useUpdateWegAssembly();
   const createVote = useCreateWegVote();
   const createReserve = useCreateReserveFundEntry();
+
+  const { data: businessPlans = [], isLoading: loadingPlans } = useWegBusinessPlans(selectedPropertyId || undefined);
+  const { data: transfers = [], isLoading: loadingTransfers } = useOwnershipTransfers(selectedPropertyId || undefined);
 
   const handleCreateAssembly = async () => {
     await createAssembly.mutateAsync({
@@ -126,7 +136,9 @@ export default function WegManagement() {
         <Tabs defaultValue="assemblies">
           <TabsList>
             <TabsTrigger value="assemblies"><Users className="h-4 w-4 mr-1" /> Versammlungen</TabsTrigger>
+            <TabsTrigger value="businessplan"><FileSpreadsheet className="h-4 w-4 mr-1" /> Wirtschaftsplan</TabsTrigger>
             <TabsTrigger value="reserve"><PiggyBank className="h-4 w-4 mr-1" /> Rücklage</TabsTrigger>
+            <TabsTrigger value="transfers"><ArrowRightLeft className="h-4 w-4 mr-1" /> Eigentümerwechsel</TabsTrigger>
           </TabsList>
 
           <TabsContent value="assemblies" className="space-y-4">
@@ -260,8 +272,106 @@ export default function WegManagement() {
               </Table>
             )}
           </TabsContent>
+
+          {/* Business Plan Tab */}
+          <TabsContent value="businessplan" className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => { setSelectedPlan(null); setBusinessPlanDialogOpen(true); }} disabled={!selectedPropertyId}>
+                <Plus className="h-4 w-4 mr-2" /> Neuer Wirtschaftsplan
+              </Button>
+            </div>
+
+            {loadingPlans ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            ) : businessPlans.length === 0 ? (
+              <Card><CardContent className="py-12 text-center text-muted-foreground">
+                <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>{selectedPropertyId ? 'Noch keine Wirtschaftspläne vorhanden.' : 'Bitte wählen Sie eine Liegenschaft.'}</p>
+              </CardContent></Card>
+            ) : (
+              <div className="space-y-3">
+                {businessPlans.map((plan) => (
+                  <Card key={plan.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => { setSelectedPlan(plan); setBusinessPlanDialogOpen(true); }}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">{plan.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Gültig ab {new Date(plan.effective_date).toLocaleDateString('de-AT')} · Gesamt: {fmt(plan.total_amount)}
+                          </p>
+                        </div>
+                        <Badge variant={plan.status === 'aktiv' ? 'default' : 'secondary'}>{planStatusLabels[plan.status]}</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Ownership Transfers Tab */}
+          <TabsContent value="transfers" className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => setTransferWizardOpen(true)} disabled={!selectedPropertyId}>
+                <ArrowRightLeft className="h-4 w-4 mr-2" /> Eigentümerwechsel
+              </Button>
+            </div>
+
+            {loadingTransfers ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+            ) : transfers.length === 0 ? (
+              <Card><CardContent className="py-12 text-center text-muted-foreground">
+                <ArrowRightLeft className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>{selectedPropertyId ? 'Noch keine Eigentümerwechsel.' : 'Bitte wählen Sie eine Liegenschaft.'}</p>
+              </CardContent></Card>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Datum</TableHead>
+                    <TableHead>Rechtsgrund</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Offene Forderungen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transfers.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell>{new Date(t.transfer_date).toLocaleDateString('de-AT')}</TableCell>
+                      <TableCell>{legalReasonLabels[t.legal_reason] || t.legal_reason}</TableCell>
+                      <TableCell><Badge variant={t.status === 'abgeschlossen' ? 'default' : 'secondary'}>{transferStatusLabels[t.status]}</Badge></TableCell>
+                      <TableCell className="text-right">{fmt(t.outstanding_amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Business Plan Dialog */}
+      {businessPlanDialogOpen && (
+        <BusinessPlanDialog
+          open={businessPlanDialogOpen}
+          onOpenChange={setBusinessPlanDialogOpen}
+          propertyId={selectedPropertyId}
+          organizationId={organization?.id || null}
+          existingPlan={selectedPlan || undefined}
+        />
+      )}
+
+      {/* Ownership Transfer Wizard */}
+      {transferWizardOpen && (
+        <OwnershipTransferWizard
+          open={transferWizardOpen}
+          onOpenChange={setTransferWizardOpen}
+          propertyId={selectedPropertyId}
+          organizationId={organization?.id || null}
+        />
+      )}
+
+
 
       {/* Assembly Dialog */}
       <Dialog open={assemblyDialogOpen} onOpenChange={setAssemblyDialogOpen}>
