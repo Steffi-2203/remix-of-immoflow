@@ -1,0 +1,36 @@
+name: DryRun Persist Parity
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tools/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+
+jobs:
+  dryrun-persist:
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare tmp folder
+        run: mkdir -p tmp
+
+      - name: Run DryRun Persist Vitest
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          RUN_ID: ${{ secrets.TEST_RUN_ID }}
+        run: |
+          npx vitest run tests/dryrun-persist.spec.ts --run
