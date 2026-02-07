@@ -16,20 +16,56 @@ import { useUnits } from '@/hooks/useUnits';
 import { useState } from 'react';
 import { PropertyImportDialog } from '@/components/properties/PropertyImportDialog';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export default function PropertyList() {
   const { data: properties, isLoading } = useProperties();
   const { data: allUnits } = useUnits();
   const [searchQuery, setSearchQuery] = useState('');
+  const [propertyFilter, setPropertyFilter] = useState('all');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const filteredProperties = properties?.filter(
-    (p) =>
+  const filteredProperties = properties?.filter((p) => {
+    const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.address.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      p.address.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (propertyFilter === 'active') {
+      const units = allUnits?.filter((u) => u.property_id === p.id) || [];
+      return units.some((u) => u.status === 'aktiv');
+    }
+    if (propertyFilter === 'vacant') {
+      const units = allUnits?.filter((u) => u.property_id === p.id) || [];
+      return units.some((u) => u.status === 'leerstand');
+    }
+    return true;
+  });
+
+  const handleExportProperties = () => {
+    if (!filteredProperties || filteredProperties.length === 0) {
+      toast.info('Keine Daten zum Exportieren');
+      return;
+    }
+    const headers = ['Name', 'Adresse', 'Stadt', 'PLZ', 'Baujahr', 'Fläche (m²)', 'MEA'];
+    const rows = filteredProperties.map((p) => [
+      p.name, p.address, p.city, p.postal_code,
+      p.building_year ?? '', Number(p.total_qm) || '', Number(p.total_mea) || '',
+    ]);
+    const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'liegenschaften.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Export erfolgreich');
+  };
 
   const getUnitsForProperty = (propertyId: string) => {
     const units = allUnits?.filter((u) => u.property_id === propertyId) || [];
@@ -70,7 +106,7 @@ export default function PropertyList() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Select defaultValue="all">
+          <Select value={propertyFilter} onValueChange={setPropertyFilter}>
             <SelectTrigger className="w-40">
               <Filter className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Filter" />
@@ -87,7 +123,7 @@ export default function PropertyList() {
             <Upload className="h-4 w-4 mr-2" />
             Importieren
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportProperties}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
