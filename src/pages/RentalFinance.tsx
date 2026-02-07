@@ -41,14 +41,14 @@ export default function RentalFinance() {
         </TabsList>
 
         <TabsContent value="payments">
-          <PaymentList embedded />
+          <PaymentList />
         </TabsContent>
         <TabsContent value="invoices">
-          <InvoiceList embedded />
+          <InvoiceList />
         </TabsContent>
         {showDunning && (
           <TabsContent value="dunning">
-            <Dunning embedded />
+            <Dunning />
           </TabsContent>
         )}
       </Tabs>

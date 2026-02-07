@@ -30,10 +30,10 @@ export default function MaintenanceHub() {
         </TabsList>
 
         <TabsContent value="tasks">
-          <Maintenance embedded />
+          <Maintenance />
         </TabsContent>
         <TabsContent value="contractors">
-          <Contractors embedded />
+          <Contractors />
         </TabsContent>
       </Tabs>
     </MainLayout>

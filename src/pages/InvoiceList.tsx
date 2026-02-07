@@ -99,9 +99,9 @@ export default function InvoiceList() {
   // Filter invoices by selected property
   const filteredInvoices = invoices?.filter(invoice => {
     if (selectedPropertyId === 'all') return true;
-    const tenant = getTenant(invoice.tenantId);
-    const unit = tenant ? getUnit(tenant.unitId) : null;
-    return unit?.propertyId === selectedPropertyId;
+    const tenant = getTenant(invoice.tenant_id);
+    const unit = tenant ? getUnit(tenant.unit_id) : null;
+    return unit?.property_id === selectedPropertyId;
   });
 
   const handleGenerateInvoices = async () => {
@@ -179,9 +179,9 @@ export default function InvoiceList() {
   };
 
   const handleSendDunning = async (invoice: any, level: 1 | 2) => {
-    const tenant = getTenant(invoice.tenantId);
-    const unit = tenant ? getUnit(tenant.unitId) : null;
-    const property = unit ? getProperty(unit.propertyId) : null;
+    const tenant = getTenant(invoice.tenant_id);
+    const unit = tenant ? getUnit(tenant.unit_id) : null;
+    const property = unit ? getProperty(unit.property_id) : null;
 
     if (!tenant?.email) {
       toast({
@@ -196,11 +196,11 @@ export default function InvoiceList() {
       invoiceId: invoice.id,
       dunningLevel: level,
       tenantEmail: tenant.email,
-      tenantName: `${tenant.firstName} ${tenant.lastName}`,
+      tenantName: `${tenant.first_name} ${tenant.last_name}`,
       propertyName: property?.name || '',
-      unitNumber: unit?.topNummer || '',
+      unitNumber: unit?.top_nummer || '',
       amount: Number(invoice.gesamtbetrag),
-      dueDate: invoice.faelligAm,
+      dueDate: invoice.faellig_am,
       invoiceMonth: invoice.month,
       invoiceYear: invoice.year,
     });
@@ -223,9 +223,9 @@ export default function InvoiceList() {
 
     for (const invoice of filteredInvoices) {
       try {
-        const tenant = getTenant(invoice.tenantId);
-        const unit = tenant ? getUnit(tenant.unitId) : null;
-        const property = unit ? getProperty(unit.propertyId) : null;
+        const tenant = getTenant(invoice.tenant_id);
+        const unit = tenant ? getUnit(tenant.unit_id) : null;
+        const property = unit ? getProperty(unit.property_id) : null;
 
         if (!tenant || !unit || !property) {
           errorCount++;
@@ -236,33 +236,33 @@ export default function InvoiceList() {
 
         // Generate PDF with Vortrag data
         const pdfBlob = generateVorschreibungPdf({
-          tenantName: `${tenant.firstName} ${tenant.lastName}`,
+          tenantName: `${tenant.first_name} ${tenant.last_name}`,
           propertyName: property.name,
           propertyAddress: property.address,
-          propertyCity: `${property.postalCode} ${property.city}`,
-          unitNumber: unit.topNummer || '',
+          propertyCity: `${(property as any).postal_code || (property as any).postalCode} ${property.city}`,
+          unitNumber: unit.top_nummer || '',
           month: invoice.month,
           year: invoice.year,
           grundmiete: Number(invoice.grundmiete),
           betriebskosten: Number(invoice.betriebskosten),
           heizungskosten: Number(invoice.heizungskosten),
-          ustSatzMiete: Number(invoice.ustSatzMiete || 0),
-          ustSatzBk: Number(invoice.ustSatzBk || 0),
-          ustSatzHeizung: Number(invoice.ustSatzHeizung || 0),
+          ustSatzMiete: Number(invoice.ust_satz_miete || 0),
+          ustSatzBk: Number(invoice.ust_satz_bk || 0),
+          ustSatzHeizung: Number(invoice.ust_satz_heizung || 0),
           ust: Number(invoice.ust || 0),
           gesamtbetrag: Number(invoice.gesamtbetrag),
-          faelligAm: invoice.faelligAm,
+          faelligAm: invoice.faellig_am,
           iban: organization?.iban || undefined,
           bic: organization?.bic || undefined,
-          vortragMiete: Number((invoice as any).vortragMiete || 0),
-          vortragBk: Number((invoice as any).vortragBk || 0),
-          vortragHk: Number((invoice as any).vortragHk || 0),
-          vortragSonstige: Number((invoice as any).vortragSonstige || 0),
+          vortragMiete: Number(invoice.vortrag_miete || 0),
+          vortragBk: Number(invoice.vortrag_bk || 0),
+          vortragHk: Number(invoice.vortrag_hk || 0),
+          vortragSonstige: Number(invoice.vortrag_sonstige || 0),
         });
 
         // Upload to tenant documents
         await uploadDocument.mutateAsync({
-          tenantId: invoice.tenantId,
+          tenantId: invoice.tenant_id,
           file: pdfBlob,
           name: `Vorschreibung ${monthName} ${invoice.year}`,
           type: 'vorschreibung',
@@ -490,18 +490,18 @@ export default function InvoiceList() {
               </TableHeader>
               <TableBody>
                 {filteredInvoices.map((invoice) => {
-                  const tenant = getTenant(invoice.tenantId);
-                  const unit = tenant ? getUnit(tenant.unitId) : null;
-                  const property = unit ? getProperty(unit.propertyId) : null;
+                  const tenant = getTenant(invoice.tenant_id);
+                  const unit = tenant ? getUnit(tenant.unit_id) : null;
+                  const property = unit ? getProperty(unit.property_id) : null;
                   const mahnstufe = (invoice as any).mahnstufe || 0;
                   const nextAction = getNextDunningAction(mahnstufe);
                   const isOpenOrOverdue = invoice.status === 'offen' || invoice.status === 'ueberfaellig';
                   
                   // Calculate Vortrag - ensure numeric values
-                  const vortragMiete = Number((invoice as any).vortragMiete) || 0;
-                  const vortragBk = Number((invoice as any).vortragBk) || 0;
-                  const vortragHk = Number((invoice as any).vortragHk) || 0;
-                  const vortragSonstige = Number((invoice as any).vortragSonstige) || 0;
+                  const vortragMiete = Number(invoice.vortrag_miete) || 0;
+                  const vortragBk = Number(invoice.vortrag_bk) || 0;
+                  const vortragHk = Number(invoice.vortrag_hk) || 0;
+                  const vortragSonstige = Number(invoice.vortrag_sonstige) || 0;
                   const vortragGesamt = vortragMiete + vortragBk + vortragHk + vortragSonstige;
 
                   return (
@@ -510,11 +510,11 @@ export default function InvoiceList() {
                         {months[invoice.month - 1]?.label} {invoice.year}
                       </TableCell>
                       <TableCell>
-                        {tenant ? `${tenant.firstName} ${tenant.lastName}` : '-'}
+                        {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
                       </TableCell>
                       <TableCell>
                         <div>
-                          <span className="font-medium">{unit?.topNummer || '-'}</span>
+                          <span className="font-medium">{unit?.top_nummer || '-'}</span>
                           <span className="text-muted-foreground text-sm ml-2">
                             {property?.name || '-'}
                           </span>
@@ -556,7 +556,7 @@ export default function InvoiceList() {
                         € {Number(invoice.gesamtbetrag).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        {invoice.faelligAm ? format(new Date(invoice.faelligAm), 'dd.MM.yyyy', { locale: de }) : '-'}
+                        {invoice.faellig_am ? format(new Date(invoice.faellig_am), 'dd.MM.yyyy', { locale: de }) : '-'}
                       </TableCell>
                       <TableCell>
                         <Badge className={statusStyles[invoice.status]}>

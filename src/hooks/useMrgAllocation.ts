@@ -173,7 +173,7 @@ export function useMrgAllocation(
       return true;
     });
 
-    const allocations: TenantAllocation[] = activeTenants.map(tenant => {
+    const allocations: TenantAllocation[] = activeTenants.map((tenant: any) => {
       // SOLL from tenant data
       const sollBk = Number(tenant.betriebskosten_vorschuss || 0);
       const sollHk = Number(tenant.heizungskosten_vorschuss || 0);
