@@ -59,38 +59,38 @@ export default function TenantList() {
   const units = selectedPropertyId === 'all' ? allUnits : propertyUnits;
 
   // Filter tenants
-  const filteredTenants = tenants.filter(tenant => {
+  const filteredTenants = tenants.filter((tenant: any) => {
     const matchesSearch = searchTerm === '' || 
-      `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${tenant.first_name} ${tenant.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tenant.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (selectedPropertyId === 'all') return matchesSearch;
     
-    const tenantUnit = units.find(u => u.id === tenant.unitId);
-    return matchesSearch && tenantUnit?.propertyId === selectedPropertyId;
+    const tenantUnit = units.find((u: any) => u.id === tenant.unit_id);
+    return matchesSearch && tenantUnit?.property_id === selectedPropertyId;
   });
 
-  const getUnit = (unitId: string) => units.find((u) => u.id === unitId);
+  const getUnit = (unitId: string) => units.find((u: any) => u.id === unitId);
   const getProperty = (unitId: string) => {
-    const unit = units.find(u => u.id === unitId);
+    const unit = units.find((u: any) => u.id === unitId);
     if (!unit) return null;
-    return properties.find(p => p.id === unit.propertyId);
+    return properties.find((p: any) => p.id === (unit as any).property_id);
   };
 
-  const activeCount = filteredTenants.filter(t => t.status === 'aktiv').length;
-  const sepaCount = filteredTenants.filter(t => t.sepaMandat).length;
-  const totalKaution = filteredTenants.reduce((sum, t) => sum + (t.kaution || 0), 0);
+  const activeCount = filteredTenants.filter((t: any) => t.status === 'aktiv').length;
+  const sepaCount = filteredTenants.filter((t: any) => t.sepa_mandat).length;
+  const totalKaution = filteredTenants.reduce((sum: number, t: any) => sum + (t.kaution || 0), 0);
 
   // Helper function to get unpaid fees for a tenant
   const getUnpaidFeesForTenant = (tenantId: string) => {
     return unpaidFees.filter(fee => fee.tenant_id === tenantId);
   };
 
-  const tenantsWithFees = filteredTenants.filter(t => getUnpaidFeesForTenant(t.id).length > 0).length;
+  const tenantsWithFees = filteredTenants.filter((t: any) => getUnpaidFeesForTenant(t.id).length > 0).length;
 
   // Get units for the selected property for import
   const importUnits = selectedPropertyId !== 'all' 
-    ? units.map(u => ({ id: u.id, top_nummer: u.topNummer }))
+    ? units.map((u: any) => ({ id: u.id, top_nummer: u.top_nummer }))
     : [];
 
   return (
@@ -121,7 +121,26 @@ export default function TenantList() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => {
+            if (!filteredTenants || filteredTenants.length === 0) {
+              return;
+            }
+            const headers = ['Vorname', 'Nachname', 'Email', 'Telefon', 'Mietbeginn', 'Grundmiete', 'BK', 'HK', 'Status'];
+            const rows = filteredTenants.map((t: any) => [
+              t.first_name, t.last_name, t.email ?? '', t.phone ?? '',
+              t.mietbeginn, Number(t.grundmiete), Number(t.betriebskosten_vorschuss), Number(t.heizungskosten_vorschuss), t.status,
+            ]);
+            const csv = [headers.join(';'), ...rows.map((r: any) => r.join(';'))].join('\n');
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'mieter.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -205,12 +224,12 @@ export default function TenantList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTenants.map((tenant) => {
-                const unit = getUnit(tenant.unitId);
-                const property = getProperty(tenant.unitId);
+              {filteredTenants.map((tenant: any) => {
+                const unit = getUnit(tenant.unit_id);
+                const property = getProperty(tenant.unit_id);
                 const totalRent = calculateTotalRent(tenant);
-                const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstigeKosten);
-                const hasSonstige = checkHasSonstigeKosten(tenant.sonstigeKosten);
+                const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstige_kosten);
+                const hasSonstige = checkHasSonstigeKosten(tenant.sonstige_kosten);
 
                 return (
                   <TableRow 
@@ -222,7 +241,7 @@ export default function TenantList() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-foreground">
-                            {tenant.firstName} {tenant.lastName}
+                            {tenant.first_name} {tenant.last_name}
                           </p>
                           {getUnpaidFeesForTenant(tenant.id).length > 0 && (
                             <TooltipProvider>
@@ -272,7 +291,7 @@ export default function TenantList() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{unit?.topNummer || '-'}</span>
+                      <span className="font-medium">{(unit as any)?.top_nummer || '-'}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-muted-foreground">{property?.name || '-'}</span>
@@ -286,7 +305,7 @@ export default function TenantList() {
                           {hasSonstige ? (
                             <>Miete €{Number(tenant.grundmiete || 0).toFixed(2)} + Nebenkosten €{sonstigeTotal.toFixed(2)}</>
                           ) : (
-                            <>(€{tenant.grundmiete} + €{tenant.betriebskostenVorschuss} BK + €{tenant.heizungskostenVorschuss} HK)</>
+                            <>(€{tenant.grundmiete} + €{tenant.betriebskosten_vorschuss} BK + €{tenant.heizungskosten_vorschuss} HK)</>
                           )}
                         </p>
                       </div>
@@ -295,7 +314,7 @@ export default function TenantList() {
                       {new Date(tenant.mietbeginn).toLocaleDateString('de-AT')}
                     </TableCell>
                     <TableCell>
-                      {tenant.sepaMandat ? (
+                      {tenant.sepa_mandat ? (
                         <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                           <CreditCard className="h-3 w-3 mr-1" />
                           Aktiv

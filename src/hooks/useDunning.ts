@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useDemoData } from '@/contexts/DemoDataContext';
 
 interface DunningRequest {
   invoiceId: string;
@@ -17,9 +18,14 @@ interface DunningRequest {
 
 export function useSendDunning() {
   const queryClient = useQueryClient();
+  const { isDemoMode } = useDemoData();
   
   return useMutation({
     mutationFn: async (request: DunningRequest) => {
+      if (isDemoMode) {
+        toast.info('Mahnungsversand ist im Demo-Modus nicht verfügbar');
+        return { message: 'Demo-Modus' };
+      }
       const { data, error } = await supabase.functions.invoke('send-dunning', {
         body: request,
       });
