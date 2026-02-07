@@ -161,28 +161,38 @@ export class BillingService {
               sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
             );
             const result = await tx.execute(sql`
-              WITH inserted AS (
-                INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
-                VALUES ${sql.join(values, sql`, `)}
-                ON CONFLICT ON CONSTRAINT invoice_lines_unique_key DO NOTHING
-                RETURNING id, invoice_id, line_type, description
-              )
-              SELECT COUNT(*) as cnt, array_agg(invoice_id) as inserted_ids FROM inserted
+              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
+              VALUES ${sql.join(values, sql`, `)}
+              ON CONFLICT ON CONSTRAINT invoice_lines_unique_key
+              DO UPDATE SET
+                amount = EXCLUDED.amount,
+                tax_rate = EXCLUDED.tax_rate,
+                meta = COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || EXCLUDED.meta::jsonb,
+                created_at = LEAST(invoice_lines.created_at, EXCLUDED.created_at)
+              RETURNING id, invoice_id, unit_id, line_type, description, amount
             `);
-            const inserted = Number(result.rows?.[0]?.cnt || 0);
-            const rawIds = result.rows?.[0]?.inserted_ids as string[] | null;
-            const insertedIds = new Set<string>((rawIds || []).map(String));
-            
-            for (const line of batch) {
-              if (!insertedIds.has(line.invoiceId)) {
-                if (conflictKeys.length < 20) {
-                  conflictKeys.push({ invoiceId: line.invoiceId, lineType: line.lineType, description: line.description });
-                }
-              }
+
+            const upsertedRows = result.rows || [];
+            insertedLinesCount += upsertedRows.length;
+            conflictCount += batch.length - upsertedRows.length;
+
+            // Audit log for each upserted row
+            if (upsertedRows.length > 0) {
+              const auditValues = upsertedRows.map((r: any) =>
+                sql`(${userId}::uuid, 'invoice_lines', ${r.id}::text, 'invoice_line_upsert', ${JSON.stringify({
+                  run_id: runId,
+                  invoice_id: r.invoice_id,
+                  unit_id: r.unit_id,
+                  line_type: r.line_type,
+                  description: r.description,
+                  amount: r.amount,
+                })}::jsonb, now())`
+              );
+              await tx.execute(sql`
+                INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+                VALUES ${sql.join(auditValues, sql`, `)}
+              `);
             }
-            
-            insertedLinesCount += inserted;
-            conflictCount += batch.length - inserted;
           }
         }
         
