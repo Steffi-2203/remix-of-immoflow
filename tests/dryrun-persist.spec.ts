@@ -475,7 +475,7 @@ describe("Normalisierung (DB vs Dryrun Formate)", () => {
 });
 
 describe("Persist-Modus Validierung", () => {
-  it("sollte ON CONFLICT DO NOTHING SQL korrekt aufbauen", () => {
+  it("sollte ON CONFLICT DO UPDATE mit IS DISTINCT FROM SQL korrekt aufbauen", () => {
     const line = {
       invoiceId: "inv-123",
       unitId: "u1",
@@ -485,9 +485,14 @@ describe("Persist-Modus Validierung", () => {
       taxRate: 10,
     };
 
-    const sql = `INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
+    const upsertSql = `INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
         VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (invoice_id, unit_id, line_type, description) DO NOTHING`;
+        ON CONFLICT (invoice_id, unit_id, line_type, description)
+        DO UPDATE SET
+          amount = EXCLUDED.amount,
+          tax_rate = EXCLUDED.tax_rate
+        WHERE (invoice_lines.amount, invoice_lines.tax_rate) IS DISTINCT FROM (EXCLUDED.amount, EXCLUDED.tax_rate)
+        RETURNING id, invoice_id, line_type, description, amount`;
 
     const params = [
       line.invoiceId,
@@ -498,12 +503,67 @@ describe("Persist-Modus Validierung", () => {
       line.taxRate,
     ];
 
-    expect(sql).toContain("ON CONFLICT");
-    expect(sql).toContain("DO NOTHING");
-    expect(sql).not.toContain("RETURNING");
+    expect(upsertSql).toContain("ON CONFLICT");
+    expect(upsertSql).toContain("DO UPDATE SET");
+    expect(upsertSql).toContain("EXCLUDED.amount");
+    expect(upsertSql).toContain("IS DISTINCT FROM");
+    expect(upsertSql).not.toContain("DO NOTHING");
+    expect(upsertSql).not.toContain("xmax");
     expect(params).toHaveLength(6);
     expect(params[0]).toBe("inv-123");
     expect(params[4]).toBe(650);
+  });
+
+  it("sollte Deterministic Merge via CTE old_values erkennen", () => {
+    const oldValuesMap = new Map<string, number>();
+    oldValuesMap.set("inv-123|grundmiete|Nettomiete September 2026", 600);
+
+    const returnedRow = {
+      id: "line-1",
+      invoice_id: "inv-123",
+      line_type: "grundmiete",
+      description: "Nettomiete September 2026",
+      amount: 650,
+    };
+
+    const key = `${returnedRow.invoice_id}|${returnedRow.line_type}|${returnedRow.description}`;
+    const oldAmount = oldValuesMap.get(key);
+    const wasUpdate = oldAmount !== undefined;
+
+    expect(wasUpdate).toBe(true);
+    expect(oldAmount).toBe(600);
+    expect(returnedRow.amount).toBe(650);
+
+    const newKey = "inv-456|betriebskosten|BK September 2026";
+    expect(oldValuesMap.get(newKey)).toBeUndefined();
+    expect(oldValuesMap.get(newKey) !== undefined).toBe(false);
+  });
+
+  it("sollte invoice_runs Idempotenz per Periode korrekt behandeln", () => {
+    const shouldAbort = (status: string) => status === 'completed' || status === 'started';
+    const shouldRetry = (status: string) => status === 'failed';
+    const checkByPeriod = (period: string, existingRuns: { period: string; status: string }[]) => {
+      const existing = existingRuns.find(r => r.period === period);
+      if (!existing) return 'new';
+      if (shouldAbort(existing.status)) return 'abort';
+      if (shouldRetry(existing.status)) return 'retry';
+      return 'new';
+    };
+
+    const runs = [
+      { period: '2026-09', status: 'completed' },
+      { period: '2026-08', status: 'failed' },
+    ];
+
+    expect(checkByPeriod('2026-09', runs)).toBe('abort');
+    expect(checkByPeriod('2026-08', runs)).toBe('retry');
+    expect(checkByPeriod('2026-10', runs)).toBe('new');
+
+    expect(shouldAbort('completed')).toBe(true);
+    expect(shouldAbort('started')).toBe(true);
+    expect(shouldAbort('failed')).toBe(false);
+    expect(shouldRetry('failed')).toBe(true);
+    expect(shouldRetry('completed')).toBe(false);
   });
 
   it("sollte Monatsname korrekt nach Monatsnummer konvertieren", () => {

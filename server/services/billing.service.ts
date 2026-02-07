@@ -152,15 +152,37 @@ export class BillingService {
       return { runId, dryRun: true, period, count: preview.length, summary, preview };
     }
 
-    const insertedRun = await db.execute(sql`
-      INSERT INTO invoice_runs (run_id, period, initiated_by, status)
-      VALUES (${runId}::uuid, ${period}, ${userId}::uuid, 'started')
-      ON CONFLICT (run_id) DO NOTHING
-      RETURNING id
+    const existingPeriodRun = await db.execute(sql`
+      SELECT id, run_id, status, period FROM invoice_runs 
+      WHERE period = ${period} 
+      ORDER BY created_at DESC LIMIT 1
     `);
 
-    if (!insertedRun.rows || insertedRun.rows.length === 0) {
-      return { runId, error: 'Run already exists' };
+    if (existingPeriodRun.rows && existingPeriodRun.rows.length > 0) {
+      const existing = existingPeriodRun.rows[0] as any;
+      if (existing.status === 'completed') {
+        return { runId, error: `Periode ${period} wurde bereits abgeschlossen (Run ${existing.run_id}). Vorschreibungen existieren bereits.` };
+      }
+      if (existing.status === 'started') {
+        return { runId, error: `Periode ${period} wird gerade verarbeitet (Run ${existing.run_id}, Status: started). Bitte warten.` };
+      }
+      if (existing.status === 'failed') {
+        await db.execute(sql`
+          UPDATE invoice_runs SET status = 'started', error = NULL, updated_at = now(), run_id = ${runId}::uuid
+          WHERE id = ${existing.id}
+        `);
+        await db.execute(sql`
+          INSERT INTO audit_logs (user_id, run_id, table_name, record_id, action, new_data, created_at)
+          VALUES (${userId}::uuid, ${runId}::uuid, 'invoice_runs', ${String(existing.id)}, 'retry_failed_run', ${JSON.stringify({
+            period, previousRunId: existing.run_id, previousStatus: existing.status
+          })}::jsonb, now())
+        `);
+      }
+    } else {
+      await db.execute(sql`
+        INSERT INTO invoice_runs (run_id, period, initiated_by, status)
+        VALUES (${runId}::uuid, ${period}, ${userId}::uuid, 'started')
+      `);
     }
 
     try {
@@ -221,43 +243,82 @@ export class BillingService {
         }
 
         let insertedLinesCount = 0;
-        let conflictCount = 0;
-        const conflictKeys: { invoiceId: string; lineType: string; description: string }[] = [];
+        let updatedLinesCount = 0;
+        const mergedKeys: { invoiceId: string; lineType: string; description: string; oldAmount: number; newAmount: number }[] = [];
         
-        const batches = chunk(allLines, 500);
+        const batches = chunk(allLines, 100);
         for (const batch of batches) {
-          if (batch.length > 0) {
-            const values = batch.map(line => 
-              sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
-            );
-            const result = await tx.execute(sql`
-              WITH inserted AS (
-                INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
-                VALUES ${sql.join(values, sql`, `)}
-                ON CONFLICT ON CONSTRAINT invoice_lines_unique_key DO NOTHING
-                RETURNING id, invoice_id, line_type, description
+          if (batch.length === 0) continue;
+          
+          const sortedBatch = [...batch].sort((a, b) => 
+            `${a.invoiceId}|${a.lineType}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.description}`)
+          );
+          
+          const values = sortedBatch.map(line => 
+            sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
+          );
+          
+          const result = await tx.execute(sql`
+            WITH old_values AS (
+              SELECT invoice_id, unit_id, line_type, description, amount AS old_amount, tax_rate AS old_tax_rate
+              FROM invoice_lines
+              WHERE (invoice_id, unit_id, line_type, description) IN (
+                SELECT * FROM (VALUES ${sql.join(
+                  sortedBatch.map(line => sql`(${line.invoiceId}::uuid, ${line.unitId}::uuid, ${line.lineType}::varchar, ${line.description}::text)`),
+                  sql`, `
+                )}) AS t(inv_id, u_id, lt, descr)
               )
-              SELECT COUNT(*) as cnt, array_agg(invoice_id) as inserted_ids FROM inserted
-            `);
-            const inserted = Number(result.rows?.[0]?.cnt || 0);
-            const rawIds = result.rows?.[0]?.inserted_ids as string[] | null;
-            const insertedIds = new Set<string>((rawIds || []).map(String));
-            
-            for (const line of batch) {
-              if (!insertedIds.has(line.invoiceId)) {
-                if (conflictKeys.length < 20) {
-                  conflictKeys.push({ invoiceId: line.invoiceId, lineType: line.lineType, description: line.description });
-                }
+            ),
+            upserted AS (
+              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
+              VALUES ${sql.join(values, sql`, `)}
+              ON CONFLICT ON CONSTRAINT invoice_lines_unique_key
+              DO UPDATE SET
+                amount = EXCLUDED.amount,
+                tax_rate = EXCLUDED.tax_rate,
+                meta = COALESCE(invoice_lines.meta, '{}'::jsonb) || COALESCE(EXCLUDED.meta, '{}'::jsonb)
+              WHERE (invoice_lines.amount, invoice_lines.tax_rate, invoice_lines.meta) IS DISTINCT FROM (EXCLUDED.amount, EXCLUDED.tax_rate, EXCLUDED.meta)
+              RETURNING id, invoice_id, unit_id, line_type, description, amount
+            )
+            SELECT u.id, u.invoice_id, u.line_type, u.description, u.amount,
+                   o.old_amount,
+                   CASE WHEN o.old_amount IS NOT NULL THEN true ELSE false END AS was_update
+            FROM upserted u
+            LEFT JOIN old_values o ON u.invoice_id = o.invoice_id AND u.unit_id = o.unit_id 
+              AND u.line_type = o.line_type AND u.description IS NOT DISTINCT FROM o.description
+          `);
+          
+          const returnedIds = new Set<string>();
+          for (const row of (result.rows || [])) {
+            returnedIds.add(`${(row as any).invoice_id}|${(row as any).line_type}|${(row as any).description}`);
+            if ((row as any).was_update) {
+              updatedLinesCount++;
+              if (mergedKeys.length < 50) {
+                mergedKeys.push({
+                  invoiceId: (row as any).invoice_id,
+                  lineType: (row as any).line_type,
+                  description: (row as any).description,
+                  oldAmount: Number((row as any).old_amount || 0),
+                  newAmount: Number((row as any).amount || 0)
+                });
               }
+            } else {
+              insertedLinesCount++;
             }
-            
-            insertedLinesCount += inserted;
-            conflictCount += batch.length - inserted;
           }
+          
         }
         
-        if (conflictCount > 0) {
-          console.warn(`Invoice lines: ${conflictCount} conflicts (duplicates skipped)`, conflictKeys.slice(0, 5));
+        if (updatedLinesCount > 0) {
+          console.warn(`Invoice lines: ${updatedLinesCount} conflicts merged (DO UPDATE)`, mergedKeys.slice(0, 5));
+          await tx.execute(sql`
+            INSERT INTO audit_logs (user_id, run_id, table_name, record_id, action, new_data, created_at)
+            VALUES (${userId}::uuid, ${runId}::uuid, 'invoice_lines', ${runId}, 'merge_conflicts', ${JSON.stringify({
+              period,
+              mergedCount: updatedLinesCount,
+              mergedKeys: mergedKeys.slice(0, 20)
+            })}::jsonb, now())
+          `);
         }
 
         await tx.execute(sql`
@@ -272,8 +333,8 @@ export class BillingService {
             invoicesCount: insertedInvoices.length, 
             linesCount: allLines.length,
             insertedLinesCount,
-            conflictCount,
-            conflictKeys: conflictKeys.slice(0, 10),
+            updatedLinesCount,
+            mergedKeys: mergedKeys.slice(0, 10),
             skippedLinesCount: skippedLines.length,
             skippedDetails: skippedLines.slice(0, 10)
           })}::jsonb, now())
