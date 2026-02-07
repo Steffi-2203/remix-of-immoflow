@@ -49,6 +49,16 @@ async function getAuthContext(req: Request, res: Response) {
   return { userId, orgId: profile[0].organizationId };
 }
 
+async function checkMutationPermission(req: Request, res: Response): Promise<boolean> {
+  const userId = (req.session as any)?.userId;
+  if (!userId) return false;
+  const userRoles = await db.select().from(schema.userRoles).where(eq(schema.userRoles.userId, userId));
+  const roles = userRoles.map(r => r.role);
+  if (roles.includes('admin') || roles.includes('property_manager') || roles.includes('finance')) return true;
+  res.status(403).json({ error: "Keine Berechtigung für diese Aktion" });
+  return false;
+}
+
 // ====== WEG ASSEMBLIES ======
 
 router.get("/api/weg/assemblies", async (req: Request, res: Response) => {
@@ -72,6 +82,7 @@ router.post("/api/weg/assemblies", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegAssemblies).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -86,6 +97,7 @@ router.patch("/api/weg/assemblies/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.wegAssemblies).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegAssemblies.id, req.params.id), eq(schema.wegAssemblies.organizationId, ctx.orgId))).returning();
@@ -120,6 +132,7 @@ router.post("/api/weg/votes", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, body.assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
@@ -155,6 +168,7 @@ router.post("/api/weg/reserve-fund", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegReserveFund).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -188,6 +202,7 @@ router.post("/api/weg/unit-owners", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegUnitOwners).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -202,6 +217,7 @@ router.patch("/api/weg/unit-owners/:id", async (req: Request, res: Response) => 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.wegUnitOwners).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegUnitOwners.id, req.params.id), eq(schema.wegUnitOwners.organizationId, ctx.orgId))).returning();
@@ -217,6 +233,7 @@ router.delete("/api/weg/unit-owners/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [deleted] = await db.delete(schema.wegUnitOwners).where(and(eq(schema.wegUnitOwners.id, req.params.id), eq(schema.wegUnitOwners.organizationId, ctx.orgId))).returning();
     if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
@@ -250,6 +267,7 @@ router.post("/api/weg/agenda-items", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const assembly = await db.select().from(schema.wegAssemblies).where(and(eq(schema.wegAssemblies.id, body.assemblyId), eq(schema.wegAssemblies.organizationId, ctx.orgId))).limit(1);
@@ -266,6 +284,7 @@ router.delete("/api/weg/agenda-items/:id", async (req: Request, res: Response) =
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const item = await db.select().from(schema.wegAgendaItems).where(eq(schema.wegAgendaItems.id, req.params.id)).limit(1);
     if (!item.length) return res.status(404).json({ error: "Nicht gefunden" });
@@ -304,6 +323,7 @@ router.post("/api/weg/owner-votes", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const vote = await db.select().from(schema.wegVotes).where(eq(schema.wegVotes.id, body.voteId)).limit(1);
@@ -341,6 +361,7 @@ router.post("/api/weg/budget-plans", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegBudgetPlans).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -355,6 +376,7 @@ router.patch("/api/weg/budget-plans/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.wegBudgetPlans).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).returning();
@@ -389,6 +411,7 @@ router.post("/api/weg/budget-lines", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, body.budgetPlanId), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
@@ -405,6 +428,7 @@ router.delete("/api/weg/budget-lines/:id", async (req: Request, res: Response) =
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const line = await db.select().from(schema.wegBudgetLines).where(eq(schema.wegBudgetLines.id, req.params.id)).limit(1);
     if (!line.length) return res.status(404).json({ error: "Nicht gefunden" });
@@ -535,6 +559,7 @@ router.post("/api/weg/budget-plans/:id/activate", async (req: Request, res: Resp
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
 
     const plan = await db.select().from(schema.wegBudgetPlans).where(and(eq(schema.wegBudgetPlans.id, req.params.id), eq(schema.wegBudgetPlans.organizationId, ctx.orgId))).limit(1);
@@ -725,6 +750,7 @@ router.post("/api/weg/special-assessments", async (req: Request, res: Response) 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegSpecialAssessments).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -739,6 +765,7 @@ router.patch("/api/weg/special-assessments/:id", async (req: Request, res: Respo
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.wegSpecialAssessments).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegSpecialAssessments.id, req.params.id), eq(schema.wegSpecialAssessments.organizationId, ctx.orgId))).returning();
@@ -773,6 +800,7 @@ router.post("/api/weg/maintenance", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.wegMaintenanceItems).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -787,6 +815,7 @@ router.patch("/api/weg/maintenance/:id", async (req: Request, res: Response) => 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.wegMaintenanceItems).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.wegMaintenanceItems.id, req.params.id), eq(schema.wegMaintenanceItems.organizationId, ctx.orgId))).returning();
@@ -802,6 +831,7 @@ router.delete("/api/weg/maintenance/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [deleted] = await db.delete(schema.wegMaintenanceItems).where(and(eq(schema.wegMaintenanceItems.id, req.params.id), eq(schema.wegMaintenanceItems.organizationId, ctx.orgId))).returning();
     if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
@@ -835,6 +865,7 @@ router.post("/api/insurance/policies", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.insurancePolicies).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -849,6 +880,7 @@ router.delete("/api/insurance/policies/:id", async (req: Request, res: Response)
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.insurancePolicies).where(and(eq(schema.insurancePolicies.id, req.params.id), eq(schema.insurancePolicies.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -877,6 +909,7 @@ router.post("/api/insurance/claims", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.insuranceClaims).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -891,6 +924,7 @@ router.patch("/api/insurance/claims/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.insuranceClaims).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.insuranceClaims.id, req.params.id), eq(schema.insuranceClaims.organizationId, ctx.orgId))).returning();
@@ -929,6 +963,7 @@ router.post("/api/deadlines", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.deadlines).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -943,6 +978,7 @@ router.patch("/api/deadlines/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.deadlines).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.deadlines.id, req.params.id), eq(schema.deadlines.organizationId, ctx.orgId))).returning();
@@ -958,6 +994,7 @@ router.delete("/api/deadlines/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.deadlines).where(and(eq(schema.deadlines.id, req.params.id), eq(schema.deadlines.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -986,6 +1023,7 @@ router.post("/api/letter-templates", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.letterTemplates).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -1000,6 +1038,7 @@ router.patch("/api/letter-templates/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.letterTemplates).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.letterTemplates.id, req.params.id), eq(schema.letterTemplates.organizationId, ctx.orgId))).returning();
@@ -1015,6 +1054,7 @@ router.delete("/api/letter-templates/:id", async (req: Request, res: Response) =
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.letterTemplates).where(and(eq(schema.letterTemplates.id, req.params.id), eq(schema.letterTemplates.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -1043,6 +1083,7 @@ router.post("/api/serial-letters", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.serialLetters).values({ ...body, organizationId: ctx.orgId, createdBy: ctx.userId }).returning();
@@ -1072,6 +1113,7 @@ router.post("/api/management-contracts", async (req: Request, res: Response) => 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.managementContracts).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -1086,6 +1128,7 @@ router.patch("/api/management-contracts/:id", async (req: Request, res: Response
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.managementContracts).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.managementContracts.id, req.params.id), eq(schema.managementContracts.organizationId, ctx.orgId))).returning();
@@ -1101,6 +1144,7 @@ router.delete("/api/management-contracts/:id", async (req: Request, res: Respons
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.managementContracts).where(and(eq(schema.managementContracts.id, req.params.id), eq(schema.managementContracts.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -1133,6 +1177,7 @@ router.post("/api/heating-cost-readings", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     if (Array.isArray(req.body)) {
       const values = req.body.map((r: any) => ({ ...objectToCamelCase(r), organizationId: ctx.orgId }));
@@ -1152,6 +1197,7 @@ router.patch("/api/heating-cost-readings/:id", async (req: Request, res: Respons
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.heatingCostReadings).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.heatingCostReadings.id, req.params.id), eq(schema.heatingCostReadings.organizationId, ctx.orgId))).returning();
@@ -1167,6 +1213,7 @@ router.delete("/api/heating-cost-readings/:id", async (req: Request, res: Respon
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.heatingCostReadings).where(and(eq(schema.heatingCostReadings.id, req.params.id), eq(schema.heatingCostReadings.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -1199,6 +1246,7 @@ router.post("/api/owner-payouts", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.ownerPayouts).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -1213,6 +1261,7 @@ router.patch("/api/owner-payouts/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.ownerPayouts).set({ ...body, updatedAt: new Date() }).where(and(eq(schema.ownerPayouts.id, req.params.id), eq(schema.ownerPayouts.organizationId, ctx.orgId))).returning();
@@ -1228,6 +1277,7 @@ router.delete("/api/owner-payouts/:id", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     await db.delete(schema.ownerPayouts).where(and(eq(schema.ownerPayouts.id, req.params.id), eq(schema.ownerPayouts.organizationId, ctx.orgId)));
     res.json({ success: true });
@@ -1313,6 +1363,7 @@ router.post("/api/weg/owner-changes", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
 
@@ -1354,6 +1405,7 @@ router.patch("/api/weg/owner-changes/:id", async (req: Request, res: Response) =
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
 
@@ -1539,6 +1591,7 @@ router.post("/api/weg/owner-changes/:id/execute", async (req: Request, res: Resp
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
 
     const [oc] = await db.select().from(schema.wegOwnerChanges).where(and(eq(schema.wegOwnerChanges.id, req.params.id), eq(schema.wegOwnerChanges.organizationId, ctx.orgId))).limit(1);
@@ -1895,6 +1948,7 @@ router.post("/api/learned-matches", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.learnedMatches).values({ ...body, organizationId: ctx.orgId }).returning();
@@ -1909,6 +1963,7 @@ router.post("/api/learned-matches/:id/increment", async (req: Request, res: Resp
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [updated] = await db.update(schema.learnedMatches).set({ matchCount: sql`${schema.learnedMatches.matchCount} + 1`, updatedAt: new Date() }).where(and(eq(schema.learnedMatches.id, req.params.id), eq(schema.learnedMatches.organizationId, ctx.orgId))).returning();
     if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
@@ -1923,6 +1978,7 @@ router.delete("/api/learned-matches/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [deleted] = await db.delete(schema.learnedMatches).where(and(eq(schema.learnedMatches.id, req.params.id), eq(schema.learnedMatches.organizationId, ctx.orgId))).returning();
     if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
@@ -1966,6 +2022,7 @@ router.post("/api/sepa-collections", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [created] = await db.insert(schema.sepaCollections).values({ ...body, organizationId: ctx.orgId, createdBy: ctx.userId }).returning();
@@ -1980,6 +2037,7 @@ router.patch("/api/sepa-collections/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const [updated] = await db.update(schema.sepaCollections).set({ status: body.status }).where(and(eq(schema.sepaCollections.id, req.params.id), eq(schema.sepaCollections.organizationId, ctx.orgId))).returning();
@@ -1995,6 +2053,7 @@ router.post("/api/sepa-collections/:id/mark-all-successful", async (req: Request
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [updated] = await db.update(schema.sepaCollections).set({ status: 'completed' }).where(and(eq(schema.sepaCollections.id, req.params.id), eq(schema.sepaCollections.organizationId, ctx.orgId))).returning();
     if (!updated) return res.status(404).json({ error: "Nicht gefunden" });
@@ -2009,6 +2068,7 @@ router.delete("/api/sepa-collections/:id", async (req: Request, res: Response) =
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const [deleted] = await db.delete(schema.sepaCollections).where(and(eq(schema.sepaCollections.id, req.params.id), eq(schema.sepaCollections.organizationId, ctx.orgId))).returning();
     if (!deleted) return res.status(404).json({ error: "Nicht gefunden" });
@@ -2066,6 +2126,7 @@ router.post("/api/property-owners", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const parsed = schema.insertPropertyOwnerSchema.parse(body);
@@ -2083,6 +2144,7 @@ router.patch("/api/property-owners/:id", async (req: Request, res: Response) => 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const existing = await db
@@ -2109,6 +2171,7 @@ router.delete("/api/property-owners/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const existing = await db
       .select({ propertyOwners: schema.propertyOwners })
@@ -2172,6 +2235,7 @@ router.post("/api/vpi-adjustments", async (req: Request, res: Response) => {
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const parsed = schema.insertVpiAdjustmentSchema.parse(body);
@@ -2195,6 +2259,7 @@ router.patch("/api/vpi-adjustments/:id", async (req: Request, res: Response) => 
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const body = objectToCamelCase(req.body);
     const existing = await db
@@ -2218,6 +2283,7 @@ router.post("/api/vpi-adjustments/:id/apply", async (req: Request, res: Response
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const existing = await db
       .select({ vpiAdjustments: schema.vpiAdjustments })
@@ -2241,6 +2307,7 @@ router.delete("/api/vpi-adjustments/:id", async (req: Request, res: Response) =>
   try {
     const ctx = await getAuthContext(req, res);
     if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const existing = await db
       .select({ vpiAdjustments: schema.vpiAdjustments })
