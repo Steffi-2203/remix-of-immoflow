@@ -1078,6 +1078,47 @@ export type Database = {
           },
         ]
       }
+      letter_templates: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          name: string
+          organization_id: string | null
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          category?: string
+          created_at?: string
+          id?: string
+          name: string
+          organization_id?: string | null
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string | null
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "letter_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       maintenance_contracts: {
         Row: {
           contract_fee: number | null
@@ -1333,6 +1374,87 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      management_contracts: {
+        Row: {
+          auto_renew: boolean
+          contract_type: string
+          created_at: string
+          document_url: string | null
+          end_date: string | null
+          fee_type: string | null
+          id: string
+          monthly_fee: number | null
+          notes: string | null
+          notice_deadline: string | null
+          notice_period_months: number | null
+          organization_id: string | null
+          owner_name: string | null
+          property_id: string | null
+          renewal_months: number | null
+          start_date: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          auto_renew?: boolean
+          contract_type?: string
+          created_at?: string
+          document_url?: string | null
+          end_date?: string | null
+          fee_type?: string | null
+          id?: string
+          monthly_fee?: number | null
+          notes?: string | null
+          notice_deadline?: string | null
+          notice_period_months?: number | null
+          organization_id?: string | null
+          owner_name?: string | null
+          property_id?: string | null
+          renewal_months?: number | null
+          start_date: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          auto_renew?: boolean
+          contract_type?: string
+          created_at?: string
+          document_url?: string | null
+          end_date?: string | null
+          fee_type?: string | null
+          id?: string
+          monthly_fee?: number | null
+          notes?: string | null
+          notice_deadline?: string | null
+          notice_period_months?: number | null
+          organization_id?: string | null
+          owner_name?: string | null
+          property_id?: string | null
+          renewal_months?: number | null
+          start_date?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "management_contracts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "management_contracts_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
@@ -2656,6 +2778,70 @@ export type Database = {
           },
         ]
       }
+      serial_letters: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string | null
+          property_id: string | null
+          recipient_count: number
+          sent_at: string | null
+          sent_via: string
+          subject: string
+          template_id: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string | null
+          property_id?: string | null
+          recipient_count?: number
+          sent_at?: string | null
+          sent_via?: string
+          subject: string
+          template_id?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string | null
+          property_id?: string | null
+          recipient_count?: number
+          sent_at?: string | null
+          sent_via?: string
+          subject?: string
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "serial_letters_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "serial_letters_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "serial_letters_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "letter_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settlement_items: {
         Row: {
           bk_anteil: number
@@ -2960,6 +3146,54 @@ export type Database = {
             foreignKeyName: "tenant_fees_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "tenants_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_portal_access: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          last_login_at: string | null
+          tenant_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          last_login_at?: string | null
+          tenant_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          last_login_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_portal_access_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_portal_access_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants_safe"
             referencedColumns: ["id"]
           },
