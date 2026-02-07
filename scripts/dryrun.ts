@@ -27,8 +27,8 @@ async function main() {
     propertyIds = allProps.map(p => p.id);
   }
 
-  console.log(`Dry-run für ${year}-${String(month).padStart(2, "0")}`);
-  console.log(`Properties: ${propertyIds.length}`);
+  process.stderr.write(`Dry-run für ${year}-${String(month).padStart(2, "0")}\n`);
+  process.stderr.write(`Properties: ${propertyIds.length}\n`);
 
   const userId = getArg("user") || "e118c1df-eb5d-4939-960d-cdf61b56d6e4";
   
@@ -41,14 +41,14 @@ async function main() {
   });
 
   fs.writeFileSync(output, JSON.stringify(result, null, 2));
-  console.log(`\nErgebnis gespeichert: ${output}`);
+  process.stderr.write(`\nErgebnis gespeichert: ${output}\n`);
   
   if (result.success && result.invoices) {
     const total = result.invoices.reduce((s: number, inv: any) => s + Number(inv.totalAmount || 0), 0);
-    console.log(`Rechnungen: ${result.invoices.length}`);
-    console.log(`Gesamtsumme: €${total.toFixed(2)}`);
+    process.stderr.write(`Rechnungen: ${result.invoices.length}\n`);
+    process.stderr.write(`Gesamtsumme: €${total.toFixed(2)}\n`);
   } else {
-    console.log("Status:", result);
+    process.stderr.write(`Status: ${JSON.stringify(result, null, 2)}\n`);
   }
 
   process.exit(0);
