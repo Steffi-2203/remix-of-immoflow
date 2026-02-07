@@ -3783,6 +3783,295 @@ export type Database = {
           },
         ]
       }
+      weg_business_plan_items: {
+        Row: {
+          annual_amount: number
+          business_plan_id: string
+          category: string
+          created_at: string
+          description: string
+          distribution_key: string
+          id: string
+          tax_rate: number
+        }
+        Insert: {
+          annual_amount?: number
+          business_plan_id: string
+          category?: string
+          created_at?: string
+          description: string
+          distribution_key?: string
+          id?: string
+          tax_rate?: number
+        }
+        Update: {
+          annual_amount?: number
+          business_plan_id?: string
+          category?: string
+          created_at?: string
+          description?: string
+          distribution_key?: string
+          id?: string
+          tax_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_business_plan_items_business_plan_id_fkey"
+            columns: ["business_plan_id"]
+            isOneToOne: false
+            referencedRelation: "weg_business_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weg_business_plans: {
+        Row: {
+          approved_at: string | null
+          approved_in_assembly_id: string | null
+          created_at: string
+          effective_date: string
+          id: string
+          notes: string | null
+          organization_id: string | null
+          property_id: string
+          status: string
+          title: string
+          total_amount: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_in_assembly_id?: string | null
+          created_at?: string
+          effective_date: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id: string
+          status?: string
+          title: string
+          total_amount?: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_in_assembly_id?: string | null
+          created_at?: string
+          effective_date?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string | null
+          property_id?: string
+          status?: string
+          title?: string
+          total_amount?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_business_plans_approved_in_assembly_id_fkey"
+            columns: ["approved_in_assembly_id"]
+            isOneToOne: false
+            referencedRelation: "weg_assemblies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_business_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_business_plans_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weg_owner_invoices: {
+        Row: {
+          amount_gross: number
+          amount_net: number
+          amount_tax: number
+          business_plan_id: string
+          created_at: string
+          due_date: string
+          id: string
+          is_prorated: boolean
+          month: number
+          owner_id: string
+          pdf_url: string | null
+          prorated_days: number | null
+          reserve_contribution: number
+          status: string
+          total_days: number | null
+          unit_id: string | null
+          year: number
+        }
+        Insert: {
+          amount_gross?: number
+          amount_net?: number
+          amount_tax?: number
+          business_plan_id: string
+          created_at?: string
+          due_date: string
+          id?: string
+          is_prorated?: boolean
+          month: number
+          owner_id: string
+          pdf_url?: string | null
+          prorated_days?: number | null
+          reserve_contribution?: number
+          status?: string
+          total_days?: number | null
+          unit_id?: string | null
+          year: number
+        }
+        Update: {
+          amount_gross?: number
+          amount_net?: number
+          amount_tax?: number
+          business_plan_id?: string
+          created_at?: string
+          due_date?: string
+          id?: string
+          is_prorated?: boolean
+          month?: number
+          owner_id?: string
+          pdf_url?: string | null
+          prorated_days?: number | null
+          reserve_contribution?: number
+          status?: string
+          total_days?: number | null
+          unit_id?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_owner_invoices_business_plan_id_fkey"
+            columns: ["business_plan_id"]
+            isOneToOne: false
+            referencedRelation: "weg_business_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_owner_invoices_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "property_owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_owner_invoices_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weg_ownership_transfers: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          land_registry_date: string | null
+          land_registry_ref: string | null
+          legal_reason: string
+          new_owner_id: string | null
+          notes: string | null
+          old_owner_id: string
+          organization_id: string | null
+          outstanding_amount: number
+          property_id: string
+          reserve_balance_transferred: number
+          status: string
+          transfer_date: string
+          unit_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          land_registry_date?: string | null
+          land_registry_ref?: string | null
+          legal_reason?: string
+          new_owner_id?: string | null
+          notes?: string | null
+          old_owner_id: string
+          organization_id?: string | null
+          outstanding_amount?: number
+          property_id: string
+          reserve_balance_transferred?: number
+          status?: string
+          transfer_date: string
+          unit_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          land_registry_date?: string | null
+          land_registry_ref?: string | null
+          legal_reason?: string
+          new_owner_id?: string | null
+          notes?: string | null
+          old_owner_id?: string
+          organization_id?: string | null
+          outstanding_amount?: number
+          property_id?: string
+          reserve_balance_transferred?: number
+          status?: string
+          transfer_date?: string
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_ownership_transfers_new_owner_id_fkey"
+            columns: ["new_owner_id"]
+            isOneToOne: false
+            referencedRelation: "property_owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_ownership_transfers_old_owner_id_fkey"
+            columns: ["old_owner_id"]
+            isOneToOne: false
+            referencedRelation: "property_owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_ownership_transfers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_ownership_transfers_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_ownership_transfers_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weg_reserve_fund: {
         Row: {
           amount: number
