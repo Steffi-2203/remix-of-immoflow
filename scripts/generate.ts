@@ -26,8 +26,10 @@ async function main() {
     propertyIds = allProps.map(p => p.id);
   }
 
-  console.log(`Generate (PERSIST) für ${year}-${String(month).padStart(2, "0")}`);
-  console.log(`Properties: ${propertyIds.length}`);
+  const output = getArg("output") || "generate.json";
+
+  process.stderr.write(`Generate (PERSIST) für ${year}-${String(month).padStart(2, "0")}\n`);
+  process.stderr.write(`Properties: ${propertyIds.length}\n`);
 
   const userId = getArg("user") || "e118c1df-eb5d-4939-960d-cdf61b56d6e4";
   
@@ -39,12 +41,12 @@ async function main() {
     dryRun: false
   });
 
-  fs.writeFileSync("generate.json", JSON.stringify(result, null, 2));
-  console.log(`\nErgebnis gespeichert: generate.json`);
+  fs.writeFileSync(output, JSON.stringify(result, null, 2));
+  process.stderr.write(`\nErgebnis gespeichert: ${output}\n`);
 
   if (result.success && result.runId) {
-    console.log(`RunId: ${result.runId}`);
-    console.log(`Rechnungen erstellt: ${result.count}`);
+    process.stderr.write(`RunId: ${result.runId}\n`);
+    process.stderr.write(`Rechnungen erstellt: ${result.count}\n`);
     
     const invoices = await db.select().from(monthlyInvoices)
       .where(and(
@@ -58,7 +60,8 @@ async function main() {
       const lines = await db.select().from(invoiceLines)
         .where(inArray(invoiceLines.invoiceId, invoiceIds));
       
-      fs.writeFileSync("invoice_lines_run.json", JSON.stringify({
+      const linesFile = output.replace(/\.json$/, '_lines.json');
+      fs.writeFileSync(linesFile, JSON.stringify({
         runId: result.runId,
         period: `${year}-${String(month).padStart(2, "0")}`,
         invoiceCount: invoices.length,
@@ -66,10 +69,10 @@ async function main() {
         invoices,
         lines
       }, null, 2));
-      console.log(`Invoice Lines gespeichert: invoice_lines_run.json (${lines.length} Zeilen)`);
+      process.stderr.write(`Invoice Lines gespeichert: ${linesFile} (${lines.length} Zeilen)\n`);
     }
   } else {
-    console.log("Fehler oder keine Rechnungen:", result);
+    process.stderr.write(`Fehler oder keine Rechnungen: ${JSON.stringify(result, null, 2)}\n`);
   }
 
   process.exit(0);
