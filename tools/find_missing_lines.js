@@ -1,7 +1,15 @@
 import fs from 'fs';
 
-const dryrunFile = process.argv[2] || 'dryrun.json';
-const dbLinesFile = process.argv[3] || 'db_lines.json';
+const args = process.argv.slice(2);
+const getArg = (name) => {
+  const arg = args.find(a => a.startsWith(`--${name}=`));
+  return arg ? arg.split("=")[1] : null;
+};
+const positional = args.filter(a => !a.startsWith("--"));
+
+const dryrunFile = getArg("dryrun-file") || getArg("dryrun") || positional[0] || 'dryrun.json';
+const dbLinesFile = getArg("db-file") || getArg("db") || positional[1] || 'db_lines.json';
+const outputFile = getArg("out") || getArg("output") || null;
 
 if (!fs.existsSync(dryrunFile)) {
   console.error(`Dry-run Datei nicht gefunden: ${dryrunFile}`);
@@ -49,17 +57,19 @@ console.log(`DB lines: ${dbLines.length}`);
 console.log(`Missing lines: ${missingLines.length}`);
 
 if (missingLines.length > 0) {
-  fs.writeFileSync('missing_lines.json', JSON.stringify(missingLines, null, 2));
+  const jsonOut = outputFile || 'missing_lines.json';
+  const csvOut = jsonOut.replace(/\.json$/, '.csv');
+  fs.writeFileSync(jsonOut, JSON.stringify(missingLines, null, 2));
   
   const csvHeader = 'tenantId,unitId,lineType,description,amount,taxRate';
   const csvRows = missingLines.map(l => 
     `${l.tenantId},${l.unitId},${l.lineType},"${l.description}",${l.amount},${l.taxRate}`
   );
-  fs.writeFileSync('missing_lines.csv', [csvHeader, ...csvRows].join('\n'));
+  fs.writeFileSync(csvOut, [csvHeader, ...csvRows].join('\n'));
   
   console.log('\nDateien erstellt:');
-  console.log('  - missing_lines.json');
-  console.log('  - missing_lines.csv');
+  console.log(`  - ${jsonOut}`);
+  console.log(`  - ${csvOut}`);
   
   console.log('\nBeispiel fehlende Zeilen:');
   missingLines.slice(0, 5).forEach(l => {
