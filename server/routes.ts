@@ -1521,7 +1521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate monthly invoices (Vorschreibungen) for all active tenants
+  // Generate monthly invoices (Vorschreibungen) via consolidated invoiceService
   app.post("/api/functions/generate-monthly-invoices", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -1534,164 +1534,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetYear = year || currentDate.getFullYear();
       const targetMonth = month || (currentDate.getMonth() + 1);
 
-      // Get all active tenants for the organization
-      const tenants = await storage.getTenantsByOrganization(profile.organizationId);
-      const activeTenants = tenants.filter(t => t.status === 'aktiv');
+      // Use consolidated invoiceService (single source of truth)
+      const { invoiceService } = await import("./services/invoiceService");
+      const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
 
-      const createdInvoices = [];
-      const errors: string[] = [];
-
-      for (const tenant of activeTenants) {
-        try {
-          // Check if invoice already exists for this month
-          const existingInvoices = await storage.getInvoicesByTenant(tenant.id);
-          const alreadyExists = existingInvoices.some(
-            inv => inv.month === targetMonth && inv.year === targetYear
-          );
-
-          if (alreadyExists) {
-            continue; // Skip if already exists
-          }
-
-          // Get unit for property info
-          const unit = await storage.getUnit(tenant.unitId);
-          if (!unit) continue;
-
-          const property = await storage.getProperty(unit.propertyId);
-          if (!property) continue;
-
-          // Calculate amounts from tenant data
-          const grundmiete = Number(tenant.grundmiete || 0);
-          const grundmieteUstSatz = 10; // Default 10% for residential
-          
-          // Parse sonstigeKosten JSONB and categorize by type
-          // Categories: betriebskosten (BK), heizungskosten (Heizung/Zentralheizung), wasserkosten (Wasser)
-          let betriebskostenTotal = 0;
-          let heizungskostenTotal = 0;
-          let wasserkostenTotal = 0;
-          let ust10Total = 0; // USt at 10%
-          let ust20Total = 0; // USt at 20%
-          let hasSonstigeKosten = false;
-          
-          if (tenant.sonstigeKosten && typeof tenant.sonstigeKosten === 'object') {
-            const positions = tenant.sonstigeKosten as Record<string, { betrag?: number | string; ust?: number }>;
-            const keys = Object.keys(positions);
-            hasSonstigeKosten = keys.length > 0;
-            
-            console.log(`[INVOICE-GEN] Mieter ${tenant.firstName} ${tenant.lastName}: sonstigeKosten gefunden mit ${keys.length} Positionen:`, JSON.stringify(positions));
-            
-            // Expanded synonym lists for categorization
-            const heizungKeywords = ['heiz', 'hk', 'zentralheizung', 'fernwärme', 'wärme', 'heizung', 'heizk'];
-            const wasserKeywords = ['wasser', 'kaltwasser', 'warmwasser', 'ww', 'kw', 'abwasser', 'kanal'];
-            
-            for (const [key, item] of Object.entries(positions)) {
-              if (item && item.betrag !== undefined) {
-                const betrag = typeof item.betrag === 'string' ? parseFloat(item.betrag) : Number(item.betrag);
-                if (!isNaN(betrag)) {
-                  // Categorize by position name (case-insensitive)
-                  const keyLower = key.toLowerCase();
-                  const isHeizung = heizungKeywords.some(kw => keyLower.includes(kw));
-                  const isWasser = wasserKeywords.some(kw => keyLower.includes(kw));
-                  const isMahnkosten = keyLower.includes('mahn') || keyLower.includes('verzug');
-                  
-                  // USt: use explicit value if provided, otherwise infer from category
-                  // Heizung = 20%, BK/Wasser = 10%, Mahnkosten = 0%
-                  let ustSatz: number;
-                  if (item.ust !== undefined) {
-                    ustSatz = Number(item.ust);
-                  } else if (isMahnkosten) {
-                    ustSatz = 0;
-                  } else if (isHeizung) {
-                    ustSatz = 20;
-                  } else {
-                    ustSatz = 10; // BK, Wasser, etc.
-                  }
-                  
-                  const ustBetrag = betrag * ustSatz / 100;
-                  
-                  if (isHeizung) {
-                    heizungskostenTotal += betrag;
-                  } else if (isWasser) {
-                    wasserkostenTotal += betrag;
-                  } else {
-                    // Default to Betriebskosten (BK, Lift, Müll, Mahnkosten, etc.)
-                    betriebskostenTotal += betrag;
-                  }
-                  
-                  // Group USt by rate (0% = no tax, 10%, 20%)
-                  if (ustSatz === 20) {
-                    ust20Total += ustBetrag;
-                  } else if (ustSatz === 10) {
-                    ust10Total += ustBetrag;
-                  }
-                  // USt 0% (Mahnkosten) adds nothing
-                }
-              }
-            }
-          }
-          
-          // Add Grundmiete to 10% category
-          const grundmieteUst = grundmiete * grundmieteUstSatz / 100;
-          ust10Total += grundmieteUst;
-          
-          // Fall back to legacy fields if no sonstigeKosten JSONB data
-          const betriebskosten = hasSonstigeKosten ? betriebskostenTotal : Number(tenant.betriebskostenVorschuss || 0);
-          const heizungskosten = hasSonstigeKosten ? heizungskostenTotal : Number(tenant.heizkostenVorschuss || 0);
-          const wasserkosten = hasSonstigeKosten ? wasserkostenTotal : Number(tenant.wasserkostenVorschuss || 0);
-          
-          console.log(`[INVOICE-GEN] Mieter ${tenant.firstName} ${tenant.lastName}: Kategorisiert -> BK=${betriebskosten}, HK=${heizungskosten}, Wasser=${wasserkosten}, USt10=${ust10Total.toFixed(2)}, USt20=${ust20Total.toFixed(2)}`);
-          
-          // Legacy USt calculation for fallback (when no sonstigeKosten)
-          if (!hasSonstigeKosten) {
-            ust10Total = (grundmiete + betriebskosten + wasserkosten) * 0.10;
-            ust20Total = heizungskosten * 0.20;
-          }
-          
-          const totalUst = ust10Total + ust20Total;
-          const nettoGesamt = grundmiete + betriebskosten + heizungskosten + wasserkosten;
-          const gesamtbetrag = nettoGesamt + totalUst;
-
-          // Calculate due date (1st of month)
-          const faelligAm = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
-
-          // Create invoice with schema-compliant field names
-          const invoiceData = {
-            tenantId: tenant.id,
-            unitId: tenant.unitId,
-            month: targetMonth,
-            year: targetYear,
-            grundmiete: String(grundmiete),
-            betriebskosten: String(betriebskosten),
-            heizungskosten: String(heizungskosten),
-            wasserkosten: String(wasserkosten),
-            ust: String(totalUst.toFixed(2)),
-            gesamtbetrag: String(gesamtbetrag.toFixed(2)),
-            faelligAm,
-            status: 'offen' as const,
-            vortragMiete: '0',
-            vortragBk: '0',
-            vortragHk: '0',
-          };
-
-          console.log(`[INVOICE-GEN] Erstelle Vorschreibung für ${tenant.firstName} ${tenant.lastName}: Miete=${grundmiete}, BK=${betriebskosten}, HK=${heizungskosten}, Wasser=${wasserkosten}, USt=${totalUst.toFixed(2)}, Gesamt=${gesamtbetrag.toFixed(2)}`);
-          
-          const newInvoice = await storage.createInvoice(invoiceData);
-          createdInvoices.push(newInvoice);
-        } catch (err) {
-          errors.push(`Fehler bei Mieter ${tenant.firstName} ${tenant.lastName}: ${err}`);
-        }
-      }
+      const result = await withAuditedErrorHandling({
+        service: 'invoiceService',
+        operation: 'generateMonthlyInvoices',
+        userId: profile.id,
+        context: { year: targetYear, month: targetMonth, organizationId: profile.organizationId },
+        fn: () => invoiceService.generateMonthlyInvoices(profile.id, targetYear, targetMonth),
+      });
 
       res.json({
-        success: true,
-        created: createdInvoices.length,
-        skipped: activeTenants.length - createdInvoices.length - errors.length,
-        errors: errors.length,
-        errorDetails: errors,
+        success: result.success,
+        created: result.created,
+        skipped: result.skipped,
+        errors: 0,
+        errorDetails: [],
+        message: result.message,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Generate invoices error:', error);
-      res.status(500).json({ error: "Vorschreibungen konnten nicht erstellt werden" });
+      const { handleFinancialError } = await import("./lib/serviceErrorHandler");
+      const errResp = handleFinancialError(error, 'invoiceService');
+      res.status(errResp.status).json(errResp.body);
     }
   });
 
@@ -2847,7 +2714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== SEPA Export Routes =====
+  // ===== SEPA Export Routes (with audit logging) =====
   app.post("/api/sepa/direct-debit", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -2856,19 +2723,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const normalizedBody = snakeToCamel(req.body);
       const { creditorName, creditorIban, creditorBic, creditorId, invoiceIds } = normalizedBody;
-      const xml = await sepaExportService.generateDirectDebitXml(
-        profile.organizationId,
-        creditorName,
-        creditorIban,
-        creditorBic,
-        creditorId,
-        invoiceIds
-      );
+      
+      const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
+      const xml = await withAuditedErrorHandling({
+        service: 'sepaExport',
+        operation: 'generateDirectDebit',
+        userId: profile.id,
+        context: { invoiceCount: invoiceIds?.length, organizationId: profile.organizationId },
+        fn: () => sepaExportService.generateDirectDebitXml(
+          profile.organizationId,
+          creditorName,
+          creditorIban,
+          creditorBic,
+          creditorId,
+          invoiceIds
+        ),
+      });
+
       res.setHeader('Content-Type', 'application/xml');
       res.setHeader('Content-Disposition', 'attachment; filename=sepa-lastschrift.xml');
       res.send(xml);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "SEPA export failed" });
+      console.error('SEPA direct debit error:', error);
+      const { handleFinancialError } = await import("./lib/serviceErrorHandler");
+      const errResp = handleFinancialError(error, 'sepaExport');
+      res.status(errResp.status).json(errResp.body);
     }
   });
 
@@ -2880,18 +2759,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const normalizedBody = snakeToCamel(req.body);
       const { debtorName, debtorIban, debtorBic, transfers } = normalizedBody;
-      const xml = await sepaExportService.generateCreditTransferXml(
-        profile.organizationId,
-        debtorName,
-        debtorIban,
-        debtorBic,
-        transfers
-      );
+      
+      const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
+      const xml = await withAuditedErrorHandling({
+        service: 'sepaExport',
+        operation: 'generateCreditTransfer',
+        userId: profile.id,
+        context: { transferCount: transfers?.length, organizationId: profile.organizationId },
+        fn: () => sepaExportService.generateCreditTransferXml(
+          profile.organizationId,
+          debtorName,
+          debtorIban,
+          debtorBic,
+          transfers
+        ),
+      });
+
       res.setHeader('Content-Type', 'application/xml');
       res.setHeader('Content-Disposition', 'attachment; filename=sepa-ueberweisung.xml');
       res.send(xml);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "SEPA export failed" });
+      console.error('SEPA credit transfer error:', error);
+      const { handleFinancialError } = await import("./lib/serviceErrorHandler");
+      const errResp = handleFinancialError(error, 'sepaExport');
+      res.status(errResp.status).json(errResp.body);
     }
   });
 
@@ -2910,17 +2801,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== Automated Dunning Routes =====
+  // ===== Automated Dunning Routes (with audit logging) =====
   app.get("/api/dunning/check", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
         return res.status(400).json({ error: "No organization" });
       }
-      const actions = await automatedDunningService.checkOverdueInvoices(profile.organizationId);
+      const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
+      const actions = await withAuditedErrorHandling({
+        service: 'dunningService',
+        operation: 'checkOverdueInvoices',
+        userId: profile.id,
+        context: { organizationId: profile.organizationId },
+        fn: () => automatedDunningService.checkOverdueInvoices(profile.organizationId),
+      });
       res.json({ actions });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to check dunning" });
+    } catch (error: any) {
+      console.error('Dunning check error:', error);
+      const { handleFinancialError } = await import("./lib/serviceErrorHandler");
+      const errResp = handleFinancialError(error, 'dunningService');
+      res.status(errResp.status).json(errResp.body);
     }
   });
 
@@ -2932,13 +2833,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const normalizedBody = snakeToCamel(req.body);
       const { sendEmails } = normalizedBody;
-      const result = await automatedDunningService.processAutomatedDunning(
-        profile.organizationId,
-        sendEmails === true
-      );
+      
+      const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
+      const result = await withAuditedErrorHandling({
+        service: 'dunningService',
+        operation: 'processAutomatedDunning',
+        userId: profile.id,
+        context: { organizationId: profile.organizationId, sendEmails: sendEmails === true },
+        fn: () => automatedDunningService.processAutomatedDunning(
+          profile.organizationId,
+          sendEmails === true
+        ),
+      });
       res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to process dunning" });
+    } catch (error: any) {
+      console.error('Dunning process error:', error);
+      const { handleFinancialError } = await import("./lib/serviceErrorHandler");
+      const errResp = handleFinancialError(error, 'dunningService');
+      res.status(errResp.status).json(errResp.body);
     }
   });
 
