@@ -102,9 +102,13 @@ export interface WegBudgetPlan {
   year: number;
   total_amount: number;
   reserve_contribution: number;
-  status: 'entwurf' | 'beschlossen' | 'abgeschlossen';
+  management_fee: number;
+  active_from: string | null;
+  due_day: number;
+  status: 'entwurf' | 'beschlossen' | 'aktiv' | 'abgeschlossen';
   approved_at: string | null;
   approved_by_vote_id: string | null;
+  activated_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -117,7 +121,59 @@ export interface WegBudgetLine {
   description: string | null;
   amount: number;
   allocation_key: string;
+  ust_rate: number;
   created_at: string;
+}
+
+export interface BudgetDistribution {
+  unit_owner_id: string;
+  unit_id: string;
+  owner_id: string;
+  unit_top: string;
+  unit_type: string;
+  owner_name: string;
+  owner_email: string | null;
+  mea_share: number;
+  mea_ratio: number;
+  bk_netto_jahr: number;
+  bk_ust_rate: number;
+  bk_ust_jahr: number;
+  hk_netto_jahr: number;
+  hk_ust_rate: number;
+  hk_ust_jahr: number;
+  ruecklage_jahr: number;
+  verwaltung_netto_jahr: number;
+  verwaltung_ust_jahr: number;
+  sonstiges_netto_jahr: number;
+  sonstiges_ust_jahr: number;
+  jahres_total: number;
+  monats_total: number;
+}
+
+export interface BudgetPreviewResponse {
+  plan: WegBudgetPlan;
+  distributions: BudgetDistribution[];
+  total_mea: number;
+}
+
+export interface WegVorschreibung {
+  id: string;
+  unit_id: string;
+  owner_id: string | null;
+  weg_budget_plan_id: string | null;
+  year: number;
+  month: number;
+  betriebskosten: number;
+  heizungskosten: number;
+  ust: number;
+  gesamtbetrag: number;
+  status: string;
+  faellig_am: string | null;
+  owner_name: string | null;
+  unit_top: string | null;
+  unit_type: string | null;
+  ust_satz_bk: number;
+  ust_satz_heizung: number;
 }
 
 export interface WegSpecialAssessment {
@@ -523,5 +579,53 @@ export function useDeleteWegMaintenance() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['/api/weg/maintenance'] }); toast.success('Maßnahme gelöscht'); },
     onError: () => toast.error('Fehler beim Löschen'),
+  });
+}
+
+// ====== BUDGET PLAN PREVIEW & ACTIVATION ======
+
+export function useBudgetPlanPreview(planId?: string) {
+  return useQuery({
+    queryKey: ['/api/weg/budget-plans', planId, 'preview'],
+    queryFn: async () => {
+      const res = await fetch(`/api/weg/budget-plans/${planId}/preview`, { credentials: 'include' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Fehler' }));
+        throw new Error(err.error || 'Fehler bei der Vorschau');
+      }
+      return res.json() as Promise<BudgetPreviewResponse>;
+    },
+    enabled: !!planId,
+  });
+}
+
+export function useActivateBudgetPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (planId: string) => {
+      const res = await apiRequest('POST', `/api/weg/budget-plans/${planId}/activate`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Fehler' }));
+        throw new Error(err.error || 'Fehler beim Aktivieren');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['/api/weg/budget-plans'] });
+      toast.success(data.message || 'Vorschreibungen generiert');
+    },
+    onError: (err: Error) => toast.error(err.message || 'Fehler beim Aktivieren'),
+  });
+}
+
+export function useWegVorschreibungen(planId?: string) {
+  return useQuery({
+    queryKey: ['/api/weg/budget-plans', planId, 'vorschreibungen'],
+    queryFn: async () => {
+      const res = await fetch(`/api/weg/budget-plans/${planId}/vorschreibungen`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Fehler beim Laden');
+      return res.json() as Promise<WegVorschreibung[]>;
+    },
+    enabled: !!planId,
   });
 }

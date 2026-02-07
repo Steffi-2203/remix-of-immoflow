@@ -13,7 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Plus, Users, PiggyBank, Vote, Loader2, Calendar, Building2, Gavel,
   FileText, Wrench, AlertTriangle, Trash2, MapPin, Clock, CheckCircle2,
-  CircleDot, ChevronRight, Euro, Shield, ArrowUpCircle, ArrowDownCircle
+  CircleDot, ChevronRight, Euro, Shield, ArrowUpCircle, ArrowDownCircle,
+  Eye, Send, Download, Zap
 } from 'lucide-react';
 import {
   useWegUnitOwners, useCreateWegUnitOwner, useDeleteWegUnitOwner,
@@ -24,9 +25,12 @@ import {
   useReserveFund, useCreateReserveFundEntry,
   useWegBudgetPlans, useCreateWegBudgetPlan, useUpdateWegBudgetPlan,
   useWegBudgetLines, useCreateWegBudgetLine, useDeleteWegBudgetLine,
+  useBudgetPlanPreview, useActivateBudgetPlan, useWegVorschreibungen,
   useWegSpecialAssessments, useCreateWegSpecialAssessment,
   useWegMaintenance, useCreateWegMaintenance, useUpdateWegMaintenance, useDeleteWegMaintenance,
+  type BudgetDistribution,
 } from '@/hooks/useWeg';
+import { downloadWegVorschreibungPdf } from '@/utils/wegVorschreibungPdfExport';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useQuery } from '@tanstack/react-query';
@@ -61,6 +65,7 @@ const assemblyStatusLabels: Record<string, string> = {
 const budgetStatusLabels: Record<string, string> = {
   entwurf: 'Entwurf',
   beschlossen: 'Beschlossen',
+  aktiv: 'Aktiv',
   abgeschlossen: 'Abgeschlossen',
 };
 
@@ -91,7 +96,9 @@ const financingLabels: Record<string, string> = {
 };
 
 const budgetCategories = [
-  'Betriebskosten', 'Heizkosten', 'Versicherung', 'Verwaltung', 'R\u00FCcklage', 'Sonstiges',
+  'Betriebskosten', 'Wasser', 'Kanal', 'M\u00FCll', 'Versicherung', 'Hausbetreuung',
+  'Strom allgemein', 'Lift', 'Gartenpflege', 'Heizkosten', 'Verwaltungshonorar',
+  'Instandhaltungsr\u00FCcklage', 'Sonstiges',
 ];
 
 function PriorityBadge({ priority }: { priority: string }) {
@@ -115,6 +122,7 @@ function StatusBadge({ status, labels, variant }: { status: string; labels: Reco
     abgeschlossen: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
     beauftragt: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
     in_ausfuehrung: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+    aktiv: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     in_einzahlung: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   };
   return <Badge className={colors[status] || ''}>{labels[status] || status}</Badge>;
@@ -187,7 +195,7 @@ export default function WegManagement() {
           <TabsContent value="owners"><OwnersTab propertyId={selectedPropertyId} orgId={orgId} /></TabsContent>
           <TabsContent value="assemblies"><AssembliesTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="votes"><VotesTab propertyId={selectedPropertyId} /></TabsContent>
-          <TabsContent value="budget"><BudgetTab propertyId={selectedPropertyId} orgId={orgId} /></TabsContent>
+          <TabsContent value="budget"><BudgetTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="reserve"><ReserveTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="maintenance"><MaintenanceTab propertyId={selectedPropertyId} orgId={orgId} /></TabsContent>
         </Tabs>
@@ -831,40 +839,61 @@ function VotesTab({ propertyId }: { propertyId: string }) {
   );
 }
 
-function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | null }) {
+function BudgetTab({ propertyId, orgId, properties = [] }: { propertyId: string; orgId: string | null; properties?: any[] }) {
+  const selectedProp = properties.find((p: any) => p.id === propertyId);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
+  const [activateDialogOpen, setActivateDialogOpen] = useState(false);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
+  const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
+  const [vorschreibungenPlanId, setVorschreibungenPlanId] = useState<string | null>(null);
+  const [activatePlanId, setActivatePlanId] = useState<string | null>(null);
+
   const [bYear, setBYear] = useState(String(new Date().getFullYear()));
-  const [bTotal, setBTotal] = useState('');
+  const [bManagementFee, setBManagementFee] = useState('');
   const [bReserve, setBReserve] = useState('');
+  const [bDueDay, setBDueDay] = useState('5');
   const [bNotes, setBNotes] = useState('');
+
   const [lCategory, setLCategory] = useState('Betriebskosten');
   const [lDesc, setLDesc] = useState('');
   const [lAmount, setLAmount] = useState('');
   const [lKey, setLKey] = useState('mea');
+  const [lUstRate, setLUstRate] = useState('0');
 
   const { data: plans = [], isLoading } = useWegBudgetPlans(propertyId || undefined);
   const { data: lines = [] } = useWegBudgetLines(expandedPlanId || undefined);
+  const { data: previewData, isLoading: previewLoading } = useBudgetPlanPreview(previewPlanId || undefined);
+  const { data: vorschreibungen = [], isLoading: vorschreibungenLoading } = useWegVorschreibungen(vorschreibungenPlanId || undefined);
+
   const createPlan = useCreateWegBudgetPlan();
   const updatePlan = useUpdateWegBudgetPlan();
   const createLine = useCreateWegBudgetLine();
   const deleteLine = useDeleteWegBudgetLine();
+  const activatePlan = useActivateBudgetPlan();
+
+  const linesTotal = lines.reduce((s, l) => s + l.amount, 0);
 
   const handleCreatePlan = async () => {
     await createPlan.mutateAsync({
       organization_id: orgId,
       property_id: propertyId,
       year: parseInt(bYear),
-      total_amount: parseFloat(bTotal.replace(',', '.')) || 0,
+      total_amount: 0,
       reserve_contribution: parseFloat(bReserve.replace(',', '.')) || 0,
+      management_fee: parseFloat(bManagementFee.replace(',', '.')) || 0,
+      due_day: parseInt(bDueDay) || 5,
       status: 'entwurf',
       approved_at: null,
       approved_by_vote_id: null,
       notes: bNotes || null,
     });
     setDialogOpen(false);
-    setBYear(String(new Date().getFullYear())); setBTotal(''); setBReserve(''); setBNotes('');
+    setBYear(String(new Date().getFullYear()));
+    setBManagementFee('');
+    setBReserve('');
+    setBDueDay('5');
+    setBNotes('');
   };
 
   const handleCreateLine = async () => {
@@ -875,12 +904,33 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
       description: lDesc || null,
       amount: parseFloat(lAmount.replace(',', '.')) || 0,
       allocation_key: lKey,
+      ust_rate: parseInt(lUstRate) || 0,
     });
     setLineDialogOpen(false);
-    setLCategory('Betriebskosten'); setLDesc(''); setLAmount(''); setLKey('mea');
+    setLCategory('Betriebskosten');
+    setLDesc('');
+    setLAmount('');
+    setLKey('mea');
+    setLUstRate('0');
   };
 
-  const linesTotal = lines.reduce((s, l) => s + l.amount, 0);
+  const handleActivate = async () => {
+    if (!activatePlanId) return;
+    await activatePlan.mutateAsync(activatePlanId);
+    setActivateDialogOpen(false);
+    setActivatePlanId(null);
+  };
+
+  const allocationKeyLabels: Record<string, string> = {
+    mea: 'MEA-Anteil',
+    nutzflaeche: 'Nutzfl\u00E4che',
+    einheiten: 'Einheiten',
+    verbrauch: 'Verbrauch',
+  };
+
+  const statusSteps = ['entwurf', 'beschlossen', 'aktiv'];
+  const statusStepLabels = ['Entwurf', 'Beschlossen', 'Aktiv'];
+  const statusStepIcons = [CircleDot, Gavel, Zap];
 
   if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
 
@@ -898,6 +948,10 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
         <div className="space-y-4">
           {plans.map(p => {
             const isExpanded = expandedPlanId === p.id;
+            const currentStepIndex = statusSteps.indexOf(p.status);
+            const showPreview = previewPlanId === p.id;
+            const showVorschreibungen = vorschreibungenPlanId === p.id;
+
             return (
               <Card key={p.id} data-testid={`card-budget-${p.id}`}>
                 <CardHeader className="pb-2">
@@ -907,30 +961,68 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
                     </CardTitle>
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatusBadge status={p.status} labels={budgetStatusLabels} />
-                      {p.status === 'entwurf' && (
-                        <Button variant="outline" size="sm" onClick={() => updatePlan.mutate({ id: p.id, status: 'beschlossen' } as any)} data-testid={`button-approve-budget-${p.id}`}>
-                          Beschlie\u00DFen
-                        </Button>
-                      )}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2 py-2">
+                    {statusSteps.map((step, idx) => {
+                      const StepIcon = statusStepIcons[idx];
+                      const isCompleted = currentStepIndex > idx;
+                      const isCurrent = currentStepIndex === idx;
+                      return (
+                        <div key={step} className="flex items-center gap-1">
+                          {idx > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          <div className={`flex items-center gap-1 text-sm ${isCurrent ? 'font-bold' : isCompleted ? 'text-muted-foreground' : 'text-muted-foreground opacity-50'}`} data-testid={`step-${step}-${p.id}`}>
+                            {isCompleted ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" /> : <StepIcon className="h-4 w-4" />}
+                            <span>{statusStepLabels[idx]}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
                   <div className="flex gap-6 text-sm flex-wrap">
-                    <span>Gesamtbetrag: <strong>{fmt(p.total_amount)}</strong></span>
-                    <span>R\u00FCcklagenbeitrag: <strong>{fmt(p.reserve_contribution)}</strong></span>
+                    <span>Gesamtbetrag: <strong data-testid={`text-total-${p.id}`}>{fmt(p.total_amount)}</strong></span>
+                    <span>R\u00FCcklagenbeitrag: <strong data-testid={`text-reserve-${p.id}`}>{fmt(p.reserve_contribution)}</strong></span>
+                    <span>Verwaltungshonorar: <strong data-testid={`text-fee-${p.id}`}>{fmt(p.management_fee)}</strong></span>
+                    <span>F\u00E4lligkeit: <strong data-testid={`text-due-${p.id}`}>{p.due_day}. des Monats</strong></span>
                     {p.notes && <span className="text-muted-foreground">{p.notes}</span>}
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => setExpandedPlanId(isExpanded ? null : p.id)} data-testid={`button-toggle-lines-${p.id}`}>
-                      <Euro className="h-3 w-3 mr-1" /> Positionen {isExpanded ? 'ausblenden' : 'anzeigen'}
-                    </Button>
-                    {isExpanded && (
-                      <Button variant="ghost" size="sm" onClick={() => setLineDialogOpen(true)} data-testid={`button-add-line-${p.id}`}>
-                        <Plus className="h-3 w-3 mr-1" /> Position hinzuf\u00FCgen
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button variant="ghost" size="sm" onClick={() => setExpandedPlanId(isExpanded ? null : p.id)} data-testid={`button-toggle-lines-${p.id}`}>
+                        <Euro className="h-3 w-3 mr-1" /> Positionen {isExpanded ? 'ausblenden' : 'anzeigen'}
                       </Button>
-                    )}
+                      {(p.status === 'beschlossen' || p.status === 'aktiv') && (
+                        <Button variant="ghost" size="sm" onClick={() => setPreviewPlanId(showPreview ? null : p.id)} data-testid={`button-preview-${p.id}`}>
+                          <Eye className="h-3 w-3 mr-1" /> Verteilung {showPreview ? 'ausblenden' : 'anzeigen'}
+                        </Button>
+                      )}
+                      {p.status === 'aktiv' && (
+                        <Button variant="ghost" size="sm" onClick={() => setVorschreibungenPlanId(showVorschreibungen ? null : p.id)} data-testid={`button-vorschreibungen-${p.id}`}>
+                          <Send className="h-3 w-3 mr-1" /> Vorschreibungen {showVorschreibungen ? 'ausblenden' : 'anzeigen'}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {p.status === 'entwurf' && isExpanded && (
+                        <Button variant="ghost" size="sm" onClick={() => setLineDialogOpen(true)} data-testid={`button-add-line-${p.id}`}>
+                          <Plus className="h-3 w-3 mr-1" /> Position hinzuf\u00FCgen
+                        </Button>
+                      )}
+                      {p.status === 'entwurf' && (
+                        <Button variant="outline" size="sm" onClick={() => updatePlan.mutate({ id: p.id, status: 'beschlossen' } as any)} data-testid={`button-approve-budget-${p.id}`}>
+                          <Gavel className="h-3 w-3 mr-1" /> Beschlie\u00DFen
+                        </Button>
+                      )}
+                      {p.status === 'beschlossen' && (
+                        <Button variant="default" size="sm" onClick={() => { setActivatePlanId(p.id); setActivateDialogOpen(true); }} data-testid={`button-activate-budget-${p.id}`}>
+                          <Zap className="h-3 w-3 mr-1" /> Aktivieren & Vorschreibungen generieren
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {isExpanded && (
@@ -943,7 +1035,8 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
                               <TableHead>Beschreibung</TableHead>
                               <TableHead className="text-right">Betrag</TableHead>
                               <TableHead>Verteilschl\u00FCssel</TableHead>
-                              <TableHead></TableHead>
+                              <TableHead className="text-right">USt %</TableHead>
+                              {p.status === 'entwurf' && <TableHead></TableHead>}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -952,29 +1045,146 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
                                 <TableCell><Badge variant="outline">{l.category}</Badge></TableCell>
                                 <TableCell>{l.description || '\u2014'}</TableCell>
                                 <TableCell className="text-right font-medium">{fmt(l.amount)}</TableCell>
-                                <TableCell>{l.allocation_key}</TableCell>
-                                <TableCell>
-                                  <Button variant="ghost" size="icon" onClick={() => deleteLine.mutate(l.id)} data-testid={`button-delete-line-${l.id}`}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </TableCell>
+                                <TableCell>{allocationKeyLabels[l.allocation_key] || l.allocation_key}</TableCell>
+                                <TableCell className="text-right">{l.ust_rate} %</TableCell>
+                                {p.status === 'entwurf' && (
+                                  <TableCell>
+                                    <Button variant="ghost" size="icon" onClick={() => deleteLine.mutate(l.id)} data-testid={`button-delete-line-${l.id}`}>
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </TableCell>
+                                )}
                               </TableRow>
                             ))}
                           </TableBody>
                         </Table>
-                        <div className="flex justify-between text-sm px-4 py-2 border-t">
-                          <span>Summe Positionen: <strong>{fmt(linesTotal)}</strong></span>
-                          <span>Plan-Gesamt: <strong>{fmt(p.total_amount)}</strong></span>
-                          {Math.abs(linesTotal - p.total_amount) > 0.01 && (
-                            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
-                              <AlertTriangle className="h-3 w-3 mr-1" /> Differenz: {fmt(Math.abs(linesTotal - p.total_amount))}
-                            </Badge>
-                          )}
+                        <div className="flex justify-between flex-wrap gap-2 text-sm px-4 py-2 border-t">
+                          <span>Summe Positionen: <strong data-testid={`text-lines-total-${p.id}`}>{fmt(linesTotal)}</strong></span>
                         </div>
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">Keine Positionen vorhanden.</p>
                     )
+                  )}
+
+                  {showPreview && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold flex items-center gap-1">
+                        <Eye className="h-4 w-4" /> Verteilungsvorschau
+                      </h4>
+                      {previewLoading ? <LoadingSpinner /> : previewData && previewData.distributions.length > 0 ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Einheit (TOP)</TableHead>
+                              <TableHead>Eigent\u00FCmer</TableHead>
+                              <TableHead className="text-right">MEA-Anteil</TableHead>
+                              <TableHead className="text-right">BK/Monat</TableHead>
+                              <TableHead className="text-right">HK/Monat</TableHead>
+                              <TableHead className="text-right">R\u00FCcklage/Monat</TableHead>
+                              <TableHead className="text-right">Verwaltung/Monat</TableHead>
+                              <TableHead className="text-right">Gesamt/Monat</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {previewData.distributions.map(d => (
+                              <TableRow key={d.unit_owner_id} data-testid={`row-preview-${d.unit_owner_id}`}>
+                                <TableCell className="font-medium">{d.unit_top}</TableCell>
+                                <TableCell>{d.owner_name}</TableCell>
+                                <TableCell className="text-right">{fmtPct(d.mea_share)}</TableCell>
+                                <TableCell className="text-right">{fmt((d.bk_netto_jahr + d.bk_ust_jahr) / 12)}</TableCell>
+                                <TableCell className="text-right">{fmt((d.hk_netto_jahr + d.hk_ust_jahr) / 12)}</TableCell>
+                                <TableCell className="text-right">{fmt(d.ruecklage_jahr / 12)}</TableCell>
+                                <TableCell className="text-right">{fmt((d.verwaltung_netto_jahr + d.verwaltung_ust_jahr) / 12)}</TableCell>
+                                <TableCell className="text-right font-medium">{fmt(d.monats_total)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">Keine Verteilungsdaten verf\u00FCgbar.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {showVorschreibungen && p.status === 'aktiv' && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold flex items-center gap-1">
+                        <Send className="h-4 w-4" /> Vorschreibungen
+                      </h4>
+                      {p.activated_at && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-green-600 dark:text-green-400" />
+                          Aktiviert am {fmtDate(p.activated_at)}
+                        </p>
+                      )}
+                      {vorschreibungenLoading ? <LoadingSpinner /> : vorschreibungen.length > 0 ? (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Monat</TableHead>
+                              <TableHead>Einheit</TableHead>
+                              <TableHead>Eigent\u00FCmer</TableHead>
+                              <TableHead className="text-right">BK</TableHead>
+                              <TableHead className="text-right">HK</TableHead>
+                              <TableHead className="text-right">USt</TableHead>
+                              <TableHead className="text-right">Gesamt</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>F\u00E4llig am</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {vorschreibungen.map(v => {
+                              const monthNames = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+                              return (
+                                <TableRow key={v.id} data-testid={`row-vorschreibung-${v.id}`}>
+                                  <TableCell>{monthNames[v.month - 1]} {v.year}</TableCell>
+                                  <TableCell>Top {v.unit_top || '\u2014'}</TableCell>
+                                  <TableCell>{v.owner_name || '\u2014'}</TableCell>
+                                  <TableCell className="text-right">{fmt(v.betriebskosten)}</TableCell>
+                                  <TableCell className="text-right">{fmt(v.heizungskosten)}</TableCell>
+                                  <TableCell className="text-right">{fmt(v.ust)}</TableCell>
+                                  <TableCell className="text-right font-medium">{fmt(v.gesamtbetrag)}</TableCell>
+                                  <TableCell><Badge variant="outline">{v.status}</Badge></TableCell>
+                                  <TableCell>{fmtDate(v.faellig_am)}</TableCell>
+                                  <TableCell>
+                                    <Button variant="ghost" size="icon" data-testid={`button-download-vorschreibung-${v.id}`} onClick={() => {
+                                      const bk = Number(v.betriebskosten) || 0;
+                                      const hk = Number(v.heizungskosten) || 0;
+                                      downloadWegVorschreibungPdf({
+                                        ownerName: v.owner_name || 'Eigentümer',
+                                        propertyName: selectedProp?.name || '',
+                                        propertyAddress: selectedProp?.address || '',
+                                        propertyCity: `${selectedProp?.postalCode || ''} ${selectedProp?.city || ''}`,
+                                        unitTop: v.unit_top || '',
+                                        unitType: v.unit_type || 'wohnung',
+                                        month: v.month,
+                                        year: v.year,
+                                        bkNetto: bk,
+                                        bkUstRate: v.ust_satz_bk || 10,
+                                        hkNetto: hk,
+                                        hkUstRate: v.ust_satz_heizung || 20,
+                                        ruecklage: 0,
+                                        verwaltungNetto: 0,
+                                        verwaltungUstRate: 20,
+                                        sonstigesNetto: 0,
+                                        gesamtBrutto: Number(v.gesamtbetrag) || 0,
+                                        faelligAm: v.faellig_am || '',
+                                      });
+                                    }}>
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">Keine Vorschreibungen vorhanden.</p>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -996,13 +1206,17 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Gesamtbetrag (\u20AC)</Label>
-                <Input value={bTotal} onChange={e => setBTotal(e.target.value)} placeholder="0,00" data-testid="input-budget-total" />
+                <Label>Verwaltungshonorar (\u20AC)</Label>
+                <Input value={bManagementFee} onChange={e => setBManagementFee(e.target.value)} placeholder="0,00" data-testid="input-budget-management-fee" />
               </div>
               <div className="space-y-2">
                 <Label>R\u00FCcklagenbeitrag (\u20AC)</Label>
                 <Input value={bReserve} onChange={e => setBReserve(e.target.value)} placeholder="0,00" data-testid="input-budget-reserve" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>F\u00E4lligkeitstag</Label>
+              <Input type="number" min="1" max="28" value={bDueDay} onChange={e => setBDueDay(e.target.value)} data-testid="input-budget-due-day" />
             </div>
             <div className="space-y-2">
               <Label>Anmerkungen</Label>
@@ -1011,7 +1225,7 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-budget">Abbrechen</Button>
-            <Button onClick={handleCreatePlan} disabled={!bYear || !bTotal || createPlan.isPending} data-testid="button-save-budget">
+            <Button onClick={handleCreatePlan} disabled={!bYear || createPlan.isPending} data-testid="button-save-budget">
               {createPlan.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Erstellen
             </Button>
           </DialogFooter>
@@ -1037,7 +1251,7 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
               <Label>Beschreibung</Label>
               <Input value={lDesc} onChange={e => setLDesc(e.target.value)} data-testid="input-line-description" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Betrag (\u20AC)</Label>
                 <Input value={lAmount} onChange={e => setLAmount(e.target.value)} placeholder="0,00" data-testid="input-line-amount" />
@@ -1054,12 +1268,48 @@ function BudgetTab({ propertyId, orgId }: { propertyId: string; orgId: string | 
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>USt-Satz</Label>
+                <Select value={lUstRate} onValueChange={setLUstRate}>
+                  <SelectTrigger data-testid="select-line-ust"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0 %</SelectItem>
+                    <SelectItem value="10">10 %</SelectItem>
+                    <SelectItem value="20">20 %</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setLineDialogOpen(false)} data-testid="button-cancel-line">Abbrechen</Button>
             <Button onClick={handleCreateLine} disabled={!lAmount || createLine.isPending} data-testid="button-save-line">
               {createLine.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Hinzuf\u00FCgen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Wirtschaftsplan aktivieren</DialogTitle>
+            <DialogDescription>M\u00F6chten Sie den Wirtschaftsplan aktivieren und Vorschreibungen generieren?</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div className="flex items-start gap-3 p-3 rounded-md border">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium">Achtung</p>
+                <p className="text-muted-foreground">Es werden 12 monatliche Vorschreibungen f\u00FCr alle Eigent\u00FCmer generiert. Dieser Vorgang kann nicht r\u00FCckg\u00E4ngig gemacht werden.</p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setActivateDialogOpen(false); setActivatePlanId(null); }} data-testid="button-cancel-activate">Abbrechen</Button>
+            <Button onClick={handleActivate} disabled={activatePlan.isPending} data-testid="button-confirm-activate">
+              {activatePlan.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Zap className="h-4 w-4 mr-2" /> Aktivieren
             </Button>
           </DialogFooter>
         </DialogContent>
