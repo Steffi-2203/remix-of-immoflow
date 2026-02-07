@@ -1,0 +1,682 @@
+[
+  {
+    "tenantId": "059facdb-218d-4d40-8f91-6ccd907d7e87",
+    "unitId": "97ad57b7-c068-4756-9209-b7cd7ce90017",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 19.81,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "053f0b4f-3750-423a-b1a1-101dfb6e8e77",
+    "unitId": "e1522a0c-a739-4ab0-b750-eb9f7db38190",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 15.51,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "871341f3-90c8-4447-ae85-e0ebb963dd32",
+    "unitId": "a60749ac-004e-4941-bb5b-f55fa2f3e7b6",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 302.3,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "871341f3-90c8-4447-ae85-e0ebb963dd32",
+    "unitId": "a60749ac-004e-4941-bb5b-f55fa2f3e7b6",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 119.93,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "ef1f4d9f-fb46-421c-8339-33c60ec9f5dc",
+    "unitId": "00181224-49bc-4c58-8957-46439bc266e0",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 194.96,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "ef1f4d9f-fb46-421c-8339-33c60ec9f5dc",
+    "unitId": "00181224-49bc-4c58-8957-46439bc266e0",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 70.24,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "6f291fe0-e9d7-43b6-ba74-91d0d16aeb1b",
+    "unitId": "523e2832-42b0-427b-a46a-1e0169fd6477",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 267.96,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "6f291fe0-e9d7-43b6-ba74-91d0d16aeb1b",
+    "unitId": "523e2832-42b0-427b-a46a-1e0169fd6477",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 104.51,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "745bd6b7-f643-4316-ac05-198ffd49b302",
+    "unitId": "523e2832-42b0-427b-a46a-1e0169fd6477",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 278.79,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "745bd6b7-f643-4316-ac05-198ffd49b302",
+    "unitId": "523e2832-42b0-427b-a46a-1e0169fd6477",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 149.46,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "302fc7e6-ec40-4805-9be8-3389d4d96efd",
+    "unitId": "ee472044-0c9b-4467-b5ff-c8b64cea08bc",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 114.13,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "302fc7e6-ec40-4805-9be8-3389d4d96efd",
+    "unitId": "ee472044-0c9b-4467-b5ff-c8b64cea08bc",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 79.61,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "b42fc52a-bcdf-4d93-a471-27df0c634b6b",
+    "unitId": "2cfaade7-c993-481e-becc-05ddcd868949",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 140,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "b42fc52a-bcdf-4d93-a471-27df0c634b6b",
+    "unitId": "2cfaade7-c993-481e-becc-05ddcd868949",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 49.75,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "f0ba0dc5-88a6-4494-8598-141c3e734b78",
+    "unitId": "2a715f65-795c-408f-ab77-e022deac5f2d",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 18.78,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "6e3592d7-ebbe-46b2-8556-c8ec1f6dde16",
+    "unitId": "4a53a62f-ea18-4dfe-8420-f2cc59ed6391",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 138.61,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "6e3592d7-ebbe-46b2-8556-c8ec1f6dde16",
+    "unitId": "4a53a62f-ea18-4dfe-8420-f2cc59ed6391",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 76.09,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "f53fcb73-a900-45aa-911f-c3abc8c5a8d3",
+    "unitId": "c6ddf9fe-99e9-4448-a204-e7020a0740fd",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 175.44,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "f53fcb73-a900-45aa-911f-c3abc8c5a8d3",
+    "unitId": "c6ddf9fe-99e9-4448-a204-e7020a0740fd",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 62.54,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "388b48a2-4a02-491c-b759-24e4b55ed7f6",
+    "unitId": "6fd5b5d9-9b17-4544-b4ca-4dc769c79a6d",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 231.1,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "388b48a2-4a02-491c-b759-24e4b55ed7f6",
+    "unitId": "6fd5b5d9-9b17-4544-b4ca-4dc769c79a6d",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 138.07,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "b93046b6-f367-4c98-af23-9943903e3a73",
+    "unitId": "8a05e073-ecf8-4a50-9d6a-690bf991972d",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 230.16,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "b93046b6-f367-4c98-af23-9943903e3a73",
+    "unitId": "8a05e073-ecf8-4a50-9d6a-690bf991972d",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 86.53,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "67a71dec-57c3-41bd-b534-a72f4e7977ba",
+    "unitId": "1c5b89b9-1d7a-4439-8d36-ac0a67c27afb",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 320.64,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "67a71dec-57c3-41bd-b534-a72f4e7977ba",
+    "unitId": "1c5b89b9-1d7a-4439-8d36-ac0a67c27afb",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 230.81,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "662a1de7-c1a2-47ca-b350-e39fe102bbf2",
+    "unitId": "31e79c7d-90e0-4871-a7ae-f6c564a132c4",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 303.84,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "662a1de7-c1a2-47ca-b350-e39fe102bbf2",
+    "unitId": "31e79c7d-90e0-4871-a7ae-f6c564a132c4",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 163.58,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "583ea4d5-6e28-4b4b-ab30-692bdf44d9bc",
+    "unitId": "35d817a0-00a8-4d64-ac6d-f1ab84143f8d",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 211.04,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "583ea4d5-6e28-4b4b-ab30-692bdf44d9bc",
+    "unitId": "35d817a0-00a8-4d64-ac6d-f1ab84143f8d",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 93.23,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "4db8c04a-38b0-480c-8bd8-bbf208993468",
+    "unitId": "8b1de22a-6fe8-48c4-86d7-762c87b2029e",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 285.75,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "4db8c04a-38b0-480c-8bd8-bbf208993468",
+    "unitId": "8b1de22a-6fe8-48c4-86d7-762c87b2029e",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 127.03,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "a9d6ba32-c6e9-4ce7-a9dc-31675b565005",
+    "unitId": "2b41964f-88c9-4dcb-8c8b-f32f33a8cb7c",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 277.86,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "a9d6ba32-c6e9-4ce7-a9dc-31675b565005",
+    "unitId": "2b41964f-88c9-4dcb-8c8b-f32f33a8cb7c",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 127.07,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "f395fd48-0e45-4531-a7f8-963940d98d08",
+    "unitId": "d09d71fa-8083-428f-97bb-af74d05054fe",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 157.35,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "f395fd48-0e45-4531-a7f8-963940d98d08",
+    "unitId": "d09d71fa-8083-428f-97bb-af74d05054fe",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 109.74,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "3a422122-8720-47cd-8a6f-b8d8f491cca5",
+    "unitId": "3d9f9711-5a3a-47ff-a64e-95bd33e62598",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 251.11,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "3a422122-8720-47cd-8a6f-b8d8f491cca5",
+    "unitId": "3d9f9711-5a3a-47ff-a64e-95bd33e62598",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 131.8,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "bbee7a70-173e-4a60-8808-1cef62643970",
+    "unitId": "bd9ef0f4-2cdf-4646-a327-221ecbab072c",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 346.39,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "bbee7a70-173e-4a60-8808-1cef62643970",
+    "unitId": "bd9ef0f4-2cdf-4646-a327-221ecbab072c",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 126.54,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "1b9598ef-7add-484a-b5bd-ab31a99fe9e3",
+    "unitId": "2b5ab87e-647b-4988-bd9c-0201b6c9cf55",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 228.43,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "1b9598ef-7add-484a-b5bd-ab31a99fe9e3",
+    "unitId": "2b5ab87e-647b-4988-bd9c-0201b6c9cf55",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 131.18,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "85461048-fb6f-4ead-8434-b67995a2571e",
+    "unitId": "394a1218-5552-4a88-978d-66d1a82386c7",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 184.11,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "85461048-fb6f-4ead-8434-b67995a2571e",
+    "unitId": "394a1218-5552-4a88-978d-66d1a82386c7",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 86.77,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "60c78c28-8234-47e6-99ff-615b635ad420",
+    "unitId": "bda17640-83cf-423f-bd30-013aaa7f91ae",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 274.66,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "60c78c28-8234-47e6-99ff-615b635ad420",
+    "unitId": "bda17640-83cf-423f-bd30-013aaa7f91ae",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 85.98,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "10a4c2fb-9663-43ea-b60c-cd50eba2ce36",
+    "unitId": "61b5644a-ed8e-4efc-ba9f-bc17b7ef872a",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 296.63,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "10a4c2fb-9663-43ea-b60c-cd50eba2ce36",
+    "unitId": "61b5644a-ed8e-4efc-ba9f-bc17b7ef872a",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 147.61,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "2f01d4a6-ad1f-4e7a-9558-35dd389e4dd9",
+    "unitId": "4a2af100-ca16-4d1d-9205-c5fb2cc9824c",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 204.27,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "2f01d4a6-ad1f-4e7a-9558-35dd389e4dd9",
+    "unitId": "4a2af100-ca16-4d1d-9205-c5fb2cc9824c",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 102.61,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "4d78a4ed-2099-4f78-8314-d519280fc340",
+    "unitId": "8c330c60-24e3-4fda-b2a0-2a5c3c955cbe",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 255.53,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "4d78a4ed-2099-4f78-8314-d519280fc340",
+    "unitId": "8c330c60-24e3-4fda-b2a0-2a5c3c955cbe",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 126.15,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "e06d765a-c967-4623-ba79-2d96fb99c0f2",
+    "unitId": "1ff4daf6-1b54-472a-bcd4-951b566c3eba",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 235.39,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "e06d765a-c967-4623-ba79-2d96fb99c0f2",
+    "unitId": "1ff4daf6-1b54-472a-bcd4-951b566c3eba",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 77.07,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "a8c0c232-6526-477d-8cbb-9e39b7b1aa9b",
+    "unitId": "a60749ac-004e-4941-bb5b-f55fa2f3e7b6",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 304.21,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "a8c0c232-6526-477d-8cbb-9e39b7b1aa9b",
+    "unitId": "a60749ac-004e-4941-bb5b-f55fa2f3e7b6",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 164.11,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "0addf53f-5e12-4228-bf35-65e2c9484ea9",
+    "unitId": "655f44af-4b87-4e30-8fb0-6e506b33cdbf",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 313.47,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "0addf53f-5e12-4228-bf35-65e2c9484ea9",
+    "unitId": "655f44af-4b87-4e30-8fb0-6e506b33cdbf",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 146.01,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "b92d9f0a-34b6-4e94-9b1a-ab4893b9d8a7",
+    "unitId": "24d5c520-f275-4ce5-b5b4-3e7cd9425ee1",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 370.33,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "b92d9f0a-34b6-4e94-9b1a-ab4893b9d8a7",
+    "unitId": "24d5c520-f275-4ce5-b5b4-3e7cd9425ee1",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 154.12,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "e84de276-a97b-453b-8f86-6b0437746f40",
+    "unitId": "24d5c520-f275-4ce5-b5b4-3e7cd9425ee1",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 411.02,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "e84de276-a97b-453b-8f86-6b0437746f40",
+    "unitId": "24d5c520-f275-4ce5-b5b4-3e7cd9425ee1",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 168.12,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "5d9e99a6-5b03-4ed7-b52d-4caaa538ea42",
+    "unitId": "8b1de22a-6fe8-48c4-86d7-762c87b2029e",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 341.84,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "5d9e99a6-5b03-4ed7-b52d-4caaa538ea42",
+    "unitId": "8b1de22a-6fe8-48c4-86d7-762c87b2029e",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 193.81,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "cc42f74c-115d-4e46-afce-222885fb5745",
+    "unitId": "0c132150-6856-400a-85e3-ed4b1e8c3c0b",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 376.31,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "cc42f74c-115d-4e46-afce-222885fb5745",
+    "unitId": "0c132150-6856-400a-85e3-ed4b1e8c3c0b",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 167.86,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "a8664f58-37b6-40ca-bb07-94509209435c",
+    "unitId": "4b2d1cfd-cb11-4697-bc20-ba6e8dc9ce8b",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 302.54,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "a8664f58-37b6-40ca-bb07-94509209435c",
+    "unitId": "4b2d1cfd-cb11-4697-bc20-ba6e8dc9ce8b",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 145.08,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "854ddd1c-6e9e-47d2-9e2b-28e8417321bc",
+    "unitId": "12f3e307-eea4-47b9-bdce-d5b4ba0edb2f",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 333.02,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "854ddd1c-6e9e-47d2-9e2b-28e8417321bc",
+    "unitId": "12f3e307-eea4-47b9-bdce-d5b4ba0edb2f",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 154.04,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "59f397ea-2082-46c8-b3e3-36b78504e40b",
+    "unitId": "926799f3-87a0-4d49-8511-8eb1809d6c56",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 346.19,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "59f397ea-2082-46c8-b3e3-36b78504e40b",
+    "unitId": "926799f3-87a0-4d49-8511-8eb1809d6c56",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 143.05,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "c8db2cec-ef2b-4902-a578-2f0c2b45511f",
+    "unitId": "cc0a8ffc-96e9-4b07-b501-b94ca49a58aa",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 138.95,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "c8db2cec-ef2b-4902-a578-2f0c2b45511f",
+    "unitId": "cc0a8ffc-96e9-4b07-b501-b94ca49a58aa",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 60.24,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "f49f7636-6966-442f-92c2-bdd6cefc7b59",
+    "unitId": "0b1e6a4f-6c64-420e-8f37-5bd2b3136cdc",
+    "lineType": "betriebskosten",
+    "description": "BK-Vorschuss September 2026",
+    "amount": 428.98,
+    "taxRate": 10
+  },
+  {
+    "tenantId": "f49f7636-6966-442f-92c2-bdd6cefc7b59",
+    "unitId": "0b1e6a4f-6c64-420e-8f37-5bd2b3136cdc",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 147.43,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "1ec1adc7-a1bf-480f-af0b-d1eb91c7436b",
+    "unitId": "f6d5fad0-a87e-47a0-ba3c-691d6f7831b7",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 18.49,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "bcade59d-0f85-4de8-b1e1-12bdbcf63b2d",
+    "unitId": "b26e9ef0-9a17-4aa7-a04d-e9a9970c5bc1",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 18.58,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "a1347de4-e6d3-4fbe-b9fd-fb3c6ca62fe2",
+    "unitId": "0ea5989b-8d0c-4017-a091-a868e04fccd4",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 24.79,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "d5e41a8c-484b-479b-9234-b097ed9c9143",
+    "unitId": "502b7469-be2e-43fd-816a-3974b0739fd6",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 16.74,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "590a0586-d63e-42bf-9791-5f78b6269973",
+    "unitId": "64e428c8-b31d-46dc-85a8-ef4ecba9561c",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 22.53,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "5b5dccbd-9a1d-4b20-a531-58650ac44692",
+    "unitId": "81119b1b-0083-4152-85de-fc1ce47bb635",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 21.9,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "b322c5ed-2017-4642-8ed5-f1b9e84838bb",
+    "unitId": "e89fa4d7-4cab-4c07-8654-59fc7c4b8a83",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 20.91,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "bcc620a5-614d-4cc1-bd05-8fe4a24da179",
+    "unitId": "cd415b13-4d7c-472a-9482-cb4be8c9d982",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 20.42,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "492bb5dc-8de2-474b-a61f-21fb10d92910",
+    "unitId": "f9170765-6e9a-4b70-8060-2063beab3b60",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 25.69,
+    "taxRate": 20
+  },
+  {
+    "tenantId": "60017a32-7a4b-4d89-9b59-aee04f41bbbc",
+    "unitId": "67e974ae-6da5-4c99-8a4c-6c8602cbf276",
+    "lineType": "heizkosten",
+    "description": "HK-Vorschuss September 2026",
+    "amount": 20.18,
+    "taxRate": 20
+  }
+]
