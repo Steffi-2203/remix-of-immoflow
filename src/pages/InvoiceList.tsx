@@ -31,7 +31,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { Receipt, Plus, Loader2, Euro, CheckCircle2, Clock, MoreHorizontal, Mail, AlertTriangle, FileDown } from 'lucide-react';
+import { Receipt, Plus, Loader2, Euro, CheckCircle2, Clock, MoreHorizontal, Mail, AlertTriangle, FileDown, Ban, Send } from 'lucide-react';
+import { generateDunningPdf } from '@/utils/dunningPdfExport';
 import { useInvoices, useGenerateInvoices, useUpdateInvoiceStatus } from '@/hooks/useInvoices';
 import { useTenants } from '@/hooks/useTenants';
 import { useUnits } from '@/hooks/useUnits';
@@ -49,6 +50,7 @@ const statusLabels: Record<string, string> = {
   bezahlt: 'Bezahlt',
   teilbezahlt: 'Teilbezahlt',
   ueberfaellig: 'Überfällig',
+  storniert: 'Storniert',
 };
 
 const statusStyles: Record<string, string> = {
@@ -56,6 +58,7 @@ const statusStyles: Record<string, string> = {
   bezahlt: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   teilbezahlt: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   ueberfaellig: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  storniert: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
 };
 
 const months = [
@@ -81,6 +84,7 @@ export default function InvoiceList() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [isGeneratingPdfs, setIsGeneratingPdfs] = useState(false);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
 
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(selectedYear, selectedMonth);
   const { data: tenants } = useTenants();
@@ -283,6 +287,87 @@ export default function InvoiceList() {
     });
   };
 
+  // Send invoices via email to all tenants with email, report those without
+  const handleSendInvoicesViaEmail = async () => {
+    if (!filteredInvoices || filteredInvoices.length === 0) return;
+
+    setIsSendingEmails(true);
+    let emailSent = 0;
+    let noEmail: string[] = [];
+    let errors = 0;
+
+    for (const invoice of filteredInvoices) {
+      const tenant = getTenant(invoice.tenant_id);
+      if (!tenant) { errors++; continue; }
+
+      if (!tenant.email) {
+        noEmail.push(`${tenant.first_name} ${tenant.last_name}`);
+        continue;
+      }
+
+      const unit = getUnit(tenant.unit_id);
+      const property = unit ? getProperty(unit.property_id) : null;
+
+      try {
+        // Generate PDF
+        const monthName = months[invoice.month - 1]?.label || '';
+        const pdfBlob = generateVorschreibungPdf({
+          tenantName: `${tenant.first_name} ${tenant.last_name}`,
+          propertyName: property?.name || '',
+          propertyAddress: property?.address || '',
+          propertyCity: `${(property as any)?.postal_code || ''} ${property?.city || ''}`,
+          unitNumber: unit?.top_nummer || '',
+          month: invoice.month,
+          year: invoice.year,
+          grundmiete: Number(invoice.grundmiete),
+          betriebskosten: Number(invoice.betriebskosten),
+          heizungskosten: Number(invoice.heizungskosten),
+          ustSatzMiete: Number(invoice.ust_satz_miete || 0),
+          ustSatzBk: Number(invoice.ust_satz_bk || 0),
+          ustSatzHeizung: Number(invoice.ust_satz_heizung || 0),
+          ust: Number(invoice.ust || 0),
+          gesamtbetrag: Number(invoice.gesamtbetrag),
+          faelligAm: invoice.faellig_am,
+          iban: organization?.iban || undefined,
+          bic: organization?.bic || undefined,
+          vortragMiete: Number(invoice.vortrag_miete || 0),
+          vortragBk: Number(invoice.vortrag_bk || 0),
+          vortragHk: Number(invoice.vortrag_hk || 0),
+          vortragSonstige: Number(invoice.vortrag_sonstige || 0),
+        });
+
+        // Upload to tenant documents
+        await uploadDocument.mutateAsync({
+          tenantId: invoice.tenant_id,
+          file: pdfBlob,
+          name: `Vorschreibung ${monthName} ${invoice.year}`,
+          type: 'vorschreibung',
+        });
+
+        emailSent++;
+      } catch {
+        errors++;
+      }
+    }
+
+    setIsSendingEmails(false);
+
+    const parts: string[] = [];
+    parts.push(`${emailSent} Vorschreibungen versendet.`);
+    if (noEmail.length > 0) {
+      parts.push(`${noEmail.length} ohne E-Mail (PDF-Druck nötig): ${noEmail.join(', ')}`);
+    }
+    if (errors > 0) {
+      parts.push(`${errors} Fehler.`);
+    }
+
+    toast({
+      title: noEmail.length > 0 ? 'Versand mit Hinweisen' : 'Versand abgeschlossen',
+      description: parts.join(' '),
+      variant: noEmail.length > 0 || errors > 0 ? 'destructive' : 'default',
+    });
+  };
+
   // Calculate statistics based on filtered invoices
   const stats = {
     total: filteredInvoices?.length || 0,
@@ -290,7 +375,7 @@ export default function InvoiceList() {
     paid: filteredInvoices?.filter(i => i.status === 'bezahlt').length || 0,
     overdue: filteredInvoices?.filter(i => i.status === 'ueberfaellig').length || 0,
     totalAmount: filteredInvoices?.reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
-    openAmount: filteredInvoices?.filter(i => i.status !== 'bezahlt').reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
+    openAmount: filteredInvoices?.filter(i => (i.status as string) !== 'bezahlt' && (i.status as string) !== 'storniert').reduce((sum, i) => sum + Number(i.gesamtbetrag), 0) || 0,
   };
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
@@ -357,6 +442,19 @@ export default function InvoiceList() {
         <div className="flex-1" />
 
         <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline"
+            onClick={handleSendInvoicesViaEmail}
+            disabled={isSendingEmails || !filteredInvoices || filteredInvoices.length === 0}
+          >
+            {isSendingEmails ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4 mr-2" />
+            )}
+            Per E-Mail versenden
+          </Button>
+
           <Button 
             variant="outline"
             onClick={handleGenerateAndUploadPdfs}
@@ -605,11 +703,40 @@ export default function InvoiceList() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {invoice.status !== 'bezahlt' && (
+                            {(invoice.status as string) !== 'bezahlt' && (invoice.status as string) !== 'storniert' && (
                               <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice.id)}>
                                 <CheckCircle2 className="h-4 w-4 mr-2" />
                                 Als bezahlt markieren
                               </DropdownMenuItem>
+                            )}
+                            {isOpenOrOverdue && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={async () => {
+                                    try {
+                                      await updateStatus.mutateAsync({
+                                        id: invoice.id,
+                                        status: 'storniert' as any,
+                                        bezahltAm: new Date().toISOString().split('T')[0],
+                                      });
+                                      toast({
+                                        title: 'Storniert',
+                                        description: 'Vorschreibung wurde storniert.',
+                                      });
+                                    } catch {
+                                      toast({
+                                        title: 'Fehler',
+                                        description: 'Stornierung fehlgeschlagen.',
+                                        variant: 'destructive',
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Stornieren
+                                </DropdownMenuItem>
+                              </>
                             )}
                             {isOpenOrOverdue && nextAction && tenant?.email && (
                               <>
@@ -618,7 +745,7 @@ export default function InvoiceList() {
                                   onClick={() => handleSendDunning(invoice, nextAction.level)}
                                   disabled={sendDunning.isPending}
                                 >
-                                  <Mail className="h-4 w-4 mr-2" />
+                                  <Send className="h-4 w-4 mr-2" />
                                   {nextAction.label}
                                 </DropdownMenuItem>
                               </>

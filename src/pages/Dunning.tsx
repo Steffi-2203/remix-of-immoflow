@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Mail, Clock, Euro, Users, AlertTriangle, CheckCircle, Send } from 'lucide-react';
+import { AlertCircle, Mail, Clock, Euro, Users, AlertTriangle, CheckCircle, Send, FileDown } from 'lucide-react';
+import { generateDunningPdf } from '@/utils/dunningPdfExport';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useDunningOverview, getDaysOverdue, DunningCase } from '@/hooks/useDunningOverview';
@@ -251,38 +252,57 @@ export default function Dunning() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {nextAction && dunningCase.email ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant={dunningCase.highestMahnstufe === 0 ? 'outline' : 'destructive'}
-                                  onClick={() => handleSendDunning(dunningCase)}
-                                  disabled={sendDunning.isPending}
-                                >
-                                  <Send className="h-4 w-4 mr-1" />
-                                  {nextAction.label}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>E-Mail an {dunningCase.email} senden</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : !dunningCase.email ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-muted-foreground">
-                                  <Mail className="h-3 w-3 mr-1" />
-                                  Keine E-Mail
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Mieter hat keine E-Mail-Adresse hinterlegt</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <Badge variant="secondary">Abgeschlossen</Badge>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {nextAction && dunningCase.email ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant={dunningCase.highestMahnstufe === 0 ? 'outline' : 'destructive'}
+                                    onClick={() => handleSendDunning(dunningCase)}
+                                    disabled={sendDunning.isPending}
+                                  >
+                                    <Send className="h-4 w-4 mr-1" />
+                                    {nextAction.label}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>E-Mail an {dunningCase.email} senden</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : !dunningCase.email && nextAction ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const oldestInvoice = dunningCase.invoices[0];
+                                      if (!oldestInvoice) return;
+                                      generateDunningPdf({
+                                        tenantName: dunningCase.tenantName,
+                                        propertyName: dunningCase.propertyName,
+                                        unitNumber: dunningCase.unitNumber,
+                                        amount: dunningCase.totalAmount,
+                                        dueDate: oldestInvoice.faellig_am,
+                                        invoiceMonth: oldestInvoice.month,
+                                        invoiceYear: oldestInvoice.year,
+                                        dunningLevel: nextAction.level,
+                                      });
+                                    }}
+                                  >
+                                    <FileDown className="h-4 w-4 mr-1" />
+                                    PDF für Post
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Keine E-Mail hinterlegt – PDF für postalischen Versand herunterladen</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : !nextAction ? (
+                              <Badge variant="secondary">Abgeschlossen</Badge>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
