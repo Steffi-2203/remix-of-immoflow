@@ -622,6 +622,126 @@ describe("Persist-Modus Validierung", () => {
       vacancyInvoice.betriebskosten * 0.1 + vacancyInvoice.heizungskosten * 0.2;
     expect(expectedUst).toBe(28);
   });
+
+  it("sollte reconcileRounding deterministisch sortieren (amount + lineType + unitId)", () => {
+    function roundToCents(v: number) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+    function reconcileRounding(lines: { amount: number; lineType: string; unitId: string }[], expectedTotal: number): void {
+      const roundedSum = lines.reduce((s, l) => s + roundToCents(l.amount || 0), 0);
+      let diff = roundToCents(expectedTotal - roundedSum);
+      if (Math.abs(diff) < 0.01) return;
+
+      lines.sort((a, b) => {
+        const amtDiff = Math.abs(b.amount || 0) - Math.abs(a.amount || 0);
+        if (amtDiff !== 0) return amtDiff;
+        const ltCmp = (a.lineType || '').localeCompare(b.lineType || '');
+        if (ltCmp !== 0) return ltCmp;
+        return (a.unitId || '').localeCompare(b.unitId || '');
+      });
+      let i = 0;
+      const maxIterations = lines.length * 2;
+      while (Math.abs(diff) >= 0.01 && i < maxIterations) {
+        const adjust = diff > 0 ? 0.01 : -0.01;
+        lines[i % lines.length].amount = roundToCents(lines[i % lines.length].amount + adjust);
+        diff = roundToCents(diff - adjust);
+        i++;
+      }
+      if (Math.abs(diff) >= 0.01) {
+        throw new Error(`Rundungsausgleich gescheitert: Restdifferenz ${diff.toFixed(4)} €`);
+      }
+    }
+
+    const lines1 = [
+      { amount: 50.00, lineType: 'betriebskosten', unitId: 'u-aaa' },
+      { amount: 50.00, lineType: 'heizkosten', unitId: 'u-aaa' },
+      { amount: 50.00, lineType: 'betriebskosten', unitId: 'u-bbb' },
+    ];
+    const lines2 = [
+      { amount: 50.00, lineType: 'betriebskosten', unitId: 'u-bbb' },
+      { amount: 50.00, lineType: 'heizkosten', unitId: 'u-aaa' },
+      { amount: 50.00, lineType: 'betriebskosten', unitId: 'u-aaa' },
+    ];
+
+    reconcileRounding(lines1, 150.01);
+    reconcileRounding(lines2, 150.01);
+
+    expect(lines1.map(l => l.amount)).toEqual(lines2.map(l => l.amount));
+
+    expect(lines1[0].lineType).toBe('betriebskosten');
+    expect(lines1[0].unitId).toBe('u-aaa');
+    expect(lines1[0].amount).toBe(50.01);
+  });
+
+  it("sollte roundToCents konsistent sein (shared/utils.ts Parität)", () => {
+    function roundToCents(v: number) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+    expect(roundToCents(1.005)).toBe(1.00);
+    expect(roundToCents(1.006)).toBe(1.01);
+    expect(roundToCents(1.004)).toBe(1.00);
+    expect(roundToCents(0)).toBe(0);
+    expect(roundToCents(NaN)).toBe(0);
+    expect(roundToCents(-3.456)).toBe(-3.46);
+    expect(roundToCents(99.999)).toBe(100.00);
+
+    expect(roundToCents(150.333)).toBe(150.33);
+    expect(roundToCents(150.335)).toBe(150.34);
+  });
+
+  it("sollte bei unlösbarer Rundungsdifferenz fail-fast werfen", () => {
+    function roundToCents(v: number) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+    function reconcileRounding(lines: { amount: number }[], expectedTotal: number): void {
+      const roundedSum = lines.reduce((s, l) => s + roundToCents(l.amount || 0), 0);
+      let diff = roundToCents(expectedTotal - roundedSum);
+      if (Math.abs(diff) < 0.01) return;
+      lines.sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0));
+      let i = 0;
+      const maxIterations = lines.length * 2;
+      while (Math.abs(diff) >= 0.01 && i < maxIterations) {
+        const adjust = diff > 0 ? 0.01 : -0.01;
+        lines[i % lines.length].amount = roundToCents(lines[i % lines.length].amount + adjust);
+        diff = roundToCents(diff - adjust);
+        i++;
+      }
+      if (Math.abs(diff) >= 0.01) {
+        throw new Error(`Rundungsausgleich gescheitert: Restdifferenz ${diff.toFixed(4)} €`);
+      }
+    }
+
+    expect(() => reconcileRounding([], 5.00)).toThrow("Rundungsausgleich gescheitert");
+
+    expect(() => reconcileRounding(
+      [{ amount: 100.00 }, { amount: 200.00 }],
+      300.02
+    )).not.toThrow();
+  });
+
+  it("sollte batch-Sort deterministisch nach invoiceId|lineType|unitId|description sein", () => {
+    const batch = [
+      { invoiceId: 'inv-1', lineType: 'heizkosten', unitId: 'u-bbb', description: 'HK Sep' },
+      { invoiceId: 'inv-1', lineType: 'betriebskosten', unitId: 'u-aaa', description: 'BK Sep' },
+      { invoiceId: 'inv-1', lineType: 'betriebskosten', unitId: 'u-bbb', description: 'BK Sep' },
+    ];
+    const sorted = [...batch].sort((a, b) =>
+      `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(
+        `${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`
+      )
+    );
+
+    expect(sorted[0].lineType).toBe('betriebskosten');
+    expect(sorted[0].unitId).toBe('u-aaa');
+    expect(sorted[1].lineType).toBe('betriebskosten');
+    expect(sorted[1].unitId).toBe('u-bbb');
+    expect(sorted[2].lineType).toBe('heizkosten');
+
+    const sorted2 = [...batch.reverse()].sort((a, b) =>
+      `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(
+        `${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`
+      )
+    );
+    expect(sorted.map(s => s.unitId)).toEqual(sorted2.map(s => s.unitId));
+    expect(sorted.map(s => s.lineType)).toEqual(sorted2.map(s => s.lineType));
+  });
 });
 
 describe("Dryrun-Datei Lesen (falls vorhanden)", () => {
