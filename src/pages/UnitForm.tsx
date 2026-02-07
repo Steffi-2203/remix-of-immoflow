@@ -65,6 +65,8 @@ interface FormData {
   ausstattungskategorie: Ausstattungskategorie;
   nutzflaeche_mrg: string;
   richtwertmiete_basis: string;
+  leerstand_bk: string;
+  leerstand_hk: string;
 }
 
 export default function UnitForm() {
@@ -93,6 +95,8 @@ export default function UnitForm() {
     ausstattungskategorie: 'A',
     nutzflaeche_mrg: '',
     richtwertmiete_basis: '',
+    leerstand_bk: '',
+    leerstand_hk: '',
   });
 
   // Distribution key values stored separately by key_id
@@ -102,7 +106,7 @@ export default function UnitForm() {
   useEffect(() => {
     if (existingUnit) {
       setFormData({
-        top_nummer: existingUnit.top_nummer || '',
+        top_nummer: existingUnit.topNummer || '',
         type: existingUnit.type || 'wohnung',
         floor: existingUnit.floor?.toString() || '',
         qm: existingUnit.qm?.toString() || '',
@@ -111,6 +115,8 @@ export default function UnitForm() {
         ausstattungskategorie: (existingUnit as any).ausstattungskategorie || 'A',
         nutzflaeche_mrg: (existingUnit as any).nutzflaeche_mrg?.toString() || '',
         richtwertmiete_basis: (existingUnit as any).richtwertmiete_basis?.toString() || '',
+        leerstand_bk: existingUnit.leerstandBk?.toString() || '',
+        leerstand_hk: existingUnit.leerstandHk?.toString() || '',
       });
     }
   }, [existingUnit]);
@@ -188,7 +194,7 @@ export default function UnitForm() {
       return;
     }
 
-    // Prepare unit data (basic fields + MRG fields)
+    // Prepare unit data (basic fields + MRG fields + Leerstand)
     const unitData: any = {
       property_id: propertyId!,
       top_nummer: formData.top_nummer.trim(),
@@ -200,6 +206,8 @@ export default function UnitForm() {
       ausstattungskategorie: formData.ausstattungskategorie,
       nutzflaeche_mrg: formData.nutzflaeche_mrg ? parseFloat(formData.nutzflaeche_mrg) : parseFloat(formData.qm) || 0,
       richtwertmiete_basis: formData.richtwertmiete_basis ? parseFloat(formData.richtwertmiete_basis) : 0,
+      leerstand_bk: formData.leerstand_bk ? parseFloat(formData.leerstand_bk) : 0,
+      leerstand_hk: formData.leerstand_hk ? parseFloat(formData.leerstand_hk) : 0,
     };
 
     // Also update legacy vs_* columns for backward compatibility
@@ -503,6 +511,70 @@ export default function UnitForm() {
                 </AlertDescription>
               </Alert>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Leerstand-Kosten (Owner pays when vacant) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Home className="h-5 w-5" />
+              Leerstand-Kosten
+            </CardTitle>
+            <CardDescription>
+              Bei Leerstand werden diese Kosten dem Eigentümer vorgeschrieben (BK/HK ohne Miete)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="leerstand_bk">
+                  Betriebskosten bei Leerstand (€/Monat)
+                </Label>
+                <Input
+                  id="leerstand_bk"
+                  name="leerstand_bk"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.leerstand_bk}
+                  onChange={handleChange}
+                  placeholder="z.B. 85.00"
+                  data-testid="input-leerstand-bk"
+                />
+                <p className="text-xs text-muted-foreground">
+                  BK-Vorschuss der bei Leerstand dem Eigentümer zugeordnet wird
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="leerstand_hk">
+                  Heizkosten bei Leerstand (€/Monat)
+                </Label>
+                <Input
+                  id="leerstand_hk"
+                  name="leerstand_hk"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.leerstand_hk}
+                  onChange={handleChange}
+                  placeholder="z.B. 45.00"
+                  data-testid="input-leerstand-hk"
+                />
+                <p className="text-xs text-muted-foreground">
+                  HK-Vorschuss der bei Leerstand dem Eigentümer zugeordnet wird
+                </p>
+              </div>
+            </div>
+
+            <Alert className="mt-4 border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800 dark:text-orange-200">
+                <strong>MRG §21:</strong> Bei Leerstand trägt der Eigentümer die anteiligen Betriebskosten 
+                und Heizkosten. Diese Werte werden für die Vorschreibung bei Status "Leerstand" verwendet.
+              </AlertDescription>
+            </Alert>
           </CardContent>
         </Card>
 

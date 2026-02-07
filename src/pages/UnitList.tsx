@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,7 +79,6 @@ const mrgScopeStyles: Record<string, string> = {
 };
 
 export default function UnitList() {
-  const navigate = useNavigate();
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -94,8 +93,8 @@ export default function UnitList() {
   const { data: invoices } = useInvoices();
 
   const getProperty = (propertyId: string) => properties?.find((p) => p.id === propertyId);
-  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unit_id === unitId && t.status === 'aktiv');
-  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unit_id === unitId) || [];
+  const getTenantForUnit = (unitId: string) => tenants?.find((t) => t.unitId === unitId && t.status === 'aktiv');
+  const getInvoicesForUnit = (unitId: string) => invoices?.filter((i) => i.unitId === unitId) || [];
 
   // Check if contract expires within 3 months
   const getContractExpirationInfo = (tenant: any) => {
@@ -121,16 +120,16 @@ export default function UnitList() {
   }).length || 0;
   // Filter units
   const filteredUnits = units?.filter(unit => {
-    if (propertyFilter !== 'all' && unit.property_id !== propertyFilter) return false;
+    if (propertyFilter !== 'all' && unit.propertyId !== propertyFilter) return false;
     if (typeFilter !== 'all' && unit.type !== typeFilter) return false;
     if (statusFilter !== 'all' && unit.status !== statusFilter) return false;
     if (searchQuery) {
-      const property = getProperty(unit.property_id);
+      const property = getProperty(unit.propertyId);
       const tenant = getTenantForUnit(unit.id);
       const searchLower = searchQuery.toLowerCase();
-      const matchesTop = unit.top_nummer.toLowerCase().includes(searchLower);
+      const matchesTop = unit.topNummer.toLowerCase().includes(searchLower);
       const matchesProperty = property?.name.toLowerCase().includes(searchLower);
-      const matchesTenant = tenant && `${tenant.first_name} ${tenant.last_name}`.toLowerCase().includes(searchLower);
+      const matchesTenant = tenant && `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(searchLower);
       if (!matchesTop && !matchesProperty && !matchesTenant) return false;
     }
     return true;
@@ -239,7 +238,7 @@ export default function UnitList() {
             if (!open) setSelectedPropertyForImport(null);
           }}
           propertyId={selectedPropertyForImport}
-          existingUnits={units?.filter(u => u.property_id === selectedPropertyForImport) || []}
+          existingUnits={units?.filter(u => u.propertyId === selectedPropertyForImport) || []}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['units'] });
             setImportDialogOpen(false);
@@ -318,34 +317,34 @@ export default function UnitList() {
                   <TableHead>MRG</TableHead>
                   <TableHead>Mieter</TableHead>
                   <TableHead>Mietvertrag</TableHead>
-                  <TableHead className="text-right">Gesamt</TableHead>
+                  <TableHead className="text-right">Vorschreibung/Monat</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUnits.map((unit) => {
-                  const property = getProperty(unit.property_id);
+                  const property = getProperty(unit.propertyId);
                   const tenant = getTenantForUnit(unit.id);
                   const expirationInfo = tenant ? getContractExpirationInfo(tenant) : null;
                   const Icon = unitTypeIcons[unit.type] || Building2;
                   
                   const grundmiete = tenant ? Number(tenant.grundmiete) : 0;
-                  const bk = tenant ? Number(tenant.betriebskosten_vorschuss) : 0;
-                  const hk = tenant ? Number(tenant.heizungskosten_vorschuss) : 0;
+                  const bk = tenant ? Number(tenant.betriebskostenVorschuss) : 0;
+                  const hk = tenant ? Number(tenant.heizungskostenVorschuss) : 0;
                   const totalRent = grundmiete + bk + hk;
 
                   return (
                     <TableRow 
                       key={unit.id} 
                       className="hover:bg-muted/30 cursor-pointer"
-                      onClick={() => navigate(`/einheiten/${unit.property_id}/${unit.id}`)}
+                      onClick={() => window.location.href = `/einheiten/${unit.propertyId}/${unit.id}`}
                     >
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="rounded-lg bg-muted p-1.5">
                             <Icon className="h-4 w-4 text-muted-foreground" />
                           </div>
-                          <span className="font-medium">{unit.top_nummer}</span>
+                          <span className="font-medium">{unit.topNummer}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -375,7 +374,7 @@ export default function UnitList() {
                         {tenant ? (
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{tenant.first_name} {tenant.last_name}</span>
+                            <span className="font-medium">{tenant.firstName} {tenant.lastName}</span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -421,9 +420,36 @@ export default function UnitList() {
                       </TableCell>
                       <TableCell className="text-right">
                         {tenant ? (
-                          <span className="font-semibold text-foreground">
-                            € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                          </span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <span className="font-semibold text-foreground cursor-help underline decoration-dotted">
+                                  € {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="p-3">
+                                <div className="space-y-1 text-sm">
+                                  <p className="font-semibold border-b pb-1 mb-2">Monatliche Vorschreibung</p>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Grundmiete:</span>
+                                    <span className="font-medium">€ {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Betriebskosten:</span>
+                                    <span className="font-medium">€ {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span>Heizkosten:</span>
+                                    <span className="font-medium">€ {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4 border-t pt-1 mt-2 font-semibold">
+                                    <span>Gesamt:</span>
+                                    <span>€ {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

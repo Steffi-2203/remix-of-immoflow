@@ -40,7 +40,6 @@ export default function PropertyForm() {
     bk_anteil_wohnung: '10',
     bk_anteil_geschaeft: '20',
     bk_anteil_garage: '20',
-    marktwert: '',
   });
 
   useEffect(() => {
@@ -57,7 +56,6 @@ export default function PropertyForm() {
         bk_anteil_wohnung: existingProperty.bk_anteil_wohnung?.toString() || '10',
         bk_anteil_geschaeft: existingProperty.bk_anteil_geschaeft?.toString() || '20',
         bk_anteil_garage: existingProperty.bk_anteil_garage?.toString() || '20',
-        marktwert: existingProperty.marktwert?.toString() || '',
       });
     }
   }, [existingProperty]);
@@ -91,16 +89,20 @@ export default function PropertyForm() {
       bk_anteil_wohnung: parseFloat(formData.bk_anteil_wohnung) || 10,
       bk_anteil_geschaeft: parseFloat(formData.bk_anteil_geschaeft) || 20,
       bk_anteil_garage: parseFloat(formData.bk_anteil_garage) || 20,
-      marktwert: formData.marktwert ? parseFloat(formData.marktwert) : null,
     };
 
     try {
       if (isEditing && id) {
         await updateProperty.mutateAsync({ id, ...propertyData });
+        navigate('/liegenschaften');
       } else {
-        await createProperty.mutateAsync(propertyData);
+        const newProperty = await createProperty.mutateAsync(propertyData);
+        if (newProperty?.id) {
+          navigate(`/liegenschaften/${newProperty.id}`);
+        } else {
+          navigate('/liegenschaften');
+        }
       }
-      navigate('/liegenschaften');
     } catch (error) {
       // Error handling is done in the hooks
     }
@@ -240,21 +242,6 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="1000"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="marktwert">Marktwert (€)</Label>
-              <Input
-                id="marktwert"
-                name="marktwert"
-                type="number"
-                step="0.01"
-                value={formData.marktwert}
-                onChange={handleChange}
-                placeholder="z.B. 2500000 (für Renditeberechnung)"
-              />
-              <p className="text-xs text-muted-foreground">
-                Wird für die Renditeberechnung verwendet. Wenn leer, wird €3.000/m² geschätzt.
-              </p>
             </div>
           </div>
         </div>

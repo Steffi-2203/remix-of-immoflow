@@ -12,12 +12,15 @@ import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DistributionKeySettings } from '@/components/settings/DistributionKeySettings';
+import { AccountCategorySettings } from '@/components/settings/AccountCategorySettings';
 import { FAQSection } from '@/components/settings/FAQSection';
 import { HandbookSection } from '@/components/settings/HandbookSection';
 import { PrivacySettings } from '@/components/settings/PrivacySettings';
 import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDialog';
 import { UserRoleManager } from '@/components/settings/UserRoleManager';
+import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
+import { SubscriptionSettings } from '@/components/settings/SubscriptionSettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useIsAdmin } from '@/hooks/useAdmin';
@@ -51,7 +54,7 @@ export default function Settings() {
     navigate('/dashboard');
   };
 
-  const canViewFinancials = userRole === 'admin' || userRole === 'finance' || userRole === 'property_manager' || userRole === 'tester';
+  const canViewFinancials = userRole === 'admin' || userRole === 'finance';
 
   if (isLoading) {
     return (
@@ -69,9 +72,12 @@ export default function Settings() {
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="account">Konto</TabsTrigger>
+            <TabsTrigger value="subscription">Abo</TabsTrigger>
             {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
+            {isAdmin && <TabsTrigger value="branding">Branding</TabsTrigger>}
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
+            <TabsTrigger value="categories">Kostenarten</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
             {isAdmin && <TabsTrigger value="admin">Administration</TabsTrigger>}
@@ -184,6 +190,10 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="subscription">
+            <SubscriptionSettings />
+          </TabsContent>
+
           {canViewFinancials && (
             <TabsContent value="banking">
               <BankAccountsSection />
@@ -194,8 +204,18 @@ export default function Settings() {
             <PrivacySettings />
           </TabsContent>
 
+          {isAdmin && (
+            <TabsContent value="branding">
+              <BrandingSettings />
+            </TabsContent>
+          )}
+
           <TabsContent value="distribution">
             <DistributionKeySettings />
+          </TabsContent>
+
+          <TabsContent value="categories">
+            <AccountCategorySettings />
           </TabsContent>
 
           <TabsContent value="faq">

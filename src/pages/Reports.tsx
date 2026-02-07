@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { getActiveTenantsForPeriod, getActiveMonthsInYear } from '@/utils/tenantFilterUtils';
-import { supabase } from '@/integrations/supabase/client';
+import { getActiveTenantsForPeriod } from '@/utils/tenantFilterUtils';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -37,6 +36,7 @@ import {
   AlertCircle,
   Plus,
   Calculator,
+  Wallet,
 } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
@@ -59,6 +59,7 @@ import {
   generateOffenePostenReport,
   generatePlausibilityReport,
   generateDetailReport,
+  generateKautionsReport,
   type PaymentData,
   type TransactionData,
   type CategoryData,
@@ -66,6 +67,8 @@ import {
 import { useBankAccounts } from '@/hooks/useBankAccounts';
 import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
+import { exportToCSV, formatDate, formatCurrency as formatCurrencyCSV } from '@/utils/csvExport';
+import { FileSpreadsheet } from 'lucide-react';
 
 // Berechnet Netto aus Brutto
 const calculateNetFromGross = (gross: number, vatRate: number): number => {
@@ -180,6 +183,20 @@ const reports = [
     icon: Receipt,
     color: 'bg-purple-500/10 text-purple-600',
   },
+  {
+    id: 'kaution',
+    title: 'Kautionsübersicht',
+    description: 'Übersicht aller bezahlten Mietkautionen',
+    icon: Wallet,
+    color: 'bg-teal-500/10 text-teal-600',
+  },
+  {
+    id: 'vertragsablauf',
+    title: 'Vertragsablauf',
+    description: 'Mietverträge die bald auslaufen',
+    icon: Calendar,
+    color: 'bg-orange-500/10 text-orange-600',
+  },
 ];
 
 const monthNames = [
@@ -190,9 +207,11 @@ const monthNames = [
 export default function Reports() {
   const currentDate = new Date();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
-  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
+  const [selectedMonth, setSelectedMonth] = useState<number>(12); // Default to December 2025
+  const [reportPeriod, setReportPeriod] = useState<'monthly' | 'quarterly' | 'halfyearly' | 'yearly'>('monthly');
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(4); // Q1=1, Q2=2, Q3=3, Q4=4
+  const [selectedHalfYear, setSelectedHalfYear] = useState<number>(2); // H1=1, H2=2
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [isGeneratingInvoices, setIsGeneratingInvoices] = useState(false);
   
@@ -235,21 +254,19 @@ export default function Reports() {
   const handleGenerateInvoices = useCallback(async () => {
     setIsGeneratingInvoices(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error('Bitte melden Sie sich an');
-        return;
-      }
-
-      const response = await supabase.functions.invoke('generate-monthly-invoices', {
-        body: { year: selectedYear, month: selectedMonth }
+      const response = await fetch('/api/functions/generate-monthly-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ year: selectedYear, month: selectedMonth })
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Fehler bei der Vorschreibungsgenerierung');
       }
 
-      const result = response.data;
+      const result = await response.json();
       
       if (result.created > 0) {
         toast.success(`${result.created} Vorschreibung(en) für ${monthNames[selectedMonth - 1]} ${selectedYear} erstellt`);
@@ -276,17 +293,21 @@ export default function Reports() {
   // Filter data by selected property
   const units = selectedPropertyId === 'all' 
     ? allUnits 
-    : allUnits?.filter(u => u.property_id === selectedPropertyId);
+    : allUnits?.filter(u => u.propertyId === selectedPropertyId);
   
   const expenses = selectedPropertyId === 'all'
     ? allExpenses
-    : allExpenses?.filter(e => e.property_id === selectedPropertyId);
+    : allExpenses?.filter(e => e.propertyId === selectedPropertyId);
 
   // Get unit IDs for filtering invoices
   const unitIds = units?.map(u => u.id) || [];
   const invoices = selectedPropertyId === 'all'
     ? allInvoices
-    : allInvoices?.filter(inv => unitIds.includes(inv.unit_id));
+    : allInvoices?.filter(inv => {
+      // Look up unit via tenant for invoice filtering
+      const tenant = allTenants?.find(t => t.id === inv.tenantId);
+      return tenant && unitIds.includes(tenant.unitId);
+    });
 
   const selectedProperty = properties?.find(p => p.id === selectedPropertyId);
 
@@ -339,31 +360,50 @@ export default function Reports() {
     // Ermittle Unit-IDs der ausgewählten Liegenschaft
     const propertyUnitIds = selectedPropertyId === 'all' 
       ? null 
-      : allUnits?.filter(u => u.property_id === selectedPropertyId).map(u => u.id) || [];
+      : allUnits?.filter(u => u.propertyId === selectedPropertyId).map(u => u.id) || [];
     
     return (combinedPayments || []).filter(p => {
       const date = new Date(p.date);
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       
-      // Zeitraum-Filter
-      if (reportPeriod === 'yearly') {
-        if (year !== selectedYear) return false;
-      } else {
-        if (year !== selectedYear || month !== selectedMonth) return false;
+      // Zeitraum-Filter (alle Perioden: monthly, quarterly, halfyearly, yearly)
+      if (year !== selectedYear) return false;
+      
+      // Berechne Zeitraum-Grenzen basierend auf reportPeriod
+      let startMonth: number, endMonth: number;
+      switch (reportPeriod) {
+        case 'quarterly':
+          startMonth = (selectedQuarter - 1) * 3 + 1;
+          endMonth = selectedQuarter * 3;
+          break;
+        case 'halfyearly':
+          startMonth = selectedHalfYear === 1 ? 1 : 7;
+          endMonth = selectedHalfYear === 1 ? 6 : 12;
+          break;
+        case 'yearly':
+          startMonth = 1;
+          endMonth = 12;
+          break;
+        default: // monthly
+          startMonth = selectedMonth;
+          endMonth = selectedMonth;
       }
       
+      if (month < startMonth || month > endMonth) return false;
+      
       // Property-Filter (über Mieter -> Unit -> Property)
+      // Note: p.tenant_id is from combinedPayments (snake_case), tenant fields are camelCase
       if (propertyUnitIds !== null) {
         const tenant = allTenants?.find(t => t.id === p.tenant_id);
-        if (!tenant || !propertyUnitIds.includes(tenant.unit_id)) {
+        if (!tenant || !propertyUnitIds.includes(tenant.unitId)) {
           return false;
         }
       }
       
       return true;
     });
-  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth, selectedPropertyId, allUnits, allTenants]);
+  }, [combinedPayments, reportPeriod, selectedYear, selectedMonth, selectedQuarter, selectedHalfYear, selectedPropertyId, allUnits, allTenants]);
 
   // Kategorie-IDs ermitteln
   const mieteinnahmenCategoryId = categories?.find(c => c.name === 'Mieteinnahmen')?.id;
@@ -387,8 +427,9 @@ export default function Reports() {
     let totalGesamt = 0;
     
     periodCombinedPayments.forEach(p => {
-      // Finde den Mieter für diese Zahlung
-      const tenant = allTenants?.find(t => t.id === p.tenant_id);
+      // Finde den Mieter für diese Zahlung (supports both tenantId and tenant_id)
+      const paymentTenantId = p.tenantId ?? p.tenant_id;
+      const tenant = allTenants?.find(t => t.id === paymentTenantId);
       if (!tenant) {
         // Wenn kein Mieter gefunden, zähle alles als Miete
         totalMieteAnteil += Number(p.amount);
@@ -396,14 +437,33 @@ export default function Reports() {
         return;
       }
       
-      // Erstelle die Invoice-Beträge aus Mieterdaten
-      const invoiceAmounts: InvoiceAmounts = {
+      // Ermittle Jahr/Monat der Zahlung
+      const paymentDate = new Date(p.date);
+      const paymentYear = paymentDate.getFullYear();
+      const paymentMonth = paymentDate.getMonth() + 1;
+      
+      // WICHTIG: SOLL-Beträge aus Vorschreibung (monthlyInvoice) statt Mieter-Stammdaten!
+      // Die Vorschreibung enthält die tatsächlichen Soll-Beträge für den spezifischen Monat
+      const invoice = allInvoices?.find(inv => 
+        (inv.tenantId ?? inv.tenant_id) === paymentTenantId && 
+        inv.year === paymentYear && 
+        inv.month === paymentMonth
+      );
+      
+      // Fallback auf Mieter-Stammdaten nur wenn keine Vorschreibung existiert
+      // Supports both camelCase and snake_case field names
+      const invoiceAmounts: InvoiceAmounts = invoice ? {
+        grundmiete: Number(invoice.grundmiete || 0),
+        betriebskosten: Number(invoice.betriebskosten || 0),
+        heizungskosten: Number(invoice.heizungskosten || 0),
+        gesamtbetrag: Number(invoice.gesamtbetrag || 0)
+      } : {
         grundmiete: Number(tenant.grundmiete || 0),
-        betriebskosten: Number(tenant.betriebskosten_vorschuss || 0),
-        heizungskosten: Number(tenant.heizungskosten_vorschuss || 0),
+        betriebskosten: Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0),
+        heizungskosten: Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0),
         gesamtbetrag: Number(tenant.grundmiete || 0) + 
-                      Number(tenant.betriebskosten_vorschuss || 0) + 
-                      Number(tenant.heizungskosten_vorschuss || 0)
+                      Number(tenant.betriebskostenVorschuss ?? tenant.betriebskosten_vorschuss ?? 0) + 
+                      Number(tenant.heizungskostenVorschuss ?? tenant.heizungskosten_vorschuss ?? 0)
       };
       
       // Berechne die Zuordnung (BK → Heizung → Miete)
@@ -412,16 +472,19 @@ export default function Reports() {
       totalBkAnteil += allocation.allocation.betriebskosten_anteil;
       totalHkAnteil += allocation.allocation.heizung_anteil;
       totalMieteAnteil += allocation.allocation.miete_anteil;
-      totalGesamt += Number(p.amount);
+      // Gesamt = Summe der allozierten Anteile (konsistent mit BK+HK+Miete)
+      totalGesamt += allocation.allocation.betriebskosten_anteil + 
+                     allocation.allocation.heizung_anteil + 
+                     allocation.allocation.miete_anteil;
     });
     
     return {
       mieteAnteil: totalMieteAnteil,
       bkAnteil: totalBkAnteil,
       hkAnteil: totalHkAnteil,
-      gesamt: totalGesamt
+      gesamt: totalGesamt  // Jetzt = bkAnteil + hkAnteil + mieteAnteil
     };
-  }, [periodCombinedPayments, allTenants]);
+  }, [periodCombinedPayments, allTenants, allInvoices]);
   
   // IST-Einnahmen = NUR Miete-Anteil (ohne BK und Heizung)
   const totalIstEinnahmenMiete = paymentAllocationDetails.mieteAnteil;
@@ -434,14 +497,15 @@ export default function Reports() {
   // Aufschlüsselung nach Mieter/Unit (für spätere Zuordnung)
   const paymentsByTenant = new Map<string, number>();
   periodCombinedPayments.forEach(p => {
-    const current = paymentsByTenant.get(p.tenant_id) || 0;
-    paymentsByTenant.set(p.tenant_id, current + Number(p.amount));
+    const paymentTenantId = p.tenantId ?? p.tenant_id;
+    const current = paymentsByTenant.get(paymentTenantId) || 0;
+    paymentsByTenant.set(paymentTenantId, current + Number(p.amount));
   });
 
 
   // ====== AUSGABEN AUS TRANSAKTIONEN (negative Beträge) ======
-  const incomeTransactions = periodTransactions.filter(t => t.amount > 0);
-  const expenseTransactions = periodTransactions.filter(t => t.amount < 0);
+  const incomeTransactions = periodTransactions.filter(t => Number(t.amount) > 0);
+  const expenseTransactions = periodTransactions.filter(t => Number(t.amount) < 0);
 
   // ====== IST-EINNAHMEN AUS TRANSAKTIONEN (kategorisiert) ======
   // Mieteinnahmen aus Transaktionen mit Kategorie "Mieteinnahmen"
@@ -484,67 +548,44 @@ export default function Reports() {
   const expenseTypeToSonstigeKosten = ['makler', 'notar', 'grundbuch', 'finanzierung'];
   
   const betriebskostenFromExpenses = periodExpenses
-    .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
+    .filter(e => expenseTypeToBetriebskosten.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
   
   const instandhaltungFromExpenses = periodExpenses
-    .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
+    .filter(e => expenseTypeToInstandhaltung.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
     
   // Sonstige Kosten aus expenses (nicht umlagefähig, nicht renditemin.)
   const sonstigeKostenFromExpenses = periodExpenses
-    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expense_type))
+    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expenseType))
     .reduce((sum, e) => sum + Number(e.betrag), 0);
   
   const totalExpensesFromCosts = periodExpenses
     .reduce((sum, e) => sum + Number(e.betrag), 0);
 
   // ====== KOMBINIERTE AUSGABEN (Transaktionen + Kosten & Belege) ======
-  // WICHTIG: Expenses mit transaction_id sind bereits in Transaktionen enthalten → nicht doppelt zählen!
-  const expensesWithoutTransaction = periodExpenses.filter(e => !e.transaction_id);
-  
-  const betriebskostenFromExpensesDeduped = expensesWithoutTransaction
-    .filter(e => expenseTypeToBetriebskosten.includes(e.expense_type))
-    .reduce((sum, e) => sum + Number(e.betrag), 0);
-  
-  const instandhaltungFromExpensesDeduped = expensesWithoutTransaction
-    .filter(e => expenseTypeToInstandhaltung.includes(e.expense_type))
-    .reduce((sum, e) => sum + Number(e.betrag), 0);
-    
-  const sonstigeKostenFromExpensesDeduped = expensesWithoutTransaction
-    .filter(e => e.category === 'sonstige_kosten' || expenseTypeToSonstigeKosten.includes(e.expense_type))
-    .reduce((sum, e) => sum + Number(e.betrag), 0);
-  
-  const totalExpensesFromCostsDeduped = expensesWithoutTransaction
-    .reduce((sum, e) => sum + Number(e.betrag), 0);
+  const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpenses;
+  const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpenses;
+  const combinedSonstigeKosten = sonstigeKostenFromExpenses; // Nur aus expenses, keine Transaktionen-Kategorie
+  const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCosts;
 
-  const combinedBetriebskosten = betriebskostenFromTransactions + betriebskostenFromExpensesDeduped;
-  const combinedInstandhaltung = instandhaltungskostenFromTransactions + instandhaltungFromExpensesDeduped;
-  const combinedSonstigeKosten = sonstigeKostenFromExpensesDeduped;
-  const combinedTotalExpenses = totalExpensesFromTransactions + totalExpensesFromCostsDeduped;
-
-  // ====== RENDITE-BERECHNUNG (IST-Basis, SSOT = payments) ======
-  // Nettoertrag = IST-Mieteinnahmen aus payments (SSOT) - Instandhaltungskosten
-  const nettoertrag = paymentAllocationDetails.mieteAnteil - combinedInstandhaltung;
-  // Bei Monatsansicht: Miete wird hochgerechnet, Instandhaltung NICHT (einmalige Kosten)
-  const annualNettoertrag = reportPeriod === 'monthly' 
-    ? (paymentAllocationDetails.mieteAnteil * 12) - combinedInstandhaltung
-    : nettoertrag;
+  // ====== RENDITE-BERECHNUNG (IST-Basis) ======
+  // Nettoertrag = IST-Mieteinnahmen - Instandhaltungskosten (Banking + Belege)
+  const nettoertrag = mieteFromTransactions - combinedInstandhaltung;
+  const annualNettoertrag = reportPeriod === 'monthly' ? nettoertrag * 12 : nettoertrag;
 
   // Vacancy rate
   const totalUnits = units?.length || 0;
   const vacantUnits = units?.filter(u => u.status === 'leerstand').length || 0;
   const vacancyRate = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
 
-  // Property value: use marktwert if set, otherwise estimate €2000/m² (konservativer Durchschnitt AT)
-  const hasRealMarktwert = selectedPropertyId === 'all'
-    ? properties?.some(p => Number(p.marktwert) > 0) ?? false
-    : Number(selectedProperty?.marktwert) > 0;
-  const estimatedPropertyValue = selectedPropertyId === 'all'
-    ? properties?.reduce((sum, p) => sum + (Number(p.marktwert) || Number(p.total_qm || 0) * 2000), 0) || 0
-    : Number(selectedProperty?.marktwert) || Number(selectedProperty?.total_qm || 0) * 2000;
+  // Property value estimation
+  const totalQm = selectedPropertyId === 'all'
+    ? properties?.reduce((sum, p) => sum + Number(p.totalQm || 0), 0) || 0
+    : Number(selectedProperty?.totalQm || 0);
+  const estimatedPropertyValue = totalQm * 3000; // €3000 per m² estimate
   
-  // Rendite basierend auf payments (SSOT für Mieteinnahmen)
+  // Rendite basierend auf Transaktionen (Mieteinnahmen aus kategorisierten Transaktionen)
   const annualYieldFromTransactions = estimatedPropertyValue > 0 
     ? (annualNettoertrag / estimatedPropertyValue) * 100 
     : 0;
@@ -596,11 +637,11 @@ export default function Reports() {
     // Filter nach Property wenn ausgewählt
     const relevantUnitIds = selectedPropertyId === 'all' 
       ? allUnits.map(u => u.id)
-      : allUnits.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+      : allUnits.filter(u => u.propertyId === selectedPropertyId).map(u => u.id);
     
     return allTenants.filter(t => {
       if (t.status !== 'aktiv') return false;
-      if (!relevantUnitIds.includes(t.unit_id)) return false;
+      if (!relevantUnitIds.includes(t.unitId)) return false;
       if (!t.mietbeginn) return false;
       
       const mietbeginn = new Date(t.mietbeginn);
@@ -615,43 +656,156 @@ export default function Reports() {
         return false;
       }
     }).map(t => {
-      const unit = allUnits.find(u => u.id === t.unit_id);
+      const unit = allUnits.find(u => u.id === t.unitId);
       return {
         ...t,
-        unitTopNummer: unit?.top_nummer || 'N/A',
+        unitTopNummer: unit?.topNummer || 'N/A',
         mietbeginnFormatted: t.mietbeginn ? new Date(t.mietbeginn).toLocaleDateString('de-AT') : '-'
       };
     });
   }, [allTenants, allUnits, selectedPropertyId, selectedYear, selectedMonth, reportPeriod]);
   
-  // Monatliche SOLL-Summen aus Mieterdaten
-  // Bei jährlicher Ansicht: proportional nach aktiven Monaten (nicht pauschal x12)
-  const periodSollGrundmiete = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    return sum + Number(t.grundmiete || 0) * months;
-  }, 0);
-  const periodSollBk = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    return sum + Number(t.betriebskosten_vorschuss || 0) * months;
-  }, 0);
-  const periodSollHk = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    return sum + Number(t.heizungskosten_vorschuss || 0) * months;
-  }, 0);
+  // Monatliche SOLL-Summen aus Mieterdaten (snake_case from TenantForFilter)
+  const sollGrundmiete = relevantTenants.reduce((sum, t) => sum + Number(t.grundmiete || 0), 0);
+  const sollBk = relevantTenants.reduce((sum, t) => sum + Number(t.betriebskosten_vorschuss || 0), 0);
+  const sollHk = relevantTenants.reduce((sum, t) => sum + Number(t.heizungskosten_vorschuss || 0), 0);
+  
+  // Berechne Zeitraum-Parameter für alle Perioden
+  let periodStartMonth: number, periodEndMonth: number, monthMultiplier: number;
+  switch (reportPeriod) {
+    case 'quarterly':
+      periodStartMonth = (selectedQuarter - 1) * 3 + 1;
+      periodEndMonth = selectedQuarter * 3;
+      monthMultiplier = 3;
+      break;
+    case 'halfyearly':
+      periodStartMonth = selectedHalfYear === 1 ? 1 : 7;
+      periodEndMonth = selectedHalfYear === 1 ? 6 : 12;
+      monthMultiplier = 6;
+      break;
+    case 'yearly':
+      periodStartMonth = 1;
+      periodEndMonth = 12;
+      monthMultiplier = 12;
+      break;
+    default: // monthly
+      periodStartMonth = selectedMonth;
+      periodEndMonth = selectedMonth;
+      monthMultiplier = 1;
+  }
+  const periodSollGrundmiete = sollGrundmiete * monthMultiplier;
+  const periodSollBk = sollBk * monthMultiplier;
+  const periodSollHk = sollHk * monthMultiplier;
   const periodSollGesamt = periodSollGrundmiete + periodSollBk + periodSollHk;
   
   // ====== SOLL/IST PRO MIETER BERECHNUNG ======
+  // Erweitert: Inkludiert ALLE Mieter mit Vorschreibungen im Zeitraum (auch ehemalige)
   const tenantSollIstDetails = useMemo(() => {
-    return relevantTenants.map(tenant => {
-      const unit = allUnits?.find(u => u.id === tenant.unit_id);
-      const property = properties?.find(p => p.id === unit?.property_id);
+    // Sammle alle Mieter-IDs die Vorschreibungen im Zeitraum haben
+    const tenantsWithInvoices = new Set<string>();
+    allInvoices?.forEach(inv => {
+      if (inv.year === selectedYear && 
+          inv.month >= periodStartMonth && inv.month <= periodEndMonth &&
+          inv.tenantId &&
+          !(inv as any).isVacancy && !(inv as any).is_vacancy) {
+        // Prüfe Property-Filter
+        const tenant = allTenants?.find(t => t.id === inv.tenantId);
+        const unit = allUnits?.find(u => u.id === tenant?.unitId);
+        const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+        if (selectedPropertyId === 'all' || unitPropertyId === selectedPropertyId) {
+          tenantsWithInvoices.add(inv.tenantId);
+        }
+      }
+    });
+    
+    // Kombiniere relevantTenants mit Mietern die Vorschreibungen haben
+    const allRelevantTenantIds = new Set([
+      ...relevantTenants.map(t => t.id),
+      ...tenantsWithInvoices
+    ]);
+    
+    // Finde die vollständigen Mieter-Objekte
+    const tenantsToProcess = Array.from(allRelevantTenantIds).map(tenantId => {
+      // Bevorzuge relevantTenants (haben korrektes Format)
+      const fromRelevant = relevantTenants.find(t => t.id === tenantId);
+      if (fromRelevant) return fromRelevant;
       
-      // SOLL-Werte proportional nach aktiven Monaten
-      const tenantMonths = reportPeriod === 'yearly' ? getActiveMonthsInYear(tenant, selectedYear) : 1;
-      const sollMiete = Number(tenant.grundmiete || 0) * tenantMonths;
-      const sollBk = Number(tenant.betriebskosten_vorschuss || 0) * tenantMonths;
-      const sollHk = Number(tenant.heizungskosten_vorschuss || 0) * tenantMonths;
-      const sollGesamt = sollMiete + sollBk + sollHk;
+      // Fallback: Suche in allTenants
+      const fromAll = allTenants?.find(t => t.id === tenantId);
+      if (fromAll) {
+        return {
+          id: fromAll.id,
+          unit_id: fromAll.unitId,
+          status: fromAll.status,
+          mietbeginn: fromAll.mietbeginn,
+          mietende: fromAll.mietende,
+          grundmiete: Number(fromAll.grundmiete || 0),
+          betriebskosten_vorschuss: Number(fromAll.betriebskostenVorschuss || 0),
+          heizungskosten_vorschuss: Number(fromAll.heizkostenVorschuss || 0),
+          first_name: fromAll.firstName,
+          last_name: fromAll.lastName,
+        };
+      }
+      return null;
+    }).filter((t): t is NonNullable<typeof t> => t !== null);
+    
+    const details = tenantsToProcess.map(tenant => {
+      const unit = allUnits?.find(u => u.id === tenant.unit_id);
+      const property = properties?.find(p => p.id === unit?.propertyId);
+      
+      // SOLL-Werte: Bevorzugt aus Vorschreibungen (monthlyInvoices) für den Zeitraum
+      // Fallback auf Mieterdaten nur wenn keine Vorschreibung existiert
+      const tenantInvoices = allInvoices?.filter(inv => 
+        inv.tenantId === tenant.id &&
+        inv.year === selectedYear &&
+        inv.month >= periodStartMonth && inv.month <= periodEndMonth
+      ) || [];
+      
+      let sollMiete = 0;
+      let sollBk = 0;
+      let sollHk = 0;
+      let sollGesamt = 0;
+      
+      if (tenantInvoices.length > 0) {
+        // BRUTTO-Werte: Summiere gesamtbetrag für konsistente BRUTTO-Anzeige
+        // Für Komponenten-Breakdown verwenden wir die Einzel-Felder + USt
+        tenantInvoices.forEach(inv => {
+          // Komponenten (NETTO aus DB)
+          const mieteNetto = Number(inv.grundmiete || 0);
+          const bkNetto = Number(inv.betriebskosten || 0);
+          const hkNetto = Number(inv.heizungskosten || 0);
+          
+          // USt-Sätze aus Invoice oder Defaults (BK 10%, HK 20%, Miete je nach Nutzungsart)
+          const ustSatzBk = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+          const ustSatzHk = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+          const ustSatzMiete = Number((inv as any).ustSatzMiete ?? (inv as any).ust_satz_miete ?? 10);
+          
+          // BRUTTO-Komponenten
+          sollMiete += mieteNetto * (1 + ustSatzMiete / 100);
+          sollBk += bkNetto * (1 + ustSatzBk / 100);
+          sollHk += hkNetto * (1 + ustSatzHk / 100);
+        });
+        // BRUTTO-Gesamt aus gesamtbetrag (konsistent mit PDF)
+        sollGesamt = tenantInvoices.reduce((sum, inv) => sum + Number((inv as any).gesamtbetrag || 0), 0);
+        
+        // Reconciliation: Falls Komponenten-Summe != gesamtbetrag, proportional anpassen
+        const komponentenSumme = sollMiete + sollBk + sollHk;
+        if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollGesamt) > 0.01) {
+          const factor = sollGesamt / komponentenSumme;
+          sollMiete *= factor;
+          sollBk *= factor;
+          sollHk *= factor;
+        }
+      } else {
+        // Fallback: Mieterdaten * monthMultiplier (NETTO → BRUTTO mit Default-USt)
+        const mieteNetto = Number(tenant.grundmiete || 0) * monthMultiplier;
+        const bkNetto = Number(tenant.betriebskosten_vorschuss || 0) * monthMultiplier;
+        const hkNetto = Number(tenant.heizungskosten_vorschuss || 0) * monthMultiplier;
+        sollMiete = mieteNetto * 1.10; // 10% USt für Wohnung
+        sollBk = bkNetto * 1.10; // 10% USt
+        sollHk = hkNetto * 1.20; // 20% USt
+        sollGesamt = sollMiete + sollBk + sollHk;
+      }
       
       // IST-Werte aus Zahlungen für diesen Mieter
       const tenantPayments = periodCombinedPayments.filter(p => p.tenant_id === tenant.id);
@@ -669,16 +823,34 @@ export default function Reports() {
       let istHk = 0;
       let istMiete = 0;
       
-      if (totalPaid > 0) {
+      // BUCHHALTÄRISCH KORREKT: Nur als "voll bezahlt" behandeln wenn:
+      // 1. Es gibt einen positiven SOLL-Betrag (sollGesamt > 0.01)
+      // 2. Die Zahlung deckt mindestens den SOLL-Betrag
+      if (sollGesamt > 0.01 && totalPaid >= sollGesamt - 0.01) {
+        // Voll bezahlt: IST = SOLL für alle Komponenten
+        istBk = sollBk;
+        istHk = sollHk;
+        istMiete = sollMiete;
+      } else if (totalPaid < 0.01) {
+        // KEINE Zahlung erfolgt: IST = 0 für alle Komponenten
+        // Dies verhindert fälschliche "Überzahlung" Anzeige
+        istBk = 0;
+        istHk = 0;
+        istMiete = 0;
+      } else {
+        // Unterzahlung: MRG-Allokation BK → HK → Miete
         const allocation = allocatePayment(totalPaid, invoiceAmounts, false);
         istBk = allocation.allocation.betriebskosten_anteil;
         istHk = allocation.allocation.heizung_anteil;
         istMiete = allocation.allocation.miete_anteil;
       }
       
+      // IST Gesamt = Summe der allozierten Anteile (konsistent mit BK+HK+Miete)
+      const istGesamt = istBk + istHk + istMiete;
+      
       return {
         tenantId: tenant.id,
-        tenantName: `${tenant.first_name} ${tenant.last_name}`,
+        tenantName: `${(tenant as any).vorname || (tenant as any).first_name || ''} ${(tenant as any).nachname || (tenant as any).last_name || ''}`.trim() || 'N/A',
         unitName: unit?.top_nummer || 'N/A',
         propertyName: property?.name || 'N/A',
         sollMiete,
@@ -688,34 +860,147 @@ export default function Reports() {
         istMiete,
         istBk,
         istHk,
-        istGesamt: totalPaid,
+        istGesamt,
         diffMiete: sollMiete - istMiete,
         diffBk: sollBk - istBk,
         diffHk: sollHk - istHk,
-        diffGesamt: sollGesamt - totalPaid,
+        diffGesamt: sollGesamt - istGesamt,
         paymentCount: tenantPayments.length
       };
     });
-  }, [relevantTenants, allUnits, properties, periodCombinedPayments, reportPeriod, selectedYear]);
+    
+    // ====== LEERSTAND (Vacancy) für SOLL/IST Vergleich ======
+    // Finde Leerstand-Vorschreibungen für den Zeitraum
+    const vacancyInvoices = allInvoices?.filter(inv => 
+      (inv as any).isVacancy === true || (inv as any).is_vacancy === true
+    ) || [];
+    
+    const periodVacancyInvoices = vacancyInvoices.filter(inv =>
+      inv.year === selectedYear &&
+      inv.month >= periodStartMonth && inv.month <= periodEndMonth
+    );
+    
+    // Gruppiere nach Unit
+    const vacancyByUnit = new Map<string, typeof periodVacancyInvoices>();
+    periodVacancyInvoices.forEach(inv => {
+      const unitId = (inv as any).unitId ?? (inv as any).unit_id;
+      if (!unitId) return;
+      
+      // Filter by property if selected (support both camelCase and snake_case)
+      const unit = allUnits?.find(u => u.id === unitId);
+      const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+      if (selectedPropertyId !== 'all' && unitPropertyId !== selectedPropertyId) return;
+      
+      if (!vacancyByUnit.has(unitId)) {
+        vacancyByUnit.set(unitId, []);
+      }
+      vacancyByUnit.get(unitId)!.push(inv);
+    });
+    
+    // Erstelle Leerstand-Einträge
+    vacancyByUnit.forEach((unitVacancyInvoices, unitId) => {
+      const unit = allUnits?.find(u => u.id === unitId);
+      const unitPropertyId = unit?.propertyId ?? (unit as any)?.property_id;
+      const property = properties?.find(p => p.id === unitPropertyId);
+      
+      // SOLL BRUTTO aus gesamtbetrag
+      const sollGesamt = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).gesamtbetrag ?? 0), 0);
+      
+      // SOLL Komponenten mit BRUTTO (NETTO + USt)
+      let sollBk = unitVacancyInvoices.reduce((sum, inv) => {
+        const netto = Number((inv as any).betriebskosten ?? 0);
+        const ustSatz = Number((inv as any).ustSatzBk ?? (inv as any).ust_satz_bk ?? 10);
+        return sum + netto * (1 + ustSatz / 100);
+      }, 0);
+      let sollHk = unitVacancyInvoices.reduce((sum, inv) => {
+        const netto = Number((inv as any).heizungskosten ?? 0);
+        const ustSatz = Number((inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung ?? 20);
+        return sum + netto * (1 + ustSatz / 100);
+      }, 0);
+      const sollMiete = 0;
+      
+      // Reconciliation: Komponenten an gesamtbetrag anpassen
+      const komponentenSumme = sollBk + sollHk;
+      if (komponentenSumme > 0 && Math.abs(komponentenSumme - sollGesamt) > 0.01) {
+        const factor = sollGesamt / komponentenSumme;
+        sollBk *= factor;
+        sollHk *= factor;
+      }
+      
+      // IST aus paid_amount
+      const totalPaid = unitVacancyInvoices.reduce((sum, inv) => 
+        sum + Number((inv as any).paidAmount ?? (inv as any).paid_amount ?? 0), 0);
+      
+      // Proportionale Verteilung der Zahlung auf Komponenten
+      const istBk = sollGesamt > 0 ? (sollBk / sollGesamt) * totalPaid : 0;
+      const istHk = sollGesamt > 0 ? (sollHk / sollGesamt) * totalPaid : 0;
+      const istMiete = 0;
+      const istGesamt = istBk + istHk;
+      
+      details.push({
+        tenantId: `vacancy-${unitId}`,
+        tenantName: `Leerstand (${unitVacancyInvoices.length} Mon.)`,
+        unitName: unit?.top_nummer || 'N/A',
+        propertyName: property?.name || 'N/A',
+        sollMiete,
+        sollBk,
+        sollHk,
+        sollGesamt,
+        istMiete,
+        istBk,
+        istHk,
+        istGesamt,
+        diffMiete: sollMiete - istMiete,
+        diffBk: sollBk - istBk,
+        diffHk: sollHk - istHk,
+        diffGesamt: sollGesamt - istGesamt,
+        paymentCount: 0
+      });
+    });
+    
+    return details;
+  }, [relevantTenants, allUnits, allTenants, properties, periodCombinedPayments, monthMultiplier, allInvoices, selectedYear, periodStartMonth, periodEndMonth, selectedPropertyId]);
 
-  // USt aus SOLL-Werten berechnen (nach Einheitstyp)
+  // ====== KONSISTENTE SUMMEN aus tenantSollIstDetails ======
+  // Diese Werte werden für die Gesamt-Zeile verwendet, damit die Summe der Einzelzeilen stimmt
+  const tenantSollIstTotals = useMemo(() => {
+    const totals = tenantSollIstDetails.reduce((acc, detail) => ({
+      sollBk: acc.sollBk + detail.sollBk,
+      sollHk: acc.sollHk + detail.sollHk,
+      sollMiete: acc.sollMiete + detail.sollMiete,
+      sollGesamt: acc.sollGesamt + detail.sollGesamt,
+      istBk: acc.istBk + detail.istBk,
+      istHk: acc.istHk + detail.istHk,
+      istMiete: acc.istMiete + detail.istMiete,
+      istGesamt: acc.istGesamt + detail.istGesamt,
+      diffBk: acc.diffBk + detail.diffBk,
+      diffHk: acc.diffHk + detail.diffHk,
+      diffMiete: acc.diffMiete + detail.diffMiete,
+      diffGesamt: acc.diffGesamt + detail.diffGesamt,
+    }), {
+      sollBk: 0, sollHk: 0, sollMiete: 0, sollGesamt: 0,
+      istBk: 0, istHk: 0, istMiete: 0, istGesamt: 0,
+      diffBk: 0, diffHk: 0, diffMiete: 0, diffGesamt: 0,
+    });
+    return totals;
+  }, [tenantSollIstDetails]);
+
+  // USt aus SOLL-Werten berechnen (nach Einheitstyp) - snake_case from TenantForFilter
   const ustFromSollMiete = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    const betrag = Number(t.grundmiete || 0) * months;
+    const betrag = Number(t.grundmiete || 0) * monthMultiplier;
     const vatRate = getVatRateForUnit(t.unit_id, 'miete');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollBk = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    const betrag = Number(t.betriebskosten_vorschuss || 0) * months;
+    const betrag = Number(t.betriebskosten_vorschuss || 0) * monthMultiplier;
     const vatRate = getVatRateForUnit(t.unit_id, 'bk');
     return sum + calculateVatFromGross(betrag, vatRate);
   }, 0);
   
   const ustFromSollHk = relevantTenants.reduce((sum, t) => {
-    const months = reportPeriod === 'yearly' ? getActiveMonthsInYear(t, selectedYear) : 1;
-    const betrag = Number(t.heizungskosten_vorschuss || 0) * months;
+    const betrag = Number(t.heizungskosten_vorschuss || 0) * monthMultiplier;
     return sum + calculateVatFromGross(betrag, 20); // Heizung immer 20%
   }, 0);
   
@@ -802,11 +1087,10 @@ export default function Reports() {
     'finanzierung': 0,   // Zinsen sind umsatzsteuerfrei
   };
   
-  // Vorsteuer-Aufschlüsselung nach expense_type
-  type VorsteuerEntry = { brutto: number; vorsteuer: number; vatRate: number };
-  const vorsteuerByExpenseType: Record<string, VorsteuerEntry> = periodExpenses.reduce<Record<string, VorsteuerEntry>>((acc, exp) => {
-    const expenseType = (exp as any).expense_type || 'sonstiges';
-    const betrag = Number((exp as any).betrag || 0);
+  // Vorsteuer-Aufschlüsselung nach expenseType (camelCase from useExpenses)
+  const vorsteuerByExpenseType = periodExpenses.reduce((acc, exp) => {
+    const expenseType = exp.expenseType || 'sonstiges';
+    const betrag = Number(exp.betrag || 0);
     const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
     const vorsteuer = calculateVatFromGross(betrag, vatRate);
     
@@ -817,24 +1101,18 @@ export default function Reports() {
     acc[expenseType].vorsteuer += vorsteuer;
     
     return acc;
-  }, {});
+  }, {} as Record<string, { brutto: number; vorsteuer: number; vatRate: number }>);
 
-  const vorsteuerFromExpenses = Object.values(vorsteuerByExpenseType).reduce(
-    (sum, data) => sum + data.vorsteuer, 0
+  type VorsteuerData = { brutto: number; vorsteuer: number; vatRate: number };
+  const vorsteuerFromExpenses = (Object.values(vorsteuerByExpenseType) as VorsteuerData[]).reduce(
+    (sum: number, data: VorsteuerData) => sum + data.vorsteuer, 0
   );
 
   // VAT liability from invoices (alt)
   const vatLiability = totalUst - vorsteuerFromExpenses;
 
-  // Kombinierte Vorsteuer aus Banking + Kosten & Belege (dedupliziert)
-  // Nur expenses OHNE transaction_id zählen, da die anderen schon in Transaktionen enthalten sind
-  const vorsteuerFromExpensesDeduped = expensesWithoutTransaction.reduce((sum, exp) => {
-    const expenseType = (exp as any).expense_type || 'sonstiges';
-    const betrag = Number((exp as any).betrag || 0);
-    const vatRate = EXPENSE_TYPE_VAT_RATES[expenseType] ?? 20;
-    return sum + calculateVatFromGross(betrag, vatRate);
-  }, 0);
-  const combinedVorsteuer = vorsteuerFromTransactions + vorsteuerFromExpensesDeduped;
+  // Kombinierte Vorsteuer aus Banking + Kosten & Belege
+  const combinedVorsteuer = vorsteuerFromTransactions + vorsteuerFromExpenses;
   const combinedVatLiability = totalUstEinnahmen - combinedVorsteuer;
 
   // Period label for display
@@ -855,12 +1133,12 @@ export default function Reports() {
       // Prepare transaction data for PDF export
       const transactionData: TransactionData[] = (allTransactions || []).map(t => ({
         id: t.id,
-        amount: t.amount,
-        transaction_date: t.transaction_date,
-        category_id: t.category_id,
-        property_id: t.property_id,
-        unit_id: t.unit_id,
-        description: t.description,
+        amount: Number(t.amount),
+        transaction_date: t.transaction_date || '',
+        category_id: t.category_id || '',
+        property_id: t.property_id || '',
+        unit_id: t.unit_id || '',
+        description: t.description || t.bookingText || '',
       }));
 
       const categoryData: CategoryData[] = (categories || []).map(c => ({
@@ -930,7 +1208,9 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            selectedQuarter,
+            selectedHalfYear
           );
           toast.success('USt-Voranmeldung wurde erstellt');
           break;
@@ -944,6 +1224,25 @@ export default function Reports() {
             date: p.date,
             source: p.source,
           }));
+          // Vorschreibungen für SOLL-Berechnung (statt Mieter-Stammdaten)
+          // WICHTIG: Alle Felder inkl. USt-Sätze übergeben für konsistente Berechnung
+          const invoicesData = (allInvoices || []).map(inv => ({
+            id: inv.id,
+            tenantId: inv.tenantId,
+            tenant_id: inv.tenant_id,
+            unitId: inv.unitId,
+            unit_id: inv.unit_id,
+            year: inv.year,
+            month: inv.month,
+            grundmiete: inv.grundmiete,
+            betriebskosten: inv.betriebskosten,
+            heizungskosten: inv.heizungskosten,
+            gesamtbetrag: inv.gesamtbetrag,
+            isVacancy: (inv as any).isVacancy || (inv as any).is_vacancy,
+            ustSatzMiete: (inv as any).ustSatzMiete ?? (inv as any).ust_satz_miete,
+            ustSatzBk: (inv as any).ustSatzBk ?? (inv as any).ust_satz_bk,
+            ustSatzHeizung: (inv as any).ustSatzHeizung ?? (inv as any).ust_satz_heizung,
+          }));
           generateOffenePostenReport(
             properties,
             allUnits,
@@ -952,7 +1251,10 @@ export default function Reports() {
             selectedPropertyId,
             selectedYear,
             reportPeriod,
-            selectedMonth
+            selectedMonth,
+            selectedQuarter,
+            selectedHalfYear,
+            invoicesData
           );
           toast.success('Offene Posten Liste wurde erstellt');
           break;
@@ -969,14 +1271,14 @@ export default function Reports() {
           // Prepare transaction data with bank_account_id
           const plausibilityTransactions = (allTransactions || []).map(t => ({
             id: t.id,
-            amount: t.amount,
-            transaction_date: t.transaction_date,
-            category_id: t.category_id,
-            property_id: t.property_id,
-            unit_id: t.unit_id,
-            description: t.description,
-            tenant_id: t.tenant_id,
-            bank_account_id: t.bank_account_id,
+            amount: Number(t.amount),
+            transaction_date: t.transaction_date || '',
+            category_id: t.category_id || '',
+            property_id: t.property_id || '',
+            unit_id: t.unit_id || '',
+            description: t.description || t.bookingText || '',
+            tenant_id: t.tenant_id || '',
+            bank_account_id: t.bank_account_id || '',
           }));
           
           // Prepare combined payments data for income
@@ -1074,9 +1376,11 @@ export default function Reports() {
         {/* Period Toggle */}
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-muted-foreground" />
-          <Tabs value={reportPeriod} onValueChange={(v) => setReportPeriod(v as 'monthly' | 'yearly')}>
+          <Tabs value={reportPeriod} onValueChange={(v) => setReportPeriod(v as 'monthly' | 'quarterly' | 'halfyearly' | 'yearly')}>
             <TabsList>
               <TabsTrigger value="monthly">Monatlich</TabsTrigger>
+              <TabsTrigger value="quarterly">Quartal</TabsTrigger>
+              <TabsTrigger value="halfyearly">Halbjahr</TabsTrigger>
               <TabsTrigger value="yearly">Jährlich</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1112,9 +1416,37 @@ export default function Reports() {
           </Select>
         )}
 
+        {/* Quarter Selection */}
+        {reportPeriod === 'quarterly' && (
+          <Select value={selectedQuarter.toString()} onValueChange={(v) => setSelectedQuarter(parseInt(v))}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Q1 (Jan-Mär)</SelectItem>
+              <SelectItem value="2">Q2 (Apr-Jun)</SelectItem>
+              <SelectItem value="3">Q3 (Jul-Sep)</SelectItem>
+              <SelectItem value="4">Q4 (Okt-Dez)</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Half Year Selection */}
+        {reportPeriod === 'halfyearly' && (
+          <Select value={selectedHalfYear.toString()} onValueChange={(v) => setSelectedHalfYear(parseInt(v))}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1. Halbjahr (Jan-Jun)</SelectItem>
+              <SelectItem value="2">2. Halbjahr (Jul-Dez)</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
         {selectedPropertyId !== 'all' && selectedProperty && (
           <span className="text-sm text-muted-foreground">
-            {Number(selectedProperty.total_qm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
+            {Number(selectedProperty.totalQm).toLocaleString('de-AT')} m² • {units?.length || 0} Einheiten
           </span>
         )}
 
@@ -1146,7 +1478,7 @@ export default function Reports() {
               <div className="mt-3 flex flex-wrap gap-2">
                 {futureTenants.map(t => (
                   <Badge key={t.id} variant="outline" className="text-xs">
-                    {t.unitTopNummer} {t.first_name} {t.last_name} (ab {t.mietbeginnFormatted})
+                    {t.unitTopNummer} {t.firstName} {t.lastName} (ab {t.mietbeginnFormatted})
                   </Badge>
                 ))}
               </div>
@@ -1154,6 +1486,59 @@ export default function Reports() {
           </div>
         </div>
       )}
+
+      {/* Kumulierte Einnahmen-Übersicht (IST aus MRG-Allokation) */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Euro className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Kumulierte Einnahmen (IST) - {periodLabel}</CardTitle>
+          </div>
+          <CardDescription>
+            Tatsächliche Zahlungseingänge nach MRG-Allokation (BK→HK→Miete) aus {periodCombinedPayments.length} Zahlungen
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Miete (IST)</p>
+              <p className="text-xl font-bold text-success mt-1">
+                €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Eigentümerrelevant
+              </p>
+            </div>
+            <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Betriebskosten (IST)</p>
+              <p className="text-xl font-bold text-blue-600 mt-1">
+                €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Durchlaufposten
+              </p>
+            </div>
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Heizkosten (IST)</p>
+              <p className="text-xl font-bold text-orange-600 mt-1">
+                €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Durchlaufposten
+              </p>
+            </div>
+            <div className="rounded-lg border-2 border-primary/50 bg-primary/5 p-4">
+              <p className="text-xs text-muted-foreground font-medium">Gesamt IST</p>
+              <p className="text-xl font-bold text-primary mt-1">
+                €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Alle Zahlungseingänge
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Stats - JETZT AUS TRANSAKTIONEN */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -1166,17 +1551,12 @@ export default function Reports() {
                   {annualYieldFromTransactions.toFixed(1)}%
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {reportPeriod === 'monthly' ? 'Miete hochgerechnet, IH tatsächlich' : 'Mieteinnahmen - Instandhaltung'}
+                  Mieteinnahmen - Instandhaltung
                 </p>
               </div>
-              <div className="text-right">
-                <div className="flex items-center gap-1 text-success text-sm">
-                  <ArrowUpRight className="h-4 w-4" />
-                  €{estimatedPropertyValue.toLocaleString('de-AT')} Marktwert
-                </div>
-                {!hasRealMarktwert && (
-                  <p className="text-xs text-warning mt-1">Geschätzt (€2.000/m²)</p>
-                )}
+              <div className="flex items-center gap-1 text-success text-sm">
+                <ArrowUpRight className="h-4 w-4" />
+                {totalQm.toLocaleString('de-AT')} m²
               </div>
             </div>
           </CardContent>
@@ -1225,7 +1605,7 @@ export default function Reports() {
                   €{combinedVatLiability.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  inkl. {expensesWithoutTransaction.length + expenseTransactions.length} Buchungen (€{combinedVorsteuer.toLocaleString('de-AT', { minimumFractionDigits: 2 })} Vorsteuer)
+                  inkl. {periodExpenses.length} Belege (€{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })} Vorsteuer)
                 </p>
               </div>
               <div className="text-xs text-muted-foreground">{periodLabel}</div>
@@ -1310,15 +1690,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollBk - paymentAllocationDetails.bkAnteil > 0.01 ? 'text-destructive' : periodSollBk - paymentAllocationDetails.bkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollBk - paymentAllocationDetails.bkAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollBk - paymentAllocationDetails.bkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollBk - paymentAllocationDetails.bkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollBk - paymentAllocationDetails.bkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollBk - paymentAllocationDetails.bkAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollBk - paymentAllocationDetails.bkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1332,15 +1712,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollHk - paymentAllocationDetails.hkAnteil > 0.01 ? 'text-destructive' : periodSollHk - paymentAllocationDetails.hkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollHk - paymentAllocationDetails.hkAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollHk - paymentAllocationDetails.hkAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollHk - paymentAllocationDetails.hkAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollHk - paymentAllocationDetails.hkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollHk - paymentAllocationDetails.hkAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollHk - paymentAllocationDetails.hkAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1354,15 +1734,15 @@ export default function Reports() {
                   </p>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">IST (aus Zahlungen):</span>
                     <span>€{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-semibold ${periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0.01 ? 'text-destructive' : periodSollGrundmiete - paymentAllocationDetails.mieteAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-semibold ${mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil > 0.01 ? 'text-destructive' : mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollGrundmiete - paymentAllocationDetails.mieteAnteil > 0 ? '-' : '+'}€{Math.abs(periodSollGrundmiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil > 0 ? '-' : '+'}€{Math.abs(mrgTotals.sollMiete - paymentAllocationDetails.mieteAnteil).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1373,15 +1753,15 @@ export default function Reports() {
                   <p className="text-xs font-semibold text-foreground">Gesamt</p>
                   <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">SOLL:</span>
-                    <span>€{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>€{mrgTotals.totalSoll.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-sm font-medium">
                     <span className="text-muted-foreground">IST (eingegangen):</span>
                     <span>€{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <div className={`flex justify-between text-sm font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                  <div className={`flex justify-between text-sm font-bold ${mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : mrgTotals.totalSoll - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
                     <span>Differenz:</span>
-                    <span>{periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                    <span>{mrgTotals.totalSoll - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(mrgTotals.totalSoll - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
                 
@@ -1448,21 +1828,18 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* Nettoertrag - Sonstige Kosten sind NICHT enthalten */}
+          {/* Rendite = Miete - Instandhaltung */}
           <div className="mt-6 p-4 rounded-lg border-2 border-primary bg-primary/5">
             <div className="flex justify-between items-center">
               <div>
-                <span className="font-semibold text-lg">Nettoertrag (für Rendite)</span>
+                <span className="font-semibold text-lg">Rendite</span>
                 <p className="text-sm text-muted-foreground">
-                  IST-Mieteinnahmen (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
-                  - Instandhaltung (€{instandhaltungFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
-                  {combinedSonstigeKosten > 0 && (
-                    <span className="text-purple-600"> • Sonstige Kosten (€{combinedSonstigeKosten.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) nicht in Rendite</span>
-                  )}
+                  Miete (€{totalIstEinnahmen.toLocaleString('de-AT', { minimumFractionDigits: 2 })}) 
+                  - Instandhaltung (€{combinedInstandhaltung.toLocaleString('de-AT', { minimumFractionDigits: 2 })})
                 </p>
               </div>
               <span className="font-bold text-primary text-2xl">
-                €{(mieteFromTransactions - instandhaltungFromExpenses).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                €{(totalIstEinnahmen - combinedInstandhaltung).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -1583,36 +1960,45 @@ export default function Reports() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {/* Summenzeile */}
+                  {/* Summenzeile - verwendet tenantSollIstTotals für konsistente Summen */}
                   <TableRow className="bg-muted/50 font-semibold">
                     <TableCell colSpan={2}>Gesamt</TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.bkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istBk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffBk > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffBk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffBk > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffBk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.hkAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istHk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffHk > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffHk < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffHk > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffHk).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollGrundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.mieteAnteil.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istMiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className={`text-xs font-semibold ${tenantSollIstTotals.diffMiete > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffMiete < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                          {tenantSollIstTotals.diffMiete > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffMiete).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-0.5">
-                        <div className="text-xs">SOLL: €{periodSollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
-                        <div>IST: €{paymentAllocationDetails.gesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div className="text-xs">SOLL: €{tenantSollIstTotals.sollGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+                        <div>IST: €{tenantSollIstTotals.istGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className={`font-bold ${periodSollGesamt - paymentAllocationDetails.gesamt > 0.01 ? 'text-destructive' : periodSollGesamt - paymentAllocationDetails.gesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
-                        {periodSollGesamt - paymentAllocationDetails.gesamt > 0 ? '-' : '+'}€{Math.abs(periodSollGesamt - paymentAllocationDetails.gesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      <div className={`font-bold ${tenantSollIstTotals.diffGesamt > 0.01 ? 'text-destructive' : tenantSollIstTotals.diffGesamt < -0.01 ? 'text-success' : 'text-muted-foreground'}`}>
+                        {tenantSollIstTotals.diffGesamt > 0 ? '-' : '+'}€{Math.abs(tenantSollIstTotals.diffGesamt).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1736,11 +2122,11 @@ export default function Reports() {
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Ausgaben (Vorsteuer)</p>
                 <p className="text-lg font-bold text-foreground">
-                  €{combinedTotalExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                  €{(totalExpensesFromTransactions + totalExpensesFromCosts).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                 </p>
                 <div className="text-xs text-muted-foreground mt-1">
                   <p>Banking: €{vorsteuerFromTransactions.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
-                  <p>Belege: €{vorsteuerFromExpensesDeduped.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
+                  <p>Belege: €{vorsteuerFromExpenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
               <div className={`rounded-lg border p-3 ${combinedVatLiability >= 0 ? 'border-success/30 bg-success/5' : 'border-primary/30 bg-primary/5'}`}>
@@ -1819,7 +2205,7 @@ export default function Reports() {
                     Aufschlüsselung nach Kostenart:
                   </p>
                   <div className="space-y-1.5 text-xs">
-                    {Object.entries(vorsteuerByExpenseType)
+                    {(Object.entries(vorsteuerByExpenseType) as [string, { brutto: number; vorsteuer: number; vatRate: number }][])
                       .filter(([, data]) => data.vorsteuer > 0)
                       .sort((a, b) => b[1].vorsteuer - a[1].vorsteuer)
                       .map(([type, data]) => (
@@ -1894,7 +2280,7 @@ export default function Reports() {
                 <TableBody>
                   {periodTransactions.slice(0, 15).map((t) => {
                     const category = categories?.find(c => c.id === t.category_id);
-                    const isIncome = t.amount > 0;
+                    const isIncome = Number(t.amount) > 0;
                     
                     return (
                       <TableRow key={t.id}>
@@ -2003,18 +2389,21 @@ export default function Reports() {
                   </TableHeader>
                   <TableBody>
                     {mrgAllocations.slice(0, 15).map((alloc) => {
+                      // Saldo = SOLL - IST: positiv = Unterzahlung, negativ = Überzahlung
                       let statusLabel = 'Ausgeglichen';
                       let statusVariant: 'default' | 'destructive' | 'secondary' | 'outline' = 'outline';
-                      if (alloc.status === 'offen') {
+                      if (alloc.status === 'offen' && alloc.saldo === 0) {
                         statusLabel = 'Offen';
                         statusVariant = 'secondary';
-                      } else if (alloc.saldo < 0) {
+                      } else if (alloc.saldo > 0.01) {
+                        // Positiver Saldo = SOLL > IST = Unterzahlung
                         statusLabel = 'Unterzahlung';
                         statusVariant = 'destructive';
-                      } else if (alloc.saldo > 0) {
+                      } else if (alloc.saldo < -0.01) {
+                        // Negativer Saldo = SOLL < IST = Überzahlung
                         statusLabel = 'Überzahlung';
                         statusVariant = 'default';
-                      } else if (alloc.status === 'vollstaendig') {
+                      } else if (Math.abs(alloc.saldo) <= 0.01) {
                         statusLabel = 'Bezahlt';
                         statusVariant = 'outline';
                       }
@@ -2026,7 +2415,7 @@ export default function Reports() {
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="font-medium">
-                                Top {alloc.unit?.top_nummer || '-'}
+                                {alloc.unit?.top_nummer || '-'}
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {alloc.tenant.first_name} {alloc.tenant.last_name} • {property?.name || '-'}
@@ -2075,18 +2464,18 @@ export default function Reports() {
           {selectedReportId === 'detailbericht' && (() => {
             // Gruppiere Transaktionen nach Einheiten
             const unitTransactions = new Map<string, { 
-              unit: any;
-              property: any;
+              unit: typeof units extends (infer U)[] ? U : never;
+              property: typeof properties extends (infer P)[] ? P : never;
               income: number; 
               expenses: number; 
-              transactions: any[];
-              tenants: any[];
+              transactions: typeof periodTransactions;
+              tenants: typeof allTenants;
             }>();
 
-            // Initialisiere alle Einheiten
+            // Initialisiere alle Einheiten (camelCase from useUnits/useTenants)
             units?.forEach(unit => {
-              const property = properties?.find(p => p.id === unit.property_id);
-              const unitTenants = allTenants?.filter(t => t.unit_id === unit.id) || [];
+              const property = properties?.find(p => p.id === unit.propertyId);
+              const unitTenants = allTenants?.filter(t => t.unitId === unit.id) || [];
               unitTransactions.set(unit.id, {
                 unit: unit as any,
                 property: property as any,
@@ -2101,7 +2490,7 @@ export default function Reports() {
             periodTransactions.forEach(t => {
               if (t.unit_id && unitTransactions.has(t.unit_id)) {
                 const data = unitTransactions.get(t.unit_id)!;
-                if (t.amount > 0) {
+                if (Number(t.amount) > 0) {
                   data.income += Number(t.amount);
                 } else {
                   data.expenses += Math.abs(Number(t.amount));
@@ -2112,17 +2501,17 @@ export default function Reports() {
 
             // Nicht zugeordnete Transaktionen
             const unassignedTransactions = periodTransactions.filter(t => !t.unit_id);
-            const unassignedIncome = unassignedTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + Number(t.amount), 0);
-            const unassignedExpenses = unassignedTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+            const unassignedIncome = unassignedTransactions.filter(t => Number(t.amount) > 0).reduce((sum, t) => sum + Number(t.amount), 0);
+            const unassignedExpenses = unassignedTransactions.filter(t => Number(t.amount) < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
             // Gruppiere nach Liegenschaft
             const propertiesData = new Map<string, {
-              property: any;
+              property: typeof properties extends (infer P)[] ? P : never;
               units: Array<{
-                unit: any;
+                unit: typeof units extends (infer U)[] ? U : never;
                 income: number;
                 expenses: number;
-                tenants: any[];
+                tenants: typeof allTenants;
               }>;
               totalIncome: number;
               totalExpenses: number;
@@ -2138,8 +2527,9 @@ export default function Reports() {
             });
 
             unitTransactions.forEach((data, unitId) => {
-              if (data.property && propertiesData.has(data.property.id)) {
-                const propData = propertiesData.get(data.property.id)!;
+              const prop = data.property as { id: string; name: string; address: string; postal_code: string; city: string } | null;
+              if (prop && propertiesData.has(prop.id)) {
+                const propData = propertiesData.get(prop.id)!;
                 propData.units.push({
                   unit: data.unit,
                   income: data.income,
@@ -2165,13 +2555,18 @@ export default function Reports() {
 
                 <div className="space-y-6">
                   {Array.from(propertiesData.values())
-                    .filter(p => selectedPropertyId === 'all' || p.property?.id === selectedPropertyId)
-                    .map((propData) => (
-                    <div key={propData.property?.id} className="border rounded-lg overflow-hidden">
+                    .filter(p => {
+                      const prop = p.property as { id: string } | null;
+                      return selectedPropertyId === 'all' || prop?.id === selectedPropertyId;
+                    })
+                    .map((propData) => {
+                      const prop = propData.property as { id: string; name: string; address: string; postal_code: string; city: string } | null;
+                      return (
+                    <div key={prop?.id} className="border rounded-lg overflow-hidden">
                       <div className="bg-muted p-4 flex justify-between items-center">
                         <div>
-                          <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
-                          <p className="text-sm text-muted-foreground">{propData.property?.address}, {propData.property?.postal_code} {propData.property?.city}</p>
+                          <h4 className="font-semibold text-lg">{prop?.name}</h4>
+                          <p className="text-sm text-muted-foreground">{prop?.address}, {prop?.postal_code} {prop?.city}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-success font-semibold">+€{propData.totalIncome.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</p>
@@ -2189,14 +2584,14 @@ export default function Reports() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {propData.units.map((unitData) => {
+                          {propData.units.map((unitData: any) => {
                             const activeTenant = (unitData.tenants as any[])?.find((t: any) => t.status === 'aktiv');
                             const saldo = unitData.income - unitData.expenses;
                             return (
                               <TableRow key={unitData.unit?.id}>
-                                <TableCell className="font-medium">Top {unitData.unit?.top_nummer}</TableCell>
+                                <TableCell className="font-medium">{unitData.unit?.top_nummer || '-'}</TableCell>
                                 <TableCell>
-                                  {activeTenant ? `${activeTenant.first_name} ${activeTenant.last_name}` : <span className="text-muted-foreground">Leerstand</span>}
+                                  {activeTenant ? `${activeTenant.vorname || activeTenant.first_name || ''} ${activeTenant.nachname || activeTenant.last_name || ''}`.trim() || 'Mieter' : <span className="text-muted-foreground">Leerstand</span>}
                                 </TableCell>
                                 <TableCell className="text-right text-success">
                                   €{unitData.income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
@@ -2213,7 +2608,8 @@ export default function Reports() {
                         </TableBody>
                       </Table>
                     </div>
-                  ))}
+                      );
+                    })}
 
                   {unassignedTransactions.length > 0 && (
                     <div className="border rounded-lg overflow-hidden">
@@ -2245,10 +2641,10 @@ export default function Reports() {
             // SOLL-Werte direkt aus tenants-Tabelle (aktive Mieter)
             // Gruppiere nach Liegenschaft
             const propertiesData = new Map<string, {
-              property: any;
+              property: typeof properties extends (infer P)[] ? P : never;
               tenantsSoll: Array<{
-                tenant: any;
-                unit: any;
+                tenant: typeof allTenants extends (infer T)[] ? T : never;
+                unit: typeof allUnits extends (infer U)[] ? U : never;
                 grundmiete: number;
                 betriebskosten: number;
                 heizungskosten: number;
@@ -2272,25 +2668,25 @@ export default function Reports() {
               });
             });
 
-            // Filtere nur relevante Units
+            // Filtere nur relevante Units (camelCase from useUnits)
             const relevantUnits = selectedPropertyId === 'all' 
               ? allUnits 
-              : allUnits?.filter(u => u.property_id === selectedPropertyId);
+              : allUnits?.filter(u => u.propertyId === selectedPropertyId);
 
             // Fülle SOLL-Daten aus Mietern
             relevantUnits?.forEach(unit => {
-              const property = properties?.find(p => p.id === unit.property_id);
+              const property = properties?.find(p => p.id === unit.propertyId);
               if (!property) return;
 
-              // Finde aktive Mieter für diese Unit
+              // Finde aktive Mieter für diese Unit (camelCase from useTenants)
               const activeTenants = allTenants?.filter(t => 
-                t.unit_id === unit.id && t.status === 'aktiv'
+                t.unitId === unit.id && t.status === 'aktiv'
               ) || [];
 
               activeTenants.forEach(tenant => {
                 const grundmiete = Number(tenant.grundmiete) || 0;
-                const bk = Number(tenant.betriebskosten_vorschuss) || 0;
-                const hk = Number(tenant.heizungskosten_vorschuss) || 0;
+                const bk = Number(tenant.betriebskostenVorschuss) || 0;
+                const hk = Number(tenant.heizkostenVorschuss) || 0;
                 const gesamt = grundmiete + bk + hk;
 
                 if (gesamt > 0) {
@@ -2374,12 +2770,14 @@ export default function Reports() {
 
                 {Array.from(propertiesData.values())
                   .filter(p => p.tenantsSoll.length > 0)
-                  .map((propData) => (
-                  <div key={propData.property?.id} className="border rounded-lg overflow-hidden mb-4">
+                  .map((propData) => {
+                    const prop = propData.property as { id: string; name: string; address: string } | null;
+                    return (
+                  <div key={prop?.id} className="border rounded-lg overflow-hidden mb-4">
                     <div className="bg-muted p-4 flex justify-between items-center">
                       <div>
-                        <h4 className="font-semibold text-lg">{propData.property?.name}</h4>
-                        <p className="text-sm text-muted-foreground">{propData.property?.address}</p>
+                        <h4 className="font-semibold text-lg">{prop?.name}</h4>
+                        <p className="text-sm text-muted-foreground">{prop?.address}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-bold">SOLL: €{propData.totalGesamt.toLocaleString('de-AT', { minimumFractionDigits: 2 })}/Monat</p>
@@ -2400,19 +2798,19 @@ export default function Reports() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {propData.tenantsSoll.map((item, idx) => (
+                        {propData.tenantsSoll.map((item: any, idx: number) => (
                           <TableRow key={idx}>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-medium">Top {item.unit?.top_nummer || '-'}</span>
+                                <span className="font-medium">{item.unit?.top_nummer || '-'}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {unitTypeLabels[item.unit?.type || ''] || item.unit?.type}
+                                  {unitTypeLabels[(item.unit as any)?.type || ''] || (item.unit as any)?.type}
                                 </span>
                               </div>
                             </TableCell>
                             <TableCell>
                               {item.tenant ? (
-                                `${item.tenant.first_name} ${item.tenant.last_name}`
+                                `${(item.tenant as any).vorname || (item.tenant as any).first_name || ''} ${(item.tenant as any).nachname || (item.tenant as any).last_name || ''}`.trim() || 'Mieter'
                               ) : (
                                 <Badge variant="outline">Leerstand</Badge>
                               )}
@@ -2434,7 +2832,377 @@ export default function Reports() {
                       </TableBody>
                     </Table>
                   </div>
-                ))}
+                    );
+                  })}
+              </>
+            );
+          })()}
+
+          {/* Kautionsübersicht Report */}
+          {selectedReportId === 'kaution' && (() => {
+            // Filter tenants with kautionBezahlt = true (camelCase from useTenants)
+            const tenantsWithKaution = (allTenants || []).filter(t => {
+              if (!t.kautionBezahlt || !t.kaution || Number(t.kaution) <= 0) return false;
+              
+              if (selectedPropertyId === 'all') return true;
+              
+              const unit = (allUnits || []).find(u => u.id === t.unitId);
+              return unit?.propertyId === selectedPropertyId;
+            });
+
+            // Sort by property, then by unit
+            const sortedTenants = tenantsWithKaution.sort((a, b) => {
+              const unitA = (allUnits || []).find(u => u.id === a.unitId);
+              const unitB = (allUnits || []).find(u => u.id === b.unitId);
+              const propA = (properties || []).find(p => p.id === unitA?.propertyId);
+              const propB = (properties || []).find(p => p.id === unitB?.propertyId);
+              
+              if (propA?.name !== propB?.name) {
+                return (propA?.name || '').localeCompare(propB?.name || '');
+              }
+              return (unitA?.topNummer || '').localeCompare(unitB?.topNummer || '');
+            });
+
+            // Calculate total
+            const totalKaution = sortedTenants.reduce((sum, t) => sum + Number(t.kaution || 0), 0);
+
+            const handleExportPdf = () => {
+              if (!properties || !allUnits || !allTenants) return;
+              
+              // Map camelCase data from hooks to snake_case for PDF export function interface
+              generateKautionsReport(
+                allTenants.map(t => ({
+                  id: t.id,
+                  first_name: t.firstName,
+                  last_name: t.lastName,
+                  email: t.email,
+                  phone: t.phone,
+                  kaution: Number(t.kaution || 0),
+                  kaution_bezahlt: t.kautionBezahlt || false,
+                  unit_id: t.unitId,
+                  mietbeginn: t.mietbeginn,
+                })),
+                allUnits.map(u => ({
+                  id: u.id,
+                  top_nummer: u.topNummer,
+                  property_id: u.propertyId,
+                })),
+                properties.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  address: p.address,
+                })),
+                selectedPropertyId
+              );
+              toast.success('PDF wurde erstellt');
+            };
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Kautionsübersicht</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Alle Mieter mit bezahlter Kaution
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleExportPdf} variant="outline" data-testid="button-kaution-export-pdf">
+                      <Download className="h-4 w-4 mr-2" />
+                      PDF
+                    </Button>
+                    <Button 
+                      onClick={() => {
+                        const csvData = sortedTenants.map(tenant => {
+                          const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                          const property = (properties || []).find(p => p.id === unit?.propertyId);
+                          return {
+                            liegenschaft: property?.name || '',
+                            einheit: unit?.topNummer || '',
+                            vorname: tenant.firstName,
+                            nachname: tenant.lastName,
+                            mietbeginn: tenant.mietbeginn || '',
+                            kaution: Number(tenant.kaution || 0),
+                          };
+                        });
+                        exportToCSV(csvData, `Kautionsuebersicht_${new Date().toISOString().split('T')[0]}`, {
+                          liegenschaft: 'Liegenschaft',
+                          einheit: 'Einheit',
+                          vorname: 'Vorname',
+                          nachname: 'Nachname',
+                          mietbeginn: 'Mietbeginn',
+                          kaution: 'Kaution (€)',
+                        });
+                        toast.success('CSV wurde exportiert');
+                      }} 
+                      variant="outline" 
+                      data-testid="button-kaution-export-csv"
+                    >
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      CSV
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-5 w-5 text-teal-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Anzahl Kautionen</p>
+                          <p className="text-2xl font-bold">{sortedTenants.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Euro className="h-5 w-5 text-teal-600" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Gesamtsumme</p>
+                          <p className="text-2xl font-bold">
+                            €{totalKaution.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Table */}
+                {sortedTenants.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Wallet className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Keine Mietkautionen gefunden</p>
+                    <p className="text-sm">Es wurden keine Mieter mit bezahlter Kaution gefunden.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Liegenschaft</TableHead>
+                        <TableHead>Einheit</TableHead>
+                        <TableHead>Mieter</TableHead>
+                        <TableHead>Mietbeginn</TableHead>
+                        <TableHead className="text-right">Kaution</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedTenants.map((tenant) => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
+                        
+                        return (
+                          <TableRow key={tenant.id} data-testid={`row-kaution-${tenant.id}`}>
+                            <TableCell>{property?.name || '-'}</TableCell>
+                            <TableCell>{unit?.topNummer || '-'}</TableCell>
+                            <TableCell className="font-medium">
+                              {tenant.firstName} {tenant.lastName}
+                            </TableCell>
+                            <TableCell>
+                              {tenant.mietbeginn 
+                                ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT')
+                                : '-'
+                              }
+                            </TableCell>
+                            <TableCell className="text-right font-bold">
+                              €{Number(tenant.kaution || 0).toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Vertragsablauf Report */}
+          {selectedReportId === 'vertragsablauf' && (() => {
+            const today = new Date();
+            const oneMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+            const threeMonths = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const sixMonths = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
+
+            // Filter tenants with mietende set (camelCase from useTenants)
+            const tenantsWithEndDate = (allTenants || []).filter(t => {
+              if (!t.mietende || t.status === 'beendet') return false;
+              
+              const endDate = new Date(t.mietende);
+              if (endDate < today) return false; // Already ended
+              if (endDate > sixMonths) return false; // More than 6 months away
+              
+              if (selectedPropertyId === 'all') return true;
+              
+              const unit = (allUnits || []).find(u => u.id === t.unitId);
+              return unit?.propertyId === selectedPropertyId;
+            });
+
+            // Sort by mietende (soonest first)
+            const sortedTenants = tenantsWithEndDate.sort((a, b) => {
+              return new Date(a.mietende!).getTime() - new Date(b.mietende!).getTime();
+            });
+
+            // Categorize by time period
+            const within1Month = sortedTenants.filter(t => new Date(t.mietende!) <= oneMonth);
+            const within3Months = sortedTenants.filter(t => {
+              const end = new Date(t.mietende!);
+              return end > oneMonth && end <= threeMonths;
+            });
+            const within6Months = sortedTenants.filter(t => {
+              const end = new Date(t.mietende!);
+              return end > threeMonths && end <= sixMonths;
+            });
+
+            const getDaysUntilEnd = (endDate: string) => {
+              const end = new Date(endDate);
+              const diff = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+              return diff;
+            };
+
+            const getBadgeVariant = (days: number) => {
+              if (days <= 30) return 'destructive';
+              if (days <= 90) return 'default';
+              return 'secondary';
+            };
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Vertragsablauf</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Mietverträge die in den nächsten 6 Monaten auslaufen
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      const csvData = sortedTenants.map(tenant => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
+                        return {
+                          liegenschaft: property?.name || '',
+                          einheit: unit?.topNummer || '',
+                          vorname: tenant.firstName,
+                          nachname: tenant.lastName,
+                          mietbeginn: tenant.mietbeginn || '',
+                          mietende: tenant.mietende || '',
+                          tage_verbleibend: getDaysUntilEnd(tenant.mietende!),
+                        };
+                      });
+                      exportToCSV(csvData, `Vertragsablauf_${new Date().toISOString().split('T')[0]}`, {
+                        liegenschaft: 'Liegenschaft',
+                        einheit: 'Einheit',
+                        vorname: 'Vorname',
+                        nachname: 'Nachname',
+                        mietbeginn: 'Mietbeginn',
+                        mietende: 'Mietende',
+                        tage_verbleibend: 'Tage verbleibend',
+                      });
+                      toast.success('CSV wurde exportiert');
+                    }} 
+                    variant="outline" 
+                    data-testid="button-vertragsablauf-export-csv"
+                    disabled={sortedTenants.length === 0}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    CSV Export
+                  </Button>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <Card className="border-l-4 border-l-red-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 1 Monat</p>
+                          <p className="text-2xl font-bold text-red-600">{within1Month.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-orange-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-orange-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 3 Monate</p>
+                          <p className="text-2xl font-bold text-orange-600">{within3Months.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-blue-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <p className="text-sm text-muted-foreground">Innerhalb 6 Monate</p>
+                          <p className="text-2xl font-bold text-blue-600">{within6Months.length}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Table */}
+                {sortedTenants.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Keine auslaufenden Verträge</p>
+                    <p className="text-sm">In den nächsten 6 Monaten laufen keine Mietverträge aus.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Liegenschaft</TableHead>
+                        <TableHead>Einheit</TableHead>
+                        <TableHead>Mieter</TableHead>
+                        <TableHead>Mietbeginn</TableHead>
+                        <TableHead>Mietende</TableHead>
+                        <TableHead className="text-right">Verbleibend</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedTenants.map((tenant) => {
+                        const unit = (allUnits || []).find(u => u.id === tenant.unitId);
+                        const property = (properties || []).find(p => p.id === unit?.propertyId);
+                        const daysLeft = getDaysUntilEnd(tenant.mietende!);
+                        
+                        return (
+                          <TableRow key={tenant.id} data-testid={`row-vertragsablauf-${tenant.id}`}>
+                            <TableCell>{property?.name || '-'}</TableCell>
+                            <TableCell>{unit?.topNummer || '-'}</TableCell>
+                            <TableCell className="font-medium">
+                              {tenant.firstName} {tenant.lastName}
+                            </TableCell>
+                            <TableCell>
+                              {tenant.mietbeginn 
+                                ? new Date(tenant.mietbeginn).toLocaleDateString('de-AT')
+                                : '-'
+                              }
+                            </TableCell>
+                            <TableCell>
+                              {new Date(tenant.mietende!).toLocaleDateString('de-AT')}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={getBadgeVariant(daysLeft)}>
+                                {daysLeft} Tage
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
               </>
             );
           })()}

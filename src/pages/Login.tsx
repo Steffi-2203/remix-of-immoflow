@@ -1,300 +1,163 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, ArrowLeft, CheckCircle } from 'lucide-react';
-import { z } from 'zod';
+import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
-
-const emailSchema = z.string().email('Bitte geben Sie eine gültige E-Mail-Adresse ein');
-const passwordSchema = z.string().min(6, 'Passwort muss mindestens 6 Zeichen lang sein');
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading, login } = useAuth();
+  const { toast } = useToast();
   
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
+    if (isAuthenticated && !loading) {
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, authLoading, navigate, location]);
-
-  const validateForm = () => {
-    setError(null);
-    
-    try {
-      emailSchema.parse(email);
-    } catch (e) {
-      if (e instanceof z.ZodError) {
-        setError(e.errors[0].message);
-        return false;
-      }
-    }
-
-    if (!showForgotPassword) {
-      try {
-        passwordSchema.parse(password);
-      } catch (e) {
-        if (e instanceof z.ZodError) {
-          setError(e.errors[0].message);
-          return false;
-        }
-      }
-    }
-
-    return true;
-  };
+  }, [isAuthenticated, loading, navigate, location]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    const { error } = await signIn(email, password);
     
-    if (error) {
-      if (error.message.includes('Invalid login credentials')) {
-        setError('Ungültige E-Mail oder Passwort');
-      } else if (error.message.includes('Email not confirmed')) {
-        setError('E-Mail-Adresse nicht bestätigt. Bitte überprüfen Sie Ihren Posteingang.');
-      } else {
-        setError(error.message);
-      }
-    }
-    
-    setIsLoading(false);
-  };
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setResetEmailSent(true);
+    if (!email || !password) {
+      toast({
+        title: "Fehler",
+        description: "Bitte E-Mail und Passwort eingeben",
+        variant: "destructive",
+      });
+      return;
     }
 
-    setIsLoading(false);
+    setIsSubmitting(true);
+    
+    try {
+      await login(email, password);
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    } catch (error: any) {
+      toast({
+        title: "Anmeldung fehlgeschlagen",
+        description: error.message || "Ungültige E-Mail oder Passwort",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  if (authLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Forgot password view
-  if (showForgotPassword) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <Link to="/" className="flex flex-col items-center mb-4 hover:opacity-80 transition-opacity">
-              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-16 w-auto mb-2" />
-              <span className="font-bold text-xl">ImmoflowMe</span>
-              <span className="text-xs text-muted-foreground">by ImmoPepper</span>
-            </Link>
-            <CardTitle className="text-2xl">Passwort zurücksetzen</CardTitle>
-            <CardDescription>
-              Geben Sie Ihre E-Mail-Adresse ein, um einen Link zum Zurücksetzen zu erhalten
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {resetEmailSent ? (
-              <div className="text-center space-y-4">
-                <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
-                <p className="text-muted-foreground">
-                  Falls ein Konto mit dieser E-Mail existiert, haben wir Ihnen einen Link zum Zurücksetzen des Passworts gesendet.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Bitte überprüfen Sie auch Ihren Spam-Ordner.
-                </p>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setShowForgotPassword(false);
-                    setResetEmailSent(false);
-                    setEmail('');
-                  }}
-                  className="mt-4"
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Zurück zur Anmeldung
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-Mail</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="ihre@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Wird gesendet...
-                    </>
-                  ) : (
-                    'Link senden'
-                  )}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-          {!resetEmailSent && (
-            <CardFooter className="flex justify-center">
-              <Button 
-                variant="ghost" 
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setError(null);
-                }}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Zurück zur Anmeldung
-              </Button>
-            </CardFooter>
-          )}
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Laden...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <Link to="/" className="flex flex-col items-center mb-4 hover:opacity-80 transition-opacity">
-            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-16 w-auto mb-2" />
-            <span className="font-bold text-xl">ImmoflowMe</span>
-            <span className="text-xs text-muted-foreground">by ImmoPepper</span>
-          </Link>
-          <CardTitle className="text-2xl">Willkommen zurück</CardTitle>
-          <CardDescription>
-            Melden Sie sich an, um fortzufahren
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">E-Mail</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center space-y-4">
+            <div className="flex justify-center">
+              <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
+            </div>
+            <CardTitle className="text-2xl font-bold">
+              Anmelden
+            </CardTitle>
+            <CardDescription>
+              Melden Sie sich mit Ihrer E-Mail und Passwort an
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-Mail</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="ihre@email.com"
+                  placeholder="ihre@email.at"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  required
+                  disabled={isSubmitting}
+                  data-testid="input-email"
+                  autoComplete="email"
                 />
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="space-y-2">
                 <Label htmlFor="password">Passwort</Label>
-                <Button
-                  type="button"
-                  variant="link"
-                  className="px-0 h-auto font-normal text-sm text-muted-foreground hover:text-primary"
-                  onClick={() => {
-                    setShowForgotPassword(true);
-                    setError(null);
-                  }}
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Ihr Passwort"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isSubmitting}
+                    data-testid="input-password"
+                    autoComplete="current-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="text-right">
+                <Link 
+                  to="/reset-password" 
+                  className="text-sm text-primary hover:underline"
+                  data-testid="link-forgot-password"
                 >
                   Passwort vergessen?
-                </Button>
+                </Link>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  required
-                />
-              </div>
-            </div>
-            
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Anmelden...
-                </>
-              ) : (
-                'Anmelden'
-              )}
-            </Button>
+              <Button 
+                type="submit"
+                className="w-full" 
+                size="lg"
+                disabled={isSubmitting}
+                data-testid="button-login"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <LogIn className="mr-2 h-5 w-5" />
+                )}
+                Anmelden
+              </Button>
+            </CardContent>
           </form>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4">
-          <Alert className="bg-muted/50 border-muted">
-            <AlertDescription className="text-center text-sm">
-              Der Zugang ist auf autorisierte Benutzer beschränkt. 
-              Konten werden nur per Einladung erstellt.
-            </AlertDescription>
-          </Alert>
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            ← Zurück zur Startseite
-          </Link>
-        </CardFooter>
-      </Card>
+          <CardFooter className="flex flex-col gap-4 text-center text-sm text-muted-foreground">
+            <p>
+              Noch kein Konto? <Link to="/demo" className="text-primary hover:underline">Kostenlos testen</Link>
+            </p>
+            <div className="flex gap-4 justify-center text-xs">
+              <Link to="/impressum" className="hover:underline">Impressum</Link>
+              <Link to="/datenschutz" className="hover:underline">Datenschutz</Link>
+              <Link to="/agb" className="hover:underline">AGB</Link>
+            </div>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }

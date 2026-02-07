@@ -14,15 +14,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Download, Upload, Mail, CreditCard, AlertTriangle, ShieldCheck, Lock, FileImage } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenants } from '@/hooks/useTenants';
+import { calculateTotalRent, calculateSonstigeKostenTotal, hasSonstigeKosten as checkHasSonstigeKosten, formatSonstigeKostenBreakdown } from '@/utils/fieldNormalizer';
 import { useUnits } from '@/hooks/useUnits';
 import { useProperties } from '@/hooks/useProperties';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { useUnpaidTenantFees, FEE_TYPE_LABELS } from '@/hooks/useTenantFees';
 import { useHasFinanceAccess } from '@/hooks/useUserRole';
 import { maskEmail } from '@/lib/dataMasking';
+import { LimitGuard } from '@/components/subscription/FeatureGuard';
 
 const statusLabels = {
   aktiv: 'Aktiv',
@@ -44,6 +47,7 @@ export default function TenantList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(propertyIdFromUrl || 'all');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
 
   const { data: properties = [] } = useProperties();
   const { data: allUnits = [] } = useUnits(); // All units for filtering
@@ -57,24 +61,24 @@ export default function TenantList() {
   // Filter tenants
   const filteredTenants = tenants.filter(tenant => {
     const matchesSearch = searchTerm === '' || 
-      `${tenant.first_name} ${tenant.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      `${tenant.firstName} ${tenant.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tenant.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (selectedPropertyId === 'all') return matchesSearch;
     
-    const tenantUnit = units.find(u => u.id === tenant.unit_id);
-    return matchesSearch && tenantUnit?.property_id === selectedPropertyId;
+    const tenantUnit = units.find(u => u.id === tenant.unitId);
+    return matchesSearch && tenantUnit?.propertyId === selectedPropertyId;
   });
 
   const getUnit = (unitId: string) => units.find((u) => u.id === unitId);
   const getProperty = (unitId: string) => {
     const unit = units.find(u => u.id === unitId);
     if (!unit) return null;
-    return properties.find(p => p.id === unit.property_id);
+    return properties.find(p => p.id === unit.propertyId);
   };
 
   const activeCount = filteredTenants.filter(t => t.status === 'aktiv').length;
-  const sepaCount = filteredTenants.filter(t => t.sepa_mandat).length;
+  const sepaCount = filteredTenants.filter(t => t.sepaMandat).length;
   const totalKaution = filteredTenants.reduce((sum, t) => sum + (t.kaution || 0), 0);
 
   // Helper function to get unpaid fees for a tenant
@@ -86,7 +90,7 @@ export default function TenantList() {
 
   // Get units for the selected property for import
   const importUnits = selectedPropertyId !== 'all' 
-    ? units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))
+    ? units.map(u => ({ id: u.id, top_nummer: u.topNummer }))
     : [];
 
   return (
@@ -117,20 +121,37 @@ export default function TenantList() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" disabled title="Kommt bald">
+          <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
           {selectedPropertyId !== 'all' && (
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              CSV Import
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setPdfScanDialogOpen(true)} data-testid="button-pdf-scan">
+                <FileImage className="h-4 w-4 mr-2" />
+                PDF scannen
+              </Button>
+              <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                CSV Import
+              </Button>
+            </>
           )}
-          <Button onClick={() => navigate('/mieter/neu')}>
-            <Plus className="h-4 w-4 mr-2" />
-            Neuer Mieter
-          </Button>
+          <LimitGuard 
+            type="tenant" 
+            currentCount={tenants?.length || 0}
+            fallback={
+              <Button variant="outline" disabled className="gap-2" data-testid="button-tenant-limit-reached">
+                <Lock className="h-4 w-4" />
+                Mieter-Limit erreicht
+              </Button>
+            }
+          >
+            <Button onClick={() => navigate('/mieter/neu')} data-testid="button-create-tenant">
+              <Plus className="h-4 w-4 mr-2" />
+              Neuer Mieter
+            </Button>
+          </LimitGuard>
         </div>
       </div>
 
@@ -185,21 +206,23 @@ export default function TenantList() {
             </TableHeader>
             <TableBody>
               {filteredTenants.map((tenant) => {
-                const unit = getUnit(tenant.unit_id);
-                const property = getProperty(tenant.unit_id);
-                const totalRent = (tenant.grundmiete || 0) + (tenant.betriebskosten_vorschuss || 0) + (tenant.heizungskosten_vorschuss || 0);
+                const unit = getUnit(tenant.unitId);
+                const property = getProperty(tenant.unitId);
+                const totalRent = calculateTotalRent(tenant);
+                const sonstigeTotal = calculateSonstigeKostenTotal(tenant.sonstigeKosten);
+                const hasSonstige = checkHasSonstigeKosten(tenant.sonstigeKosten);
 
                 return (
                   <TableRow 
                     key={tenant.id} 
                     className="hover:bg-muted/30 cursor-pointer"
-                    onClick={() => navigate(`/mieter/${tenant.id}`)}
+                    onClick={() => navigate(`/mieter/${tenant.id}/bearbeiten`)}
                   >
                     <TableCell>
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-foreground">
-                            {tenant.first_name} {tenant.last_name}
+                            {tenant.firstName} {tenant.lastName}
                           </p>
                           {getUnpaidFeesForTenant(tenant.id).length > 0 && (
                             <TooltipProvider>
@@ -249,7 +272,7 @@ export default function TenantList() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{unit?.top_nummer || '-'}</span>
+                      <span className="font-medium">{unit?.topNummer || '-'}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-muted-foreground">{property?.name || '-'}</span>
@@ -260,7 +283,11 @@ export default function TenantList() {
                           €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          (€{tenant.grundmiete} + €{tenant.betriebskosten_vorschuss} BK + €{tenant.heizungskosten_vorschuss} HK)
+                          {hasSonstige ? (
+                            <>Miete €{Number(tenant.grundmiete || 0).toFixed(2)} + Nebenkosten €{sonstigeTotal.toFixed(2)}</>
+                          ) : (
+                            <>(€{tenant.grundmiete} + €{tenant.betriebskostenVorschuss} BK + €{tenant.heizungskostenVorschuss} HK)</>
+                          )}
                         </p>
                       </div>
                     </TableCell>
@@ -268,7 +295,7 @@ export default function TenantList() {
                       {new Date(tenant.mietbeginn).toLocaleDateString('de-AT')}
                     </TableCell>
                     <TableCell>
-                      {tenant.sepa_mandat ? (
+                      {tenant.sepaMandat ? (
                         <Badge variant="outline" className="bg-success/10 text-success border-success/30">
                           <CreditCard className="h-3 w-3 mr-1" />
                           Aktiv
@@ -292,13 +319,22 @@ export default function TenantList() {
 
       {/* Import Dialog */}
       {selectedPropertyId !== 'all' && (
-        <TenantImportDialog
-          open={importDialogOpen}
-          onOpenChange={setImportDialogOpen}
-          propertyId={selectedPropertyId}
-          units={importUnits}
-          onSuccess={() => refetch()}
-        />
+        <>
+          <TenantImportDialog
+            open={importDialogOpen}
+            onOpenChange={setImportDialogOpen}
+            propertyId={selectedPropertyId}
+            units={importUnits}
+            onSuccess={() => refetch()}
+          />
+          <PdfScanDialog
+            open={pdfScanDialogOpen}
+            onOpenChange={setPdfScanDialogOpen}
+            propertyId={selectedPropertyId}
+            units={importUnits}
+            onSuccess={() => refetch()}
+          />
+        </>
       )}
     </MainLayout>
   );

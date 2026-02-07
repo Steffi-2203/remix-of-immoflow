@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,7 +7,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -23,12 +24,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Loader2, Save, User, Euro, CreditCard, Calendar } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, User, Euro, CreditCard, Calendar, Plus, Trash2, BarChart3 } from 'lucide-react';
 import { useUnit } from '@/hooks/useUnits';
 import { useProperty } from '@/hooks/useProperties';
 import { useTenant, useCreateTenant, useUpdateTenant } from '@/hooks/useTenants';
+import { useDistributionKeysByProperty } from '@/hooks/useDistributionKeys';
 import { format } from 'date-fns';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
+
+interface SonstigeKostenPosition {
+  name: string;
+  betrag: number;
+  ust: number;
+  schluessel: string;
+}
 
 const tenantSchema = z.object({
   first_name: z.string().trim().min(1, 'Vorname ist erforderlich').max(100),
@@ -42,6 +51,7 @@ const tenantSchema = z.object({
   grundmiete: z.coerce.number().min(0, 'Grundmiete muss positiv sein'),
   betriebskosten_vorschuss: z.coerce.number().min(0, 'BK-Vorschuss muss positiv sein'),
   heizungskosten_vorschuss: z.coerce.number().min(0, 'Heizungskosten-Vorschuss muss positiv sein'),
+  wasserkosten_vorschuss: z.coerce.number().min(0, 'Wasserkosten-Vorschuss muss positiv sein'),
   sepa_mandat: z.boolean(),
   iban: z.string().trim().max(34).optional().or(z.literal('')),
   bic: z.string().trim().max(11).optional().or(z.literal('')),
@@ -57,10 +67,34 @@ export default function TenantForm() {
   const isEditing = !!tenantId;
 
   const { data: unit, isLoading: isLoadingUnit } = useUnit(unitId);
-  const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId || unit?.property_id);
+  const { data: property, isLoading: isLoadingProperty } = useProperty(propertyId || unit?.propertyId);
   const { data: tenant, isLoading: isLoadingTenant } = useTenant(tenantId);
   const createTenant = useCreateTenant();
   const updateTenant = useUpdateTenant();
+  
+  const effectivePropertyId = propertyId || unit?.propertyId;
+  const { data: distributionKeys } = useDistributionKeysByProperty(effectivePropertyId);
+  
+  const [sonstigeKosten, setSonstigeKosten] = useState<SonstigeKostenPosition[]>([]);
+  
+  useEffect(() => {
+    const tenantAny = tenant as any;
+    if (tenantAny?.sonstigeKosten && typeof tenantAny.sonstigeKosten === 'object') {
+      const positions: SonstigeKostenPosition[] = [];
+      const sk = tenantAny.sonstigeKosten as Record<string, { betrag?: number | string; ust?: number; schluessel?: string }>;
+      for (const [name, item] of Object.entries(sk)) {
+        if (item && item.betrag !== undefined) {
+          positions.push({
+            name,
+            betrag: typeof item.betrag === 'string' ? parseFloat(item.betrag) : Number(item.betrag),
+            ust: Number(item.ust || 10),
+            schluessel: item.schluessel || '',
+          });
+        }
+      }
+      setSonstigeKosten(positions);
+    }
+  }, [tenant]);
 
   const form = useForm<TenantFormData>({
     resolver: zodResolver(tenantSchema),
@@ -76,6 +110,7 @@ export default function TenantForm() {
       grundmiete: 0,
       betriebskosten_vorschuss: 0,
       heizungskosten_vorschuss: 0,
+      wasserkosten_vorschuss: 0,
       sepa_mandat: false,
       iban: '',
       bic: '',
@@ -83,22 +118,23 @@ export default function TenantForm() {
       status: 'aktiv',
     },
     values: tenant ? {
-      first_name: tenant.first_name,
-      last_name: tenant.last_name,
+      first_name: tenant.firstName,
+      last_name: tenant.lastName,
       email: tenant.email || '',
       phone: tenant.phone || '',
-      mietbeginn: tenant.mietbeginn,
+      mietbeginn: tenant.mietbeginn || '',
       mietende: tenant.mietende || '',
-      kaution: Number(tenant.kaution),
-      kaution_bezahlt: tenant.kaution_bezahlt,
-      grundmiete: Number(tenant.grundmiete),
-      betriebskosten_vorschuss: Number(tenant.betriebskosten_vorschuss),
-      heizungskosten_vorschuss: Number(tenant.heizungskosten_vorschuss),
-      sepa_mandat: tenant.sepa_mandat,
+      kaution: Number(tenant.kaution || 0),
+      kaution_bezahlt: tenant.kautionBezahlt || false,
+      grundmiete: Number(tenant.grundmiete || 0),
+      betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss || 0),
+      heizungskosten_vorschuss: Number(tenant.heizkostenVorschuss || 0),
+      wasserkosten_vorschuss: Number((tenant as any).wasserkostenVorschuss || 0),
+      sepa_mandat: tenant.sepaMandat || false,
       iban: tenant.iban || '',
       bic: tenant.bic || '',
-      mandat_reference: tenant.mandat_reference || '',
-      status: tenant.status,
+      mandat_reference: '',
+      status: tenant.status || 'aktiv',
     } : undefined,
   });
 
@@ -106,36 +142,74 @@ export default function TenantForm() {
   const watchGrundmiete = form.watch('grundmiete');
   const watchBK = form.watch('betriebskosten_vorschuss');
   const watchHeizung = form.watch('heizungskosten_vorschuss');
-  const totalRent = (watchGrundmiete || 0) + (watchBK || 0) + (watchHeizung || 0);
+  const watchWasser = form.watch('wasserkosten_vorschuss');
+  
+  const sonstigeKostenTotal = sonstigeKosten.reduce((sum, pos) => sum + (pos.betrag || 0), 0);
+  const totalRent = (watchGrundmiete || 0) + (watchBK || 0) + (watchHeizung || 0) + (watchWasser || 0) + sonstigeKostenTotal;
+  
+  const addSonstigeKostenPosition = () => {
+    setSonstigeKosten([...sonstigeKosten, { name: '', betrag: 0, ust: 10, schluessel: '' }]);
+  };
+  
+  const removeSonstigeKostenPosition = (index: number) => {
+    setSonstigeKosten(sonstigeKosten.filter((_, i) => i !== index));
+  };
+  
+  const updateSonstigeKostenPosition = (index: number, field: keyof SonstigeKostenPosition, value: string | number) => {
+    const updated = [...sonstigeKosten];
+    if (field === 'betrag' || field === 'ust') {
+      updated[index][field] = typeof value === 'string' ? parseFloat(value) || 0 : value;
+    } else {
+      updated[index][field] = value as string;
+    }
+    setSonstigeKosten(updated);
+  };
 
   const onSubmit = async (data: TenantFormData) => {
+    // Build sonstige_kosten JSONB from positions
+    const sonstigeKostenObj: Record<string, { betrag: number; ust: number; schluessel: string }> = {};
+    for (const pos of sonstigeKosten) {
+      if (pos.name && pos.betrag > 0) {
+        sonstigeKostenObj[pos.name] = {
+          betrag: pos.betrag,
+          ust: pos.ust,
+          schluessel: pos.schluessel || 'Nutzfläche', // Default to Nutzfläche if not set
+        };
+      }
+    }
+    
+    // Convert form data (snake_case) to API format (camelCase)
     const tenantData = {
-      first_name: data.first_name,
-      last_name: data.last_name,
-      unit_id: unitId!,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      unitId: unitId!,
       mietbeginn: data.mietbeginn,
       mietende: data.mietende || null,
-      kaution: data.kaution,
-      kaution_bezahlt: data.kaution_bezahlt,
-      grundmiete: data.grundmiete,
-      betriebskosten_vorschuss: data.betriebskosten_vorschuss,
-      heizungskosten_vorschuss: data.heizungskosten_vorschuss,
-      sepa_mandat: data.sepa_mandat,
+      kaution: String(data.kaution),
+      kautionBezahlt: data.kaution_bezahlt,
+      grundmiete: String(data.grundmiete),
+      betriebskostenVorschuss: String(data.betriebskosten_vorschuss),
+      heizkostenVorschuss: String(data.heizungskosten_vorschuss),
+      wasserkostenVorschuss: String(data.wasserkosten_vorschuss),
+      sonstigeKosten: Object.keys(sonstigeKostenObj).length > 0 ? sonstigeKostenObj : null,
+      sepaMandat: data.sepa_mandat,
+      sepaMandatDatum: null,
       status: data.status,
       email: data.email || null,
       phone: data.phone || null,
+      mobilePhone: null,
       iban: data.iban || null,
       bic: data.bic || null,
-      mandat_reference: data.mandat_reference || null,
+      mandatReference: data.mandat_reference || null,
+      notes: null,
     };
 
     if (isEditing && tenantId) {
-      await updateTenant.mutateAsync({ id: tenantId, ...tenantData });
+      await updateTenant.mutateAsync({ id: tenantId, ...tenantData } as any);
     } else {
-      await createTenant.mutateAsync(tenantData);
+      await createTenant.mutateAsync(tenantData as any);
     }
 
-    const effectivePropertyId = propertyId || unit?.property_id;
     navigate(`/einheiten/${effectivePropertyId}/${unitId}`);
   };
 
@@ -152,13 +226,12 @@ export default function TenantForm() {
     );
   }
 
-  const effectivePropertyId = propertyId || unit?.property_id;
   const backUrl = `/einheiten/${effectivePropertyId}/${unitId}`;
 
   return (
     <MainLayout
       title={isEditing ? 'Mieter bearbeiten' : 'Neuer Mieter'}
-      subtitle={unit ? `${unit.top_nummer} - ${property?.name || ''}` : ''}
+      subtitle={unit ? `${unit.topNummer} - ${property?.name || ''}` : ''}
     >
       {/* Back Button */}
       <Link
@@ -405,6 +478,23 @@ export default function TenantForm() {
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name="wasserkosten_vorschuss"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        Wasserkosten-Vorschuss (€)
+                        <InfoTooltip text="Monatlicher Vorschuss für Wasserkosten (falls separat abgerechnet)" />
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               <div className="p-4 rounded-lg bg-muted">
@@ -415,6 +505,115 @@ export default function TenantForm() {
                   </span>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Sonstige Kosten */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Sonstige Kosten
+                  </CardTitle>
+                  <CardDescription>
+                    Zusätzliche Betriebskosten-Positionen mit Verteilerschlüssel
+                  </CardDescription>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addSonstigeKostenPosition}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Position hinzufügen
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sonstigeKosten.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-4">
+                  Keine zusätzlichen Kosten. Klicken Sie auf "Position hinzufügen" um eine neue Position anzulegen.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {sonstigeKosten.map((pos, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-3 border rounded-lg items-end">
+                      <div className="md:col-span-1">
+                        <label className="text-sm font-medium mb-1 block">Bezeichnung</label>
+                        <Input
+                          placeholder="z.B. BK inkl. Stellplatz"
+                          value={pos.name}
+                          onChange={(e) => updateSonstigeKostenPosition(index, 'name', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Betrag (€ netto)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={pos.betrag}
+                          onChange={(e) => updateSonstigeKostenPosition(index, 'betrag', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">USt %</label>
+                        <Select
+                          value={String(pos.ust)}
+                          onValueChange={(val) => updateSonstigeKostenPosition(index, 'ust', parseInt(val))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="10">10% (BK/Wasser)</SelectItem>
+                            <SelectItem value="20">20% (Heizung)</SelectItem>
+                            <SelectItem value="0">0% (steuerfrei)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">Verteilerschlüssel</label>
+                        <Select
+                          value={pos.schluessel}
+                          onValueChange={(val) => updateSonstigeKostenPosition(index, 'schluessel', val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Schlüssel wählen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {distributionKeys?.filter(k => k.isActive).map((key) => (
+                              <SelectItem key={key.id} value={key.name}>
+                                {key.name}
+                              </SelectItem>
+                            ))}
+                            {(!distributionKeys || distributionKeys.filter(k => k.isActive).length === 0) && (
+                              <SelectItem value="Direktwert">Direktwert</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeSonstigeKostenPosition(index)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {sonstigeKosten.length > 0 && (
+                    <div className="p-3 rounded-lg bg-muted flex items-center justify-between">
+                      <span className="font-medium">Summe Sonstige Kosten:</span>
+                      <span className="font-bold">
+                        € {sonstigeKostenTotal.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -49,7 +49,7 @@ import { AddInvoiceDialog } from '@/components/maintenance/AddInvoiceDialog';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
-export default function MaintenancePage({ embedded = false }: { embedded?: boolean }) {
+export default function MaintenancePage() {
   const permissions = usePermissions();
   const { data: properties } = useProperties();
   const { data: units } = useUnits();
@@ -98,17 +98,13 @@ export default function MaintenancePage({ embedded = false }: { embedded?: boole
   });
 
   if (!permissions.canManageMaintenance && !permissions.isAdmin) {
-    const noAccess = (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">
-          Sie haben keine Berechtigung für diese Seite.
-        </p>
-      </div>
-    );
-    if (embedded) return noAccess;
     return (
       <MainLayout title="Keine Berechtigung" subtitle="">
-        {noAccess}
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">
+            Sie haben keine Berechtigung für diese Seite.
+          </p>
+        </div>
       </MainLayout>
     );
   }
@@ -165,7 +161,7 @@ export default function MaintenancePage({ embedded = false }: { embedded?: boole
   };
 
   const getUnitsForProperty = (propertyId: string) => {
-    return units?.filter((u) => u.property_id === propertyId) || [];
+    return units?.filter((u) => u.propertyId === propertyId) || [];
   };
 
   // Statistics
@@ -177,8 +173,11 @@ export default function MaintenancePage({ embedded = false }: { embedded?: boole
     completed: tasks?.filter((t) => t.status === 'completed').length || 0,
   };
 
-  const content = (
-    <>
+  return (
+    <MainLayout
+      title="Wartungen & Aufträge"
+      subtitle="Facility Management und Handwerkeraufträge verwalten"
+    >
       {/* Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <Card>
@@ -537,7 +536,7 @@ export default function MaintenancePage({ embedded = false }: { embedded?: boole
                     <SelectItem value="">Keine Einheit</SelectItem>
                     {getUnitsForProperty(newTask.property_id).map((u) => (
                       <SelectItem key={u.id} value={u.id}>
-                        Top {u.top_nummer}
+                        Top {u.topNummer}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -672,17 +671,6 @@ export default function MaintenancePage({ embedded = false }: { embedded?: boole
           contractorName={selectedTaskForInvoice.contractorName}
         />
       )}
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout
-      title="Wartungen & Aufträge"
-      subtitle="Facility Management und Handwerkeraufträge verwalten"
-    >
-      {content}
     </MainLayout>
   );
 }

@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -28,9 +29,11 @@ import {
   Users,
   AlertTriangle,
   Wrench,
+  FileImage,
 } from 'lucide-react';
 import { UnitImportDialog } from '@/components/units/UnitImportDialog';
 import { TenantImportDialog } from '@/components/tenants/TenantImportDialog';
+import { PdfScanDialog } from '@/components/tenants/PdfScanDialog';
 import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
 import { MaintenanceContractsTab } from '@/components/property/MaintenanceContractsTab';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,6 +41,12 @@ import { cn } from '@/lib/utils';
 import { useProperty, useDeleteProperty } from '@/hooks/useProperties';
 import { useUnits } from '@/hooks/useUnits';
 import { usePropertyDocuments, useUploadPropertyDocument, useDeletePropertyDocument, PROPERTY_DOCUMENT_TYPES } from '@/hooks/usePropertyDocuments';
+import { useDistributionKeysByProperty, useCreatePropertyDistributionKey, useDeletePropertyDistributionKey, inputTypeOptions } from '@/hooks/useDistributionKeys';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { useSubscriptionLimits } from '@/hooks/useOrganization';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentList } from '@/components/documents/DocumentList';
@@ -81,18 +90,62 @@ export default function PropertyDetail() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [unitImportDialogOpen, setUnitImportDialogOpen] = useState(false);
   const [tenantImportDialogOpen, setTenantImportDialogOpen] = useState(false);
+  const [pdfScanDialogOpen, setPdfScanDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('units');
   const { maxLimits, canAddUnit: canAddUnitToProperty } = useSubscriptionLimits();
   
   const { data: property, isLoading: isLoadingProperty } = useProperty(id);
   const { data: units, isLoading: isLoadingUnits } = useUnits(id);
   const { data: documents, isLoading: isLoadingDocuments } = usePropertyDocuments(id);
+  const { data: distributionKeys, isLoading: isLoadingDistributionKeys } = useDistributionKeysByProperty(id);
   const deleteProperty = useDeleteProperty();
   const uploadDocument = useUploadPropertyDocument();
   const deleteDocument = useDeletePropertyDocument();
+  const createDistributionKey = useCreatePropertyDistributionKey(id || '');
+  const deleteDistributionKey = useDeletePropertyDistributionKey(id || '');
+  
+  const [newKeyDialogOpen, setNewKeyDialogOpen] = useState(false);
+  const [newKeyForm, setNewKeyForm] = useState({ 
+    keyCode: '', 
+    name: '', 
+    description: '', 
+    inputType: 'flaeche', 
+    unit: 'm²',
+    includedUnitTypes: ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'] as string[]
+  });
+  
+  const allUnitTypes = [
+    { value: 'wohnung', label: 'Wohnungen' },
+    { value: 'geschaeft', label: 'Geschäfte' },
+    { value: 'lager', label: 'Lager' },
+    { value: 'garage', label: 'Garagen' },
+    { value: 'stellplatz', label: 'Stellplätze' },
+    { value: 'sonstiges', label: 'Sonstige' },
+  ];
   
   // Check if unit limit is reached for this property
   const canAddUnit = id ? canAddUnitToProperty(id) : false;
+  
+  const handleCreateDistributionKey = async () => {
+    if (!newKeyForm.keyCode || !newKeyForm.name) return;
+    await createDistributionKey.mutateAsync({
+      keyCode: newKeyForm.keyCode,
+      name: newKeyForm.name,
+      description: newKeyForm.description || undefined,
+      inputType: newKeyForm.inputType,
+      unit: inputTypeOptions.find(o => o.value === newKeyForm.inputType)?.unit || 'Anteil',
+      includedUnitTypes: newKeyForm.includedUnitTypes,
+    });
+    setNewKeyForm({ 
+      keyCode: '', 
+      name: '', 
+      description: '', 
+      inputType: 'flaeche', 
+      unit: 'm²',
+      includedUnitTypes: ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges']
+    });
+    setNewKeyDialogOpen(false);
+  };
 
   const handleDelete = async () => {
     if (id) {
@@ -351,7 +404,11 @@ export default function PropertyDetail() {
               </Button>
               <Button variant="outline" onClick={() => setTenantImportDialogOpen(true)}>
                 <Users className="h-4 w-4 mr-2" />
-                Mieter importieren
+                Mieter CSV Import
+              </Button>
+              <Button onClick={() => setPdfScanDialogOpen(true)} data-testid="button-pdf-scan-property">
+                <FileImage className="h-4 w-4 mr-2" />
+                PDF scannen
               </Button>
               {canAddUnit ? (
                 <Link to={`/liegenschaften/${id}/einheiten/neu`}>
@@ -361,10 +418,10 @@ export default function PropertyDetail() {
                   </Button>
                 </Link>
               ) : (
-              <Link to="/einstellungen">
+                <Link to="/upgrade">
                   <Button variant="secondary">
                     <Crown className="h-4 w-4 mr-2" />
-                    Limit erreicht
+                    Plan upgraden
                   </Button>
                 </Link>
               )}
@@ -382,7 +439,7 @@ export default function PropertyDetail() {
                     <TableHead>MEA</TableHead>
                     <TableHead>Personen</TableHead>
                     <TableHead>Mieter</TableHead>
-                    <TableHead>Gesamtmiete</TableHead>
+                    <TableHead>Vorschreibung/Monat</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Aktionen</TableHead>
                   </TableRow>
@@ -391,11 +448,10 @@ export default function PropertyDetail() {
                   {units.map((unit) => {
                     const tenants = unit.tenants as any[];
                     const activeTenant = tenants?.find((t: any) => t.status === 'aktiv');
-                    const totalRent = activeTenant
-                      ? Number(activeTenant.grundmiete || 0) +
-                        Number(activeTenant.betriebskosten_vorschuss || 0) +
-                        Number(activeTenant.heizungskosten_vorschuss || 0)
-                      : 0;
+                    const grundmiete = activeTenant ? Number(activeTenant.grundmiete || 0) : 0;
+                    const bk = activeTenant ? Number(activeTenant.betriebskosten_vorschuss || 0) : 0;
+                    const hk = activeTenant ? Number(activeTenant.heizungskosten_vorschuss || 0) : 0;
+                    const totalRent = grundmiete + bk + hk;
 
                     return (
                       <TableRow key={unit.id} className="hover:bg-muted/30">
@@ -421,9 +477,36 @@ export default function PropertyDetail() {
                         </TableCell>
                         <TableCell>
                           {activeTenant ? (
-                            <span className="font-medium">
-                              €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
-                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <span className="font-medium cursor-help underline decoration-dotted">
+                                    €{totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="p-3">
+                                  <div className="space-y-1 text-sm">
+                                    <p className="font-semibold border-b pb-1 mb-2">Monatliche Vorschreibung</p>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Grundmiete:</span>
+                                      <span className="font-medium">€ {grundmiete.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Betriebskosten:</span>
+                                      <span className="font-medium">€ {bk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                      <span>Heizkosten:</span>
+                                      <span className="font-medium">€ {hk.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4 border-t pt-1 mt-2 font-semibold">
+                                      <span>Gesamt:</span>
+                                      <span>€ {totalRent.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -603,6 +686,193 @@ export default function PropertyDetail() {
               })}
             </div>
           </div>
+          
+          {/* Eigene Verteilerschlüssel */}
+          <div className="rounded-xl border border-border bg-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-foreground">Eigene Verteilerschlüssel</h3>
+                <p className="text-sm text-muted-foreground">
+                  Definieren Sie eigene Verteilerschlüssel für diese Liegenschaft (z.B. Heizkreis A, Lift 1, etc.)
+                </p>
+              </div>
+              <Dialog open={newKeyDialogOpen} onOpenChange={setNewKeyDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="button-add-distribution-key">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Neuer Schlüssel
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Neuen Verteilerschlüssel anlegen</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="keyCode">Schlüssel-Code</Label>
+                        <Input
+                          id="keyCode"
+                          placeholder="z.B. heizkreis_a"
+                          value={newKeyForm.keyCode}
+                          onChange={(e) => setNewKeyForm(f => ({ ...f, keyCode: e.target.value }))}
+                          data-testid="input-key-code"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="keyName">Name</Label>
+                        <Input
+                          id="keyName"
+                          placeholder="z.B. Heizkreis A"
+                          value={newKeyForm.name}
+                          onChange={(e) => setNewKeyForm(f => ({ ...f, name: e.target.value }))}
+                          data-testid="input-key-name"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="keyDescription">Beschreibung (optional)</Label>
+                      <Input
+                        id="keyDescription"
+                        placeholder="z.B. Heizkreislauf für Tops 1-5"
+                        value={newKeyForm.description}
+                        onChange={(e) => setNewKeyForm(f => ({ ...f, description: e.target.value }))}
+                        data-testid="input-key-description"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="inputType">Berechnungsart</Label>
+                      <Select
+                        value={newKeyForm.inputType}
+                        onValueChange={(v) => setNewKeyForm(f => ({ ...f, inputType: v }))}
+                      >
+                        <SelectTrigger data-testid="select-input-type">
+                          <SelectValue placeholder="Berechnungsart wählen" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {inputTypeOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label} ({opt.unit})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Einbezogene Einheitstypen</Label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Welche Einheitstypen werden bei dieser Kostenart berücksichtigt?
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {allUnitTypes.map(ut => (
+                          <label key={ut.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={newKeyForm.includedUnitTypes.includes(ut.value)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setNewKeyForm(f => ({ ...f, includedUnitTypes: [...f.includedUnitTypes, ut.value] }));
+                                } else {
+                                  setNewKeyForm(f => ({ ...f, includedUnitTypes: f.includedUnitTypes.filter(t => t !== ut.value) }));
+                                }
+                              }}
+                              data-testid={`checkbox-unit-type-${ut.value}`}
+                            />
+                            {ut.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline">Abbrechen</Button>
+                    </DialogClose>
+                    <Button 
+                      onClick={handleCreateDistributionKey}
+                      disabled={!newKeyForm.keyCode || !newKeyForm.name || createDistributionKey.isPending}
+                      data-testid="button-save-distribution-key"
+                    >
+                      {createDistributionKey.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                      Speichern
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            {isLoadingDistributionKeys ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : distributionKeys && distributionKeys.length > 0 ? (
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Typ</TableHead>
+                      <TableHead>Einheit</TableHead>
+                      <TableHead>Einbezogene Einheiten</TableHead>
+                      <TableHead className="text-right">Aktionen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {distributionKeys.map((key) => {
+                      const unitTypes = (key.includedUnitTypes as string[] | null) || ['wohnung', 'geschaeft', 'lager', 'garage', 'stellplatz', 'sonstiges'];
+                      const unitTypeLabels: Record<string, string> = {
+                        wohnung: 'Whg',
+                        geschaeft: 'Gesch',
+                        lager: 'Lager',
+                        garage: 'Gar',
+                        stellplatz: 'Stpl',
+                        sonstiges: 'Sonst'
+                      };
+                      return (
+                      <TableRow key={key.id} data-testid={`row-distribution-key-${key.id}`}>
+                        <TableCell className="font-mono text-sm">{key.keyCode}</TableCell>
+                        <TableCell>{key.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {inputTypeOptions.find(o => o.value === key.inputType)?.label || key.inputType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{key.unit}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {unitTypes.length === 6 ? (
+                              <Badge variant="outline" className="text-xs">Alle</Badge>
+                            ) : (
+                              unitTypes.map(ut => (
+                                <Badge key={ut} variant="outline" className="text-xs">{unitTypeLabels[ut] || ut}</Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteDistributionKey.mutate(key.id)}
+                            disabled={deleteDistributionKey.isPending}
+                            data-testid={`button-delete-key-${key.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>Noch keine eigenen Verteilerschlüssel definiert.</p>
+                <p className="text-sm">Klicken Sie auf "Neuer Schlüssel" um einen anzulegen.</p>
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="costs" className="space-y-4">
@@ -714,6 +984,17 @@ export default function PropertyDetail() {
           <TenantImportDialog
             open={tenantImportDialogOpen}
             onOpenChange={setTenantImportDialogOpen}
+            propertyId={id}
+            units={units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['units', id] });
+              queryClient.invalidateQueries({ queryKey: ['tenants'] });
+            }}
+          />
+
+          <PdfScanDialog
+            open={pdfScanDialogOpen}
+            onOpenChange={setPdfScanDialogOpen}
             propertyId={id}
             units={units.map(u => ({ id: u.id, top_nummer: u.top_nummer }))}
             onSuccess={() => {

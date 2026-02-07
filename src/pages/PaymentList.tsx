@@ -66,12 +66,12 @@ import { toast } from 'sonner';
 import { TenantPaymentDetailDialog } from '@/components/payments/TenantPaymentDetailDialog';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
 
-export default function PaymentList({ embedded = false }: { embedded?: boolean }) {
+export default function PaymentList() {
   const now = new Date();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
+  const [selectedMonth, setSelectedMonth] = useState<number>(1); // Default to January 2025
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
@@ -116,13 +116,13 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
   // Get unit IDs for selected property
   const propertyUnitIds = useMemo(() => {
     if (!units || selectedPropertyId === 'all') return null;
-    return units.filter(u => u.property_id === selectedPropertyId).map(u => u.id);
+    return units.filter(u => u.propertyId === selectedPropertyId).map(u => u.id);
   }, [units, selectedPropertyId]);
 
   const rentalIncomeTransactions = useMemo(() => {
     if (!transactions || incomeCategories.length === 0) return [];
     let filtered = transactions
-      .filter(t => incomeCategories.includes(t.category_id) && t.amount > 0);
+      .filter(t => incomeCategories.includes(t.category_id) && Number(t.amount) > 0);
     
     // Filter by property if selected
     if (propertyUnitIds) {
@@ -132,7 +132,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
         // Check via tenant's unit
         if (t.tenant_id) {
           const tenant = tenants?.find(ten => ten.id === t.tenant_id);
-          if (tenant && propertyUnitIds.includes(tenant.unit_id)) return true;
+          if (tenant && propertyUnitIds.includes(tenant.unitId)) return true;
         }
         return false;
       });
@@ -143,20 +143,24 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
 
   // Filter payments by property and current month (same as Reports logic)
   const filteredPayments = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    
     let filtered = (payments || []).filter(p => {
-      const date = new Date(p.eingangs_datum);
-      return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      const date = new Date(p.eingangsDatum);
+      const paymentMonth = date.getMonth() + 1;
+      const paymentYear = date.getFullYear();
+      
+      // In 'year' viewMode, show all payments for the selected year
+      // In 'month' viewMode, filter by both month and year
+      if (viewMode === 'year') {
+        return paymentYear === selectedYear;
+      }
+      return paymentMonth === selectedMonth && paymentYear === selectedYear;
     });
     
     // Filter by property if selected
     if (propertyUnitIds) {
       filtered = filtered.filter(p => {
-        const tenant = tenants?.find(t => t.id === p.tenant_id);
-        return tenant && propertyUnitIds.includes(tenant.unit_id);
+        const tenant = tenants?.find(t => t.id === p.tenantId);
+        return tenant && propertyUnitIds.includes(tenant.unitId);
       });
     }
     
@@ -164,8 +168,8 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       filtered = filtered.filter(p => {
-        const tenant = tenants?.find(t => t.id === p.tenant_id);
-        const tenantName = tenant ? `${tenant.first_name} ${tenant.last_name}`.toLowerCase() : '';
+        const tenant = tenants?.find(t => t.id === p.tenantId);
+        const tenantName = tenant ? `${tenant.firstName} ${tenant.lastName}`.toLowerCase() : '';
         return (
           p.referenz?.toLowerCase().includes(searchLower) ||
           tenantName.includes(searchLower)
@@ -173,8 +177,8 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
       });
     }
     
-    return filtered.sort((a, b) => new Date(b.eingangs_datum).getTime() - new Date(a.eingangs_datum).getTime());
-  }, [payments, propertyUnitIds, tenants, searchQuery]);
+    return filtered.sort((a, b) => new Date(b.eingangsDatum).getTime() - new Date(a.eingangsDatum).getTime());
+  }, [payments, propertyUnitIds, tenants, searchQuery, selectedYear, selectedMonth, viewMode]);
 
   // Use central MRG allocation hook for consistent logic with Reports (monthly)
   const { allocations: mrgAllocationsMonthly, totals: mrgTotalsMonthly, isLoading: mrgLoadingMonthly } = useMrgAllocation(
@@ -215,8 +219,8 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
     return unpaidFees.filter(fee => {
       const tenant = tenants.find(t => t.id === fee.tenant_id);
       if (!tenant) return false;
-      const unit = units.find(u => u.id === tenant.unit_id);
-      return unit?.property_id === selectedPropertyId;
+      const unit = units.find(u => u.id === tenant.unitId);
+      return unit?.propertyId === selectedPropertyId;
     });
   }, [unpaidFees, tenants, units, selectedPropertyId]);
 
@@ -251,7 +255,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
       
       // If no tenant found via tenant_id, try to find active tenant for this unit
       if (!tenant && unit) {
-        tenant = tenants?.find(t => t.unit_id === transaction.unit_id && t.status === 'aktiv');
+        tenant = tenants?.find(t => t.unitId === transaction.unit_id && t.status === 'aktiv');
       }
     }
     
@@ -282,8 +286,8 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
     }
     
     const paymentAmount = Number(selectedTransaction.amount);
-    const bkSoll = Number(tenant.betriebskosten_vorschuss || 0);
-    const hkSoll = Number(tenant.heizungskosten_vorschuss || 0);
+    const bkSoll = Number(tenant.betriebskostenVorschuss || 0);
+    const hkSoll = Number(tenant.heizungskostenVorschuss || 0);
     const mieteSoll = Number(tenant.grundmiete || 0);
     
     // Calculate preview
@@ -309,11 +313,11 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
         await assignPaymentWithSplit.mutateAsync({
           transactionId: selectedTransaction.id,
           tenantId: selectedTenantId,
-          unitId: tenant.unit_id,
+          unitId: tenant.unitId,
           paymentAmount: Number(selectedTransaction.amount),
           tenant: {
-            betriebskosten_vorschuss: Number(tenant.betriebskosten_vorschuss || 0),
-            heizungskosten_vorschuss: Number(tenant.heizungskosten_vorschuss || 0),
+            betriebskosten_vorschuss: Number(tenant.betriebskostenVorschuss || 0),
+            heizungskosten_vorschuss: Number(tenant.heizungskostenVorschuss || 0),
             grundmiete: Number(tenant.grundmiete || 0),
           },
           categories: {
@@ -338,12 +342,10 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
         await updateTransaction.mutateAsync({
           id: selectedTransaction.id,
           tenant_id: selectedTenantId,
-          unit_id: tenant.unit_id,
-          status: 'matched',
-          matched_at: new Date().toISOString(),
+          unit_id: tenant.unitId,
         });
 
-        toast.success(`Transaktion wurde ${tenant.first_name} ${tenant.last_name} zugeordnet`);
+        toast.success(`Transaktion wurde ${tenant.firstName} ${tenant.lastName} zugeordnet`);
         setReassignDialogOpen(false);
         setSelectedTransaction(null);
         setSelectedTenantId('');
@@ -364,12 +366,12 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
     const grouped: { property: any; activeTenants: any[]; formerTenants: any[] }[] = [];
     
     properties.forEach(property => {
-      const propertyUnits = units.filter(u => u.property_id === property.id);
+      const propertyUnits = units.filter(u => u.propertyId === property.id);
       const allPropertyTenants = tenants.filter(t => 
-        propertyUnits.some(u => u.id === t.unit_id)
+        propertyUnits.some(u => u.id === t.unitId)
       ).map(t => ({
         ...t,
-        unit: propertyUnits.find(u => u.id === t.unit_id)
+        unit: propertyUnits.find(u => u.id === t.unitId)
       }));
       
       const activeTenants = allPropertyTenants.filter(t => t.status === 'aktiv');
@@ -383,8 +385,11 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
     return grouped;
   }, [tenants, units, properties]);
 
-  const content = (
-    <>
+  return (
+    <MainLayout
+      title="Mieteinnahmen"
+      subtitle="Übersicht der Mieteinnahmen aus der Buchhaltung"
+    >
       {/* Data Consistency Alert */}
       <DataConsistencyAlert variant="compact" />
 
@@ -519,7 +524,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                     const groupedByProperty = (properties || [])
                       .filter(p => selectedPropertyId === 'all' || p.id === selectedPropertyId)
                       .map(property => {
-                        const propertyUnits = (units || []).filter(u => u.property_id === property.id);
+                        const propertyUnits = (units || []).filter(u => u.propertyId === property.id);
                         const propertyAllocations = mrgAllocations
                           .filter(alloc => propertyUnits.some(u => u.id === alloc.unit?.id))
                           .sort((a, b) => {
@@ -658,19 +663,19 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                   </TableHeader>
                   <TableBody>
                     {filteredPayments.map((payment) => {
-                      const tenant = tenants?.find(t => t.id === payment.tenant_id);
-                      const unit = tenant ? units?.find(u => u.id === tenant.unit_id) : null;
+                      const tenant = tenants?.find(t => t.id === payment.tenantId);
+                      const unit = tenant ? units?.find(u => u.id === tenant.unitId) : null;
 
                       return (
                         <TableRow key={payment.id}>
                           <TableCell>
-                            {format(new Date(payment.eingangs_datum), 'dd.MM.yyyy', { locale: de })}
+                            {format(new Date(payment.eingangsDatum), 'dd.MM.yyyy', { locale: de })}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
+                            {tenant ? `${tenant.firstName} ${tenant.lastName}` : '-'}
                           </TableCell>
                           <TableCell>
-                            {unit ? unit.top_nummer : '-'}
+                            {unit ? unit.topNummer : '-'}
                           </TableCell>
                           <TableCell className="max-w-xs truncate">
                             {payment.referenz || '-'}
@@ -794,7 +799,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                   <TableBody>
                     {filteredUnpaidFees.map((fee) => {
                       const tenant = tenants?.find(t => t.id === fee.tenant_id);
-                      const unit = tenant ? units?.find(u => u.id === tenant.unit_id) : null;
+                      const unit = tenant ? units?.find(u => u.id === tenant.unitId) : null;
                       
                       return (
                         <TableRow key={fee.id} className="bg-purple-50/30 dark:bg-purple-950/10">
@@ -802,9 +807,9 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                             {format(new Date(fee.created_at), 'dd.MM.yyyy', { locale: de })}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {tenant ? `${tenant.first_name} ${tenant.last_name}` : '-'}
+                            {tenant ? `${tenant.firstName} ${tenant.lastName}` : '-'}
                           </TableCell>
-                          <TableCell>{unit?.top_nummer || '-'}</TableCell>
+                          <TableCell>{unit?.topNummer || '-'}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
                               {FEE_TYPE_LABELS[fee.fee_type] || fee.fee_type}
@@ -977,7 +982,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                         </SelectLabel>
                         {activeTenants.map(tenant => (
                           <SelectItem key={tenant.id} value={tenant.id}>
-                            {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
+                            {tenant.firstName} {tenant.lastName} (Top {tenant.unit?.topNummer})
                           </SelectItem>
                         ))}
                         {formerTenants.length > 0 && (
@@ -987,7 +992,7 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                             </SelectLabel>
                             {formerTenants.map(tenant => (
                               <SelectItem key={tenant.id} value={tenant.id}>
-                                {tenant.first_name} {tenant.last_name} (Top {tenant.unit?.top_nummer})
+                                {tenant.firstName} {tenant.lastName} (Top {tenant.unit?.topNummer})
                               </SelectItem>
                             ))}
                           </>
@@ -1021,8 +1026,8 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
                   {(() => {
                     const tenant = tenants?.find(t => t.id === selectedTenantId);
                     if (!tenant) return null;
-                    const totalSoll = Number(tenant.betriebskosten_vorschuss || 0) + 
-                                     Number(tenant.heizungskosten_vorschuss || 0) + 
+                    const totalSoll = Number(tenant.betriebskostenVorschuss || 0) + 
+                                     Number(tenant.heizungskostenVorschuss || 0) + 
                                      Number(tenant.grundmiete || 0);
                     const unterzahlung = totalSoll - Number(selectedTransaction.amount);
                     if (unterzahlung > 0.01) {
@@ -1065,17 +1070,6 @@ export default function PaymentList({ embedded = false }: { embedded?: boolean }
         year={selectedYear}
         month={selectedMonth}
       />
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <MainLayout
-      title="Mieteinnahmen"
-      subtitle="Übersicht der Mieteinnahmen aus der Buchhaltung"
-    >
-      {content}
     </MainLayout>
   );
 }
