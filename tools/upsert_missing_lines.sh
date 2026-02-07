@@ -77,15 +77,8 @@ echo "--- Schritt 1: Dry-Run erzeugen ---"
 npx tsx scripts/dryrun.ts --year="$YEAR" --month="$MONTH" --output="$DRYRUN_FILE"
 echo ""
 
-RUN_ID=$(node -e "const d=require('./${DRYRUN_FILE}'); console.log(d.runId || '')")
-
-if [ -z "$RUN_ID" ]; then
-  echo "FEHLER: Kein runId im Dry-Run gefunden."
-  exit 1
-fi
-
-echo "--- Schritt 2: DB Lines exportieren ---"
-node tools/export_db_lines.js "$RUN_ID" --out="$DB_FILE" || true
+echo "--- Schritt 2: DB Lines exportieren (Jahr=${YEAR}, Monat=${MONTH}) ---"
+node tools/export_db_lines.js --year="$YEAR" --month="$MONTH" --out="$DB_FILE" || true
 echo ""
 
 echo "--- Schritt 3: Fehlende Zeilen finden ---"
