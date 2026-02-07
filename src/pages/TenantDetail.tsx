@@ -76,6 +76,13 @@ export default function TenantDetail() {
       subtitle="Mieter-Details"
     >
       <div className="max-w-3xl mx-auto space-y-6">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1 text-sm text-muted-foreground flex-wrap">
+          <Link to="/mieter" className="hover:text-foreground transition-colors">Mieter</Link>
+          <span>/</span>
+          <span className="text-foreground font-medium">{tenant.first_name} {tenant.last_name}</span>
+        </nav>
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <Button variant="outline" onClick={() => navigate('/mieter')}>
