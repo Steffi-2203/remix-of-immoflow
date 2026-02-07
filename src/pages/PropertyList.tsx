@@ -77,7 +77,7 @@ export default function PropertyList() {
   };
 
   const totalUnits = allUnits?.length || 0;
-  const totalQm = properties?.reduce((sum, p) => sum + (Number(p.total_qm) || 0), 0) || 0;
+  const totalQm = (properties as any[])?.reduce((sum: number, p: any) => sum + (Number(p.total_qm) || 0), 0) || 0;
   const occupiedUnits = allUnits?.filter((u) => u.status === 'aktiv').length || 0;
   const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
@@ -181,6 +181,7 @@ export default function PropertyList() {
                 total_qm: Number(property.total_qm),
                 total_mea: Number(property.total_mea),
                 building_year: property.building_year,
+                management_type: (property as any).management_type,
               }}
               units={getUnitsForProperty(property.id)}
             />

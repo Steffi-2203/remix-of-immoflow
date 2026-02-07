@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, PiggyBank, Vote, Loader2, Calendar, FileSpreadsheet, ArrowRightLeft } from 'lucide-react';
+import { Plus, Users, PiggyBank, Vote, Loader2, Calendar, FileSpreadsheet, ArrowRightLeft, Building2 } from 'lucide-react';
 import { useWegAssemblies, useCreateWegAssembly, useUpdateWegAssembly, useWegVotes, useCreateWegVote, useReserveFund, useCreateReserveFundEntry } from '@/hooks/useWeg';
 import { useWegBusinessPlans, statusLabels as planStatusLabels } from '@/hooks/useWegBusinessPlan';
 import { useOwnershipTransfers, transferStatusLabels, legalReasonLabels } from '@/hooks/useOwnershipTransfer';
@@ -18,6 +18,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
 import { BusinessPlanDialog } from '@/components/weg/BusinessPlanDialog';
 import { OwnershipTransferWizard } from '@/components/weg/OwnershipTransferWizard';
+import { PropertyOwnersCard } from '@/components/property/PropertyOwnersCard';
 
 const statusLabels: Record<string, string> = { geplant: 'Geplant', durchgefuehrt: 'Durchgeführt', protokolliert: 'Protokolliert' };
 const statusStyles: Record<string, string> = { geplant: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', durchgefuehrt: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', protokolliert: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
@@ -133,13 +134,26 @@ export default function WegManagement() {
           </Select>
         </div>
 
-        <Tabs defaultValue="assemblies">
+        <Tabs defaultValue="owners">
           <TabsList>
+            <TabsTrigger value="owners"><Building2 className="h-4 w-4 mr-1" /> Eigentümer</TabsTrigger>
             <TabsTrigger value="assemblies"><Users className="h-4 w-4 mr-1" /> Versammlungen</TabsTrigger>
             <TabsTrigger value="businessplan"><FileSpreadsheet className="h-4 w-4 mr-1" /> Wirtschaftsplan</TabsTrigger>
             <TabsTrigger value="reserve"><PiggyBank className="h-4 w-4 mr-1" /> Rücklage</TabsTrigger>
             <TabsTrigger value="transfers"><ArrowRightLeft className="h-4 w-4 mr-1" /> Eigentümerwechsel</TabsTrigger>
           </TabsList>
+
+          {/* Owners Tab */}
+          <TabsContent value="owners" className="space-y-4">
+            {selectedPropertyId ? (
+              <PropertyOwnersCard propertyId={selectedPropertyId} />
+            ) : (
+              <Card><CardContent className="py-12 text-center text-muted-foreground">
+                <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Bitte wählen Sie eine Liegenschaft, um die Eigentümer zu verwalten.</p>
+              </CardContent></Card>
+            )}
+          </TabsContent>
 
           <TabsContent value="assemblies" className="space-y-4">
             <div className="flex justify-end">

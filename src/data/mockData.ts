@@ -26,6 +26,7 @@ export interface DemoProperty {
   richtwert_bundesland: string | null;
   stichtag_mrg: string | null;
   marktwert: number | null;
+  management_type: 'mrg' | 'weg' | 'gemischt';
   created_at: string;
   updated_at: string;
 }
@@ -219,6 +220,7 @@ export const mockProperties: DemoProperty[] = [
     richtwert_bundesland: 'Wien',
     stichtag_mrg: null,
     marktwert: 2850000,
+    management_type: 'mrg',
     created_at: '2023-01-15T10:00:00Z',
     updated_at: '2024-11-20T14:30:00Z',
   },
@@ -247,6 +249,7 @@ export const mockProperties: DemoProperty[] = [
     richtwert_bundesland: 'Steiermark',
     stichtag_mrg: null,
     marktwert: 4200000,
+    management_type: 'weg',
     created_at: '2022-06-10T09:00:00Z',
     updated_at: '2024-12-01T11:00:00Z',
   },
@@ -275,6 +278,7 @@ export const mockProperties: DemoProperty[] = [
     richtwert_bundesland: 'Salzburg',
     stichtag_mrg: null,
     marktwert: 1950000,
+    management_type: 'mrg',
     created_at: '2021-03-22T08:00:00Z',
     updated_at: '2024-10-15T16:00:00Z',
   },

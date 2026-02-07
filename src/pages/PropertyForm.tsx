@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useProperty, useCreateProperty, useUpdateProperty } from '@/hooks/useProperties';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -40,6 +41,7 @@ export default function PropertyForm() {
     bk_anteil_wohnung: '10',
     bk_anteil_geschaeft: '20',
     bk_anteil_garage: '20',
+    management_type: 'mrg',
   });
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export default function PropertyForm() {
         bk_anteil_wohnung: existingProperty.bk_anteil_wohnung?.toString() || '10',
         bk_anteil_geschaeft: existingProperty.bk_anteil_geschaeft?.toString() || '20',
         bk_anteil_garage: existingProperty.bk_anteil_garage?.toString() || '20',
+        management_type: (existingProperty as any).management_type || 'mrg',
       });
     }
   }, [existingProperty]);
@@ -89,6 +92,7 @@ export default function PropertyForm() {
       bk_anteil_wohnung: parseFloat(formData.bk_anteil_wohnung) || 10,
       bk_anteil_geschaeft: parseFloat(formData.bk_anteil_geschaeft) || 20,
       bk_anteil_garage: parseFloat(formData.bk_anteil_garage) || 20,
+      management_type: formData.management_type,
     };
 
     try {
@@ -211,6 +215,22 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="z.B. 1965"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="management_type">Verwaltungsart</Label>
+              <Select
+                value={formData.management_type}
+                onValueChange={(v) => setFormData(prev => ({ ...prev, management_type: v }))}
+              >
+                <SelectTrigger id="management_type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mrg">MRG – Mietverwaltung</SelectItem>
+                  <SelectItem value="weg">WEG – Wohnungseigentum</SelectItem>
+                  <SelectItem value="gemischt">Gemischt</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

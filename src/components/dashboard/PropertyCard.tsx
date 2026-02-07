@@ -13,6 +13,7 @@ export interface PropertyCardProps {
     total_qm: number;
     total_mea: number;
     building_year: number | null;
+    management_type?: string;
   };
   units?: { total: number; occupied: number; vacant: number };
   maxUnitsPerProperty?: number;
@@ -42,7 +43,14 @@ export function PropertyCard({ property, units = { total: 0, occupied: 0, vacant
             </div>
           </div>
         </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="flex items-center gap-2">
+          {property.management_type && (
+            <Badge variant="outline" className="text-xs">
+              {property.management_type === 'weg' ? 'WEG' : property.management_type === 'mrg' ? 'MRG' : 'Gemischt'}
+            </Badge>
+          )}
+          <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-3 gap-4">
