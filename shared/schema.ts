@@ -562,7 +562,7 @@ export const messages = pgTable("messages", {
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => profiles.id),
-  runId: uuid("run_id"),
+  runId: text("run_id"),
   tableName: text("table_name").notNull(),
   recordId: text("record_id"),
   action: text("action").notNull(),
@@ -1419,3 +1419,27 @@ export const jobQueue = pgTable("job_queue", {
 export const insertJobQueueSchema = createInsertSchema(jobQueue).omit({ id: true, createdAt: true });
 export type JobQueue = typeof jobQueue.$inferSelect;
 export type InsertJobQueue = typeof jobQueue.$inferInsert;
+
+export const reconcileRuns = pgTable("reconcile_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: text("run_id").notNull().unique(),
+  type: text("type").notNull().default("batch_upsert"),
+  status: text("status").notNull().default("started"),
+  inserted: integer("inserted").default(0),
+  updated: integer("updated").default(0),
+  skipped: integer("skipped").default(0),
+  errors: integer("errors").default(0),
+  totalRows: integer("total_rows").default(0),
+  error: text("error"),
+  meta: jsonb("meta"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_reconcile_runs_run_id").on(table.runId),
+  index("idx_reconcile_runs_status").on(table.status),
+]);
+
+export const insertReconcileRunSchema = createInsertSchema(reconcileRuns).omit({ id: true, createdAt: true });
+export type ReconcileRun = typeof reconcileRuns.$inferSelect;
+export type InsertReconcileRun = typeof reconcileRuns.$inferInsert;
