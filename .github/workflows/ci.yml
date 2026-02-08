@@ -313,7 +313,7 @@ jobs:
 
           # Seed a dummy tenant (required FK for monthly_invoices)
           psql "$DATABASE_URL" -c "
-            INSERT INTO tenants (id, unit_id, vorname, nachname, email, created_at, updated_at)
+            INSERT INTO tenants (id, unit_id, first_name, last_name, email, created_at, updated_at)
             VALUES (
               '00000000-0000-0000-0000-000000009000',
               '00000000-0000-0000-0000-000000002000',
