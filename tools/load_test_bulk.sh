@@ -7,7 +7,7 @@ ROWS=${1:-10000}
 PARALLEL=${2:-1}
 DATABASE_URL=${3:-$STAGING_DATABASE_URL}
 
-RUN_ID=$(uuidgen)
+RUN_ID=$(node -e "console.log(require('crypto').randomUUID())")
 OUTDIR="load_tests/${RUN_ID}"
 mkdir -p "$OUTDIR"
 
