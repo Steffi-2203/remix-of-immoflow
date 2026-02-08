@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
 export interface BillingRunSummary {
@@ -32,6 +32,30 @@ export interface ChunkSummary {
   completedAt: string | null;
 }
 
+export interface SampleRow {
+  id: string;
+  invoice_id: string;
+  unit_id: string;
+  line_type: string;
+  description: string;
+  amount: number;
+  tax_rate: number;
+  created_at: string;
+  operation: string;
+  chunk_id: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  userId: string | null;
+  tableName: string;
+  recordId: string | null;
+  action: string;
+  oldData: any;
+  newData: any;
+  createdAt: string;
+}
+
 export function useBillingRuns() {
   return useQuery<BillingRunSummary[]>({
     queryKey: ['billing-runs'],
@@ -52,5 +76,53 @@ export function useBillingRunDetail(runId: string | null) {
     },
     enabled: !!runId,
     refetchInterval: 5_000,
+  });
+}
+
+export function useBillingRunSamples(runId: string | null) {
+  return useQuery<SampleRow[]>({
+    queryKey: ['billing-run-samples', runId],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/admin/billing-runs/${runId}/samples?limit=50`);
+      return res.json();
+    },
+    enabled: !!runId,
+  });
+}
+
+export function useAcceptRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runId, comment }: { runId: string; comment?: string }) => {
+      const res = await apiRequest('POST', `/api/admin/billing-runs/${runId}/accept`, { comment });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-runs'] });
+    },
+  });
+}
+
+export function useDeclineRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runId, reason }: { runId: string; reason?: string }) => {
+      const res = await apiRequest('POST', `/api/admin/billing-runs/${runId}/decline`, { reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-runs'] });
+    },
+  });
+}
+
+export function useReconciliationAudit(action?: string) {
+  return useQuery<AuditEntry[]>({
+    queryKey: ['reconciliation-audit', action],
+    queryFn: async () => {
+      const params = action ? `?action=${action}` : '';
+      const res = await apiRequest('GET', `/api/admin/reconciliation-audit${params}`);
+      return res.json();
+    },
   });
 }

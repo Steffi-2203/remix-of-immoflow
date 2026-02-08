@@ -51,6 +51,7 @@ import Datenschutz from "./pages/Datenschutz";
 import AGB from "./pages/AGB";
 import BatchOperations from "./pages/BatchOperations";
 import OwnerPortal from "./pages/OwnerPortal";
+import ReconciliationDashboard from "./pages/ReconciliationDashboard";
 
 const queryClient = new QueryClient();
 
@@ -119,6 +120,8 @@ const App = () => (
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
               <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+              <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
+              <Route path="/admin/reconciliation" element={<AdminRoute><ReconciliationDashboard /></AdminRoute>} />
               <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
             <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
