@@ -883,6 +883,7 @@ export type Database = {
           invoice_id: string
           line_type: string
           meta: Json | null
+          normalized_description: string | null
           tax_rate: number | null
           unit_id: string | null
         }
@@ -894,6 +895,7 @@ export type Database = {
           invoice_id: string
           line_type: string
           meta?: Json | null
+          normalized_description?: string | null
           tax_rate?: number | null
           unit_id?: string | null
         }
@@ -905,6 +907,7 @@ export type Database = {
           invoice_id?: string
           line_type?: string
           meta?: Json | null
+          normalized_description?: string | null
           tax_rate?: number | null
           unit_id?: string | null
         }
@@ -4468,6 +4471,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      invoice_lines_normalize_text: {
+        Args: { in_text: string }
+        Returns: string
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_org_admin: {
