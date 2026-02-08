@@ -268,6 +268,12 @@ export const invoiceLines = pgTable("invoice_lines", {
   unitId: uuid("unit_id").references(() => units.id),
   lineType: varchar("line_type", { length: 50 }).notNull(),
   description: text("description"),
+  /**
+   * Auto-populated by DB trigger `trg_invoice_lines_normalize`.
+   * Setting it explicitly in application code is redundant but harmless —
+   * the trigger always overwrites with its own computation.
+   */
+  normalizedDescription: text("normalized_description"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   taxRate: integer("tax_rate").default(0),
   meta: jsonb("meta"),
@@ -275,10 +281,10 @@ export const invoiceLines = pgTable("invoice_lines", {
 }, (table) => [
   index("idx_invoice_lines_invoice").on(table.invoiceId),
   index("idx_invoice_lines_unit").on(table.unitId),
-  uniqueIndex("idx_invoice_lines_unique").on(table.invoiceId, table.unitId, table.lineType, table.description),
+  uniqueIndex("idx_invoice_lines_unique").on(table.invoiceId, table.unitId, table.lineType, table.normalizedDescription),
 ]);
 
-export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true });
+export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true, normalizedDescription: true });
 export type InvoiceLine = typeof invoiceLines.$inferSelect;
 export type InsertInvoiceLine = typeof invoiceLines.$inferInsert;
 
