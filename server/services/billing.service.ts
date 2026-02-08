@@ -4,6 +4,7 @@ import { invoiceGenerator } from "./invoice.generator";
 import { roundMoney } from "@shared/utils";
 import { normalizeDescription } from "../lib/normalizeDescription";
 import { sql, eq, inArray } from "drizzle-orm";
+import { metrics, METRIC } from "../lib/metrics";
 import {
   monthlyInvoices,
   invoiceLines,
@@ -237,8 +238,17 @@ export class BillingService {
         const durationMs = Date.now() - startTime;
         const expectedLines = allLines.length;
 
-        // ── Structured run metrics ──
-        const metrics = {
+        // ── Emit to metrics collector ──
+        metrics.increment(METRIC.INVOICES_EXPECTED, invoicesToCreate.length);
+        metrics.increment(METRIC.INVOICES_INSERTED, insertedInvoices.length);
+        metrics.increment(METRIC.LINES_EXPECTED, expectedLines);
+        metrics.increment(METRIC.LINES_UPSERTED, upsertedLinesCount);
+        metrics.increment(METRIC.LINES_SKIPPED, skippedLines.length);
+        metrics.increment(METRIC.CONFLICT_COUNT, conflictCount);
+        metrics.histogram(METRIC.RUN_DURATION_MS, durationMs);
+
+        // ── Structured run summary (for audit + log) ──
+        const runMetrics = {
           run_id: runId,
           period,
           invoicesExpected: invoicesToCreate.length,
@@ -266,8 +276,9 @@ export class BillingService {
           );
         }
 
-        // Always log metrics
-        console.info(`[BillingMetrics]`, JSON.stringify(metrics));
+        // Log structured metrics + flush collector
+        console.info(`[BillingMetrics]`, JSON.stringify(runMetrics));
+        metrics.flush();
 
         await tx.execute(sql`
           UPDATE invoice_runs SET status = 'completed', updated_at = now()
@@ -278,7 +289,7 @@ export class BillingService {
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
           VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({
-            ...metrics,
+            ...runMetrics,
             conflictKeys: conflictKeys.slice(0, 10),
             skippedDetails: skippedLines.slice(0, 10),
           })}::jsonb, now())
