@@ -75,10 +75,10 @@ export function MergeUndoPanel() {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Undo2 className="h-4 w-4 text-amber-600" />
-          Undo-Fenster aktiv
+          Undo-Fenster aktiv (2h)
         </CardTitle>
         <CardDescription>
-          Diese Merges können noch rückgängig gemacht werden.
+          Diese Merges können innerhalb von 2 Stunden rückgängig gemacht werden.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">

@@ -116,6 +116,32 @@ export function useDeclineRun() {
   });
 }
 
+export function useRollbackRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runId, reason }: { runId: string; reason?: string }) => {
+      const res = await apiRequest('POST', `/api/admin/billing-runs/${runId}/rollback`, { reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-runs'] });
+    },
+  });
+}
+
+export function useReprocessRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runId }: { runId: string }) => {
+      const res = await apiRequest('POST', `/api/admin/billing-runs/${runId}/reprocess`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['billing-runs'] });
+    },
+  });
+}
+
 export function useReconciliationAudit(action?: string) {
   return useQuery<AuditEntry[]>({
     queryKey: ['reconciliation-audit', action],
