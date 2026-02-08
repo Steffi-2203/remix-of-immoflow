@@ -17,7 +17,8 @@ export function useTransactions() {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data as Transaction[];
@@ -43,7 +44,8 @@ export function useTransactionsByUnit(unitId?: string) {
         .from('transactions')
         .select('*')
         .eq('unit_id', unitId)
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data as Transaction[];
@@ -74,7 +76,8 @@ export function useTransactionsByBankAccount(bankAccountId?: string) {
         .from('transactions')
         .select('*')
         .eq('bank_account_id', bankAccountId)
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data as Transaction[];
@@ -105,7 +108,8 @@ export function useTransactionsByCategory(categoryId?: string) {
         .from('transactions')
         .select('*')
         .eq('category_id', categoryId)
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data as Transaction[];
@@ -165,7 +169,8 @@ export function useUnmatchedTransactions() {
         .from('transactions')
         .select('*')
         .eq('status', 'unmatched')
-        .order('transaction_date', { ascending: false });
+        .order('transaction_date', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data as Transaction[];

@@ -28,7 +28,8 @@ export function usePayments() {
       const { data, error } = await supabase
         .from('payments')
         .select('*, tenants(first_name, last_name, unit_id, units(top_nummer, property_id, properties(name)))')
-        .order('eingangs_datum', { ascending: false });
+        .order('eingangs_datum', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data;
@@ -54,7 +55,8 @@ export function usePaymentsByTenant(tenantId?: string) {
         .from('payments')
         .select('*')
         .eq('tenant_id', tenantId)
-        .order('eingangs_datum', { ascending: false });
+        .order('eingangs_datum', { ascending: false })
+        .limit(500);
       
       if (error) throw error;
       return data;

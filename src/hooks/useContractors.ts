@@ -64,7 +64,8 @@ export function useContractors(onlyActive = true) {
       let query = supabase
         .from('contractors')
         .select('*')
-        .order('company_name');
+        .order('company_name')
+        .limit(500);
       
       if (onlyActive) {
         query = query.eq('is_active', true);
