@@ -1,37 +1,31 @@
 
 
-## P2 – Strategische Umsetzung
+## Enterprise-Readiness Checkliste
 
-### P2-7: Temp-Table COPY + Upsert CTE fuer Gross-Batches ✅
+### P0 – Vor Enterprise-Einsatz ✅
 
-**Status**: Implementiert
-- `server/services/bulkUpsertLines.ts`: Neues Modul mit Temp-Table + CTE Bulk-Pfad
-- `server/services/billing.service.ts`: Dispatch-Logik (≥ BULK_THRESHOLD → Bulk, sonst Legacy)
-- `server/lib/metrics.ts`: `METRIC.BULK_PATH_USED` hinzugefuegt
-- Schwellwert konfigurierbar via `BILLING_BULK_THRESHOLD` Env-Var (Default: 5000)
+| Item | Status | Details |
+|------|--------|---------|
+| Artifact Governance | ✅ | Pre-commit blockt CSVs + reconciliation dirs; nur summary.json + SHA256 in Git |
+| Centralized Normalizer | ✅ | Single source: `server/lib/normalizeDescription.ts` + CJS-Wrapper; alle Tools importieren daraus |
+| Normalizer Parity Tests | ✅ | 16 Tests inkl. DB-Trigger-Parity (pgTriggerNormalize vs TS-Funktion) |
+| Audit Enrichment | ✅ | Standardisiertes Schema: `run_id, actor, operation, normalized_description, old_amount, new_amount` |
+| Secrets & Pre-commit | ✅ | git-secrets Scan + Fallback-Pattern-Matching; CSV-Blockierung; reconciliation-Dir-Blockierung |
 
----
+### P1 – Short Term ✅
 
-### P2-8: Enterprise Features
+| Item | Status | Details |
+|------|--------|---------|
+| Batch Ingestion Pipeline | ✅ | P2-7: Temp-Table + CTE Bulk-Pfad (≥5000 Zeilen), Legacy-Fallback |
+| Duplicate Resolution | ✅ | CI Duplicate-Precheck + tools/find_missing_lines.js + tools/upsert_missing_lines.js |
+| Observability & Alerts | ✅ | Metrics-Collector mit Counters + Histogramme; Alerts bei missing/conflict lines |
 
-#### 8a. RBAC-Erweiterung ✅
+### P2 – Strategic
 
-**Status**: Vollstaendig implementiert
-- DB-Tabellen: `permissions` + `role_permissions_override` mit RLS + Seed-Daten
-- `server/middleware/rbac.ts`: `hasPermission()` + `requirePermission()` Middleware
-- `src/hooks/usePermissions.ts`: Erweitert mit `useHasPermission(resource, action)` Hook + resource-basierte Permission-Aufloesung
-- `src/components/subscription/FeatureGuard.tsx`: Erweitert mit `resource`/`action` Props fuer RBAC-Pruefung
-- `server/routes.ts`: `requirePermission` importiert + auf `DELETE /api/properties/:id` angewendet
-
-#### 8b. SSO (SAML/OIDC) ⏳
-
-**Status**: Geplant (erfordert Produkt-Entscheidungen)
-- Betroffene Dateien: Auth.tsx, server/auth.ts, sso-callback Edge Function
-- Neue Spalten in organizations: sso_provider, sso_domain, sso_metadata_url
-
-#### 8c. Verschluesselte Artefakte + Retention ✅
-
-**Status**: Implementiert
-- `server/lib/artifactEncryption.ts`: AES-256-GCM Verschluesselung (aktiviert via `ARTIFACT_ENCRYPTION_KEY` Env-Var)
-- DB-Tabelle: `artifact_metadata` mit RLS, Retention-Index, Org-Zugehoerigkeit
-- `supabase/functions/cleanup-expired-artifacts/index.ts`: Cron-Funktion fuer automatische Bereinigung
+| Item | Status | Details |
+|------|--------|---------|
+| RBAC | ✅ | `permissions` + `role_permissions_override` Tabellen; `requirePermission()` Middleware; `useHasPermission()` Hook |
+| Encrypted Artifacts | ✅ | AES-256-GCM via `ARTIFACT_ENCRYPTION_KEY`; `artifact_metadata` Tabelle; Cleanup-Cron |
+| SSO | ⏳ | Geplant – erfordert Produkt-Entscheidungen |
+| Multi-Tenant Isolation | ⏳ | Via organization_id RLS; weitere Haertung geplant |
+| Job Queue / Horizontal Scaling | ⏳ | Architektur geplant |

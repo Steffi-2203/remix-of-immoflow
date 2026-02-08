@@ -26,4 +26,50 @@ describe('normalizeDescription', () => {
   test('strips invisible characters', () => {
     expect(normalizeDescription('a\u200Bb')).toBe('ab');
   });
+
+  // ── DB trigger parity tests ──
+  // The DB trigger uses: regexp_replace(lower(trim(description)), '\s+', ' ', 'g')
+  // Our TS function must produce identical output for all inputs.
+
+  describe('DB trigger parity', () => {
+    /**
+     * Simulate the Postgres trigger logic in JS:
+     *   regexp_replace(lower(trim(description)), '\s+', ' ', 'g')
+     *
+     * Our normalizeDescription additionally does:
+     *   - NFC unicode normalization (safe superset)
+     *   - Invisible character stripping (safe superset)
+     *
+     * For all standard inputs the results must be identical.
+     */
+    function pgTriggerNormalize(raw: string): string {
+      return raw.trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    const PARITY_CASES = [
+      'Grundmiete',
+      '  Betriebskosten  ',
+      'Heizkosten\tAbrechnung\n2025',
+      'VERSICHERUNG Gebäude',
+      'müllabfuhr 1. OG',
+      'Lift / Aufzug Wartung',
+      '   Multiple   Spaces   Here   ',
+      'Straße 123',
+      'Wasser/Abwasser',
+      'BK-Nachzahlung 2024',
+    ];
+
+    for (const input of PARITY_CASES) {
+      test(`parity: "${input.replace(/\n/g, '\\n').replace(/\t/g, '\\t')}"`, () => {
+        const tsResult = normalizeDescription(input);
+        const pgResult = pgTriggerNormalize(input);
+        expect(tsResult).toBe(pgResult);
+      });
+    }
+
+    test('parity holds for empty-ish strings', () => {
+      expect(normalizeDescription('')).toBe(pgTriggerNormalize(''));
+      expect(normalizeDescription('   ')).toBe(pgTriggerNormalize('   '));
+    });
+  });
 });
