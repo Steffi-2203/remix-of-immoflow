@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useSubscriptionLimits, type UserSubscriptionTier } from '@/hooks/useSubscriptionLimits';
 import { useIsAdmin } from '@/hooks/useAdmin';
+import { useHasPermission } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Lock, Crown, Sparkles, AlertTriangle } from 'lucide-react';
@@ -227,6 +228,9 @@ interface FeatureGuardProps {
   fallback?: ReactNode;
   mode?: 'inline' | 'card' | 'minimal' | 'hide';
   isWriteAction?: boolean;
+  /** P2-8a: Optional resource-level permission check (e.g. resource="invoices" action="write") */
+  resource?: string;
+  action?: string;
 }
 
 export function FeatureGuard({ 
@@ -234,18 +238,44 @@ export function FeatureGuard({
   children, 
   fallback,
   mode = 'inline',
-  isWriteAction = true
+  isWriteAction = true,
+  resource,
+  action,
 }: FeatureGuardProps) {
   const { limits, effectiveTier, isLoading } = useSubscriptionLimits();
   const { data: isAdmin } = useIsAdmin();
   const { phase, canWrite, canRead } = usePaymentPhase();
 
-  if (isLoading) {
+  // P2-8a: Resource-level permission check
+  const { allowed: hasResourcePermission, isLoading: permLoading } = useHasPermission(
+    resource || '', action || ''
+  );
+
+  if (isLoading || (resource && action && permLoading)) {
     return null;
   }
 
   if (isAdmin) {
     return <>{children}</>;
+  }
+
+  // P2-8a: If resource+action specified, check RBAC permission
+  if (resource && action && !hasResourcePermission) {
+    if (fallback) return <>{fallback}</>;
+    if (mode === 'hide') return null;
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
+        <Lock className="h-5 w-5 text-destructive flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-destructive">
+            Keine Berechtigung
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Sie haben keine Berechtigung für diese Aktion.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (phase === 'hard_lock' || phase === 'canceled') {

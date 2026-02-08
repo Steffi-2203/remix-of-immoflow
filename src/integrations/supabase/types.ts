@@ -59,6 +59,47 @@ export type Database = {
           },
         ]
       }
+      artifact_metadata: {
+        Row: {
+          created_at: string
+          encryption_key_id: string
+          expires_at: string
+          file_path: string
+          id: string
+          organization_id: string | null
+          retention_days: number
+          run_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          encryption_key_id?: string
+          expires_at?: string
+          file_path: string
+          id?: string
+          organization_id?: string | null
+          retention_days?: number
+          run_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          encryption_key_id?: string
+          expires_at?: string
+          file_path?: string
+          id?: string
+          organization_id?: string | null
+          retention_days?: number
+          run_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifact_metadata_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext';
 
 interface Permissions {
   canViewFinances: boolean;
@@ -19,10 +20,90 @@ interface Permissions {
   isLoading: boolean;
 }
 
+function mapPermissionFlags(perms: { resource: string; action: string }[]): Record<string, boolean> {
+  const set = new Set(perms.map(p => `${p.resource}:${p.action}`));
+  return {
+    canViewFinances: set.has('invoices:read') || set.has('payments:read'),
+    canEditFinances: set.has('invoices:write') || set.has('payments:write'),
+    canViewFullTenantData: set.has('tenants:read'),
+    canManageMaintenance: set.has('properties:write'),
+    canApproveInvoices: set.has('invoices:approve'),
+    canSendMessages: set.has('tenants:write'),
+    canManageUsers: set.has('users:write'),
+  };
+}
+
+function useOrgId(): string | undefined {
+  try {
+    const ctx = useActiveOrganization();
+    return ctx?.activeOrgId ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Check if user has a specific resource-level permission (P2-8a).
+ */
+export function useHasPermission(resource: string, action: string): { allowed: boolean; isLoading: boolean } {
+  const { user } = useAuth();
+  const organizationId = useOrgId();
+
+  const { data: userRole, isLoading: roleLoading } = useQuery({
+    queryKey: ['user-role', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return data?.role || null;
+    },
+    enabled: !!user?.id,
+  });
+
+  const { data: allowed, isLoading: permLoading } = useQuery({
+    queryKey: ['has-permission', userRole, resource, action, organizationId],
+    queryFn: async () => {
+      if (!userRole || !resource || !action) return false;
+      if (userRole === 'admin') return true;
+
+      // Check org override first
+      if (organizationId) {
+        const { data: overrideRows } = await supabase
+          .rpc('check_permission_override' as any, {
+            p_org_id: organizationId,
+            p_role: userRole,
+            p_resource: resource,
+            p_action: action,
+          });
+        // If we get an override, use it
+        if (overrideRows && Array.isArray(overrideRows) && overrideRows.length > 0) {
+          return overrideRows[0].allowed === true;
+        }
+      }
+
+      // Fall back to default permissions via raw query
+      const { data, error } = await supabase
+        .from('permissions' as any)
+        .select('id')
+        .eq('role', userRole)
+        .eq('resource', resource)
+        .eq('action', action)
+        .limit(1);
+      return !error && (data?.length ?? 0) > 0;
+    },
+    enabled: !!userRole && !!resource && !!action,
+  });
+
+  return { allowed: allowed ?? false, isLoading: roleLoading || permLoading };
+}
+
 export function usePermissions(): Permissions {
   const { user } = useAuth();
+  const organizationId = useOrgId();
 
-  // Fetch user's role from user_roles table
   const { data: userRole, isLoading: roleLoading } = useQuery({
     queryKey: ['user-role', user?.id],
     queryFn: async () => {
@@ -32,7 +113,6 @@ export function usePermissions(): Permissions {
         .select('role')
         .eq('user_id', user.id)
         .maybeSingle();
-      
       if (error) {
         console.error('Error fetching user role:', error);
         return null;
@@ -42,80 +122,77 @@ export function usePermissions(): Permissions {
     enabled: !!user?.id,
   });
 
-  // Check if user is admin or tester before the conditional hook
   const isUserAdmin = userRole === 'admin';
   const isUserTester = userRole === 'tester';
 
-  // Fetch permissions for the user's role (for non-admin, non-tester users)
-  const { data: permissions, isLoading: permissionsLoading } = useQuery({
-    queryKey: ['role-permissions', userRole],
+  const { data: resourcePerms, isLoading: permsLoading } = useQuery({
+    queryKey: ['resource-permissions', userRole, organizationId],
     queryFn: async () => {
-      if (!userRole) return null;
-      const { data, error } = await supabase
-        .from('role_permissions')
-        .select('*')
-        .eq('role', userRole)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error fetching role permissions:', error);
-        return null;
+      if (!userRole) return [];
+
+      const { data: basePerms } = await supabase
+        .from('permissions' as any)
+        .select('resource, action')
+        .eq('role', userRole);
+
+      const perms: { resource: string; action: string }[] = ((basePerms || []) as unknown as { resource: string; action: string }[]).slice();
+
+      if (organizationId) {
+        const { data: overrides } = await supabase
+          .from('role_permissions_override' as any)
+          .select('resource, action, allowed')
+          .eq('organization_id', organizationId)
+          .eq('role', userRole);
+
+        if (overrides) {
+          for (const ov of overrides as unknown as { resource: string; action: string; allowed: boolean }[]) {
+            if (!ov.allowed) {
+              const idx = perms.findIndex(p => p.resource === ov.resource && p.action === ov.action);
+              if (idx >= 0) perms.splice(idx, 1);
+            } else {
+              if (!perms.find(p => p.resource === ov.resource && p.action === ov.action)) {
+                perms.push({ resource: ov.resource, action: ov.action });
+              }
+            }
+          }
+        }
       }
-      return data;
+
+      return perms;
     },
     enabled: !!userRole && !isUserAdmin && !isUserTester,
   });
 
-  const isLoading = roleLoading || (isUserAdmin || isUserTester ? false : permissionsLoading);
+  const isLoading = roleLoading || (isUserAdmin || isUserTester ? false : permsLoading);
 
-  // If user is admin, grant all permissions
   if (isUserAdmin) {
     return {
-      canViewFinances: true,
-      canEditFinances: true,
-      canViewFullTenantData: true,
-      canManageMaintenance: true,
-      canApproveInvoices: true,
-      canSendMessages: true,
-      canManageUsers: true,
-      role: 'admin',
-      isAdmin: true,
-      isPropertyManager: false,
-      isFinance: false,
-      isViewer: false,
-      isTester: false,
-      isLoading: roleLoading,
+      canViewFinances: true, canEditFinances: true, canViewFullTenantData: true,
+      canManageMaintenance: true, canApproveInvoices: true, canSendMessages: true,
+      canManageUsers: true, role: 'admin', isAdmin: true, isPropertyManager: false,
+      isFinance: false, isViewer: false, isTester: false, isLoading: roleLoading,
     };
   }
 
-  // If user is tester, grant view permissions (demo mode handles data isolation)
   if (isUserTester) {
     return {
-      canViewFinances: true,
-      canEditFinances: true, // Allowed in demo mode
-      canViewFullTenantData: true,
-      canManageMaintenance: true,
-      canApproveInvoices: true,
-      canSendMessages: true,
-      canManageUsers: false,
-      role: 'tester',
-      isAdmin: false,
-      isPropertyManager: false,
-      isFinance: false,
-      isViewer: false,
-      isTester: true,
-      isLoading: roleLoading,
+      canViewFinances: true, canEditFinances: true, canViewFullTenantData: true,
+      canManageMaintenance: true, canApproveInvoices: true, canSendMessages: true,
+      canManageUsers: false, role: 'tester', isAdmin: false, isPropertyManager: false,
+      isFinance: false, isViewer: false, isTester: true, isLoading: roleLoading,
     };
   }
 
+  const flags = mapPermissionFlags(resourcePerms || []);
+
   return {
-    canViewFinances: permissions?.can_view_finances ?? false,
-    canEditFinances: permissions?.can_edit_finances ?? false,
-    canViewFullTenantData: permissions?.can_view_full_tenant_data ?? false,
-    canManageMaintenance: permissions?.can_manage_maintenance ?? false,
-    canApproveInvoices: permissions?.can_approve_invoices ?? false,
-    canSendMessages: permissions?.can_send_messages ?? false,
-    canManageUsers: permissions?.can_manage_users ?? false,
+    canViewFinances: flags.canViewFinances ?? false,
+    canEditFinances: flags.canEditFinances ?? false,
+    canViewFullTenantData: flags.canViewFullTenantData ?? false,
+    canManageMaintenance: flags.canManageMaintenance ?? false,
+    canApproveInvoices: flags.canApproveInvoices ?? false,
+    canSendMessages: flags.canSendMessages ?? false,
+    canManageUsers: flags.canManageUsers ?? false,
     role: userRole,
     isAdmin: false,
     isPropertyManager: userRole === 'property_manager',
