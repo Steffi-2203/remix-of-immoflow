@@ -4347,6 +4347,54 @@ export type Database = {
         }
         Relationships: []
       }
+      water_readings: {
+        Row: {
+          coefficient: number | null
+          consumption: number
+          created_at: string
+          id: string
+          organization_id: string | null
+          reading_date: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          coefficient?: number | null
+          consumption?: number
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          reading_date: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          coefficient?: number | null
+          consumption?: number
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          reading_date?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "water_readings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "water_readings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weg_assemblies: {
         Row: {
           assembly_date: string
