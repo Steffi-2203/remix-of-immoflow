@@ -20,6 +20,7 @@ import { paymentService } from "./services/paymentService";
 import readonlyRoutes from "./routes/readonly";
 import { requirePermission } from "./middleware/rbac";
 import crypto from "crypto";
+import { createAuditLog } from "./lib/auditLog";
 import multer from "multer";
 import OpenAI from "openai";
 import { 
@@ -5119,6 +5120,111 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     } catch (error) {
       console.error('Access log error:', error);
       res.status(500).json({ error: "Fehler beim Laden des Zugriffsprotokolls" });
+    }
+  });
+
+  // ── Bulk Duplicate Resolution ──────────────────────────────────────────────
+  app.post("/api/admin/duplicates/bulk-resolve", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const { groupIds, action, comment, mergePolicy } = req.body;
+      if (!groupIds || !Array.isArray(groupIds) || groupIds.length === 0) {
+        return res.status(400).json({ error: "groupIds required" });
+      }
+      if (!comment || comment.length < 5) {
+        return res.status(400).json({ error: "Comment must be at least 5 characters" });
+      }
+
+      let processed = 0;
+
+      for (const groupId of groupIds) {
+        try {
+          // Parse groupId => invoice_id|unit_id|line_type|normalized_description
+          const parts = groupId.split('|');
+          if (parts.length < 4) continue;
+
+          const [invoiceId, unitId, lineType, ...descParts] = parts;
+          const normDesc = descParts.join('|');
+
+          // Find duplicates in this group
+          const dupes = await db.execute(sql`
+            SELECT id, amount, created_at FROM invoice_lines
+            WHERE invoice_id = ${invoiceId}::uuid
+              AND unit_id = ${unitId}::uuid
+              AND line_type = ${lineType}
+              AND normalized_description = ${normDesc}
+              AND deleted_at IS NULL
+            ORDER BY created_at ASC
+          `);
+
+          if (!dupes.rows || dupes.rows.length <= 1) continue;
+
+          if (action === 'accept') {
+            // Keep the canonical (earliest), soft-delete the rest
+            const canonical = dupes.rows[0] as any;
+            const toDelete = dupes.rows.slice(1).map((r: any) => r.id);
+
+            if (toDelete.length > 0) {
+              await db.execute(sql`
+                UPDATE invoice_lines SET deleted_at = now()
+                WHERE id = ANY(${toDelete}::uuid[])
+              `);
+            }
+
+            await createAuditLog({
+              userId,
+              tableName: 'invoice_lines',
+              recordId: canonical.id,
+              action: 'bulk_accept',
+              newData: {
+                group_id: groupId,
+                merge_policy: mergePolicy || 'keep_latest',
+                deleted_ids: toDelete,
+                comment,
+              },
+            });
+          } else {
+            // Decline = mark as reviewed but no action
+            await createAuditLog({
+              userId,
+              tableName: 'invoice_lines',
+              recordId: groupId,
+              action: 'bulk_decline',
+              newData: { group_id: groupId, comment, action: 'decline' },
+            });
+          }
+
+          processed++;
+        } catch (groupErr) {
+          console.error(`Bulk resolve error for group ${groupId}:`, groupErr);
+        }
+      }
+
+      res.json({ processed, total: groupIds.length });
+    } catch (error) {
+      console.error('Bulk resolve error:', error);
+      res.status(500).json({ error: "Fehler bei Bulk-Auflösung" });
+    }
+  });
+
+  // ── SLO Check Endpoint ─────────────────────────────────────────────────────
+  app.get("/api/admin/billing-runs/:runId/slo", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const { runPostRunSLOCheck } = await import("./services/sloAlertingService");
+      const result = await runPostRunSLOCheck(req.params.runId);
+      res.json(result);
+    } catch (error) {
+      console.error('SLO check error:', error);
+      res.status(500).json({ error: "Fehler bei SLO-Prüfung" });
     }
   });
 

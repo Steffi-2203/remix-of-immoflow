@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
@@ -10,7 +11,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Check, X, Package, Loader2, RotateCcw, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Check, X, Package, Loader2, RotateCcw, RefreshCw, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -43,6 +44,21 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
   const [rollbackReason, setRollbackReason] = useState('');
+  const [sloResult, setSloResult] = useState<any>(null);
+  const [sloLoading, setSloLoading] = useState(false);
+
+  const handleSLOCheck = async () => {
+    setSloLoading(true);
+    try {
+      const res = await fetch(`/api/admin/billing-runs/${runId}/slo`, { credentials: 'include' });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
+      setSloResult(result);
+      if (result.passed) toast.success('SLO-Check bestanden');
+      else toast.error(`SLO-Verletzungen: ${result.breaches.length}`);
+    } catch { toast.error('SLO-Check fehlgeschlagen'); }
+    finally { setSloLoading(false); }
+  };
 
   if (isLoading) return <Skeleton className="h-96" />;
   if (!detail) return <p className="text-muted-foreground text-center py-8">Run nicht gefunden</p>;
@@ -103,6 +119,16 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
           <ArrowLeft className="h-4 w-4" /> Zurück
         </Button>
         <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={handleSLOCheck}
+            disabled={sloLoading}
+          >
+            {sloLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+            SLO-Check
+          </Button>
           {canReprocess && (
             <Button
               variant="outline"
@@ -142,6 +168,34 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
           )}
         </div>
       </div>
+
+      {/* SLO Result */}
+      {sloResult && (
+        <Card className={sloResult.passed ? 'border-primary/30' : 'border-destructive/30'}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              {sloResult.passed ? <ShieldCheck className="h-4 w-4 text-primary" /> : <ShieldAlert className="h-4 w-4 text-destructive" />}
+              SLO-Ergebnis: {sloResult.passed ? 'Bestanden' : 'Verletzungen'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {sloResult.breaches.map((b: any, i: number) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <Badge variant={b.severity === 'critical' ? 'destructive' : 'secondary'} className="text-xs">
+                  {b.severity}
+                </Badge>
+                <span>{b.message}</span>
+              </div>
+            ))}
+            {sloResult.warnings.map((w: string, i: number) => (
+              <div key={`w-${i}`} className="text-sm text-muted-foreground">⚠️ {w}</div>
+            ))}
+            {sloResult.breaches.length === 0 && sloResult.warnings.length === 0 && (
+              <p className="text-sm text-muted-foreground">Alle SLOs eingehalten ✓</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Card */}
       <Card>
