@@ -7,6 +7,8 @@ on:
       - 'tools/**'
       - 'tests/**'
       - '.github/workflows/**'
+      - 'server/services/billing.service.ts'
+      - 'shared/utils.ts'
 
 jobs:
   dryrun-persist:
@@ -25,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Prepare tmp folder
-        run: mkdir -p tmp
+      - name: Prepare directories
+        run: mkdir -p tmp reconciliations
 
       - name: Run DryRun Persist Vitest
         env:
@@ -34,3 +36,23 @@ jobs:
           RUN_ID: ${{ secrets.TEST_RUN_ID }}
         run: |
           npx vitest run tests/dryrun-persist.spec.ts --run
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-debug-${{ github.run_id }}
+          path: |
+            tmp/*.json
+            tmp/*.csv
+          retention-days: 7
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-audit-${{ github.run_id }}
+          path: |
+            reconciliations/*/
+          retention-days: 90
+          if-no-files-found: ignore
