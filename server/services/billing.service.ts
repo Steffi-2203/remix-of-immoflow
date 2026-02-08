@@ -141,6 +141,8 @@ export class BillingService {
       return { runId, error: 'Run already exists' };
     }
 
+    const startTime = Date.now();
+
     try {
       const createdInvoices = await db.transaction(async (tx) => {
         const insertedInvoices: any[] = [];
@@ -182,6 +184,7 @@ export class BillingService {
         }
 
         let insertedLinesCount = 0;
+        let upsertedLinesCount = 0;
         let conflictCount = 0;
         const conflictKeys: { invoiceId: string; lineType: string; description: string }[] = [];
         
@@ -204,7 +207,7 @@ export class BillingService {
             `);
 
             const upsertedRows = result.rows || [];
-            insertedLinesCount += upsertedRows.length;
+            upsertedLinesCount += upsertedRows.length;
             conflictCount += batch.length - upsertedRows.length;
 
             // Audit log for each upserted row
@@ -226,35 +229,71 @@ export class BillingService {
             }
           }
         }
-        
-        if (conflictCount > 0) {
-          console.warn(`Invoice lines: ${conflictCount} conflicts (duplicates skipped)`, conflictKeys.slice(0, 5));
+
+        const durationMs = Date.now() - startTime;
+        const expectedLines = allLines.length;
+
+        // ── Structured run metrics ──
+        const metrics = {
+          run_id: runId,
+          period,
+          invoicesExpected: invoicesToCreate.length,
+          invoicesInserted: insertedInvoices.length,
+          expectedLines,
+          insertedLines: upsertedLinesCount,
+          upsertedLines: upsertedLinesCount,
+          conflictCount,
+          skippedLinesCount: skippedLines.length,
+          durationMs,
+        };
+
+        // Alert conditions
+        if (upsertedLinesCount < expectedLines) {
+          console.warn(
+            `[BillingMetrics] ALERT: insertedLines (${upsertedLinesCount}) < expectedLines (${expectedLines}). ` +
+            `${expectedLines - upsertedLinesCount} lines may be missing. Run: ${runId}`
+          );
         }
+        if (conflictCount > 0) {
+          console.warn(
+            `[BillingMetrics] ALERT: ${conflictCount} conflict(s) during upsert. ` +
+            `Possible duplicate data. Run: ${runId}`,
+            conflictKeys.slice(0, 5)
+          );
+        }
+
+        // Always log metrics
+        console.info(`[BillingMetrics]`, JSON.stringify(metrics));
 
         await tx.execute(sql`
           UPDATE invoice_runs SET status = 'completed', updated_at = now()
           WHERE run_id = ${runId}::uuid
         `);
 
+        // Structured audit log with full metrics
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-          VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({ 
-            period, 
-            invoicesCount: insertedInvoices.length, 
-            linesCount: allLines.length,
-            insertedLinesCount,
-            conflictCount,
+          VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices', ${JSON.stringify({
+            ...metrics,
             conflictKeys: conflictKeys.slice(0, 10),
-            skippedLinesCount: skippedLines.length,
-            skippedDetails: skippedLines.slice(0, 10)
+            skippedDetails: skippedLines.slice(0, 10),
           })}::jsonb, now())
         `);
 
         return insertedInvoices;
       });
 
-      return { runId, success: true, period, created: createdInvoices.length, invoices: createdInvoices };
+      const totalDurationMs = Date.now() - startTime;
+      return {
+        runId,
+        success: true,
+        period,
+        created: createdInvoices.length,
+        invoices: createdInvoices,
+        durationMs: totalDurationMs,
+      };
     } catch (err: any) {
+      const durationMs = Date.now() - startTime;
       await db.execute(sql`
         UPDATE invoice_runs SET status = 'failed', error = ${String(err.message || err)}, updated_at = now()
         WHERE run_id = ${runId}::uuid
@@ -262,7 +301,11 @@ export class BillingService {
 
       await db.execute(sql`
         INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-        VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices_failed', ${JSON.stringify({ error: String(err.message || err) })}::jsonb, now())
+        VALUES (${userId}::uuid, 'monthly_invoices', ${runId}, 'generate_invoices_failed', ${JSON.stringify({
+          error: String(err.message || err),
+          durationMs,
+          period,
+        })}::jsonb, now())
       `);
 
       throw err;
