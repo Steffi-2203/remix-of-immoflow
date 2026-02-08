@@ -26,6 +26,8 @@ on:
         type: string
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 concurrency:
   group: billing-parity-${{ github.ref }}
@@ -373,3 +375,26 @@ jobs:
             load_test_output.log
             load_tests/
           retention-days: 30
+
+  pr-gate:
+    name: PR Gate (required)
+    runs-on: ubuntu-latest
+    needs: [test, billing-parity]
+    if: always()
+    steps:
+      - name: Check required jobs
+        run: |
+          echo "Test result: ${{ needs.test.result }}"
+          echo "Billing Parity result: ${{ needs.billing-parity.result }}"
+
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::Unit Tests failed or were skipped"
+            exit 1
+          fi
+
+          if [ "${{ needs.billing-parity.result }}" != "success" ]; then
+            echo "::error::Billing Parity failed or was skipped"
+            exit 1
+          fi
+
+          echo "✅ All required checks passed — PR is ready to merge"
