@@ -201,7 +201,7 @@ if (dryRun) {
           tax_rate = EXCLUDED.tax_rate,
           description = EXCLUDED.description
         WHERE (invoice_lines.amount, invoice_lines.tax_rate) IS DISTINCT FROM (EXCLUDED.amount, EXCLUDED.tax_rate)
-        RETURNING id, invoice_id, line_type, normalized_description, amount
+        RETURNING id, invoice_id, line_type, description, normalized_description, amount
       `, params);
 
       const returnedKeys = new Set();
@@ -217,7 +217,7 @@ if (dryRun) {
             mergedKeys.push({
               invoiceId: row.invoice_id,
               lineType: row.line_type,
-              description: row.description,
+              description: row.description || row.normalized_description,
               oldAmount: oldValues.amount,
               oldTaxRate: oldValues.taxRate,
               newAmount: Number(row.amount)
