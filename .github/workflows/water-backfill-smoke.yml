@@ -1,0 +1,19 @@
+name: Invoice Water Backfill Smoke
+on:
+  workflow_dispatch:
+
+jobs:
+  backfill-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm ci --legacy-peer-deps
+      - name: Run backfill dry-run
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: node scripts/backfill/run_water_backfill.js --year 2025 --dry-run
