@@ -883,7 +883,6 @@ export type Database = {
           invoice_id: string
           line_type: string
           meta: Json | null
-          normalized_description: string | null
           tax_rate: number | null
           unit_id: string | null
         }
@@ -895,7 +894,6 @@ export type Database = {
           invoice_id: string
           line_type: string
           meta?: Json | null
-          normalized_description?: string | null
           tax_rate?: number | null
           unit_id?: string | null
         }
@@ -907,7 +905,6 @@ export type Database = {
           invoice_id?: string
           line_type?: string
           meta?: Json | null
-          normalized_description?: string | null
           tax_rate?: number | null
           unit_id?: string | null
         }
