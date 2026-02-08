@@ -221,13 +221,39 @@ jobs:
             echo "✅ Parity check passed — 0 missing lines"
           fi
 
+      # ── Export audit package ──
+      - name: Export audit package
+        if: always()
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          AWS_REGION: eu-central-1
+          LOVABLE_API_URL: ${{ secrets.LOVABLE_API_URL }}
+          LOVABLE_API_TOKEN: ${{ secrets.LOVABLE_API_TOKEN }}
+        run: |
+          RUN_ID="${{ steps.parity.outputs.run_id }}"
+          STORAGE="local"
+          EXTRA_ARGS=""
+          if [ -n "$S3_BUCKET" ]; then
+            STORAGE="s3"
+            EXTRA_ARGS="--s3-bucket $S3_BUCKET"
+          elif [ -n "$LOVABLE_API_URL" ] && [ -n "$LOVABLE_API_TOKEN" ]; then
+            STORAGE="lovable"
+          fi
+          node tools/export_audit_package.js \
+            --run-id "$RUN_ID" \
+            --out "audit_exports" \
+            --storage "$STORAGE" \
+            $EXTRA_ARGS || echo "::warning::Audit package export failed (non-blocking)"
+
       # ── Upload reconciliation artifacts ──
       - name: Upload reconciliation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reconciliation-${{ steps.parity.outputs.run_id }}
-          path: reconciliations/${{ steps.parity.outputs.run_id }}/*
+          path: |
+            reconciliations/${{ steps.parity.outputs.run_id }}/*
+            audit_exports/${{ steps.parity.outputs.run_id }}/*
           retention-days: 90
 
       # ── Fail if parity mismatch ──
