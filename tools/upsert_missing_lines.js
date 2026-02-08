@@ -162,9 +162,9 @@ if (dryRun) {
     const params = [];
     let p = 1;
     for (const r of batch) {
-      values.push(`($${p}, $${p+1}, $${p+2}, $${p+3}, $${p+4}, $${p+5})`);
-      params.push(r.invoiceId, r.unitId, r.lineType, r.description, r.amount, r.taxRate);
-      p += 6;
+      values.push(`($${p}, $${p+1}, $${p+2}, $${p+3}, $${p+4}, $${p+5}, $${p+6})`);
+      params.push(r.invoiceId, r.unitId, r.lineType, r.description, normalizeDescription(r.description), r.amount, r.taxRate);
+      p += 7;
     }
     try {
       await client.query('BEGIN');
@@ -174,40 +174,41 @@ if (dryRun) {
       let kp = 1;
       for (const r of batch) {
         keyValues2.push(`($${kp}::uuid, $${kp+1}::uuid, $${kp+2}::varchar, $${kp+3}::text)`);
-        keyParams.push(r.invoiceId, r.unitId, r.lineType, r.description);
+        keyParams.push(r.invoiceId, r.unitId, r.lineType, normalizeDescription(r.description));
         kp += 4;
       }
       const oldResult = await client.query(`
-        SELECT invoice_id, unit_id, line_type, description, amount AS old_amount, tax_rate AS old_tax_rate
+        SELECT invoice_id, unit_id, line_type, normalized_description, amount AS old_amount, tax_rate AS old_tax_rate
         FROM invoice_lines
-        WHERE (invoice_id, unit_id, line_type, description) IN (
-          SELECT * FROM (VALUES ${keyValues2.join(', ')}) AS t(inv_id, u_id, lt, descr)
+        WHERE (invoice_id, unit_id, line_type, normalized_description) IN (
+          SELECT * FROM (VALUES ${keyValues2.join(', ')}) AS t(inv_id, u_id, lt, norm_descr)
         )
       `, keyParams);
       
       const oldValuesMap = new Map();
       for (const row of (oldResult?.rows || [])) {
-        oldValuesMap.set(`${row.invoice_id}|${row.line_type}|${normalizeDescription(row.description)}`, { 
+        oldValuesMap.set(`${row.invoice_id}|${row.line_type}|${row.normalized_description}`, { 
           amount: Number(row.old_amount), taxRate: Number(row.old_tax_rate) 
         });
       }
       
       const result = await client.query(`
-        INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate)
+        INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, normalized_description, amount, tax_rate)
         VALUES ${values.join(', ')}
-        ON CONFLICT (invoice_id, unit_id, line_type, description)
+        ON CONFLICT (invoice_id, unit_id, line_type, normalized_description)
         DO UPDATE SET
           amount = EXCLUDED.amount,
-          tax_rate = EXCLUDED.tax_rate
+          tax_rate = EXCLUDED.tax_rate,
+          description = EXCLUDED.description
         WHERE (invoice_lines.amount, invoice_lines.tax_rate) IS DISTINCT FROM (EXCLUDED.amount, EXCLUDED.tax_rate)
-        RETURNING id, invoice_id, line_type, description, amount
+        RETURNING id, invoice_id, line_type, normalized_description, amount
       `, params);
 
       const returnedKeys = new Set();
       let batchInserted = 0;
       let batchUpdated = 0;
       for (const row of result.rows) {
-        const key = `${row.invoice_id}|${row.line_type}|${normalizeDescription(row.description)}`;
+        const key = `${row.invoice_id}|${row.line_type}|${row.normalized_description}`;
         returnedKeys.add(key);
         const oldValues = oldValuesMap.get(key);
         if (oldValues !== undefined) {
