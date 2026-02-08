@@ -142,6 +142,16 @@ jobs:
           chmod +x tools/schema_compat_check.sh
           bash tools/schema_compat_check.sh
 
+      - name: DR restore test
+        run: |
+          chmod +x tools/dr_restore_test.sh
+          bash tools/dr_restore_test.sh || echo "::warning::DR restore test had issues (non-blocking)"
+
+      - name: Security audit
+        run: |
+          chmod +x tools/security_audit.sh
+          bash tools/security_audit.sh || echo "::warning::Security audit found issues (review required)"
+
       - name: Duplicate precheck
         run: |
           DUPES=$(psql "$DATABASE_URL" -t -A -c "
