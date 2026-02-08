@@ -239,11 +239,26 @@ jobs:
           exit 1
 
   load-test:
-    name: Load Test (manual)
+    name: Load Test (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: billing-parity
-    timeout-minutes: 15
+    timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_load_test == 'true'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "S1-10k"
+            rows: 10000
+            parallel: 1
+          - name: "S2-50k"
+            rows: 50000
+            parallel: 1
+          - name: "S3-100k"
+            rows: 100000
+            parallel: 4
+
     services:
       postgres:
         image: postgres:15
@@ -277,7 +292,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
@@ -288,20 +302,23 @@ jobs:
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
+      - name: Capture WAL position before
+        id: wal_before
+        run: |
+          WAL_BEFORE=$(psql "$DATABASE_URL" -t -A -c "SELECT pg_current_wal_lsn();")
+          echo "lsn=$WAL_BEFORE" >> "$GITHUB_OUTPUT"
+
       - name: Seed test data for load test
         run: |
-          ROWS=${{ github.event.inputs.load_test_rows || '10000' }}
-          # We need ceil(ROWS/10) invoices and 100 units (matching load_test_bulk.sh UUID pattern)
+          ROWS=${{ matrix.rows }}
           INVOICE_COUNT=$(( (ROWS + 9) / 10 ))
 
-          # Seed a dummy property (required FK for units)
           psql "$DATABASE_URL" -c "
             INSERT INTO properties (id, name, address, city, postal_code, created_at)
             VALUES ('00000000-0000-0000-0000-000000000001', 'Load Test Property', 'Test 1', 'Wien', '1010', now())
             ON CONFLICT DO NOTHING;
           "
 
-          # Seed dummy units
           psql "$DATABASE_URL" -c "
             INSERT INTO units (id, property_id, top_nummer, flaeche, nutzwert, created_at, updated_at)
             SELECT
@@ -313,7 +330,6 @@ jobs:
             ON CONFLICT DO NOTHING;
           "
 
-          # Seed a dummy tenant (required FK for monthly_invoices)
           psql "$DATABASE_URL" -c "
             INSERT INTO tenants (id, unit_id, first_name, last_name, email, created_at, updated_at)
             VALUES (
@@ -324,7 +340,6 @@ jobs:
             ON CONFLICT DO NOTHING;
           "
 
-          # Seed dummy invoices (monthly_invoices table)
           psql "$DATABASE_URL" -c "
             INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, faellig_am, created_at)
             SELECT
@@ -345,13 +360,39 @@ jobs:
         id: loadtest
         run: |
           chmod +x tools/load_test_bulk.sh
+          START_EPOCH=$(date +%s%3N)
           bash tools/load_test_bulk.sh \
-            ${{ github.event.inputs.load_test_rows || '10000' }} \
-            ${{ github.event.inputs.load_test_parallel || '1' }} \
+            ${{ matrix.rows }} \
+            ${{ matrix.parallel }} \
             "$DATABASE_URL" 2>&1 | tee load_test_output.log
+          END_EPOCH=$(date +%s%3N)
+          DURATION_MS=$((END_EPOCH - START_EPOCH))
+          echo "duration_ms=$DURATION_MS" >> "$GITHUB_OUTPUT"
 
-      - name: Duplicate precheck after load test
+      - name: Collect metrics
+        id: metrics
         run: |
+          SCENARIO="${{ matrix.name }}"
+          ROWS=${{ matrix.rows }}
+          PARALLEL=${{ matrix.parallel }}
+          DURATION_MS=${{ steps.loadtest.outputs.duration_ms }}
+
+          # DB settings
+          WORK_MEM=$(psql "$DATABASE_URL" -t -A -c "SHOW work_mem;")
+          MAX_WAL=$(psql "$DATABASE_URL" -t -A -c "SHOW max_wal_size;")
+          MAX_CONN=$(psql "$DATABASE_URL" -t -A -c "SHOW max_connections;")
+          SHARED_BUF=$(psql "$DATABASE_URL" -t -A -c "SHOW shared_buffers;")
+
+          # WAL diff
+          WAL_BEFORE="${{ steps.wal_before.outputs.lsn }}"
+          WAL_AFTER=$(psql "$DATABASE_URL" -t -A -c "SELECT pg_current_wal_lsn();")
+          WAL_BYTES=$(psql "$DATABASE_URL" -t -A -c "SELECT pg_wal_lsn_diff('${WAL_AFTER}', '${WAL_BEFORE}');")
+          WAL_MB=$(echo "scale=2; ${WAL_BYTES:-0} / 1048576" | bc)
+
+          # Row counts
+          INSERTED=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM invoice_lines WHERE created_at >= now() - interval '30 min';")
+
+          # Duplicates
           DUPES=$(psql "$DATABASE_URL" -t -A -c "
             SELECT count(*) FROM (
               SELECT invoice_id, unit_id, line_type,
@@ -361,16 +402,43 @@ jobs:
               HAVING count(*) > 1
             ) sub;
           ")
-          echo "Post-load-test duplicates: $DUPES"
+
+          # PG version
+          PG_VERSION=$(psql "$DATABASE_URL" -t -A -c "SELECT version();")
+
+          mkdir -p "load_tests/${SCENARIO}"
+          cat > "load_tests/${SCENARIO}/metrics.json" <<EOF
+          {
+            "scenario": "${SCENARIO}",
+            "rows": ${ROWS},
+            "parallel": ${PARALLEL},
+            "duration_ms": ${DURATION_MS:-0},
+            "duration_s": $(echo "scale=2; ${DURATION_MS:-0} / 1000" | bc),
+            "inserted": ${INSERTED:-0},
+            "duplicates": ${DUPES:-0},
+            "wal_mb": ${WAL_MB:-0},
+            "work_mem": "${WORK_MEM}",
+            "max_wal_size": "${MAX_WAL}",
+            "max_connections": "${MAX_CONN}",
+            "shared_buffers": "${SHARED_BUF}",
+            "pg_version": "${PG_VERSION}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${GITHUB_SHA}"
+          }
+          EOF
+
+          echo "Metrics written to load_tests/${SCENARIO}/metrics.json"
+          cat "load_tests/${SCENARIO}/metrics.json"
+
           if [ "$DUPES" -gt 0 ]; then
-            echo "::warning::Found $DUPES duplicate groups after load test"
+            echo "::warning::Found $DUPES duplicate groups after load test ${SCENARIO}"
           fi
 
       - name: Upload load test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: load-test-results
+          name: load-test-${{ matrix.name }}
           path: |
             load_test_output.log
             load_tests/
