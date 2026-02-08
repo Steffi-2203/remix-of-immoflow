@@ -18,7 +18,7 @@ import { InviteUserDialog } from '@/components/settings/InviteUserDialog';
 import { PropertyAssignmentDialog } from '@/components/settings/PropertyAssignmentDialog';
 import { usePendingInvites, useDeleteInvite, ROLE_LABELS } from '@/hooks/useOrganizationInvites';
 
-type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
+type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester' | 'auditor' | 'ops';
 
 const ROLE_OPTIONS: { value: AppRole; label: string; description: string; permissions: string }[] = [
   { value: 'admin', label: 'Admin', description: 'Voller Zugriff auf alle Funktionen', permissions: 'Voller Zugriff' },

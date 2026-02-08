@@ -5071,6 +5071,57 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ── Artifact Access (RBAC-enforced, CloudTrail-logged) ───────────────────
+  const { downloadArtifact, listArtifacts, getAccessLog } = await import("./services/artifactAccessService");
+
+  // List artifacts (optional ?runId=)
+  app.get("/api/admin/artifacts", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const runId = req.query.runId as string | undefined;
+      const result = await listArtifacts(userId, runId, req);
+      if (!result.allowed) return res.status(403).json({ error: result.reason });
+      res.json(result.artifacts);
+    } catch (error) {
+      console.error('List artifacts error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Artefakte" });
+    }
+  });
+
+  // Download a specific artifact
+  app.get("/api/admin/artifacts/:artifactId/download", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const result = await downloadArtifact(userId, req.params.artifactId, req);
+      if (!result.allowed) return res.status(403).json({ error: result.reason });
+
+      // Stream from Supabase storage or S3 based on file_path
+      // For now return metadata + signed URL approach
+      res.json({
+        filePath: result.filePath,
+        contentType: result.contentType,
+        message: 'Use signed URL from storage to download',
+      });
+    } catch (error) {
+      console.error('Download artifact error:', error);
+      res.status(500).json({ error: "Fehler beim Herunterladen" });
+    }
+  });
+
+  // Artifact access log (CloudTrail)
+  app.get("/api/admin/artifacts/access-log", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const result = await getAccessLog(userId, limit, req);
+      if (!result.allowed) return res.status(403).json({ error: result.reason });
+      res.json(result.logs);
+    } catch (error) {
+      console.error('Access log error:', error);
+      res.status(500).json({ error: "Fehler beim Laden des Zugriffsprotokolls" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
