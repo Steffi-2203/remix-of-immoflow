@@ -1396,3 +1396,26 @@ export const tenantPortalAccess = pgTable("tenant_portal_access", {
 export const insertTenantPortalAccessSchema = createInsertSchema(tenantPortalAccess).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertTenantPortalAccess = z.infer<typeof insertTenantPortalAccessSchema>;
 export type TenantPortalAccess = typeof tenantPortalAccess.$inferSelect;
+
+export const jobQueue = pgTable("job_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  type: varchar("type", { length: 100 }).notNull(),
+  payload: jsonb("payload").default('{}'),
+  status: varchar("status", { length: 20 }).notNull().default('pending'),
+  result: jsonb("result"),
+  error: text("error"),
+  attempts: integer("attempts").default(0),
+  maxAttempts: integer("max_attempts").default(3),
+  organizationId: uuid("organization_id"),
+  createdBy: uuid("created_by"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_job_queue_status").on(table.status),
+  index("idx_job_queue_org").on(table.organizationId),
+]);
+
+export const insertJobQueueSchema = createInsertSchema(jobQueue).omit({ id: true, createdAt: true });
+export type JobQueue = typeof jobQueue.$inferSelect;
+export type InsertJobQueue = typeof jobQueue.$inferInsert;
