@@ -3143,6 +3143,60 @@ export type Database = {
         }
         Relationships: []
       }
+      sepa_batches: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          organization_id: string | null
+          property_id: string | null
+          psp_response: Json | null
+          status: string
+          submitted_at: string | null
+          updated_at: string
+          xml: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          property_id?: string | null
+          psp_response?: Json | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+          xml?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          property_id?: string | null
+          psp_response?: Json | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+          xml?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sepa_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sepa_batches_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sepa_collection_items: {
         Row: {
           amount: number
