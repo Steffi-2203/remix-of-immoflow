@@ -92,6 +92,30 @@ jobs:
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
+      - name: Duplicate precheck
+        run: |
+          DUPES=$(psql "$DATABASE_URL" -t -A -c "
+            SELECT count(*) FROM (
+              SELECT invoice_id, unit_id, line_type,
+                     regexp_replace(lower(trim(description)), '\s+', ' ', 'g') AS norm
+              FROM invoice_lines
+              GROUP BY invoice_id, unit_id, line_type, norm
+              HAVING count(*) > 1
+            ) sub;
+          ")
+          echo "Duplicate groups found: $DUPES"
+          if [ "$DUPES" -gt 0 ]; then
+            echo "::error::Found $DUPES duplicate invoice_line groups before tests!"
+            psql "$DATABASE_URL" -c "
+              SELECT invoice_id, unit_id, line_type,
+                     regexp_replace(lower(trim(description)), '\s+', ' ', 'g') AS norm, count(*)
+              FROM invoice_lines
+              GROUP BY invoice_id, unit_id, line_type, norm
+              HAVING count(*) > 1;
+            "
+            exit 1
+          fi
+
       - name: Run billing determinism tests
         run: npx vitest run tests/unit/billing-determinism.test.ts --reporter=verbose
 
@@ -100,3 +124,28 @@ jobs:
 
       - name: Run rounding utility tests
         run: npx vitest run tests/unit/utils.test.ts tests/unit/invoice-generation.test.ts --reporter=verbose
+
+      - name: Run normalizeDescription tests
+        run: npx vitest run src/test/normalizeDescription.test.ts --reporter=verbose
+
+      - name: Generate dry-run diff artifacts
+        if: always()
+        run: |
+          mkdir -p ci-artifacts
+          psql "$DATABASE_URL" -c "
+            SELECT invoice_id, unit_id, line_type, description, normalized_description, amount
+            FROM invoice_lines ORDER BY invoice_id, unit_id, line_type
+          " --csv -o ci-artifacts/db_invoice_lines.csv 2>/dev/null || true
+          cp dryrun.json ci-artifacts/dryrun.json 2>/dev/null || true
+          cp dry_db_diffs.json ci-artifacts/dry_db_diffs.json 2>/dev/null || true
+          cp missing_lines.json ci-artifacts/missing_lines.json 2>/dev/null || true
+          echo "Artifacts collected at $(date -u)" > ci-artifacts/manifest.txt
+
+      - name: Upload parity artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: billing-parity-artifacts
+          path: ci-artifacts/
+          retention-days: 30
+          if-no-files-found: ignore
