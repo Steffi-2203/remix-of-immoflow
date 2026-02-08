@@ -1,0 +1,14 @@
+name: Detect Direct DB Access
+on: [pull_request]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for supabase.from usage
+        run: |
+          grep -R --line-number "supabase\\.from(\|db\\.select" src/ | tee /tmp/dbaccess.txt || true
+          if grep -E "supabase\\.from\\(['\"](payments|invoices|tenants)" /tmp/dbaccess.txt; then
+            echo "::error::Direct DB access to critical tables found. Migrate to /api endpoints."
+            exit 1
+          fi
