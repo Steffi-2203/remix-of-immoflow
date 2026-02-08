@@ -1,30 +1,141 @@
 import { Express, Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import zxcvbn from "zxcvbn";
 import { db } from "./db";
 import * as schema from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, desc, sql } from "drizzle-orm";
 import { sendEmail } from "./lib/resend";
 import { createAuditLog, getClientInfo } from "./lib/auditLog";
 
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
-const MIN_PASSWORD_LENGTH = 10;
+const MIN_PASSWORD_LENGTH = 12;
+const ZXCVBN_MIN_SCORE = 3;
+const PASSWORD_HISTORY_COUNT = 5;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 15;
 
-function validatePasswordStrength(password: string): string | null {
+async function validatePasswordStrength(password: string): Promise<string | null> {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein`;
   }
-  let categories = 0;
-  if (/[a-z]/.test(password)) categories++;
-  if (/[A-Z]/.test(password)) categories++;
-  if (/[0-9]/.test(password)) categories++;
-  if (/[^a-zA-Z0-9]/.test(password)) categories++;
-  if (categories < 3) {
-    return "Passwort muss mindestens 3 der folgenden enthalten: Kleinbuchstaben, Großbuchstaben, Ziffern, Sonderzeichen";
+
+  const result = zxcvbn(password);
+  if (result.score < ZXCVBN_MIN_SCORE) {
+    const feedback = result.feedback.warning || result.feedback.suggestions?.[0] || "";
+    return `Passwort ist zu schwach (Stärke ${result.score}/4, mindestens ${ZXCVBN_MIN_SCORE} erforderlich). ${feedback}`;
   }
+
+  const isLeaked = await checkLeakedPassword(password);
+  if (isLeaked) {
+    return "Dieses Passwort wurde in einem Datenleck gefunden. Bitte wählen Sie ein anderes Passwort.";
+  }
+
   return null;
+}
+
+async function checkLeakedPassword(password: string): Promise<boolean> {
+  try {
+    const sha1Hash = crypto.createHash("sha1").update(password).digest("hex").toUpperCase();
+    const prefix = sha1Hash.substring(0, 5);
+    const suffix = sha1Hash.substring(5);
+
+    const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+      headers: { "User-Agent": "ImmoflowMe-PasswordCheck" },
+    });
+
+    if (!response.ok) {
+      console.warn("HIBP API unavailable, skipping leak check");
+      return false;
+    }
+
+    const text = await response.text();
+    const lines = text.split("\n");
+    for (const line of lines) {
+      const [hashSuffix] = line.split(":");
+      if (hashSuffix.trim() === suffix) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.warn("HIBP check failed, skipping:", error);
+    return false;
+  }
+}
+
+async function checkPasswordHistory(userId: string, newPassword: string): Promise<boolean> {
+  const history = await db.select()
+    .from(schema.passwordHistory)
+    .where(eq(schema.passwordHistory.userId, userId))
+    .orderBy(desc(schema.passwordHistory.createdAt))
+    .limit(PASSWORD_HISTORY_COUNT);
+
+  for (const entry of history) {
+    const isReused = await bcrypt.compare(newPassword, entry.passwordHash);
+    if (isReused) return true;
+  }
+  return false;
+}
+
+async function savePasswordToHistory(userId: string, passwordHash: string): Promise<void> {
+  await db.insert(schema.passwordHistory).values({
+    userId,
+    passwordHash,
+  });
+
+  const allHistory = await db.select({ id: schema.passwordHistory.id })
+    .from(schema.passwordHistory)
+    .where(eq(schema.passwordHistory.userId, userId))
+    .orderBy(desc(schema.passwordHistory.createdAt));
+
+  if (allHistory.length > PASSWORD_HISTORY_COUNT) {
+    const idsToDelete = allHistory.slice(PASSWORD_HISTORY_COUNT).map(h => h.id);
+    for (const id of idsToDelete) {
+      await db.delete(schema.passwordHistory).where(eq(schema.passwordHistory.id, id));
+    }
+  }
+}
+
+async function checkAccountLockout(email: string): Promise<{ locked: boolean; remainingMinutes?: number }> {
+  const cutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000);
+
+  const recentAttempts = await db.select()
+    .from(schema.loginAttempts)
+    .where(and(
+      eq(schema.loginAttempts.email, email.toLowerCase()),
+      eq(schema.loginAttempts.success, false),
+      gte(schema.loginAttempts.attemptedAt, cutoff)
+    ));
+
+  if (recentAttempts.length >= MAX_LOGIN_ATTEMPTS) {
+    const oldestAttempt = recentAttempts.reduce((oldest, a) =>
+      a.attemptedAt! < oldest.attemptedAt! ? a : oldest
+    );
+    const unlockAt = new Date(oldestAttempt.attemptedAt!.getTime() + LOCKOUT_DURATION_MINUTES * 60 * 1000);
+    const remainingMs = unlockAt.getTime() - Date.now();
+    const remainingMinutes = Math.ceil(remainingMs / 60000);
+    return { locked: true, remainingMinutes: Math.max(1, remainingMinutes) };
+  }
+
+  return { locked: false };
+}
+
+async function recordLoginAttempt(email: string, ipAddress: string | null, success: boolean): Promise<void> {
+  await db.insert(schema.loginAttempts).values({
+    email: email.toLowerCase(),
+    ipAddress,
+    success,
+  });
+
+  if (success) {
+    await db.delete(schema.loginAttempts).where(and(
+      eq(schema.loginAttempts.email, email.toLowerCase()),
+      eq(schema.loginAttempts.success, false)
+    ));
+  }
 }
 
 async function logAuthEvent(req: Request, action: string, email: string, userId: string | null, success: boolean, details?: Record<string, any>) {
@@ -89,7 +200,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "E-Mail und Passwort sind erforderlich" });
       }
 
-      const passwordError = validatePasswordStrength(password);
+      const passwordError = await validatePasswordStrength(password);
       if (passwordError) {
         await logAuthEvent(req, 'register_failed', email, null, false, { reason: 'weak_password' });
         return res.status(400).json({ error: passwordError });
@@ -155,6 +266,8 @@ export function setupAuth(app: Express) {
         }).returning();
         profile = created[0];
       }
+
+      await savePasswordToHistory(profile.id, passwordHash);
 
       if (isAdmin) {
         let adminOrg = await db.select().from(schema.organizations)
@@ -232,14 +345,25 @@ export function setupAuth(app: Express) {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
+      const { ipAddress } = getClientInfo(req);
       
       if (!email || !password) {
         return res.status(400).json({ error: "E-Mail und Passwort sind erforderlich" });
       }
 
+      const lockout = await checkAccountLockout(email);
+      if (lockout.locked) {
+        await logAuthEvent(req, 'login_failed', email.toLowerCase(), null, false, { reason: 'account_locked' });
+        return res.status(429).json({ 
+          error: `Konto vorübergehend gesperrt. Bitte versuchen Sie es in ${lockout.remainingMinutes} Minute(n) erneut.`,
+          lockedUntilMinutes: lockout.remainingMinutes,
+        });
+      }
+
       const profile = await getProfileByEmail(email.toLowerCase());
       
       if (!profile || !profile.passwordHash) {
+        await recordLoginAttempt(email, ipAddress, false);
         await logAuthEvent(req, 'login_failed', email.toLowerCase(), null, false, { reason: 'unknown_email' });
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
       }
@@ -247,9 +371,19 @@ export function setupAuth(app: Express) {
       const isValid = await bcrypt.compare(password, profile.passwordHash);
       
       if (!isValid) {
+        await recordLoginAttempt(email, ipAddress, false);
         await logAuthEvent(req, 'login_failed', email.toLowerCase(), profile.id, false, { reason: 'wrong_password' });
-        return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
+
+        const updatedLockout = await checkAccountLockout(email);
+        const remainingAttempts = MAX_LOGIN_ATTEMPTS - (updatedLockout.locked ? MAX_LOGIN_ATTEMPTS : await getFailedAttemptCount(email));
+
+        return res.status(401).json({ 
+          error: "Ungültige E-Mail oder Passwort",
+          ...(remainingAttempts <= 2 && remainingAttempts > 0 ? { remainingAttempts } : {}),
+        });
       }
+
+      await recordLoginAttempt(email, ipAddress, true);
 
       req.session.userId = profile.id;
       req.session.email = profile.email;
@@ -385,7 +519,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "Token und Passwort sind erforderlich" });
       }
 
-      const passwordError = validatePasswordStrength(password);
+      const passwordError = await validatePasswordStrength(password);
       if (passwordError) {
         return res.status(400).json({ error: passwordError });
       }
@@ -407,11 +541,20 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "Dieser Token ist abgelaufen" });
       }
 
+      const isReused = await checkPasswordHistory(resetToken.userId, password);
+      if (isReused) {
+        return res.status(400).json({ 
+          error: `Dieses Passwort wurde kürzlich verwendet. Bitte wählen Sie ein Passwort, das nicht unter den letzten ${PASSWORD_HISTORY_COUNT} Passwörtern ist.` 
+        });
+      }
+
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
       await db.update(schema.profiles)
         .set({ passwordHash, updatedAt: new Date() })
         .where(eq(schema.profiles.id, resetToken.userId));
+
+      await savePasswordToHistory(resetToken.userId, passwordHash);
 
       await db.update(schema.passwordResetTokens)
         .set({ usedAt: new Date() })
@@ -423,4 +566,16 @@ export function setupAuth(app: Express) {
       res.status(500).json({ error: "Passwort zurücksetzen fehlgeschlagen" });
     }
   });
+}
+
+async function getFailedAttemptCount(email: string): Promise<number> {
+  const cutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000);
+  const result = await db.select({ count: sql<number>`count(*)` })
+    .from(schema.loginAttempts)
+    .where(and(
+      eq(schema.loginAttempts.email, email.toLowerCase()),
+      eq(schema.loginAttempts.success, false),
+      gte(schema.loginAttempts.attemptedAt, cutoff)
+    ));
+  return Number(result[0]?.count || 0);
 }

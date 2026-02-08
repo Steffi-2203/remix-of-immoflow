@@ -116,6 +116,21 @@ export const insertOrganizationInviteSchema = createInsertSchema(organizationInv
 export type OrganizationInvite = typeof organizationInvites.$inferSelect;
 export type InsertOrganizationInvite = typeof organizationInvites.$inferInsert;
 
+export const passwordHistory = pgTable("password_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const loginAttempts = pgTable("login_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull(),
+  ipAddress: text("ip_address"),
+  success: boolean("success").notNull().default(false),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }).defaultNow(),
+});
+
 export const properties = pgTable("properties", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
