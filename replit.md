@@ -80,6 +80,36 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
 - **Payment Allocations**: `payment_allocations` table for flexible payment-to-invoice mapping.
 - **Migrated Functions**: Key business logic functions integrated directly into the Express.js backend.
 
+## Security Configuration (updated 2026-02-08)
+- **Password Policy**:
+    - Minimum length: 12 characters
+    - zxcvbn complexity threshold: score ≥ 3 (out of 4)
+    - Leaked password check: Have I Been Pwned k-Anonymity API (SHA-1 prefix query, privacy-safe)
+    - Password history: prevents reuse of last 5 passwords (via `password_history` table)
+    - Applied to: register, reset-password
+- **Account Lockout**:
+    - Lock after 5 failed login attempts within 15 minutes
+    - Automatic unlock after 15-minute cooldown
+    - Remaining attempts warning shown when ≤ 2 attempts left
+    - Tracked via `login_attempts` table with IP address logging
+    - Successful login clears all failed attempt records
+- **API Rate Limiting**:
+    - General API: 100 requests / 15 min per IP (`express-rate-limit`)
+    - Auth routes (`/api/auth/*`): 20 requests / 1 min per IP (strict)
+    - Stripe webhooks: 5 requests / 1 min per IP
+- **Session Security**:
+    - Cookie: `httpOnly: true`, `secure: true` (prod), `sameSite: 'none'` (prod) / `'lax'` (dev)
+    - Session name: `__Secure-immo_sid` (prod) / `immo_sid` (dev)
+    - maxAge: 24 hours
+    - Storage: PostgreSQL via `connect-pg-simple` (`user_sessions` table)
+- **Auth Event Audit Logging**:
+    - All login/register/logout events logged to `audit_logs` table via centralized `createAuditLog`
+    - Captures: action, email, userId, IP address, user agent, success/failure, failure reason
+    - Events: `login`, `login_failed` (unknown_email, wrong_password, account_locked), `register`, `register_failed`, `logout`
+- **HTTP Security Headers**: Helmet.js (CSP, HSTS, etc.)
+- **CORS**: Whitelist-based origin validation
+- **Dependencies**: zxcvbn (password strength), bcrypt (12 rounds), HIBP API (leak check)
+
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service.
 - **Replit Auth**: Authentication service.
