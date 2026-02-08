@@ -874,6 +874,60 @@ export type Database = {
           },
         ]
       }
+      invoice_lines: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string | null
+          id: string
+          invoice_id: string
+          line_type: string
+          meta: Json | null
+          normalized_description: string | null
+          tax_rate: number | null
+          unit_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          invoice_id: string
+          line_type: string
+          meta?: Json | null
+          normalized_description?: string | null
+          tax_rate?: number | null
+          unit_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          invoice_id?: string
+          line_type?: string
+          meta?: Json | null
+          normalized_description?: string | null
+          tax_rate?: number | null
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_lines_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_entries: {
         Row: {
           beleg_nummer: string | null
