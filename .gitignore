@@ -5,3 +5,30 @@ invoice_lines_run.json
 missing_lines.csv
 missing_lines.json
 dry_db_diffs.json
+git rm --cached dryrun.json db_lines.json invoice_lines_run.json missing_lines.csv
+git commit -m "chore: remove temp reconciliation files from git index"
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.env
