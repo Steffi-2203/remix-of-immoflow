@@ -9,6 +9,21 @@ on:
         required: false
         default: 'true'
         type: boolean
+      run_load_test:
+        description: 'Run load test after parity'
+        required: false
+        default: 'false'
+        type: boolean
+      load_test_rows:
+        description: 'Number of rows for load test'
+        required: false
+        default: '10000'
+        type: string
+      load_test_parallel:
+        description: 'Parallel jobs for load test'
+        required: false
+        default: '1'
+        type: string
   push:
     branches: [ main ]
 
@@ -214,3 +229,86 @@ jobs:
           echo "::error::PARITY FAILED — ${{ steps.parity.outputs.missing_count }} missing lines."
           echo "Download the reconciliation-missing artifact for details."
           exit 1
+
+  load-test:
+    name: Load Test (manual)
+    runs-on: ubuntu-latest
+    needs: billing-parity
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_load_test == 'true'
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: loadtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d loadtest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/loadtest
+      STAGING_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loadtest
+      SESSION_SECRET: ci-test-secret-not-for-production
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install uuid-runtime
+        run: sudo apt-get update && sudo apt-get install -y uuid-runtime
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
+
+      - name: Run migrations
+        run: node migrations/run-migration.cjs
+
+      - name: Run load test
+        id: loadtest
+        run: |
+          chmod +x tools/load_test_bulk.sh
+          bash tools/load_test_bulk.sh \
+            ${{ github.event.inputs.load_test_rows || '10000' }} \
+            ${{ github.event.inputs.load_test_parallel || '1' }} \
+            "$DATABASE_URL" 2>&1 | tee load_test_output.log
+
+      - name: Duplicate precheck after load test
+        run: |
+          DUPES=$(psql "$DATABASE_URL" -t -A -c "
+            SELECT count(*) FROM (
+              SELECT invoice_id, unit_id, line_type,
+                     regexp_replace(lower(trim(description)), '\s+', ' ', 'g') AS norm
+              FROM invoice_lines
+              GROUP BY invoice_id, unit_id, line_type, norm
+              HAVING count(*) > 1
+            ) sub;
+          ")
+          echo "Post-load-test duplicates: $DUPES"
+          if [ "$DUPES" -gt 0 ]; then
+            echo "::warning::Found $DUPES duplicate groups after load test"
+          fi
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: |
+            load_test_output.log
+            load_tests/
+          retention-days: 30
