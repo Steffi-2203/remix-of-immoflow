@@ -18,6 +18,7 @@ import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import { paymentService } from "./services/paymentService";
 import readonlyRoutes from "./routes/readonly";
+import { requirePermission } from "./middleware/rbac";
 import crypto from "crypto";
 import multer from "multer";
 import OpenAI from "openai";
@@ -529,7 +530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/properties/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/properties/:id", isAuthenticated, requirePermission('properties', 'delete'), async (req, res) => {
     try {
       await storage.deleteProperty(req.params.id);
       res.json({ success: true });

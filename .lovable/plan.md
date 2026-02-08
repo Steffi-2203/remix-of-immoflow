@@ -16,21 +16,22 @@
 
 #### 8a. RBAC-Erweiterung ✅
 
-**Status**: Schema + Middleware implementiert
-- DB-Tabellen: `permissions` + `role_permissions_override` mit RLS
-- Seed-Daten: Standard-Berechtigungen fuer admin, property_manager, finance, viewer
+**Status**: Vollstaendig implementiert
+- DB-Tabellen: `permissions` + `role_permissions_override` mit RLS + Seed-Daten
 - `server/middleware/rbac.ts`: `hasPermission()` + `requirePermission()` Middleware
-- Noch offen: Frontend-Hook Erweiterung, Route-Integration, FeatureGuard-Update
+- `src/hooks/usePermissions.ts`: Erweitert mit `useHasPermission(resource, action)` Hook + resource-basierte Permission-Aufloesung
+- `src/components/subscription/FeatureGuard.tsx`: Erweitert mit `resource`/`action` Props fuer RBAC-Pruefung
+- `server/routes.ts`: `requirePermission` importiert + auf `DELETE /api/properties/:id` angewendet
 
-#### 8b. SSO (SAML/OIDC)
+#### 8b. SSO (SAML/OIDC) ⏳
 
 **Status**: Geplant (erfordert Produkt-Entscheidungen)
 - Betroffene Dateien: Auth.tsx, server/auth.ts, sso-callback Edge Function
 - Neue Spalten in organizations: sso_provider, sso_domain, sso_metadata_url
 
-#### 8c. Verschluesselte Artefakte + Retention
+#### 8c. Verschluesselte Artefakte + Retention ✅
 
-**Status**: Geplant
-- server/lib/artifactEncryption.ts (neu)
-- artifact_metadata Tabelle
-- cleanup-expired-artifacts Cron Edge Function
+**Status**: Implementiert
+- `server/lib/artifactEncryption.ts`: AES-256-GCM Verschluesselung (aktiviert via `ARTIFACT_ENCRYPTION_KEY` Env-Var)
+- DB-Tabelle: `artifact_metadata` mit RLS, Retention-Index, Org-Zugehoerigkeit
+- `supabase/functions/cleanup-expired-artifacts/index.ts`: Cron-Funktion fuer automatische Bereinigung
