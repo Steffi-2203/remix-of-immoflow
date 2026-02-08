@@ -44,6 +44,26 @@ export interface MergeResult {
   deletedCount: number;
   auditLogId: string | null;
   mergePolicy: string;
+  undoWindowMinutes: number;
+  undoExpiresAt: string;
+}
+
+export interface MergeTombstone {
+  id: string;
+  group_id: string;
+  canonical_id: string;
+  deleted_row_ids: string[];
+  merge_policy: string;
+  merged_by: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface UndoResult {
+  status: string;
+  restoredCount: number;
+  canonicalId: string;
+  groupId: string;
 }
 
 export function useDuplicateGroups() {
@@ -74,6 +94,21 @@ export function useDuplicateGroup(groupId: string | null) {
   });
 }
 
+export function usePendingUndos() {
+  return useQuery({
+    queryKey: ["merge-pending-undos"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke(
+        "duplicate-merge?action=pending-undos",
+        { method: "GET" }
+      );
+      if (error) throw error;
+      return (data as { tombstones: MergeTombstone[] }).tombstones;
+    },
+    refetchInterval: 15_000, // refresh every 15s to track expiry
+  });
+}
+
 export function useMergeDuplicates(groupId: string) {
   const queryClient = useQueryClient();
 
@@ -81,10 +116,7 @@ export function useMergeDuplicates(groupId: string) {
     mutationFn: async (req: MergeRequest) => {
       const { data, error } = await supabase.functions.invoke(
         `duplicate-merge?groupId=${encodeURIComponent(groupId)}`,
-        {
-          method: "POST",
-          body: req,
-        }
+        { method: "POST", body: req }
       );
       if (error) throw error;
       return data as MergeResult;
@@ -92,14 +124,45 @@ export function useMergeDuplicates(groupId: string) {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["duplicate-groups"] });
       queryClient.invalidateQueries({ queryKey: ["duplicate-group", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["merge-pending-undos"] });
       toast({
-        title: "Duplikate zusammengeführt",
-        description: `${result.deletedCount} Zeile(n) gelöscht, Canonical: ${result.canonicalId.slice(0, 8)}…`,
+        title: "Duplikate zusammengeführt (soft-delete)",
+        description: `${result.deletedCount} Zeile(n) soft-gelöscht. Undo verfügbar für ${result.undoWindowMinutes} Minuten.`,
       });
     },
     onError: (err: Error) => {
       toast({
         title: "Fehler beim Zusammenführen",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useUndoMerge() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (tombstoneId: string) => {
+      const { data, error } = await supabase.functions.invoke(
+        "duplicate-merge?action=undo",
+        { method: "POST", body: { tombstoneId } }
+      );
+      if (error) throw error;
+      return data as UndoResult;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["duplicate-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["merge-pending-undos"] });
+      toast({
+        title: "Merge rückgängig gemacht",
+        description: `${result.restoredCount} Zeile(n) wiederhergestellt.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Undo fehlgeschlagen",
         description: err.message,
         variant: "destructive",
       });
