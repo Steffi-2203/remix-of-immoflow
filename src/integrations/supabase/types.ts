@@ -208,6 +208,69 @@ export type Database = {
           },
         ]
       }
+      billing_runs: {
+        Row: {
+          artifacts: Json | null
+          completed_chunks: number
+          created_at: string
+          description: string | null
+          error_message: string | null
+          expected_lines: number
+          failed_chunks: number
+          finished_at: string | null
+          id: string
+          inserted: number
+          run_id: string
+          skipped: number
+          started_at: string | null
+          status: string
+          total_chunks: number
+          triggered_by: string | null
+          updated: number
+          updated_at: string
+        }
+        Insert: {
+          artifacts?: Json | null
+          completed_chunks?: number
+          created_at?: string
+          description?: string | null
+          error_message?: string | null
+          expected_lines?: number
+          failed_chunks?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          run_id: string
+          skipped?: number
+          started_at?: string | null
+          status?: string
+          total_chunks?: number
+          triggered_by?: string | null
+          updated?: number
+          updated_at?: string
+        }
+        Update: {
+          artifacts?: Json | null
+          completed_chunks?: number
+          created_at?: string
+          description?: string | null
+          error_message?: string | null
+          expected_lines?: number
+          failed_chunks?: number
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          run_id?: string
+          skipped?: number
+          started_at?: string | null
+          status?: string
+          total_chunks?: number
+          triggered_by?: string | null
+          updated?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       booking_number_sequences: {
         Row: {
           current_number: number
@@ -2586,6 +2649,7 @@ export type Database = {
       }
       reconcile_runs: {
         Row: {
+          billing_run_id: string | null
           chunk_id: number
           completed_at: string | null
           created_at: string
@@ -2600,6 +2664,7 @@ export type Database = {
           updated: number
         }
         Insert: {
+          billing_run_id?: string | null
           chunk_id: number
           completed_at?: string | null
           created_at?: string
@@ -2614,6 +2679,7 @@ export type Database = {
           updated?: number
         }
         Update: {
+          billing_run_id?: string | null
           chunk_id?: number
           completed_at?: string | null
           created_at?: string
@@ -2627,7 +2693,15 @@ export type Database = {
           total_chunks?: number
           updated?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reconcile_runs_billing_run_id_fkey"
+            columns: ["billing_run_id"]
+            isOneToOne: false
+            referencedRelation: "billing_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rent_adjustments: {
         Row: {
@@ -4779,6 +4853,12 @@ export type Database = {
     Enums: {
       app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
       ausstattungskategorie: "A" | "B" | "C" | "D"
+      billing_run_status:
+        | "pending"
+        | "running"
+        | "completed"
+        | "failed"
+        | "cancelled"
       expense_category:
         | "betriebskosten_umlagefaehig"
         | "instandhaltung"
@@ -4975,6 +5055,13 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "property_manager", "finance", "viewer", "tester"],
       ausstattungskategorie: ["A", "B", "C", "D"],
+      billing_run_status: [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
       expense_category: [
         "betriebskosten_umlagefaehig",
         "instandhaltung",

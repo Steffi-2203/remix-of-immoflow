@@ -4764,6 +4764,50 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ── Admin: Billing Runs (Run Lifecycle) ──────────────────────────────────
+
+  app.get("/api/admin/billing-runs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const runs = await db.select().from(schema.billingRuns)
+        .orderBy(desc(schema.billingRuns.createdAt))
+        .limit(50);
+      res.json(runs);
+    } catch (error) {
+      console.error('Admin billing runs error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Billing Runs" });
+    }
+  });
+
+  app.get("/api/admin/billing-runs/:runId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const [run] = await db.select().from(schema.billingRuns)
+        .where(eq(schema.billingRuns.runId, req.params.runId))
+        .limit(1);
+
+      if (!run) return res.status(404).json({ error: "Run nicht gefunden" });
+
+      // Fetch chunks
+      const chunks = await db.select().from(schema.reconcileRuns)
+        .where(eq(schema.reconcileRuns.runId, req.params.runId))
+        .orderBy(schema.reconcileRuns.chunkId);
+
+      res.json({ ...run, chunks });
+    } catch (error) {
+      console.error('Admin billing run detail error:', error);
+      res.status(500).json({ error: "Fehler beim Laden des Runs" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 

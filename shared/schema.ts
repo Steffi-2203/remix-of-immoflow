@@ -940,3 +940,47 @@ export const whiteLabelLicenses = pgTable("white_label_licenses", {
 export const insertWhiteLabelLicenseSchema = createInsertSchema(whiteLabelLicenses).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWhiteLabelLicense = z.infer<typeof insertWhiteLabelLicenseSchema>;
 export type WhiteLabelLicense = typeof whiteLabelLicenses.$inferSelect;
+
+// ── Billing Runs (Run-Level State Machine) ───────────────────────────────
+export const billingRuns = pgTable("billing_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: text("run_id").notNull().unique(),
+  status: text("status").notNull().default('pending'),
+  description: text("description"),
+  triggeredBy: uuid("triggered_by"),
+  expectedLines: integer("expected_lines").notNull().default(0),
+  totalChunks: integer("total_chunks").notNull().default(0),
+  completedChunks: integer("completed_chunks").notNull().default(0),
+  failedChunks: integer("failed_chunks").notNull().default(0),
+  inserted: integer("inserted").notNull().default(0),
+  updated: integer("updated").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  artifacts: jsonb("artifacts").default([]),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type BillingRun = typeof billingRuns.$inferSelect;
+export type InsertBillingRun = typeof billingRuns.$inferInsert;
+
+// ── Reconcile Runs (Chunk-Level Tracking) ────────────────────────────────
+export const reconcileRuns = pgTable("reconcile_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: text("run_id").notNull(),
+  chunkId: integer("chunk_id").notNull(),
+  totalChunks: integer("total_chunks").notNull(),
+  status: text("status").notNull().default('pending'),
+  rowsInChunk: integer("rows_in_chunk").notNull().default(0),
+  inserted: integer("inserted").notNull().default(0),
+  updated: integer("updated").notNull().default(0),
+  errorMessage: text("error_message"),
+  billingRunId: uuid("billing_run_id").references(() => billingRuns.id),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export type ReconcileRun = typeof reconcileRuns.$inferSelect;
