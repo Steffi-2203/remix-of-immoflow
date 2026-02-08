@@ -12,6 +12,8 @@ import { WebhookHandlers } from './webhookHandlers';
 import { setupAuth } from "./auth";
 import { pool } from "./db";
 import { seedDistributionKeys } from "./seedDistributionKeys";
+import { jobQueueService } from "./services/jobQueueService";
+import { billingService } from "./services/billing.service";
 import SESSION_SECRET from "./config/session";
 
 const app = express();
@@ -222,6 +224,22 @@ async function initStripe() {
 (async () => {
   await initStripe();
   await seedDistributionKeys();
+
+  // Register job queue handlers
+  jobQueueService.registerHandler('billing_run', async (payload) => {
+    const result = await billingService.generateMonthlyInvoices({
+      userId: payload.userId as string,
+      propertyIds: payload.propertyIds as string[],
+      year: payload.year as number,
+      month: payload.month as number,
+      dryRun: false,
+    });
+    return { runId: result.runId, created: result.created };
+  });
+
+  // Start job queue worker
+  jobQueueService.start(5000);
+
   setupAuth(app);
   const server = await registerRoutes(app);
 
