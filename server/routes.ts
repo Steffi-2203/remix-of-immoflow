@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, sql, and, inArray, desc } from "drizzle-orm";
+import { parsePagination, paginateArray } from "./lib/pagination";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -581,7 +582,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const allPayments = await storage.getPaymentsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(allPayments) : allPayments);
+      const masked = isTester(roles) ? maskPersonalData(allPayments) : allPayments;
+      const pagination = parsePagination(req);
+      res.json(paginateArray(masked, pagination));
     } catch (error) {
       console.error("Payments error:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
@@ -698,7 +701,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const transactions = await storage.getTransactionsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
+      const masked = isTester(roles) ? maskPersonalData(transactions) : transactions;
+      const pagination = parsePagination(req);
+      res.json(paginateArray(masked, pagination));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
@@ -792,7 +797,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const expenses = await storage.getExpensesByOrganization(profile?.organizationId);
-      res.json(expenses);
+      const pagination = parsePagination(req);
+      res.json(paginateArray(expenses, pagination));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
     }
@@ -916,14 +922,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const units = await storage.getUnitsByOrganization(profile?.organizationId);
-      // Add mea/qm/vs_personen aliases for frontend compatibility
       const unitsWithAliases = units.map(unit => ({
         ...unit,
         mea: unit.nutzwert,
         qm: unit.flaeche,
         vs_personen: unit.vsPersonen,
       }));
-      res.json(unitsWithAliases);
+      const pagination = parsePagination(req);
+      res.json(paginateArray(unitsWithAliases, pagination));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
@@ -1048,7 +1054,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const tenants = await storage.getTenantsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(tenants) : tenants);
+      const masked = isTester(roles) ? maskPersonalData(tenants) : tenants;
+      const pagination = parsePagination(req);
+      res.json(paginateArray(masked, pagination));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tenants" });
     }
@@ -1341,7 +1349,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         month ? parseInt(month as string) : undefined
       );
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(invoices) : invoices);
+      const masked = isTester(roles) ? maskPersonalData(invoices) : invoices;
+      const pagination = parsePagination(req);
+      res.json(paginateArray(masked, pagination));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch invoices" });
     }
@@ -5225,6 +5235,59 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     } catch (error) {
       console.error('SLO check error:', error);
       res.status(500).json({ error: "Fehler bei SLO-Prüfung" });
+    }
+  });
+
+  // ── Background Job Queue API ────────────────────────────────────────────────
+  app.post("/api/jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const { jobType, payload, priority, scheduledFor } = req.body;
+      if (!jobType) return res.status(400).json({ error: "jobType required" });
+
+      const { jobQueueService } = await import("./services/jobQueueService");
+      const jobId = await jobQueueService.enqueue({
+        organizationId: profile.organizationId,
+        jobType,
+        payload: payload || {},
+        createdBy: profile.id,
+        priority,
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : undefined,
+      });
+      res.json({ jobId, status: "pending" });
+    } catch (error) {
+      console.error("Enqueue job error:", error);
+      res.status(500).json({ error: "Failed to enqueue job" });
+    }
+  });
+
+  app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const { jobQueueService } = await import("./services/jobQueueService");
+      const status = req.query.status as string | undefined;
+      const jobs = await jobQueueService.listJobs(profile.organizationId, { 
+        status: status as any,
+        limit: parseInt(req.query.limit as string) || 50
+      });
+      res.json(jobs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to list jobs" });
+    }
+  });
+
+  app.get("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { jobQueueService } = await import("./services/jobQueueService");
+      const job = await jobQueueService.getJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      res.json(job);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get job" });
     }
   });
 
