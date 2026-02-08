@@ -9,19 +9,16 @@ import {
   tenants,
   units
 } from "@shared/schema";
+import {
+  resolveVatProfile,
+  DEFAULT_BILLING_RULES,
+  renderDescription,
+  type VatProfile,
+  type BillingRules,
+  type LineTypeConfig,
+} from "../config/vatConfig";
 
-/**
- * Invoice generator: deterministic functions to build invoice payloads and lines.
- * - All numeric values are numbers (not strings)
- * - All rounding done via roundMoney
- * - buildInvoiceData and buildInvoiceLines are pure/deterministic
- */
-
-export type VatRates = {
-  ustSatzMiete: number;
-  ustSatzBk: number;
-  ustSatzHeizung: number;
-};
+export type { VatProfile as VatRates };
 
 export type CarryForward = {
   vortragMiete: number;
@@ -54,13 +51,14 @@ export interface InvoiceData {
 }
 
 export class InvoiceGenerator {
-  getVatRates(unitType: string): VatRates {
-    const isCommercial = ['geschaeft', 'garage', 'stellplatz', 'lager'].includes((unitType || '').toLowerCase());
-    return {
-      ustSatzMiete: isCommercial ? 20 : 10,
-      ustSatzBk: isCommercial ? 20 : 10,
-      ustSatzHeizung: 20
-    };
+  private billingRules: BillingRules;
+
+  constructor(rules?: Partial<BillingRules>) {
+    this.billingRules = { ...DEFAULT_BILLING_RULES, ...rules };
+  }
+
+  getVatRates(unitType: string): VatProfile {
+    return resolveVatProfile(unitType);
   }
 
   calculateVatFromGross(grossAmount: number, vatRate: number): number {
@@ -130,7 +128,7 @@ export class InvoiceGenerator {
   buildInvoiceLines(
     invoiceId: string,
     tenant: typeof tenants.$inferSelect,
-    vatRates: VatRates,
+    vatRates: VatProfile,
     month: number,
     year: number,
     unitId?: string
@@ -144,62 +142,28 @@ export class InvoiceGenerator {
     meta?: Record<string, unknown>;
   }> {
     const lines: any[] = [];
-    const monthName = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][month - 1];
 
-    const grundmiete = roundMoney(Number(tenant.grundmiete) || 0);
-    if (grundmiete > 0) {
-      lines.push({
-        invoiceId,
-        unitId,
-        lineType: 'grundmiete',
-        description: `Nettomiete ${monthName} ${year}`,
-        amount: grundmiete,
-        taxRate: vatRates.ustSatzMiete,
-        meta: { reference: 'MRG §15' }
-      });
+    // Use configured line types instead of hardcoded ones
+    for (const lineConfig of this.billingRules.lineTypes) {
+      const rawAmount = Number((tenant as any)[lineConfig.tenantField]) || 0;
+      const amount = roundMoney(rawAmount);
+      if (amount > 0) {
+        lines.push({
+          invoiceId,
+          unitId,
+          lineType: lineConfig.key,
+          description: renderDescription(lineConfig.descriptionTemplate, month, year),
+          amount,
+          taxRate: vatRates[lineConfig.vatKey],
+          meta: { reference: lineConfig.reference },
+        });
+      }
     }
 
-    const bk = roundMoney(Number(tenant.betriebskostenVorschuss) || 0);
-    if (bk > 0) {
-      lines.push({
-        invoiceId,
-        unitId,
-        lineType: 'betriebskosten',
-        description: `BK-Vorschuss ${monthName} ${year}`,
-        amount: bk,
-        taxRate: vatRates.ustSatzBk,
-        meta: { reference: 'MRG §21' }
-      });
-    }
-
-    const hk = roundMoney(Number(tenant.heizkostenVorschuss) || 0);
-    if (hk > 0) {
-      lines.push({
-        invoiceId,
-        unitId,
-        lineType: 'heizkosten',
-        description: `HK-Vorschuss ${monthName} ${year}`,
-        amount: hk,
-        taxRate: vatRates.ustSatzHeizung,
-        meta: { reference: 'HeizKG' }
-      });
-    }
-
-    const wasser = roundMoney(Number(tenant.wasserkostenVorschuss) || 0);
-    if (wasser > 0) {
-      lines.push({
-        invoiceId,
-        unitId,
-        lineType: 'wasserkosten',
-        description: `Wasserkosten-Vorschuss ${monthName} ${year}`,
-        amount: wasser,
-        taxRate: 10,
-        meta: { reference: 'MRG §21' }
-      });
-    }
-
+    // Dynamic sonstige Kosten (always kept flexible)
     const sonstigeKosten = tenant.sonstigeKosten as Record<string, { betrag: number; ust: number; schluessel?: string }> | null;
     if (sonstigeKosten && typeof sonstigeKosten === 'object') {
+      const monthName = renderDescription('{monthName}', month, year);
       for (const [key, value] of Object.entries(sonstigeKosten)) {
         if (value && Number(value.betrag) > 0) {
           const betrag = roundMoney(Number(value.betrag));

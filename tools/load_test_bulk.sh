@@ -48,26 +48,54 @@ psql "$DATABASE_URL" -t -A -c "
   ) FROM pg_stat_bgwriter;
 " > "$OUTDIR/bgwriter_before.json" 2>/dev/null || echo '{}' > "$OUTDIR/bgwriter_before.json"
 
-# ── 1) Generate CSV ──
+# ── 1) Generate realistic CSV ──
 CSV="$OUTDIR/data.csv"
 node -e "
 const fs = require('fs');
+const crypto = require('crypto');
 const rows = ${ROWS};
 const out = '${CSV}';
 const w = fs.createWriteStream(out);
 w.write('invoice_id,unit_id,line_type,description,amount,tax_rate,meta\n');
+
+const lineTypes = ['grundmiete', 'betriebskosten', 'heizkosten', 'wasserkosten', 'sonstige'];
+const descriptions = {
+  grundmiete: ['Nettomiete Jänner', 'Nettomiete Februar', 'Nettomiete März', 'Nettomiete April', 'Nettomiete Mai', 'Nettomiete Juni', 'Nettomiete Juli', 'Nettomiete August', 'Nettomiete September', 'Nettomiete Oktober', 'Nettomiete November', 'Nettomiete Dezember'],
+  betriebskosten: ['BK-Vorschuss'],
+  heizkosten: ['HK-Vorschuss'],
+  wasserkosten: ['Wasserkosten-Vorschuss'],
+  sonstige: ['Lift', 'Garten', 'Schneeräumung', 'Müllabfuhr']
+};
+const taxRates = { grundmiete: 10, betriebskosten: 10, heizkosten: 20, wasserkosten: 10, sonstige: 20 };
+const amountRanges = { grundmiete: [300, 2500], betriebskosten: [50, 400], heizkosten: [30, 250], wasserkosten: [10, 80], sonstige: [5, 150] };
+
+// Generate realistic property/unit/invoice hierarchy
+const numProperties = Math.max(5, Math.floor(rows / 200));
+const unitsPerProperty = Math.max(3, Math.floor(rows / numProperties / 4));
+
 for (let i = 0; i < rows; i++) {
-  const invoice = '00000000-0000-0000-0000-' + (1000 + Math.floor(i / 10)).toString().padStart(12, '0');
-  const unit = '00000000-0000-0000-0000-' + (2000 + (i % 100)).toString().padStart(12, '0');
-  const lineType = 'rent';
-  const desc = 'Test line ' + i;
-  const amount = (Math.random() * 1000).toFixed(2);
-  const tax = 0;
-  const meta = '{}';
-  w.write(invoice + ',' + unit + ',' + lineType + ',\"' + desc + '\",' + amount + ',' + tax + ',\"' + meta + '\"\\n');
+  const propIdx = i % numProperties;
+  const unitIdx = Math.floor(i / numProperties) % unitsPerProperty;
+  const month = (Math.floor(i / (numProperties * unitsPerProperty)) % 12) + 1;
+  
+  const invoice = crypto.createHash('md5').update('inv-' + propIdx + '-' + unitIdx + '-' + month).digest('hex');
+  const invoiceUuid = [invoice.slice(0,8), invoice.slice(8,12), '4' + invoice.slice(13,16), '8' + invoice.slice(17,20), invoice.slice(20,32)].join('-');
+  
+  const unitHash = crypto.createHash('md5').update('unit-' + propIdx + '-' + unitIdx).digest('hex');
+  const unitUuid = [unitHash.slice(0,8), unitHash.slice(8,12), '4' + unitHash.slice(13,16), '8' + unitHash.slice(17,20), unitHash.slice(20,32)].join('-');
+  
+  const lt = lineTypes[i % lineTypes.length];
+  const descList = descriptions[lt];
+  const desc = descList[month % descList.length] + ' 2025';
+  const [minAmt, maxAmt] = amountRanges[lt];
+  const amount = (minAmt + Math.random() * (maxAmt - minAmt)).toFixed(2);
+  const tax = taxRates[lt];
+  const meta = JSON.stringify({ reference: lt === 'grundmiete' ? 'MRG §15' : 'MRG §21', run: '${RUN_ID}' });
+  
+  w.write(invoiceUuid + ',' + unitUuid + ',' + lt + ',\"' + desc + '\",' + amount + ',' + tax + ',\"' + meta.replace(/\"/g, '\"\"') + '\"\\n');
 }
 w.end();
-console.log('CSV generated:', out, '(' + rows + ' rows)');
+console.log('CSV generated:', out, '(' + rows + ' rows, ' + numProperties + ' properties, ' + unitsPerProperty + ' units/prop)');
 "
 
 # ── 2) Start lock profiler in background ──

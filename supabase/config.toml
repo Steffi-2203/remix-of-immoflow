@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.duplicate-merge]
 verify_jwt = false
+
+[functions.process-job-queue]
+verify_jwt = false

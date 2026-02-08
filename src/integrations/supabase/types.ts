@@ -4934,6 +4934,34 @@ export type Database = {
         Args: { account_id: string; as_of_date?: string }
         Returns: number
       }
+      claim_next_job: {
+        Args: never
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          failed_at: string | null
+          id: string
+          job_type: string
+          max_retries: number
+          organization_id: string | null
+          payload: Json
+          priority: number
+          result: Json | null
+          retry_count: number
+          scheduled_for: string
+          started_at: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "job_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_managed_property_ids: {
         Args: { _user_id: string }
         Returns: string[]
