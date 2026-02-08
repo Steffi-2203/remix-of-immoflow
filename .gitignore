@@ -27,3 +27,11 @@ dist-ssr
 # Audit temp files
 tmp/
 upsert_errors.json
+
+# Reconciliation tool outputs
+dryrun.json
+db_lines.json
+invoice_lines_run.json
+missing_lines.csv
+missing_lines.json
+*.dump
