@@ -199,36 +199,13 @@ jobs:
           fi
 
       # ── Upload reconciliation artifacts ──
-      - name: Upload missing_lines.csv
-        if: always() && steps.parity.outputs.missing_count != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: reconciliation-missing-${{ steps.parity.outputs.run_id }}
-          path: reconciliations/${{ steps.parity.outputs.run_id }}/missing_lines.csv
-          retention-days: 90
-          if-no-files-found: ignore
-
-      - name: Upload reconciliation summary
+      - name: Upload reconciliation artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reconciliation-summary-${{ steps.parity.outputs.run_id }}
-          path: |
-            reconciliations/${{ steps.parity.outputs.run_id }}/summary.json
-            reconciliations/${{ steps.parity.outputs.run_id }}/checksums.sha256
+          name: reconciliation-${{ steps.parity.outputs.run_id }}
+          path: reconciliations/${{ steps.parity.outputs.run_id }}/*
           retention-days: 90
-          if-no-files-found: ignore
-
-      - name: Upload full parity artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: billing-parity-artifacts
-          path: |
-            reconciliations/${{ steps.parity.outputs.run_id }}/
-            dryrun.json
-          retention-days: 30
-          if-no-files-found: ignore
 
       # ── Fail if parity mismatch ──
       - name: Fail on parity mismatch
