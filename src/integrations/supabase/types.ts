@@ -211,7 +211,11 @@ export type Database = {
       billing_runs: {
         Row: {
           artifacts: Json | null
+          avg_chunk_duration_ms: number | null
+          batch_size: number
           completed_chunks: number
+          conflict_count: number
+          conflict_rate: number | null
           created_at: string
           description: string | null
           error_message: string | null
@@ -220,7 +224,11 @@ export type Database = {
           finished_at: string | null
           id: string
           inserted: number
+          parallel_jobs: number
+          peak_chunk_duration_ms: number | null
+          rows_per_second: number | null
           run_id: string
+          scenario_tag: string | null
           skipped: number
           started_at: string | null
           status: string
@@ -231,7 +239,11 @@ export type Database = {
         }
         Insert: {
           artifacts?: Json | null
+          avg_chunk_duration_ms?: number | null
+          batch_size?: number
           completed_chunks?: number
+          conflict_count?: number
+          conflict_rate?: number | null
           created_at?: string
           description?: string | null
           error_message?: string | null
@@ -240,7 +252,11 @@ export type Database = {
           finished_at?: string | null
           id?: string
           inserted?: number
+          parallel_jobs?: number
+          peak_chunk_duration_ms?: number | null
+          rows_per_second?: number | null
           run_id: string
+          scenario_tag?: string | null
           skipped?: number
           started_at?: string | null
           status?: string
@@ -251,7 +267,11 @@ export type Database = {
         }
         Update: {
           artifacts?: Json | null
+          avg_chunk_duration_ms?: number | null
+          batch_size?: number
           completed_chunks?: number
+          conflict_count?: number
+          conflict_rate?: number | null
           created_at?: string
           description?: string | null
           error_message?: string | null
@@ -260,7 +280,11 @@ export type Database = {
           finished_at?: string | null
           id?: string
           inserted?: number
+          parallel_jobs?: number
+          peak_chunk_duration_ms?: number | null
+          rows_per_second?: number | null
           run_id?: string
+          scenario_tag?: string | null
           skipped?: number
           started_at?: string | null
           status?: string
