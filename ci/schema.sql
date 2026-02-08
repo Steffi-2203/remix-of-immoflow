@@ -249,6 +249,31 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 
+-- ── Billing Runs (run-level state machine) ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS billing_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending',
+  description TEXT,
+  triggered_by UUID,
+  expected_lines INTEGER NOT NULL DEFAULT 0,
+  total_chunks INTEGER NOT NULL DEFAULT 0,
+  completed_chunks INTEGER NOT NULL DEFAULT 0,
+  failed_chunks INTEGER NOT NULL DEFAULT 0,
+  inserted INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0,
+  skipped INTEGER NOT NULL DEFAULT 0,
+  artifacts JSONB DEFAULT '[]'::jsonb,
+  error_message TEXT,
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_runs_status ON billing_runs(status);
+CREATE INDEX IF NOT EXISTS idx_billing_runs_created ON billing_runs(created_at DESC);
+
 -- ── Reconcile Runs (chunk tracking) ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS reconcile_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -260,6 +285,7 @@ CREATE TABLE IF NOT EXISTS reconcile_runs (
   inserted INTEGER NOT NULL DEFAULT 0,
   updated INTEGER NOT NULL DEFAULT 0,
   error_message TEXT,
+  billing_run_id UUID REFERENCES billing_runs(id),
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -267,6 +293,7 @@ CREATE TABLE IF NOT EXISTS reconcile_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reconcile_runs_run_id ON reconcile_runs(run_id);
+CREATE INDEX IF NOT EXISTS idx_reconcile_runs_billing_run ON reconcile_runs(billing_run_id);
 
 -- ── Distribution Keys ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS distribution_keys (

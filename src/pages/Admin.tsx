@@ -52,6 +52,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { DemoInviteManager } from '@/components/admin/DemoInviteManager';
 import { WhiteLabelInquiryManager } from '@/components/admin/WhiteLabelInquiryManager';
 import { WhiteLabelLicenseManager } from '@/components/admin/WhiteLabelLicenseManager';
+import { BillingRunsManager } from '@/components/admin/BillingRunsManager';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -221,6 +222,9 @@ export default function Admin() {
 
         {/* White Label Licenses */}
         <WhiteLabelLicenseManager />
+
+        {/* Billing Runs Lifecycle */}
+        <BillingRunsManager />
 
         {/* Organizations Table */}
         <Card>
