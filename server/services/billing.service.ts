@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from "../db";
 import { invoiceGenerator } from "./invoice.generator";
 import { roundMoney } from "@shared/utils";
+import { normalizeDescription } from "../lib/normalizeDescription";
 import { sql, eq, inArray } from "drizzle-orm";
 import {
   monthlyInvoices,
@@ -192,10 +193,10 @@ export class BillingService {
         for (const batch of batches) {
           if (batch.length > 0) {
             const values = batch.map(line => 
-              sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
+              sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${normalizeDescription(line.description)}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
             );
             const result = await tx.execute(sql`
-              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
+              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, normalized_description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
               ON CONFLICT ON CONSTRAINT idx_invoice_lines_unique
               DO UPDATE SET
