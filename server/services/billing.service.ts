@@ -33,7 +33,13 @@ function reconcileRounding(lines: any[], expectedTotal: number): void {
   let diff = roundMoney(expectedTotal - roundedSum);
   if (Math.abs(diff) < 0.01) return;
 
-  lines.sort((a, b) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0));
+  lines.sort((a, b) => {
+    const diff = Math.abs(b.amount || 0) - Math.abs(a.amount || 0);
+    if (diff !== 0) return diff;
+    const typeCmp = (a.lineType || '').localeCompare(b.lineType || '');
+    if (typeCmp !== 0) return typeCmp;
+    return (a.unitId || '').localeCompare(b.unitId || '');
+  });
   let i = 0;
   while (Math.abs(diff) >= 0.01 && i < lines.length * 2) {
     const adjust = diff > 0 ? 0.01 : -0.01;
