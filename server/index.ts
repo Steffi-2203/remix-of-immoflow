@@ -26,16 +26,26 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// Security: Rate limiting - 100 requests per 15 minutes per IP
+// Security: Rate limiting - general API (100 req / 15 min per IP)
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => !req.path.startsWith('/api'), // Only limit API routes
+  skip: (req) => !req.path.startsWith('/api'),
 });
 app.use(apiLimiter);
+
+// Security: Strict rate limiting for auth routes (20 req / min per IP)
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Zu viele Anmeldeversuche. Bitte warten Sie eine Minute.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth', authLimiter);
 
 // Security: CORS with whitelist
 const allowedOrigins = [
@@ -79,7 +89,7 @@ app.use(session({
     secure: isProduction,
     httpOnly: true,
     sameSite: isProduction ? 'none' : 'lax',
-    maxAge: 1000 * 60 * 60 * 8, // 8 hours
+    maxAge: 1000 * 60 * 60 * 24, // 24 hours
   },
 }));
 
