@@ -9,6 +9,20 @@ function roundToCents(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+/**
+ * Deterministische Beschreibungs-Normalisierung — identisch mit server/lib/normalizeDescription.ts.
+ * Direkt hier definiert, da dieses Tool als standalone JS ohne TS-Transpile läuft.
+ */
+function normalizeDescription(raw) {
+  if (raw === undefined || raw === null) return null;
+  let s = String(raw).trim();
+  if (s.normalize) s = s.normalize('NFC');
+  s = s.replace(/\s+/g, ' ');
+  s = s.toLowerCase();
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  return s;
+}
+
 const args = process.argv.slice(2);
 const getArg = (name) => {
   const arg = args.find(a => a.startsWith(`--${name}=`));
@@ -131,7 +145,7 @@ for (const line of missingLines) {
 }
 
 resolved.sort((a, b) =>
-  `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`)
+  `${a.invoiceId}|${a.lineType}|${a.unitId}|${normalizeDescription(a.description)}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${normalizeDescription(b.description)}`)
 );
 
 const mergedKeys = [];
@@ -173,7 +187,7 @@ if (dryRun) {
       
       const oldValuesMap = new Map();
       for (const row of (oldResult?.rows || [])) {
-        oldValuesMap.set(`${row.invoice_id}|${row.line_type}|${row.description}`, { 
+        oldValuesMap.set(`${row.invoice_id}|${row.line_type}|${normalizeDescription(row.description)}`, { 
           amount: Number(row.old_amount), taxRate: Number(row.old_tax_rate) 
         });
       }
@@ -193,7 +207,7 @@ if (dryRun) {
       let batchInserted = 0;
       let batchUpdated = 0;
       for (const row of result.rows) {
-        const key = `${row.invoice_id}|${row.line_type}|${row.description}`;
+        const key = `${row.invoice_id}|${row.line_type}|${normalizeDescription(row.description)}`;
         returnedKeys.add(key);
         const oldValues = oldValuesMap.get(key);
         if (oldValues !== undefined) {

@@ -1,6 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * Deterministische Beschreibungs-Normalisierung — identisch mit server/lib/normalizeDescription.ts.
+ * Direkt hier definiert, da dieses Tool als standalone JS ohne TS-Transpile läuft.
+ */
+function normalizeDescription(raw) {
+  if (raw === undefined || raw === null) return null;
+  let s = String(raw).trim();
+  if (s.normalize) s = s.normalize('NFC');
+  s = s.replace(/\s+/g, ' ');
+  s = s.toLowerCase();
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  return s;
+}
+
 const args = process.argv.slice(2);
 const getArg = (name) => {
   const arg = args.find(a => a.startsWith(`--${name}=`));
@@ -47,11 +61,11 @@ dryrun.preview.forEach(p => {
 });
 
 const dbLineSet = new Set(
-  dbLines.map(l => `${l.unit_id || l.unitId}|${l.line_type || l.lineType}|${l.description}`)
+  dbLines.map(l => `${l.unit_id || l.unitId}|${l.line_type || l.lineType}|${normalizeDescription(l.description)}`)
 );
 
 const missingLines = expectedLines.filter(l => 
-  !dbLineSet.has(`${l.unitId}|${l.lineType}|${l.description}`)
+  !dbLineSet.has(`${l.unitId}|${l.lineType}|${normalizeDescription(l.description)}`)
 );
 
 console.log(`Expected lines (dry-run): ${expectedLines.length}`);
