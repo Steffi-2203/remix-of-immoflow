@@ -61,7 +61,7 @@ export async function seedTestData() {
   `);
 
   await db.execute(sql`
-    INSERT INTO tenants (id, unit_id, first_name, last_name, email, status, grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss, mietbeginn, created_at)
+    INSERT INTO tenants (id, unit_id, vorname, nachname, email, status, grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss, mietbeginn, created_at)
     VALUES (${testTenantId}::uuid, ${testUnitId}::uuid, 'Max', 'Mustermann', 'max@test.at', 'aktiv', 500.00, 150.00, 80.00, '2025-01-01', NOW())
     ON CONFLICT (id) DO NOTHING
   `);
