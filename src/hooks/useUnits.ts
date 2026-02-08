@@ -16,13 +16,14 @@ export function useUnits(propertyId?: string) {
     queryFn: async () => {
       let query = supabase
         .from('units')
+        .select('*, tenants(*)')
         .select('*, tenants(*)');
       
       if (propertyId) {
         query = query.eq('property_id', propertyId);
       }
       
-      const { data, error } = await query.order('top_nummer');
+      const { data, error } = await query.order('top_nummer').limit(500);
       
       if (error) throw error;
       return data;

@@ -19,7 +19,8 @@ export function useInvoices(year?: number, month?: number) {
         .select('*')
         .order('year', { ascending: false })
         .order('month', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
 
       if (year) {
         query = query.eq('year', year);
@@ -53,7 +54,8 @@ export function useInvoicesByTenant(tenantId: string) {
         .select('*')
         .eq('tenant_id', tenantId)
         .order('year', { ascending: false })
-        .order('month', { ascending: false });
+        .order('month', { ascending: false })
+        .limit(500);
 
       if (error) throw error;
       return data;

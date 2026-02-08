@@ -69,7 +69,8 @@ export function useExpenses(propertyId?: string, year?: number, month?: number) 
       let query = supabase
         .from('expenses')
         .select('*, properties(name)')
-        .order('datum', { ascending: false });
+        .order('datum', { ascending: false })
+        .limit(500);
       
       if (propertyId) {
         query = query.eq('property_id', propertyId);
@@ -109,7 +110,8 @@ export function useExpensesByCategory(propertyId?: string, year?: number) {
       let query = supabase
         .from('expenses')
         .select('*')
-        .order('datum', { ascending: false });
+        .order('datum', { ascending: false })
+        .limit(500);
       
       if (propertyId) {
         query = query.eq('property_id', propertyId);

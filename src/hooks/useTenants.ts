@@ -17,7 +17,8 @@ export function useTenants() {
       const { data, error } = await supabase
         .from('tenants')
         .select('*, units(*, properties(*))')
-        .order('last_name');
+        .order('last_name')
+        .limit(500);
       
       if (error) throw error;
       return data;
