@@ -1,51 +1,24 @@
 
 
-## Problem: Load Test bricht nach 32 Sekunden ab
+## Fix: Dependency-Konflikt jspdf / jspdf-autotable
 
-### Ursache
-Der `batch_upsert.js` generiert synthetische UUIDs (z.B. `00000000-0000-0000-0000-000000001000`) fuer `invoice_id` und `unit_id`. In der CI-Datenbank existieren diese Datensaetze aber nicht. Wenn `invoice_lines` Foreign Keys auf `invoices` und `units` hat, schlaegt das INSERT mit einem FK-Constraint-Fehler fehl, und `set -euo pipefail` bricht das Shell-Script sofort ab.
-
-Zusaetzlich fehlt ein `timeout-minutes` im CI-Job, was bei echten Laenglaeufen zu GitHub-Defaults (6h) fuehrt.
+### Problem
+`jspdf-autotable@5.0.2` erfordert `jspdf@"^2 || ^3"`, aber `jspdf@4.0.0` ist installiert. `npm ci` schlaegt in der CI fehl.
 
 ### Loesung
+Zwei Aenderungen:
 
-**1. Seed-Daten vor dem Load Test einfuegen**
+1. **`package.json`**: jspdf von `^4.0.0` auf `^3.0.0` downgraden, damit es mit jspdf-autotable kompatibel ist.
 
-Im CI-Job einen neuen Step **vor** dem Load Test einfuegen, der die benoetigten `invoices` und `units` Dummy-Datensaetze anlegt:
+2. **`.github/workflows/ci.yml`**: Zusaetzlich `--legacy-peer-deps` als Fallback bei allen `npm ci` Steps hinzufuegen, um zukuenftige Minor-Konflikte abzufangen.
 
-```sql
--- Erzeuge 5000 Dummy-Invoices
-INSERT INTO invoices (id, ...)
-SELECT '00000000-0000-0000-0000-' || lpad((1000 + g)::text, 12, '0'), ...
-FROM generate_series(0, 4999) g
-ON CONFLICT DO NOTHING;
-
--- Erzeuge 100 Dummy-Units
-INSERT INTO units (id, ...)
-SELECT '00000000-0000-0000-0000-' || lpad((2000 + g)::text, 12, '0'), ...
-FROM generate_series(0, 99) g
-ON CONFLICT DO NOTHING;
-```
-
-**2. Timeout und Error-Handling im CI-Job**
-
-- `timeout-minutes: 15` zum `load-test` Job hinzufuegen
-- Im `load_test_bulk.sh` das `set -e` durch besseres Error-Handling ersetzen, damit Teilergebnisse sichtbar bleiben
-
-**3. batch_upsert.js robuster machen**
-
-- Bessere Fehlermeldung bei FK-Violations ausgeben statt nur "ROLLED BACK"
-- Optional: `--skip-fk-check` Flag oder `SET session_replication_role = 'replica'` fuer Tests
-
-### Aenderungen im Detail
+### Betroffene Dateien
 
 | Datei | Aenderung |
 |---|---|
-| `.github/workflows/ci.yml` | `timeout-minutes: 15` zum load-test Job; neuer Step "Seed test data" vor "Run load test" |
-| `tools/load_test_bulk.sh` | Fehlerbehandlung verbessern; CSV-Meta-Feld fixen (escaped quotes) |
-| `tools/batch_upsert.js` | Bessere Fehlerausgabe bei FK-Constraint-Fehlern |
+| `package.json` | `jspdf`: `"^4.0.0"` wird zu `"^3.0.0"` |
+| `.github/workflows/ci.yml` | Alle `npm ci` Aufrufe werden zu `npm ci --legacy-peer-deps` |
 
-### Technische Details
-
-Die CSV-Generierung in `load_test_bulk.sh` hat auch ein Quoting-Problem bei der `meta`-Spalte (einfache Anfuehrungszeichen statt korrekte JSON-Escaping), was ebenfalls zu Parse-Fehlern fuehren kann. Das wird mitkorrigiert.
+### Risiko
+Gering. jspdf 3.x und 4.x haben eine sehr aehnliche API. Falls dein Code jspdf-4-spezifische Features nutzt, muessten diese angepasst werden -- das wird beim Build sofort sichtbar.
 
