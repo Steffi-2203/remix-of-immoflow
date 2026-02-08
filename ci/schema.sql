@@ -1,61 +1,50 @@
 -- ============================================================================
--- CI Bootstrap Schema
+-- CI Bootstrap Schema (idempotent)
 -- Erstellt die Basistabellen, die run-migration.cjs und der CI-Workflow
 -- benötigen. Wird VOR den Migrations ausgeführt.
+--
+-- RULES:
+--   1. ALL statements must be idempotent (IF NOT EXISTS, DO $$ ... $$)
+--   2. NO GENERATED ALWAYS columns — use regular columns + trigger/view
+--   3. Aligned with production schema (snake_case, same types)
 -- ============================================================================
 
 BEGIN;
 
--- ── Enums ──────────────────────────────────────────────────────────────────
-DO $$ BEGIN
-  CREATE TYPE invoice_status AS ENUM ('offen', 'bezahlt', 'teilbezahlt', 'ueberfaellig');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+-- ── Extensions ─────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-DO $$ BEGIN
-  CREATE TYPE expense_category AS ENUM ('betriebskosten_umlagefaehig', 'instandhaltung');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE expense_type AS ENUM (
-    'versicherung', 'grundsteuer', 'muellabfuhr', 'wasser_abwasser', 'heizung',
-    'strom_allgemein', 'hausbetreuung', 'lift', 'gartenpflege', 'schneeraeumung',
-    'verwaltung', 'ruecklage', 'reparatur', 'sanierung', 'sonstiges'
-  );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE tenant_status AS ENUM ('aktiv', 'leerstand', 'beendet');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE unit_type AS ENUM ('wohnung', 'geschaeft', 'garage', 'stellplatz', 'lager', 'sonstiges');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
-  CREATE TYPE mrg_bk_kategorie AS ENUM (
-    'wasserversorgung', 'abwasserentsorgung', 'muellabfuhr', 'kanalraeumung',
-    'hausreinigung', 'hausbetreuung', 'rauchfangkehrer', 'schaedlingsbekaempfung',
-    'lichtkosten', 'beleuchtung', 'feuerversicherung', 'haftpflichtversicherung',
-    'leitungswasserschaden', 'sturmschaden', 'glasversicherung',
-    'grundsteuer', 'verwaltung', 'sonstige'
-  );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+-- ── Enums (idempotent via DO block) ────────────────────────────────────────
+DO $$ BEGIN CREATE TYPE invoice_status AS ENUM ('offen', 'bezahlt', 'teilbezahlt', 'ueberfaellig'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE expense_category AS ENUM ('betriebskosten_umlagefaehig', 'instandhaltung'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE expense_type AS ENUM (
+  'versicherung', 'grundsteuer', 'muellabfuhr', 'wasser_abwasser', 'heizung',
+  'strom_allgemein', 'hausbetreuung', 'lift', 'gartenpflege', 'schneeraeumung',
+  'verwaltung', 'ruecklage', 'reparatur', 'sanierung', 'sonstiges'
+); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE tenant_status AS ENUM ('aktiv', 'leerstand', 'beendet'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE unit_type AS ENUM ('wohnung', 'geschaeft', 'garage', 'stellplatz', 'lager', 'sonstiges'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE mrg_bk_kategorie AS ENUM (
+  'wasserversorgung', 'abwasserentsorgung', 'muellabfuhr', 'kanalraeumung',
+  'hausreinigung', 'hausbetreuung', 'rauchfangkehrer', 'schaedlingsbekaempfung',
+  'lichtkosten', 'beleuchtung', 'feuerversicherung', 'haftpflichtversicherung',
+  'leitungswasserschaden', 'sturmschaden', 'glasversicherung',
+  'grundsteuer', 'verwaltung', 'sonstige'
+); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE app_role AS ENUM ('admin', 'manager', 'viewer', 'finance', 'accountant'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── Organizations ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  subscription_tier TEXT DEFAULT 'free',
+  subscription_status TEXT DEFAULT 'active',
+  trial_ends_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ── Profiles ──────────────────────────────────────────────────────────────
+-- ── Profiles ───────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT,
@@ -65,10 +54,18 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ── User Roles ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  role app_role NOT NULL DEFAULT 'viewer',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ── Properties ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS properties (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID,
+  organization_id UUID REFERENCES organizations(id),
   name TEXT NOT NULL,
   address TEXT NOT NULL,
   city TEXT NOT NULL,
@@ -80,6 +77,15 @@ CREATE TABLE IF NOT EXISTS properties (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   deleted_at TIMESTAMPTZ
+);
+
+-- ── Property Managers ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS property_managers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  property_id UUID NOT NULL REFERENCES properties(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (user_id, property_id)
 );
 
 -- ── Units ──────────────────────────────────────────────────────────────────
@@ -102,11 +108,9 @@ CREATE TABLE IF NOT EXISTS units (
   deleted_at TIMESTAMPTZ
 );
 
--- Alias columns used by CI seed (qm → flaeche, mea → nutzwert)
--- The CI load test uses qm and mea; we add them as generated columns if needed.
--- Actually the CI uses explicit column names, so we just need the base columns.
-
 -- ── Tenants ────────────────────────────────────────────────────────────────
+-- NOTE: first_name and last_name are plain columns, NOT GENERATED ALWAYS.
+-- Production uses the same pattern. Never use GENERATED columns in CI schema.
 CREATE TABLE IF NOT EXISTS tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   unit_id UUID NOT NULL REFERENCES units(id),
@@ -137,6 +141,8 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 
 -- ── Monthly Invoices (Vorschreibungen) ─────────────────────────────────────
+-- NOTE: vortrag_gesamt is a plain NUMERIC column, NOT GENERATED ALWAYS.
+-- A trigger keeps it in sync. This avoids GENERATED column issues in CI/restore.
 CREATE TABLE IF NOT EXISTS monthly_invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID REFERENCES tenants(id),
@@ -161,10 +167,34 @@ CREATE TABLE IF NOT EXISTS monthly_invoices (
   vortrag_bk NUMERIC(10,2) DEFAULT 0,
   vortrag_hk NUMERIC(10,2) DEFAULT 0,
   vortrag_sonstige NUMERIC(10,2) DEFAULT 0,
+  vortrag_gesamt NUMERIC(10,2) DEFAULT 0,
   run_id UUID,
+  paid_amount NUMERIC(10,2) DEFAULT 0,
+  version INTEGER DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Trigger to keep vortrag_gesamt in sync (replaces GENERATED ALWAYS)
+CREATE OR REPLACE FUNCTION sync_vortrag_gesamt()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.vortrag_gesamt := COALESCE(NEW.vortrag_miete, 0)
+                      + COALESCE(NEW.vortrag_bk, 0)
+                      + COALESCE(NEW.vortrag_hk, 0)
+                      + COALESCE(NEW.vortrag_sonstige, 0);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_sync_vortrag_gesamt ON monthly_invoices;
+CREATE TRIGGER trg_sync_vortrag_gesamt
+  BEFORE INSERT OR UPDATE ON monthly_invoices
+  FOR EACH ROW EXECUTE FUNCTION sync_vortrag_gesamt();
+
+-- Unique constraint for idempotent invoice generation
+CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_invoices_unique
+  ON monthly_invoices(unit_id, year, month, COALESCE(paid_amount, 0), COALESCE(version, 1));
 
 -- ── Invoice Lines ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS invoice_lines (
@@ -185,6 +215,21 @@ CREATE INDEX IF NOT EXISTS idx_invoice_lines_unit ON invoice_lines(unit_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_lines_unique
   ON invoice_lines(invoice_id, unit_id, line_type, normalized_description);
 
+-- ── Payments ───────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  invoice_id UUID REFERENCES monthly_invoices(id),
+  betrag NUMERIC(10,2) NOT NULL,
+  eingangs_datum DATE NOT NULL,
+  zahlungsart TEXT DEFAULT 'ueberweisung',
+  notizen TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
+
 -- ── Audit Logs ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -201,7 +246,29 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ── Distribution Keys (needed by expenses FK) ─────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+
+-- ── Reconcile Runs (chunk tracking) ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS reconcile_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id TEXT NOT NULL,
+  chunk_id INTEGER NOT NULL,
+  total_chunks INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  rows_in_chunk INTEGER NOT NULL DEFAULT 0,
+  inserted INTEGER NOT NULL DEFAULT 0,
+  updated INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (run_id, chunk_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconcile_runs_run_id ON reconcile_runs(run_id);
+
+-- ── Distribution Keys ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS distribution_keys (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID,
@@ -213,6 +280,7 @@ CREATE TABLE IF NOT EXISTS distribution_keys (
   unit TEXT DEFAULT 'm²',
   input_type TEXT DEFAULT 'flaeche',
   included_unit_types TEXT[],
+  erlaubter_schluessel TEXT[],
   is_system BOOLEAN DEFAULT false,
   is_active BOOLEAN DEFAULT true,
   mrg_konform BOOLEAN DEFAULT true,
@@ -270,6 +338,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   beleg_nummer TEXT,
   beleg_url TEXT,
   notes TEXT,
+  notizen TEXT,
   year INTEGER NOT NULL,
   month INTEGER NOT NULL,
   mrg_kategorie mrg_bk_kategorie,
@@ -296,6 +365,18 @@ CREATE TABLE IF NOT EXISTS expense_allocations (
 CREATE INDEX IF NOT EXISTS idx_expense_allocations_expense_id ON expense_allocations(expense_id);
 CREATE INDEX IF NOT EXISTS idx_expense_allocations_unit_id ON expense_allocations(unit_id);
 
+-- ── Leases ─────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS leases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id),
+  unit_id UUID NOT NULL REFERENCES units(id),
+  start_date DATE NOT NULL,
+  end_date DATE,
+  rent_amount NUMERIC(10,2) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ── Normalize Description Trigger ──────────────────────────────────────────
 CREATE OR REPLACE FUNCTION invoice_lines_normalize_text(in_text TEXT)
 RETURNS TEXT LANGUAGE plpgsql IMMUTABLE AS $$
@@ -318,5 +399,11 @@ CREATE TRIGGER trg_invoice_lines_normalize
   BEFORE INSERT OR UPDATE ON invoice_lines
   FOR EACH ROW
   EXECUTE FUNCTION invoice_lines_normalize_description_trigger();
+
+-- ── Helper functions used by RLS / services ────────────────────────────────
+CREATE OR REPLACE FUNCTION is_admin(_user_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM user_roles WHERE user_id = _user_id AND role = 'admin');
+$$;
 
 COMMIT;
