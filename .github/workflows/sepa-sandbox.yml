@@ -1,0 +1,19 @@
+name: SEPA Sandbox Tests
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1' # weekly Monday 4am
+
+jobs:
+  sepa-sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm ci --legacy-peer-deps
+      - name: Run SEPA sandbox tests
+        run: npx vitest run tests/integration/sepa-worker.sandbox.spec.ts --config vitest.server.config.ts
