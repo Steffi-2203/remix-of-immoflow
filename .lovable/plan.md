@@ -1,24 +1,25 @@
 
 
-## Fix: Dependency-Konflikt jspdf / jspdf-autotable
+## Fix: Add missing `test` script to `package.json`
 
 ### Problem
-`jspdf-autotable@5.0.2` erfordert `jspdf@"^2 || ^3"`, aber `jspdf@4.0.0` ist installiert. `npm ci` schlaegt in der CI fehl.
+The CI `test` job (line 81) runs `npm test`, but `package.json` has no `"test"` script, causing the immediate failure.
 
-### Loesung
-Zwei Aenderungen:
+### Solution
+Add a `"test"` script to `package.json` that runs vitest, consistent with how the `billing-parity` job already invokes tests.
 
-1. **`package.json`**: jspdf von `^4.0.0` auf `^3.0.0` downgraden, damit es mit jspdf-autotable kompatibel ist.
+### Changes
 
-2. **`.github/workflows/ci.yml`**: Zusaetzlich `--legacy-peer-deps` als Fallback bei allen `npm ci` Steps hinzufuegen, um zukuenftige Minor-Konflikte abzufangen.
+**`package.json`** -- add to the `"scripts"` block:
 
-### Betroffene Dateien
+```json
+"test": "vitest run"
+```
 
-| Datei | Aenderung |
-|---|---|
-| `package.json` | `jspdf`: `"^4.0.0"` wird zu `"^3.0.0"` |
-| `.github/workflows/ci.yml` | Alle `npm ci` Aufrufe werden zu `npm ci --legacy-peer-deps` |
+This will run all vitest test files matching the default include pattern. The billing-parity job already runs specific test files via `npx vitest run <file>`, so this keeps the approach consistent.
 
-### Risiko
-Gering. jspdf 3.x und 4.x haben eine sehr aehnliche API. Falls dein Code jspdf-4-spezifische Features nutzt, muessten diese angepasst werden -- das wird beim Build sofort sichtbar.
+### Technical Notes
+- `vitest run` executes tests once (no watch mode), which is correct for CI.
+- The existing `vitest.config.ts` (if present) or vite config will control test discovery. The `billing-parity` job targets specific files, but the `test` job can run the full suite.
+- No new dependencies are needed -- vitest is already used in the project.
 
