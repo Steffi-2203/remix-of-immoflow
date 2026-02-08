@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from "../db";
 import { invoiceGenerator } from "./invoice.generator";
 import { roundMoney } from "@shared/utils";
+import { normalizeDescription } from "../lib/normalizeDescription";
 import { sql, eq, inArray } from "drizzle-orm";
 import {
   monthlyInvoices,
@@ -273,7 +274,7 @@ export class BillingService {
           if (batch.length === 0) continue;
           
           const sortedBatch = [...batch].sort((a, b) => 
-            `${a.invoiceId}|${a.lineType}|${a.unitId}|${a.description}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${b.description}`)
+            `${a.invoiceId}|${a.lineType}|${a.unitId}|${normalizeDescription(a.description)}`.localeCompare(`${b.invoiceId}|${b.lineType}|${b.unitId}|${normalizeDescription(b.description)}`)
           );
           
           const values = sortedBatch.map(line => 
@@ -282,37 +283,38 @@ export class BillingService {
           
           const result = await tx.execute(sql`
             WITH old_values AS (
-              SELECT invoice_id, unit_id, line_type, description, amount AS old_amount, tax_rate AS old_tax_rate
+              SELECT invoice_id, unit_id, line_type, normalized_description, amount AS old_amount, tax_rate AS old_tax_rate
               FROM invoice_lines
-              WHERE (invoice_id, unit_id, line_type, description) IN (
+              WHERE (invoice_id, unit_id, line_type, normalized_description) IN (
                 SELECT * FROM (VALUES ${sql.join(
-                  sortedBatch.map(line => sql`(${line.invoiceId}::uuid, ${line.unitId}::uuid, ${line.lineType}::varchar, ${line.description}::text)`),
+                  sortedBatch.map(line => sql`(${line.invoiceId}::uuid, ${line.unitId}::uuid, ${line.lineType}::varchar, ${normalizeDescription(line.description)}::text)`),
                   sql`, `
-                )}) AS t(inv_id, u_id, lt, descr)
+                )}) AS t(inv_id, u_id, lt, norm_descr)
               )
             ),
             upserted AS (
               INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
-              ON CONFLICT (invoice_id, unit_id, line_type, description)
+              ON CONFLICT (invoice_id, unit_id, line_type, normalized_description)
               DO UPDATE SET
                 amount = EXCLUDED.amount,
                 tax_rate = EXCLUDED.tax_rate,
+                description = EXCLUDED.description,
                 meta = COALESCE(invoice_lines.meta, '{}'::jsonb) || COALESCE(EXCLUDED.meta, '{}'::jsonb)
               WHERE (invoice_lines.amount, invoice_lines.tax_rate, invoice_lines.meta) IS DISTINCT FROM (EXCLUDED.amount, EXCLUDED.tax_rate, EXCLUDED.meta)
-              RETURNING id, invoice_id, unit_id, line_type, description, amount
+              RETURNING id, invoice_id, unit_id, line_type, normalized_description, amount
             )
-            SELECT u.id, u.invoice_id, u.line_type, u.description, u.amount,
+            SELECT u.id, u.invoice_id, u.line_type, u.normalized_description, u.amount,
                    o.old_amount,
                    CASE WHEN o.old_amount IS NOT NULL THEN true ELSE false END AS was_update
             FROM upserted u
             LEFT JOIN old_values o ON u.invoice_id = o.invoice_id AND u.unit_id = o.unit_id 
-              AND u.line_type = o.line_type AND u.description IS NOT DISTINCT FROM o.description
+              AND u.line_type = o.line_type AND u.normalized_description IS NOT DISTINCT FROM o.normalized_description
           `);
           
           const returnedIds = new Set<string>();
           for (const row of (result.rows || [])) {
-            returnedIds.add(`${(row as any).invoice_id}|${(row as any).line_type}|${(row as any).description}`);
+            returnedIds.add(`${(row as any).invoice_id}|${(row as any).line_type}|${(row as any).normalized_description}`);
             if ((row as any).was_update) {
               updatedLinesCount++;
               if (mergedKeys.length < 50) {

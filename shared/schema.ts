@@ -270,6 +270,7 @@ export const invoiceLines = pgTable("invoice_lines", {
   unitId: uuid("unit_id").references(() => units.id),
   lineType: varchar("line_type", { length: 50 }).notNull(),
   description: text("description"),
+  normalizedDescription: text("normalized_description"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   taxRate: integer("tax_rate").default(0),
   meta: jsonb("meta"),
@@ -277,7 +278,7 @@ export const invoiceLines = pgTable("invoice_lines", {
 }, (table) => [
   index("idx_invoice_lines_invoice").on(table.invoiceId),
   index("idx_invoice_lines_unit").on(table.unitId),
-  uniqueIndex("invoice_lines_unique_idx").on(table.invoiceId, table.unitId, table.lineType, table.description),
+  uniqueIndex("invoice_lines_unique_idx").on(table.invoiceId, table.unitId, table.lineType, table.normalizedDescription),
 ]);
 
 export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true });
