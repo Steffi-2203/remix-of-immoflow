@@ -78,7 +78,7 @@ jobs:
         run: node migrations/run-migration.cjs
 
       - name: Run tests
-        run: npm test
+        run: npx vitest run
 
   billing-parity:
     name: Billing Parity & Reconciliation
