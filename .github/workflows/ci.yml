@@ -381,6 +381,13 @@ jobs:
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
+      - name: Tune Postgres for load test
+        run: |
+          psql "$DATABASE_URL" -c "ALTER SYSTEM SET max_wal_size = '4GB';"
+          psql "$DATABASE_URL" -c "ALTER SYSTEM SET checkpoint_timeout = '30min';"
+          psql "$DATABASE_URL" -c "SELECT pg_reload_conf();"
+          echo "Applied bulk window tuning: max_wal_size=4GB, checkpoint_timeout=30min"
+
       - name: Capture WAL position before
         id: wal_before
         run: |
@@ -439,79 +446,84 @@ jobs:
         id: loadtest
         run: |
           chmod +x tools/load_test_bulk.sh
-          START_EPOCH=$(date +%s%3N)
           bash tools/load_test_bulk.sh \
             ${{ matrix.rows }} \
             ${{ matrix.parallel }} \
-            "$DATABASE_URL" 2>&1 | tee load_test_output.log
-          END_EPOCH=$(date +%s%3N)
-          DURATION_MS=$((END_EPOCH - START_EPOCH))
-          echo "duration_ms=$DURATION_MS" >> "$GITHUB_OUTPUT"
+            "$DATABASE_URL" \
+            "${{ matrix.name }}" 2>&1 | tee load_test_output.log
 
-      - name: Collect metrics
-        id: metrics
+          # Find the metrics.json that was just written
+          LATEST_DIR=$(ls -td load_tests/*/ 2>/dev/null | head -1)
+          if [ -n "$LATEST_DIR" ] && [ -f "${LATEST_DIR}metrics.json" ]; then
+            DURATION_MS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('${LATEST_DIR}metrics.json','utf8')).duration_ms)")
+            echo "duration_ms=$DURATION_MS" >> "$GITHUB_OUTPUT"
+            echo "metrics_dir=$LATEST_DIR" >> "$GITHUB_OUTPUT"
+            # Copy to scenario-named dir for report generator
+            mkdir -p "load_tests/${{ matrix.name }}"
+            cp "${LATEST_DIR}metrics.json" "load_tests/${{ matrix.name }}/metrics.json"
+            cp "${LATEST_DIR}locks.log" "load_tests/${{ matrix.name }}/locks.log" 2>/dev/null || true
+          fi
+
+      - name: Acceptance gate
+        if: always()
         run: |
           SCENARIO="${{ matrix.name }}"
-          ROWS=${{ matrix.rows }}
-          PARALLEL=${{ matrix.parallel }}
-          DURATION_MS=${{ steps.loadtest.outputs.duration_ms }}
-
-          # DB settings
-          WORK_MEM=$(psql "$DATABASE_URL" -t -A -c "SHOW work_mem;")
-          MAX_WAL=$(psql "$DATABASE_URL" -t -A -c "SHOW max_wal_size;")
-          MAX_CONN=$(psql "$DATABASE_URL" -t -A -c "SHOW max_connections;")
-          SHARED_BUF=$(psql "$DATABASE_URL" -t -A -c "SHOW shared_buffers;")
-
-          # WAL diff
-          WAL_BEFORE="${{ steps.wal_before.outputs.lsn }}"
-          WAL_AFTER=$(psql "$DATABASE_URL" -t -A -c "SELECT pg_current_wal_lsn();")
-          WAL_BYTES=$(psql "$DATABASE_URL" -t -A -c "SELECT pg_wal_lsn_diff('${WAL_AFTER}', '${WAL_BEFORE}');")
-          WAL_MB=$(echo "scale=2; ${WAL_BYTES:-0} / 1048576" | bc)
-
-          # Row counts
-          INSERTED=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM invoice_lines WHERE created_at >= now() - interval '30 min';")
-
-          # Duplicates
-          DUPES=$(psql "$DATABASE_URL" -t -A -c "
-            SELECT count(*) FROM (
-              SELECT invoice_id, unit_id, line_type,
-                     regexp_replace(lower(trim(description)), '\s+', ' ', 'g') AS norm
-              FROM invoice_lines
-              GROUP BY invoice_id, unit_id, line_type, norm
-              HAVING count(*) > 1
-            ) sub;
-          ")
-
-          # PG version
-          PG_VERSION=$(psql "$DATABASE_URL" -t -A -c "SELECT version();")
-
-          mkdir -p "load_tests/${SCENARIO}"
-          cat > "load_tests/${SCENARIO}/metrics.json" <<EOF
-          {
-            "scenario": "${SCENARIO}",
-            "rows": ${ROWS},
-            "parallel": ${PARALLEL},
-            "duration_ms": ${DURATION_MS:-0},
-            "duration_s": $(echo "scale=2; ${DURATION_MS:-0} / 1000" | bc),
-            "inserted": ${INSERTED:-0},
-            "duplicates": ${DUPES:-0},
-            "wal_mb": ${WAL_MB:-0},
-            "work_mem": "${WORK_MEM}",
-            "max_wal_size": "${MAX_WAL}",
-            "max_connections": "${MAX_CONN}",
-            "shared_buffers": "${SHARED_BUF}",
-            "pg_version": "${PG_VERSION}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "commit": "${GITHUB_SHA}"
-          }
-          EOF
-
-          echo "Metrics written to load_tests/${SCENARIO}/metrics.json"
-          cat "load_tests/${SCENARIO}/metrics.json"
-
-          if [ "$DUPES" -gt 0 ]; then
-            echo "::warning::Found $DUPES duplicate groups after load test ${SCENARIO}"
+          METRICS_FILE="load_tests/${SCENARIO}/metrics.json"
+          if [ ! -f "$METRICS_FILE" ]; then
+            echo "::warning::No metrics file found for ${SCENARIO}"
+            exit 0
           fi
+
+          echo "── Acceptance Results for ${SCENARIO} ──"
+          node -e "
+            const m = JSON.parse(require('fs').readFileSync('${METRICS_FILE}', 'utf8'));
+            let pass = true;
+
+            // Gate 1: Duration SLA (100k < 30 min)
+            if (m.duration_s > 1800) {
+              console.log('❌ Duration ' + m.duration_s + 's exceeds 1800s SLA');
+              pass = false;
+            } else {
+              console.log('✅ Duration ' + m.duration_s + 's within SLA');
+            }
+
+            // Gate 2: No locks > 30s
+            if (m.max_lock_wait_ms > 30000) {
+              console.log('❌ Max lock wait ' + m.max_lock_wait_ms + 'ms exceeds 30s');
+              pass = false;
+            } else {
+              console.log('✅ Max lock wait ' + m.max_lock_wait_ms + 'ms within 30s');
+            }
+
+            // Gate 3: Zero duplicates
+            if (m.duplicates > 0) {
+              console.log('❌ ' + m.duplicates + ' duplicate groups');
+              pass = false;
+            } else {
+              console.log('✅ Zero duplicates');
+            }
+
+            // Gate 4: Conflict rate
+            if (m.conflict_rate > 0.10) {
+              console.log('⚠️  Conflict rate ' + (m.conflict_rate * 100).toFixed(1) + '% exceeds 10%');
+            } else {
+              console.log('✅ Conflict rate ' + (m.conflict_rate * 100).toFixed(1) + '%');
+            }
+
+            console.log('');
+            console.log('Throughput: ' + m.rows_per_second + ' rows/s');
+            console.log('WAL: ' + m.wal_mb + ' MB');
+            console.log('Settings: work_mem=' + m.pg_settings.work_mem + ' max_wal_size=' + m.pg_settings.max_wal_size);
+
+            if (!pass) process.exit(1);
+          "
+
+      - name: Reset Postgres tuning
+        if: always()
+        run: |
+          psql "$DATABASE_URL" -c "ALTER SYSTEM RESET max_wal_size;" 2>/dev/null || true
+          psql "$DATABASE_URL" -c "ALTER SYSTEM RESET checkpoint_timeout;" 2>/dev/null || true
+          psql "$DATABASE_URL" -c "SELECT pg_reload_conf();" 2>/dev/null || true
 
       - name: Upload load test results
         if: always()
