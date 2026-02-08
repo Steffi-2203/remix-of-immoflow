@@ -17,6 +17,7 @@ import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import { paymentService } from "./services/paymentService";
+import { jobQueueService } from "./services/jobQueueService";
 import readonlyRoutes from "./routes/readonly";
 import featureRoutes from "./routes/featureRoutes";
 import crypto from "crypto";
@@ -44,6 +45,20 @@ function snakeToCamel(obj: any): any {
     result[camelKey] = snakeToCamel(value);
   }
   return result;
+}
+
+function parsePagination(req: Request) {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 100));
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
+function paginateArray<T>(items: T[], page: number, limit: number) {
+  const total = items.length;
+  const offset = (page - 1) * limit;
+  const data = items.slice(offset, offset + limit);
+  return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
@@ -271,7 +286,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
       
-      res.json(enrichedProps);
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(enrichedProps, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch properties" });
     }
@@ -617,7 +634,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const allPayments = await storage.getPaymentsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(allPayments) : allPayments);
+      const items = isTester(roles) ? maskPersonalData(allPayments) : allPayments;
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(items, page, limit);
+      res.json(result);
     } catch (error) {
       console.error("Payments error:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
@@ -734,7 +754,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const transactions = await storage.getTransactionsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
+      const items = isTester(roles) ? maskPersonalData(transactions) : transactions;
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(items, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
@@ -828,7 +851,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const expenses = await storage.getExpensesByOrganization(profile?.organizationId);
-      res.json(expenses);
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(expenses, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
     }
@@ -959,7 +984,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         qm: unit.flaeche,
         vs_personen: unit.vsPersonen,
       }));
-      res.json(unitsWithAliases);
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(unitsWithAliases, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
@@ -1084,7 +1111,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const tenants = await storage.getTenantsByOrganization(profile?.organizationId);
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(tenants) : tenants);
+      const items = isTester(roles) ? maskPersonalData(tenants) : tenants;
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(items, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tenants" });
     }
@@ -1377,7 +1407,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         month ? parseInt(month as string) : undefined
       );
       const roles = await getUserRoles(req);
-      res.json(isTester(roles) ? maskPersonalData(invoices) : invoices);
+      const items = isTester(roles) ? maskPersonalData(invoices) : invoices;
+      const { page, limit } = parsePagination(req);
+      const result = paginateArray(items, page, limit);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch invoices" });
     }
@@ -5098,8 +5131,48 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ===== Job Queue Routes =====
+  app.post("/api/jobs", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const { type, payload } = req.body;
+      if (!type) return res.status(400).json({ error: "Job type required" });
+      const jobId = await jobQueueService.enqueue(type, payload || {}, profile?.organizationId, profile?.id);
+      res.json({ jobId, status: 'pending' });
+    } catch (error) {
+      console.error("Job enqueue error:", error);
+      res.status(500).json({ error: "Failed to enqueue job" });
+    }
+  });
+
+  app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const jobs = await jobQueueService.getJobsByOrganization(profile?.organizationId);
+      res.json(jobs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+
+  app.get("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const job = await jobQueueService.getJobStatus(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.organizationId && job.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(job);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch job status" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
+
+  jobQueueService.startPolling(5000);
 
   const httpServer = createServer(app);
   return httpServer;
