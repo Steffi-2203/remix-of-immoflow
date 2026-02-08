@@ -34,6 +34,8 @@ dryrun.json
 db_lines.json
 invoice_lines_run.json
 generate.json
+missing_lines.json
+missing_lines.csv
 
 # reconciliations/ wird BEWUSST versioniert (auditierbare Ergebnisse)
 # → reconciliations/<runId>/missing_lines.csv + summary.json
