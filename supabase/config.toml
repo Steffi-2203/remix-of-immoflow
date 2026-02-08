@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.send-settlement-email]
 verify_jwt = false
+
+[functions.duplicate-merge]
+verify_jwt = false
