@@ -1,3 +1,5 @@
+git rm --cached dryrun.json db_lines.json invoice_lines_run.json missing_lines.csv
+git commit -m "chore: remove temp reconciliation files from git index"
 # Logs
 logs
 *.log
