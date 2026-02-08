@@ -110,11 +110,8 @@ CREATE TABLE IF NOT EXISTS units (
 CREATE TABLE IF NOT EXISTS tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   unit_id UUID NOT NULL REFERENCES units(id),
-  vorname TEXT NOT NULL DEFAULT '',
-  nachname TEXT NOT NULL DEFAULT '',
-  -- Aliases expected by Drizzle ORM (first_name/last_name map to vorname/nachname)
-  first_name TEXT GENERATED ALWAYS AS (vorname) STORED,
-  last_name TEXT GENERATED ALWAYS AS (nachname) STORED,
+  first_name TEXT NOT NULL DEFAULT '',
+  last_name TEXT NOT NULL DEFAULT '',
   email TEXT,
   phone TEXT,
   mobile_phone TEXT,
