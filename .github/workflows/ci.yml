@@ -275,8 +275,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Install uuid-runtime
-        run: sudo apt-get update && sudo apt-get install -y uuid-runtime
 
       - name: Wait for Postgres
         run: |
