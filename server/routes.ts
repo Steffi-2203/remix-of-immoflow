@@ -4904,6 +4904,138 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ── Admin: Rollback a Billing Run ─────────────────────────────────────────
+  // Soft-deletes all invoice_lines created by a run (via audit_logs),
+  // marks the run as 'rolled_back', and logs the compensating action.
+
+  app.post("/api/admin/billing-runs/:runId/rollback", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const runId = req.params.runId;
+      const reason = req.body.reason || 'Rollback by admin';
+
+      const [run] = await db.select().from(schema.billingRuns)
+        .where(eq(schema.billingRuns.runId, runId));
+      if (!run) return res.status(404).json({ error: "Run nicht gefunden" });
+
+      if (run.status === 'rolled_back') {
+        return res.status(409).json({ error: "Run wurde bereits zurückgerollt" });
+      }
+
+      // Find all record IDs created/updated by this run
+      const auditRows = await db.execute(sql`
+        SELECT DISTINCT record_id FROM audit_logs
+        WHERE (action = 'invoice_line_upsert' OR action = 'upsert_missing_lines')
+          AND new_data->>'run_id' = ${runId}
+          AND record_id IS NOT NULL
+      `);
+
+      const recordIds = (auditRows.rows || []).map((r: any) => r.record_id).filter(Boolean);
+
+      let softDeletedCount = 0;
+
+      if (recordIds.length > 0) {
+        // Soft-delete in chunks of 500
+        const idChunks: string[][] = [];
+        for (let i = 0; i < recordIds.length; i += 500) {
+          idChunks.push(recordIds.slice(i, i + 500));
+        }
+
+        for (const chunk of idChunks) {
+          const result = await db.execute(sql`
+            UPDATE invoice_lines
+            SET deleted_at = now()
+            WHERE id::text = ANY(${chunk})
+              AND deleted_at IS NULL
+          `);
+          softDeletedCount += Number(result.rowCount || 0);
+        }
+      }
+
+      // Mark run as rolled back
+      await db.update(schema.billingRuns)
+        .set({
+          status: 'rolled_back',
+          errorMessage: reason,
+          finishedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.billingRuns.runId, runId));
+
+      // Audit log
+      await db.insert(schema.auditLogs).values({
+        userId,
+        tableName: 'billing_runs',
+        recordId: run.id,
+        action: 'billing_run_rollback',
+        newData: {
+          runId,
+          reason,
+          soft_deleted_lines: softDeletedCount,
+          total_audit_records: recordIds.length,
+        },
+      });
+
+      console.log(`[billing-run-rollback] runId=${runId} soft-deleted=${softDeletedCount} lines by user=${userId}`);
+
+      res.json({
+        status: 'rolled_back',
+        runId,
+        softDeletedLines: softDeletedCount,
+        totalAuditRecords: recordIds.length,
+      });
+    } catch (error) {
+      console.error('Admin rollback run error:', error);
+      res.status(500).json({ error: "Fehler beim Rollback" });
+    }
+  });
+
+  // ── Admin: Reprocess a Failed/Rolled-Back Run ────────────────────────────
+  // Marks the run as 'pending_reprocess' so the next billing cycle picks it up.
+
+  app.post("/api/admin/billing-runs/:runId/reprocess", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const runId = req.params.runId;
+      const [run] = await db.select().from(schema.billingRuns)
+        .where(eq(schema.billingRuns.runId, runId));
+      if (!run) return res.status(404).json({ error: "Run nicht gefunden" });
+
+      if (!['failed', 'rolled_back', 'cancelled'].includes(run.status)) {
+        return res.status(409).json({ error: `Run hat Status '${run.status}' — nur failed/rolled_back/cancelled können reprocessed werden` });
+      }
+
+      await db.update(schema.billingRuns)
+        .set({
+          status: 'pending_reprocess',
+          errorMessage: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.billingRuns.runId, runId));
+
+      await db.insert(schema.auditLogs).values({
+        userId,
+        tableName: 'billing_runs',
+        recordId: run.id,
+        action: 'billing_run_reprocess',
+        newData: { runId, previous_status: run.status },
+      });
+
+      res.json({ status: 'pending_reprocess', runId });
+    } catch (error) {
+      console.error('Admin reprocess run error:', error);
+      res.status(500).json({ error: "Fehler beim Reprocess" });
+    }
+  });
+
   // ── Admin: Audit Explorer ─────────────────────────────────────────────────
 
   app.get("/api/admin/reconciliation-audit", isAuthenticated, async (req: Request, res: Response) => {
@@ -4918,7 +5050,9 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
 
       const reconciliationActions = [
         'upsert_missing_lines', 'bulk_accept', 'bulk_decline',
-        'duplicate_merge', 'duplicate_resolve'
+        'duplicate_merge', 'duplicate_resolve', 'duplicate_merge_undo',
+        'billing_run_rollback', 'billing_run_reprocess',
+        'merge_tombstone_cleanup'
       ];
 
       const actions = actionFilter 

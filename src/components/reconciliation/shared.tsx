@@ -1,12 +1,14 @@
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, XCircle, Clock, Loader2, Ban } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Loader2, Ban, RotateCcw, RefreshCw } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  pending:   { label: 'Wartend',       icon: Clock,        variant: 'outline' },
-  running:   { label: 'Läuft',         icon: Loader2,      variant: 'secondary' },
-  completed: { label: 'Abgeschlossen', icon: CheckCircle2, variant: 'default' },
-  failed:    { label: 'Fehlgeschlagen', icon: XCircle,     variant: 'destructive' },
-  cancelled: { label: 'Abgebrochen',   icon: Ban,          variant: 'outline' },
+  pending:             { label: 'Wartend',          icon: Clock,        variant: 'outline' },
+  running:             { label: 'Läuft',            icon: Loader2,      variant: 'secondary' },
+  completed:           { label: 'Abgeschlossen',    icon: CheckCircle2, variant: 'default' },
+  failed:              { label: 'Fehlgeschlagen',    icon: XCircle,     variant: 'destructive' },
+  cancelled:           { label: 'Abgebrochen',      icon: Ban,          variant: 'outline' },
+  rolled_back:         { label: 'Zurückgerollt',    icon: RotateCcw,    variant: 'destructive' },
+  pending_reprocess:   { label: 'Reprocess wartend', icon: RefreshCw,   variant: 'secondary' },
 };
 
 export function RunStatusBadge({ status }: { status: string }) {

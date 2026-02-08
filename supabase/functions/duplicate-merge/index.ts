@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const UNDO_WINDOW_MINUTES = 5;
+const UNDO_WINDOW_MINUTES = 120; // 2 hours for safe rollback within SLA
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

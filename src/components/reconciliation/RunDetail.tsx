@@ -10,7 +10,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Check, X, Package, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check, X, Package, Loader2, RotateCcw, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -19,6 +19,8 @@ import {
   useBillingRunSamples,
   useAcceptRun,
   useDeclineRun,
+  useRollbackRun,
+  useReprocessRun,
 } from '@/hooks/useBillingRuns';
 import { RunStatusBadge, ChunkStatusBadge, formatDuration } from './shared';
 
@@ -32,11 +34,15 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
   const { data: samples, isLoading: samplesLoading } = useBillingRunSamples(runId);
   const acceptMutation = useAcceptRun();
   const declineMutation = useDeclineRun();
+  const rollbackMutation = useRollbackRun();
+  const reprocessMutation = useReprocessRun();
 
   const [showAcceptDialog, setShowAcceptDialog] = useState(false);
   const [showDeclineDialog, setShowDeclineDialog] = useState(false);
+  const [showRollbackDialog, setShowRollbackDialog] = useState(false);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState('');
+  const [rollbackReason, setRollbackReason] = useState('');
 
   if (isLoading) return <Skeleton className="h-96" />;
   if (!detail) return <p className="text-muted-foreground text-center py-8">Run nicht gefunden</p>;
@@ -46,6 +52,8 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
     : 0;
 
   const canDecide = detail.status === 'completed' || detail.status === 'running';
+  const canRollback = !['rolled_back', 'pending_reprocess'].includes(detail.status);
+  const canReprocess = ['failed', 'rolled_back', 'cancelled'].includes(detail.status);
 
   const handleAccept = async () => {
     try {
@@ -67,28 +75,72 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
     }
   };
 
+  const handleRollback = async () => {
+    try {
+      const result = await rollbackMutation.mutateAsync({ runId, reason: rollbackReason });
+      toast.success(`Rollback erfolgreich: ${result.softDeletedLines} Zeilen soft-gelöscht`);
+      setShowRollbackDialog(false);
+      setRollbackReason('');
+    } catch {
+      toast.error('Fehler beim Rollback');
+    }
+  };
+
+  const handleReprocess = async () => {
+    try {
+      await reprocessMutation.mutateAsync({ runId });
+      toast.success('Run zum Reprocessing markiert');
+    } catch {
+      toast.error('Fehler beim Reprocess');
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1">
           <ArrowLeft className="h-4 w-4" /> Zurück
         </Button>
-        {canDecide && (
-          <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {canReprocess && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={handleReprocess}
+              disabled={reprocessMutation.isPending}
+            >
+              {reprocessMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Reprocess
+            </Button>
+          )}
+          {canRollback && (
             <Button
               variant="outline"
               size="sm"
               className="gap-1 text-destructive border-destructive/30"
-              onClick={() => setShowDeclineDialog(true)}
+              onClick={() => setShowRollbackDialog(true)}
             >
-              <X className="h-4 w-4" /> Ablehnen
+              <RotateCcw className="h-4 w-4" /> Rollback
             </Button>
-            <Button size="sm" className="gap-1" onClick={() => setShowAcceptDialog(true)}>
-              <Check className="h-4 w-4" /> Akzeptieren
-            </Button>
-          </div>
-        )}
+          )}
+          {canDecide && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-destructive border-destructive/30"
+                onClick={() => setShowDeclineDialog(true)}
+              >
+                <X className="h-4 w-4" /> Ablehnen
+              </Button>
+              <Button size="sm" className="gap-1" onClick={() => setShowAcceptDialog(true)}>
+                <Check className="h-4 w-4" /> Akzeptieren
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Summary Card */}
@@ -280,6 +332,34 @@ export function ReconciliationRunDetail({ runId, onBack }: Props) {
             <Button variant="destructive" onClick={handleDecline} disabled={declineMutation.isPending}>
               {declineMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               Ablehnen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rollback Dialog */}
+      <Dialog open={showRollbackDialog} onOpenChange={setShowRollbackDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-destructive" />
+              Run Rollback
+            </DialogTitle>
+            <DialogDescription>
+              Alle {detail.inserted + detail.updated} Zeilen dieses Runs werden soft-gelöscht.
+              Der Run wird als &quot;rolled_back&quot; markiert und kann anschließend reprocessed werden.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Grund für den Rollback (wird im Audit-Log gespeichert)"
+            value={rollbackReason}
+            onChange={(e) => setRollbackReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRollbackDialog(false)}>Abbrechen</Button>
+            <Button variant="destructive" onClick={handleRollback} disabled={rollbackMutation.isPending || !rollbackReason.trim()}>
+              {rollbackMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Rollback durchführen
             </Button>
           </DialogFooter>
         </DialogContent>
