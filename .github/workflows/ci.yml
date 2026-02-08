@@ -136,59 +136,11 @@ jobs:
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
-      # ── Schema Compatibility Check ──
-      - name: Schema compatibility check
+      # ── Schema Compatibility Gate ──
+      - name: Schema compatibility gate
         run: |
-          echo "Dumping CI schema after migrations..."
-          pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges \
-            --exclude-schema=pg_catalog --exclude-schema=information_schema \
-            | grep -v '^--' | grep -v '^$' | grep -v '^SET ' | grep -v '^SELECT pg_catalog' \
-            > /tmp/ci_schema.sql
-
-          # Check critical tables exist
-          EXPECTED_TABLES="organizations profiles properties units tenants monthly_invoices invoice_lines payments audit_logs reconcile_runs expenses distribution_keys bank_accounts transactions"
-          MISSING=""
-          for tbl in $EXPECTED_TABLES; do
-            if ! grep -q "CREATE TABLE.*${tbl}" /tmp/ci_schema.sql 2>/dev/null; then
-              # Table might exist via IF NOT EXISTS, check pg_tables
-              EXISTS=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM pg_tables WHERE tablename = '${tbl}' AND schemaname = 'public';")
-              if [ "$EXISTS" = "0" ]; then
-                MISSING="$MISSING $tbl"
-              fi
-            fi
-          done
-
-          if [ -n "$MISSING" ]; then
-            echo "::error::Missing tables in CI schema:$MISSING"
-            exit 1
-          fi
-
-          # Check no GENERATED ALWAYS columns exist (they cause restore issues)
-          GENERATED=$(psql "$DATABASE_URL" -t -A -c "
-            SELECT count(*) FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND is_generated = 'ALWAYS';
-          ")
-          if [ "$GENERATED" -gt 0 ]; then
-            echo "::warning::Found $GENERATED GENERATED ALWAYS column(s) — consider replacing with triggers"
-            psql "$DATABASE_URL" -c "
-              SELECT table_name, column_name, generation_expression
-              FROM information_schema.columns
-              WHERE table_schema = 'public' AND is_generated = 'ALWAYS';
-            "
-          fi
-
-          # Check critical indexes exist
-          EXPECTED_INDEXES="idx_invoice_lines_unique idx_invoice_lines_invoice_id"
-          for idx in $EXPECTED_INDEXES; do
-            EXISTS=$(psql "$DATABASE_URL" -t -A -c "SELECT count(*) FROM pg_indexes WHERE indexname = '${idx}';")
-            if [ "$EXISTS" = "0" ]; then
-              echo "::error::Missing index: ${idx}"
-              exit 1
-            fi
-          done
-
-          echo "✅ Schema compatibility check passed"
+          chmod +x tools/schema_compat_check.sh
+          bash tools/schema_compat_check.sh
 
       - name: Duplicate precheck
         run: |
