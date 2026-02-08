@@ -28,24 +28,49 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
+/**
+ * Distributes rounding differences (≤ lines.length × 0.01 €) across invoice lines
+ * so that their sum matches `expectedTotal` exactly.
+ *
+ * **Tolerance:** Differences < 0.01 € are ignored (sub-cent, irrelevant for accounting).
+ * The loop is capped at `lines.length * 2` iterations to prevent infinite loops.
+ * If a residual ≥ 0.01 € remains after the cap, a warning is logged — this indicates
+ * an unexpectedly large discrepancy that should be investigated.
+ *
+ * **Determinism:** Lines are sorted by |amount| desc → lineType asc → unitId asc,
+ * guaranteeing identical cent distribution across repeated runs.
+ */
 function reconcileRounding(lines: any[], expectedTotal: number): void {
   const roundedSum = lines.reduce((s, l) => s + roundMoney(l.amount || 0), 0);
   let diff = roundMoney(expectedTotal - roundedSum);
+
+  // Sub-cent tolerance — no adjustment needed
   if (Math.abs(diff) < 0.01) return;
 
+  // Deterministic sort: amount desc → lineType asc → unitId asc
   lines.sort((a, b) => {
-    const diff = Math.abs(b.amount || 0) - Math.abs(a.amount || 0);
-    if (diff !== 0) return diff;
+    const d = Math.abs(b.amount || 0) - Math.abs(a.amount || 0);
+    if (d !== 0) return d;
     const typeCmp = (a.lineType || '').localeCompare(b.lineType || '');
     if (typeCmp !== 0) return typeCmp;
     return (a.unitId || '').localeCompare(b.unitId || '');
   });
+
+  const maxIterations = lines.length * 2;
   let i = 0;
-  while (Math.abs(diff) >= 0.01 && i < lines.length * 2) {
+  while (Math.abs(diff) >= 0.01 && i < maxIterations) {
     const adjust = diff > 0 ? 0.01 : -0.01;
     lines[i % lines.length].amount = roundMoney(lines[i % lines.length].amount + adjust);
     diff = roundMoney(diff - adjust);
     i++;
+  }
+
+  // Warn if residual remains after cap — should not happen in normal operation
+  if (Math.abs(diff) >= 0.01) {
+    console.warn(
+      `[reconcileRounding] Residual ${diff.toFixed(2)} € after ${maxIterations} iterations. ` +
+      `Expected total: ${expectedTotal}, lines: ${lines.length}. Investigate discrepancy.`
+    );
   }
 }
 
