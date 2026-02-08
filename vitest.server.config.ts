@@ -1,0 +1,17 @@
+import { defineConfig } from 'vitest/config';
+import path from 'path';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['tests/unit/**/*.test.ts'],
+    deps: {
+      inline: ['drizzle-zod', 'drizzle-orm', 'pg'],
+    },
+  },
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, './shared'),
+    },
+  },
+});
