@@ -1,0 +1,61 @@
+name: Worker Smoke Test
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1' # weekly Monday 3am
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm ci --legacy-peer-deps
+      - name: Migrate DB
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: npm run migrate:up
+      - name: Run worker unit tests
+        run: npx vitest run tests/unit/worker-template.test.ts --config vitest.server.config.ts
+      - name: Enqueue and process smoke job
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          node -e "
+            const { db } = require('./server/db');
+            const { sql } = require('drizzle-orm');
+            async function main() {
+              // Enqueue a test job
+              const res = await db.execute(sql\`
+                INSERT INTO job_queue (organization_id, job_type, payload, status, priority)
+                VALUES (NULL, 'billing_run', '{\"smoke_test\": true}'::jsonb, 'pending', 0)
+                RETURNING id
+              \`);
+              const jobId = res.rows[0].id;
+              console.log('Enqueued smoke job:', jobId);
+
+              // Claim it (simulates worker pick-up)
+              const claimed = await db.execute(sql\`SELECT * FROM claim_next_job()\`);
+              if (!claimed.rows || claimed.rows.length === 0) {
+                console.error('Failed to claim job');
+                process.exit(1);
+              }
+              console.log('Claimed job:', claimed.rows[0].id);
+
+              // Mark completed
+              await db.execute(sql\`
+                UPDATE job_queue SET status = 'completed', completed_at = now()
+                WHERE id = \${jobId}::uuid
+              \`);
+              console.log('Smoke test PASSED');
+
+              // Cleanup
+              await db.execute(sql\`DELETE FROM job_queue WHERE id = \${jobId}::uuid\`);
+              process.exit(0);
+            }
+            main().catch(e => { console.error(e); process.exit(1); });
+          "
