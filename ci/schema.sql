@@ -47,6 +47,24 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- ── Organizations ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ── Profiles ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT,
+  full_name TEXT,
+  organization_id UUID REFERENCES organizations(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ── Properties ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS properties (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
