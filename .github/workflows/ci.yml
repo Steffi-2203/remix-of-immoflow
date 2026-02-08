@@ -1,14 +1,24 @@
 
-name: CI
+name: Billing Parity & Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      dry_run_only:
+        description: 'Only run dry-run parity (no release)'
+        required: false
+        default: 'true'
+        type: boolean
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+
+concurrency:
+  group: billing-parity-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Unit Tests
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -25,51 +35,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Wait for Postgres
-        run: |
-          for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
-
-      - name: Set DATABASE_URL
-        run: echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/testdb" >> $GITHUB_ENV
-
-      - name: Run migrations
-        run: node migrations/run-migration.cjs
-
-      - name: Run tests
-        run: npm test
-
-  test-billing-parity:
-    name: Billing Parity & Determinism
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: billing_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d billing_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/billing_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
       SESSION_SECRET: ci-test-secret-not-for-production
       NODE_ENV: test
 
@@ -92,6 +59,61 @@ jobs:
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
+      - name: Run tests
+        run: npm test
+
+  billing-parity:
+    name: Billing Parity & Reconciliation
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: billing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d billing_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Local CI DB — not a real secret, but mask it anyway
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/billing_test
+      SESSION_SECRET: ci-test-secret-not-for-production
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Mask secrets
+        run: |
+          echo "::add-mask::$DATABASE_URL"
+          if [ -n "${{ secrets.STAGING_DATABASE_URL }}" ]; then
+            echo "::add-mask::${{ secrets.STAGING_DATABASE_URL }}"
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
+
+      - name: Run migrations
+        run: node migrations/run-migration.cjs
+
+      # ── Duplicate Precheck ──
       - name: Duplicate precheck
         run: |
           DUPES=$(psql "$DATABASE_URL" -t -A -c "
@@ -105,47 +127,113 @@ jobs:
           ")
           echo "Duplicate groups found: $DUPES"
           if [ "$DUPES" -gt 0 ]; then
-            echo "::error::Found $DUPES duplicate invoice_line groups before tests!"
-            psql "$DATABASE_URL" -c "
-              SELECT invoice_id, unit_id, line_type,
-                     regexp_replace(lower(trim(description)), '\s+', ' ', 'g') AS norm, count(*)
-              FROM invoice_lines
-              GROUP BY invoice_id, unit_id, line_type, norm
-              HAVING count(*) > 1;
-            "
+            echo "::error::Found $DUPES duplicate invoice_line groups before parity run!"
             exit 1
           fi
 
+      # ── Unit & Parity Tests ──
       - name: Run billing determinism tests
         run: npx vitest run tests/unit/billing-determinism.test.ts --reporter=verbose
 
       - name: Run billing service parity tests
         run: npx vitest run tests/unit/billing.service.test.ts --reporter=verbose
 
-      - name: Run rounding utility tests
+      - name: Run rounding & invoice tests
         run: npx vitest run tests/unit/utils.test.ts tests/unit/invoice-generation.test.ts --reporter=verbose
 
-      - name: Run normalizeDescription tests
+      - name: Run normalizeDescription parity tests
         run: npx vitest run src/test/normalizeDescription.test.ts --reporter=verbose
 
-      - name: Generate dry-run diff artifacts
-        if: always()
+      # ── Dry-Run Parity Harness ──
+      - name: Run parity harness (dry-run)
+        id: parity
         run: |
-          mkdir -p ci-artifacts
-          psql "$DATABASE_URL" -c "
-            SELECT invoice_id, unit_id, line_type, description, normalized_description, amount
-            FROM invoice_lines ORDER BY invoice_id, unit_id, line_type
-          " --csv -o ci-artifacts/db_invoice_lines.csv 2>/dev/null || true
-          cp dryrun.json ci-artifacts/dryrun.json 2>/dev/null || true
-          cp dry_db_diffs.json ci-artifacts/dry_db_diffs.json 2>/dev/null || true
-          cp missing_lines.json ci-artifacts/missing_lines.json 2>/dev/null || true
-          echo "Artifacts collected at $(date -u)" > ci-artifacts/manifest.txt
+          RUN_ID="ci-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          mkdir -p "reconciliations/$RUN_ID"
 
-      - name: Upload parity artifacts
+          # Execute dry-run script (produces dryrun.json)
+          npx tsx scripts/dryrun.ts 2>&1 | tee "reconciliations/$RUN_ID/dryrun.log"
+
+          # Export DB state for comparison
+          psql "$DATABASE_URL" -c "
+            SELECT invoice_id, unit_id, line_type, description,
+                   normalized_description, amount, tax_rate
+            FROM invoice_lines
+            ORDER BY invoice_id, unit_id, line_type
+          " --csv -o "reconciliations/$RUN_ID/db_invoice_lines.csv" 2>/dev/null || true
+
+          # Run diff tool to find missing lines
+          node tools/compare_dryrun_db.js \
+            --dryrun=dryrun.json \
+            --db-csv="reconciliations/$RUN_ID/db_invoice_lines.csv" \
+            --output="reconciliations/$RUN_ID" 2>&1 || true
+
+          # Check for missing lines
+          MISSING_COUNT=0
+          if [ -f "reconciliations/$RUN_ID/missing_lines.csv" ]; then
+            MISSING_COUNT=$(tail -n +2 "reconciliations/$RUN_ID/missing_lines.csv" | wc -l | tr -d ' ')
+          fi
+
+          # Generate summary.json
+          cat > "reconciliations/$RUN_ID/summary.json" <<EOF
+          {
+            "run_id": "$RUN_ID",
+            "commit": "$GITHUB_SHA",
+            "ref": "$GITHUB_REF",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "missing_lines_count": $MISSING_COUNT,
+            "parity_pass": $([ "$MISSING_COUNT" -eq 0 ] && echo true || echo false)
+          }
+          EOF
+
+          # Compute SHA256 of artifacts
+          sha256sum reconciliations/$RUN_ID/* > "reconciliations/$RUN_ID/checksums.sha256" 2>/dev/null || true
+
+          echo "missing_count=$MISSING_COUNT" >> "$GITHUB_OUTPUT"
+
+          if [ "$MISSING_COUNT" -gt 0 ]; then
+            echo "::warning::Parity mismatch — $MISSING_COUNT missing lines detected (run: $RUN_ID)"
+          else
+            echo "✅ Parity check passed — 0 missing lines"
+          fi
+
+      # ── Upload reconciliation artifacts ──
+      - name: Upload missing_lines.csv
+        if: always() && steps.parity.outputs.missing_count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-missing-${{ steps.parity.outputs.run_id }}
+          path: reconciliations/${{ steps.parity.outputs.run_id }}/missing_lines.csv
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Upload reconciliation summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-summary-${{ steps.parity.outputs.run_id }}
+          path: |
+            reconciliations/${{ steps.parity.outputs.run_id }}/summary.json
+            reconciliations/${{ steps.parity.outputs.run_id }}/checksums.sha256
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Upload full parity artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: billing-parity-artifacts
-          path: ci-artifacts/
+          path: |
+            reconciliations/${{ steps.parity.outputs.run_id }}/
+            dryrun.json
           retention-days: 30
           if-no-files-found: ignore
+
+      # ── Fail if parity mismatch ──
+      - name: Fail on parity mismatch
+        if: steps.parity.outputs.missing_count != '0'
+        run: |
+          echo "::error::PARITY FAILED — ${{ steps.parity.outputs.missing_count }} missing lines."
+          echo "Download the reconciliation-missing artifact for details."
+          exit 1
