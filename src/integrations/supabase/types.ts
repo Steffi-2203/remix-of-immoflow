@@ -2584,6 +2584,51 @@ export type Database = {
           },
         ]
       }
+      reconcile_runs: {
+        Row: {
+          chunk_id: number
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          inserted: number
+          rows_in_chunk: number
+          run_id: string
+          started_at: string | null
+          status: string
+          total_chunks: number
+          updated: number
+        }
+        Insert: {
+          chunk_id: number
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inserted?: number
+          rows_in_chunk?: number
+          run_id: string
+          started_at?: string | null
+          status?: string
+          total_chunks: number
+          updated?: number
+        }
+        Update: {
+          chunk_id?: number
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inserted?: number
+          rows_in_chunk?: number
+          run_id?: string
+          started_at?: string | null
+          status?: string
+          total_chunks?: number
+          updated?: number
+        }
+        Relationships: []
+      }
       rent_adjustments: {
         Row: {
           adjustment_date: string
