@@ -163,6 +163,12 @@ export default function Admin() {
               Audit-Logs
             </Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link to="/admin/reconciliation">
+              <FileText className="h-4 w-4 mr-2" />
+              Reconciliation
+            </Link>
+          </Button>
         </div>
 
         {/* Stats Cards */}

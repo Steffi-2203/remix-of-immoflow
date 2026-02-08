@@ -4808,6 +4808,135 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ── Admin: Sample Rows for a Run ──────────────────────────────────────────
+
+  app.get("/api/admin/billing-runs/:runId/samples", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const limit = Math.min(100, parseInt(req.query.limit as string) || 20);
+      
+      // Get invoice lines that were created/updated during this run via audit_logs
+      const samples = await db.execute(sql`
+        SELECT il.id, il.invoice_id, il.unit_id, il.line_type, il.description,
+               il.amount, il.tax_rate, il.created_at,
+               al.action, al.new_data->>'operation' as operation,
+               al.new_data->>'chunk_id' as chunk_id
+        FROM audit_logs al
+        JOIN invoice_lines il ON il.id::text = al.record_id
+        WHERE al.action = 'upsert_missing_lines'
+          AND al.new_data->>'run_id' = ${req.params.runId}
+        ORDER BY al.created_at DESC
+        LIMIT ${limit}
+      `);
+
+      res.json(samples.rows || []);
+    } catch (error) {
+      console.error('Admin sample rows error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Sample Rows" });
+    }
+  });
+
+  // ── Admin: Bulk Accept/Decline Run ────────────────────────────────────────
+
+  app.post("/api/admin/billing-runs/:runId/accept", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const [run] = await db.select().from(schema.billingRuns)
+        .where(eq(schema.billingRuns.runId, req.params.runId));
+      if (!run) return res.status(404).json({ error: "Run nicht gefunden" });
+
+      await db.update(schema.billingRuns)
+        .set({ status: 'completed', finishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(schema.billingRuns.runId, req.params.runId));
+
+      // Audit log
+      await db.insert(schema.auditLogs).values({
+        userId,
+        tableName: 'billing_runs',
+        recordId: run.id,
+        action: 'bulk_accept',
+        newData: { runId: req.params.runId, comment: req.body.comment || '' },
+      });
+
+      res.json({ status: 'accepted', runId: req.params.runId });
+    } catch (error) {
+      console.error('Admin accept run error:', error);
+      res.status(500).json({ error: "Fehler beim Akzeptieren" });
+    }
+  });
+
+  app.post("/api/admin/billing-runs/:runId/decline", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const [run] = await db.select().from(schema.billingRuns)
+        .where(eq(schema.billingRuns.runId, req.params.runId));
+      if (!run) return res.status(404).json({ error: "Run nicht gefunden" });
+
+      await db.update(schema.billingRuns)
+        .set({ status: 'cancelled', finishedAt: new Date(), updatedAt: new Date(), errorMessage: req.body.reason || 'Declined by admin' })
+        .where(eq(schema.billingRuns.runId, req.params.runId));
+
+      // Audit log
+      await db.insert(schema.auditLogs).values({
+        userId,
+        tableName: 'billing_runs',
+        recordId: run.id,
+        action: 'bulk_decline',
+        newData: { runId: req.params.runId, reason: req.body.reason || '' },
+      });
+
+      res.json({ status: 'declined', runId: req.params.runId });
+    } catch (error) {
+      console.error('Admin decline run error:', error);
+      res.status(500).json({ error: "Fehler beim Ablehnen" });
+    }
+  });
+
+  // ── Admin: Audit Explorer ─────────────────────────────────────────────────
+
+  app.get("/api/admin/reconciliation-audit", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const [adminRole] = await db.select().from(schema.userRoles)
+        .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, 'admin')));
+      if (!adminRole) return res.status(403).json({ error: "Nur Admins" });
+
+      const limit = Math.min(200, parseInt(req.query.limit as string) || 50);
+      const actionFilter = req.query.action as string;
+
+      const reconciliationActions = [
+        'upsert_missing_lines', 'bulk_accept', 'bulk_decline',
+        'duplicate_merge', 'duplicate_resolve'
+      ];
+
+      const actions = actionFilter 
+        ? [actionFilter]
+        : reconciliationActions;
+
+      const logs = await db.select().from(schema.auditLogs)
+        .where(inArray(schema.auditLogs.action, actions))
+        .orderBy(desc(schema.auditLogs.createdAt))
+        .limit(limit);
+
+      res.json(logs);
+    } catch (error) {
+      console.error('Admin audit explorer error:', error);
+      res.status(500).json({ error: "Fehler beim Laden der Audit-Logs" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
