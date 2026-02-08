@@ -8,25 +8,7 @@ const path = require('path');
 const { parse } = require('csv-parse/sync');
 const { Client } = require('pg');
 const argv = require('minimist')(process.argv.slice(2));
-
-// Try to import normalizeDescription from server lib; fallback to inline normalizer if not available
-let normalizeDescription;
-try {
-  normalizeDescription = require(path.resolve(process.cwd(), 'server/lib/normalizeDescription')).normalizeDescription;
-  if (typeof normalizeDescription !== 'function') throw new Error('normalizeDescription not a function');
-} catch (e) {
-  // fallback deterministic normalizer (same logic as DB trigger)
-  normalizeDescription = (raw) => {
-    if (raw === undefined || raw === null) return null;
-    let s = String(raw).trim();
-    s = s.normalize ? s.normalize('NFC') : s;
-    s = s.replace(/\s+/g, ' ');
-    s = s.toLowerCase();
-    s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
-    return s;
-  };
-  console.warn('Warning: using fallback normalizeDescription. Prefer importing server/lib/normalizeDescription.');
-}
+const { normalizeDescription } = require(path.resolve(__dirname, '../server/lib/normalizeDescription.cjs'));
 
 const CSV_PATH = path.resolve(process.cwd(), argv.csv || 'missing_lines.csv');
 const BATCH_SIZE = Number(argv['batch-size'] || 100);
@@ -87,6 +69,7 @@ if (DRY_RUN) {
         return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}::jsonb, now())`;
       }).join(', ');
 
+      // Use old.amount via subquery to capture previous value for audit
       const upsertSql = `
         INSERT INTO invoice_lines
           (invoice_id, unit_id, line_type, description, normalized_description, amount, tax_rate, meta, created_at)
@@ -97,7 +80,8 @@ if (DRY_RUN) {
           tax_rate = EXCLUDED.tax_rate,
           meta = COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || EXCLUDED.meta::jsonb,
           created_at = LEAST(invoice_lines.created_at, COALESCE(EXCLUDED.created_at, now()))
-        RETURNING id, invoice_id, unit_id, line_type, description, normalized_description, amount;
+        RETURNING id, invoice_id, unit_id, line_type, description, normalized_description, amount,
+          (SELECT il2.amount FROM invoice_lines il2 WHERE il2.id = invoice_lines.id) AS old_amount;
       `;
 
       await client.query('BEGIN');
@@ -106,7 +90,6 @@ if (DRY_RUN) {
         const upsertRes = await client.query(upsertSql, values);
 
         if (upsertRes.rows.length) {
-          // Write audit logs matching actual audit_logs schema
           const auditPlaceholders = upsertRes.rows.map((_, idx) => {
             const base = idx * 5;
             return `($${base + 1}::uuid, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::jsonb, now())`;
@@ -116,17 +99,19 @@ if (DRY_RUN) {
           for (const r of upsertRes.rows) {
             auditParams.push(
               null, // user_id (system/manual reconcile)
-              'invoice_lines', // table_name
-              r.id, // record_id
-              'invoice_line_reconcile', // action
+              'invoice_lines',
+              r.id,
+              'invoice_line_reconcile',
               JSON.stringify({
                 run_id: RUN_ID,
+                actor: 'system/reconcile',
                 invoice_id: r.invoice_id,
                 unit_id: r.unit_id,
                 line_type: r.line_type,
                 description: r.description,
                 normalized_description: r.normalized_description,
-                amount: r.amount,
+                old_amount: r.old_amount != null ? Number(r.old_amount) : null,
+                new_amount: Number(r.amount),
                 note: 'reconciled missing line'
               })
             );

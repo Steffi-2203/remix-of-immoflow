@@ -1,12 +1,14 @@
 // tools/compare_dryrun_db.js
 const fs = require('fs');
+const path = require('path');
+const { normalizeDescription } = require(path.resolve(__dirname, '../server/lib/normalizeDescription.cjs'));
 
 function normalize(lines) {
   return (lines || []).map(l => ({
     invoiceId: l.invoice_id || l.invoiceId || null,
     unitId: l.unit_id || l.unitId || l.unit || null,
     lineType: l.line_type || l.lineType || null,
-    description: (l.description || '').trim(),
+    description: normalizeDescription(l.description) || '',
     amount: Number(l.amount || 0).toFixed(2)
   })).sort((a, b) => 
     (a.invoiceId || '').localeCompare(b.invoiceId || '') || 

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Block accidental commit of reconciliation artifacts
+BLOCKED_FILES="dryrun.json db_lines.json invoice_lines_run.json missing_lines.csv missing_lines.json dry_db_diffs.json"
+
+for file in $BLOCKED_FILES; do
+  if git diff --cached --name-only | grep -qx "$file"; then
+    echo "ERROR: Reconciliation artifact '$file' is staged for commit."
+    echo "These files should not be committed. Remove with: git reset HEAD $file"
+    exit 1
+  fi
+done

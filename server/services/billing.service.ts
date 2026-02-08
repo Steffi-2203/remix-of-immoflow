@@ -204,7 +204,8 @@ export class BillingService {
                 tax_rate = EXCLUDED.tax_rate,
                 meta = COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || EXCLUDED.meta::jsonb,
                 created_at = LEAST(invoice_lines.created_at, EXCLUDED.created_at)
-              RETURNING id, invoice_id, unit_id, line_type, description, amount
+              RETURNING id, invoice_id, unit_id, line_type, description, amount,
+                (SELECT il2.amount FROM invoice_lines il2 WHERE il2.id = invoice_lines.id) AS old_amount
             `);
 
             const upsertedRows = result.rows || [];
@@ -216,11 +217,13 @@ export class BillingService {
               const auditValues = upsertedRows.map((r: any) =>
                 sql`(${userId}::uuid, 'invoice_lines', ${r.id}::text, 'invoice_line_upsert', ${JSON.stringify({
                   run_id: runId,
+                  actor: userId,
                   invoice_id: r.invoice_id,
                   unit_id: r.unit_id,
                   line_type: r.line_type,
                   description: r.description,
-                  amount: r.amount,
+                  old_amount: r.old_amount != null ? Number(r.old_amount) : null,
+                  new_amount: Number(r.amount),
                 })}::jsonb, now())`
               );
               await tx.execute(sql`
