@@ -234,6 +234,7 @@ jobs:
     name: Load Test (manual)
     runs-on: ubuntu-latest
     needs: billing-parity
+    timeout-minutes: 15
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_load_test == 'true'
     services:
       postgres:
@@ -277,6 +278,59 @@ jobs:
 
       - name: Run migrations
         run: node migrations/run-migration.cjs
+
+      - name: Seed test data for load test
+        run: |
+          ROWS=${{ github.event.inputs.load_test_rows || '10000' }}
+          # We need ceil(ROWS/10) invoices and 100 units (matching load_test_bulk.sh UUID pattern)
+          INVOICE_COUNT=$(( (ROWS + 9) / 10 ))
+
+          # Seed a dummy property (required FK for units)
+          psql "$DATABASE_URL" -c "
+            INSERT INTO properties (id, name, address, city, postal_code, created_at)
+            VALUES ('00000000-0000-0000-0000-000000000001', 'Load Test Property', 'Test 1', 'Wien', '1010', now())
+            ON CONFLICT DO NOTHING;
+          "
+
+          # Seed dummy units
+          psql "$DATABASE_URL" -c "
+            INSERT INTO units (id, property_id, top_nummer, qm, mea, created_at, updated_at)
+            SELECT
+              '00000000-0000-0000-0000-' || lpad((2000 + g)::text, 12, '0'),
+              '00000000-0000-0000-0000-000000000001',
+              'LT-' || g,
+              50, 100, now(), now()
+            FROM generate_series(0, 99) g
+            ON CONFLICT DO NOTHING;
+          "
+
+          # Seed a dummy tenant (required FK for monthly_invoices)
+          psql "$DATABASE_URL" -c "
+            INSERT INTO tenants (id, unit_id, vorname, nachname, email, created_at, updated_at)
+            VALUES (
+              '00000000-0000-0000-0000-000000009000',
+              '00000000-0000-0000-0000-000000002000',
+              'Load', 'Test', 'loadtest@test.local', now(), now()
+            )
+            ON CONFLICT DO NOTHING;
+          "
+
+          # Seed dummy invoices (monthly_invoices table)
+          psql "$DATABASE_URL" -c "
+            INSERT INTO monthly_invoices (id, tenant_id, unit_id, year, month, faellig_am, created_at)
+            SELECT
+              '00000000-0000-0000-0000-' || lpad((1000 + g)::text, 12, '0'),
+              '00000000-0000-0000-0000-000000009000',
+              '00000000-0000-0000-0000-' || lpad((2000 + (g % 100))::text, 12, '0'),
+              2025,
+              1 + (g % 12),
+              '2025-01-15',
+              now()
+            FROM generate_series(0, ${INVOICE_COUNT} - 1) g
+            ON CONFLICT DO NOTHING;
+          "
+
+          echo "Seeded: 1 property, 100 units, 1 tenant, $INVOICE_COUNT invoices"
 
       - name: Run load test
         id: loadtest

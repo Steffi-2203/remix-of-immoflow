@@ -194,7 +194,12 @@ if (DRY_RUN) {
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`[batch_upsert] Batch ${batchNum} ROLLED BACK:`, err.message);
+        if (err.code === '23503') {
+          console.error(`[batch_upsert] Batch ${batchNum} FK VIOLATION: ${err.detail || err.message}`);
+          console.error('[batch_upsert] Hint: Ensure referenced invoices/units exist. Use seed data in CI.');
+        } else {
+          console.error(`[batch_upsert] Batch ${batchNum} ROLLED BACK (${err.code || 'unknown'}):`, err.message);
+        }
         throw err;
       }
     }

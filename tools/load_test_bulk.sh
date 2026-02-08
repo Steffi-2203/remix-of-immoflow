@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 # Usage: ./tools/load_test_bulk.sh <rows> <parallel_jobs> <DATABASE_URL>
 
@@ -29,7 +29,7 @@ for (let i = 0; i < rows; i++) {
   const amount = (Math.random() * 1000).toFixed(2);
   const tax = 0;
   const meta = '{}';
-  w.write(invoice + ',' + unit + ',' + lineType + ',\"' + desc + '\",' + amount + ',' + tax + ',\\'' + meta + '\\'\\n');
+  w.write(invoice + ',' + unit + ',' + lineType + ',\"' + desc + '\",' + amount + ',' + tax + ',\"' + meta + '\"\\n');
 }
 w.end();
 console.log('CSV generated', out);
