@@ -76,23 +76,26 @@ try {
   }
 
   console.log('--- Step 4: Compare dry-run vs DB ---');
-  run(`node tools/find_missing_lines.js --dryrun-file=${dryOut} --db-file=${dbOut} --out=${missingOut}`);
+  const effectiveRunId = RUN_ID || JSON.parse(fs.readFileSync(genOut, 'utf8')).runId || 'unknown';
+  const auditDir = path.resolve('reconciliations', effectiveRunId);
+  run(`node tools/find_missing_lines.js --dryrun-file=${dryOut} --db-file=${dbOut} --run-id=${effectiveRunId}`);
 
-  const missingExists = fs.existsSync(missingOut) && fs.readFileSync(missingOut, 'utf8').trim().length > 0;
+  const auditMissing = path.join(auditDir, 'missing_lines.csv');
+  const missingExists = fs.existsSync(auditMissing) && fs.readFileSync(auditMissing, 'utf8').trim().length > 0;
 
   if (!missingExists) {
     console.log('\nKeine fehlenden Zeilen erkannt. Dry-Run und Persist sind in Parität.');
   } else {
-    const missingContent = fs.readFileSync(missingOut, 'utf8').trim();
+    const missingContent = fs.readFileSync(auditMissing, 'utf8').trim();
     const missingCount = missingContent.split('\n').length - 1;
-    console.warn(`\n${missingCount} fehlende Zeilen erkannt. Siehe ${missingOut}`);
+    console.warn(`\n${missingCount} fehlende Zeilen erkannt. Audit: ${auditDir}`);
 
     if (DO_UPSERT) {
       console.log('\n--- Step 5a: Upsert dry-run ---');
-      run(`node tools/upsert_missing_lines.js --csv=${missingOut} --run-id=${RUN_ID} --database-url="${DATABASE_URL}" --dry-run`);
+      run(`node tools/upsert_missing_lines.js --csv=${auditMissing} --run-id=${effectiveRunId} --database-url="${DATABASE_URL}" --dry-run`);
 
       console.log('\n--- Step 5b: Upsert real ---');
-      run(`node tools/upsert_missing_lines.js --csv=${missingOut} --run-id=${RUN_ID} --database-url="${DATABASE_URL}"`);
+      run(`node tools/upsert_missing_lines.js --csv=${auditMissing} --run-id=${effectiveRunId} --database-url="${DATABASE_URL}"`);
 
       console.log('\n--- Step 5c: Recompute gesamtbetrag ---');
       const recomputeSql = `
