@@ -5,7 +5,8 @@ import { ReconciliationRunsList } from '@/components/reconciliation/RunsList';
 import { ReconciliationRunDetail } from '@/components/reconciliation/RunDetail';
 import { ReconciliationDuplicates } from '@/components/reconciliation/DuplicatesTab';
 import { ReconciliationAuditExplorer } from '@/components/reconciliation/AuditExplorer';
-import { ListChecks, Search, GitMerge, FileText } from 'lucide-react';
+import { CapacityDashboard } from '@/components/reconciliation/CapacityDashboard';
+import { ListChecks, Search, GitMerge, FileText, Gauge } from 'lucide-react';
 
 export default function ReconciliationDashboard() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -19,10 +20,10 @@ export default function ReconciliationDashboard() {
   return (
     <MainLayout
       title="Reconciliation Dashboard"
-      subtitle="Run Lifecycle, Samples, Duplikat-Auflösung und Audit-Explorer"
+      subtitle="Run Lifecycle, Samples, Duplikat-Auflösung, Audit-Explorer und Capacity Planning"
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
           <TabsTrigger value="runs" className="gap-1.5">
             <ListChecks className="h-4 w-4" />
             <span className="hidden sm:inline">Runs</span>
@@ -34,6 +35,10 @@ export default function ReconciliationDashboard() {
           <TabsTrigger value="duplicates" className="gap-1.5">
             <GitMerge className="h-4 w-4" />
             <span className="hidden sm:inline">Duplikate</span>
+          </TabsTrigger>
+          <TabsTrigger value="capacity" className="gap-1.5">
+            <Gauge className="h-4 w-4" />
+            <span className="hidden sm:inline">Kapazität</span>
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-1.5">
             <FileText className="h-4 w-4" />
@@ -60,6 +65,10 @@ export default function ReconciliationDashboard() {
 
         <TabsContent value="duplicates">
           <ReconciliationDuplicates />
+        </TabsContent>
+
+        <TabsContent value="capacity">
+          <CapacityDashboard />
         </TabsContent>
 
         <TabsContent value="audit">
