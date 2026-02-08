@@ -26,6 +26,6 @@
 |------|--------|---------|
 | RBAC | ✅ | `permissions` + `role_permissions_override` Tabellen; `requirePermission()` Middleware; `useHasPermission()` Hook |
 | Encrypted Artifacts | ✅ | AES-256-GCM via `ARTIFACT_ENCRYPTION_KEY`; `artifact_metadata` Tabelle; Cleanup-Cron |
-| SSO | ⏳ | Geplant – erfordert Produkt-Entscheidungen |
-| Multi-Tenant Isolation | ⏳ | Via organization_id RLS; weitere Haertung geplant |
-| Job Queue / Horizontal Scaling | ⏳ | Architektur geplant |
+| SSO | ✅ | `sso_providers` Tabelle (SAML/OIDC); `ssoService` mit Provider-Abstraction; Domain-basiertes Enforcement; Stubs für SAML-Validation + OIDC-Exchange |
+| Multi-Tenant Isolation | ✅ | `user_org_id()`, `owns_property()`, `owns_tenant()` Helper-Funktionen; 9 permissive RLS-Policies gehärtet auf org-scope; nur audit_logs INSERT bleibt `true` (gewollt) |
+| Job Queue / Horizontal Scaling | ✅ | `job_queue` Tabelle mit `FOR UPDATE SKIP LOCKED`; `jobQueueService` mit Handler-Registry, Exponential-Backoff-Retries, Priority-Queue; Billing-Handler registriert |

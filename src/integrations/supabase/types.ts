@@ -969,6 +969,74 @@ export type Database = {
           },
         ]
       }
+      job_queue: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          failed_at: string | null
+          id: string
+          job_type: string
+          max_retries: number
+          organization_id: string | null
+          payload: Json
+          priority: number
+          result: Json | null
+          retry_count: number
+          scheduled_for: string
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          failed_at?: string | null
+          id?: string
+          job_type: string
+          max_retries?: number
+          organization_id?: string | null
+          payload?: Json
+          priority?: number
+          result?: Json | null
+          retry_count?: number
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          failed_at?: string | null
+          id?: string
+          job_type?: string
+          max_retries?: number
+          organization_id?: string | null
+          payload?: Json
+          priority?: number
+          result?: Json | null
+          retry_count?: number
+          scheduled_for?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_queue_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_entries: {
         Row: {
           beleg_nummer: string | null
@@ -3100,6 +3168,68 @@ export type Database = {
           },
         ]
       }
+      sso_providers: {
+        Row: {
+          allowed_domains: string[]
+          attribute_mapping: Json
+          certificate: string | null
+          client_id: string | null
+          client_secret_vault_id: string | null
+          created_at: string
+          display_name: string
+          enforce_sso: boolean
+          id: string
+          is_active: boolean
+          issuer_url: string | null
+          metadata_url: string | null
+          organization_id: string
+          provider_type: string
+          updated_at: string
+        }
+        Insert: {
+          allowed_domains?: string[]
+          attribute_mapping?: Json
+          certificate?: string | null
+          client_id?: string | null
+          client_secret_vault_id?: string | null
+          created_at?: string
+          display_name: string
+          enforce_sso?: boolean
+          id?: string
+          is_active?: boolean
+          issuer_url?: string | null
+          metadata_url?: string | null
+          organization_id: string
+          provider_type: string
+          updated_at?: string
+        }
+        Update: {
+          allowed_domains?: string[]
+          attribute_mapping?: Json
+          certificate?: string | null
+          client_id?: string | null
+          client_secret_vault_id?: string | null
+          created_at?: string
+          display_name?: string
+          enforce_sso?: boolean
+          id?: string
+          is_active?: boolean
+          issuer_url?: string | null
+          metadata_url?: string | null
+          organization_id?: string
+          provider_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sso_providers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_comments: {
         Row: {
           comment: string
@@ -4597,6 +4727,9 @@ export type Database = {
         Returns: undefined
       }
       next_booking_number: { Args: { _org_id: string }; Returns: string }
+      owns_property: { Args: { _property_id: string }; Returns: boolean }
+      owns_tenant: { Args: { _tenant_id: string }; Returns: boolean }
+      user_org_id: { Args: never; Returns: string }
     }
     Enums: {
       app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
