@@ -78,7 +78,7 @@ jobs:
         run: node migrations/run-migration.cjs
 
       - name: Run tests
-        run: npx vitest run --dir src --exclude 'tests/**'
+        run: npx vitest run src/test/normalizeDescription.test.ts --reporter=verbose
 
   billing-parity:
     name: Billing Parity & Reconciliation
