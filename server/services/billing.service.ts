@@ -197,7 +197,7 @@ export class BillingService {
             const result = await tx.execute(sql`
               INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta, created_at)
               VALUES ${sql.join(values, sql`, `)}
-              ON CONFLICT ON CONSTRAINT invoice_lines_unique_key
+              ON CONFLICT ON CONSTRAINT idx_invoice_lines_unique
               DO UPDATE SET
                 amount = EXCLUDED.amount,
                 tax_rate = EXCLUDED.tax_rate,
