@@ -7,7 +7,7 @@ import {
   payments, 
   propertyManagers 
 } from "@shared/schema";
-import { eq, and, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
 import type { Tenant } from "@shared/schema";
 import { roundMoney } from "@shared/utils";
@@ -490,20 +490,40 @@ export class InvoiceService {
     const createdInvoices = await db.transaction(async (tx) => {
       const allInserted: (typeof monthlyInvoices.$inferSelect)[] = [];
 
-      // Insert tenant invoices
+      // Upsert tenant invoices — update amounts if conflict on (tenant_id, year, month)
       if (tenantInvoicesToCreate.length > 0) {
         const inserted = await tx.insert(monthlyInvoices)
           .values(tenantInvoicesToCreate)
-          .onConflictDoNothing()
+          .onConflictDoUpdate({
+            target: [monthlyInvoices.tenantId, monthlyInvoices.year, monthlyInvoices.month],
+            set: {
+              grundmiete: sql`EXCLUDED.grundmiete`,
+              betriebskosten: sql`EXCLUDED.betriebskosten`,
+              heizungskosten: sql`EXCLUDED.heizungskosten`,
+              gesamtbetrag: sql`EXCLUDED.gesamtbetrag`,
+              ust: sql`EXCLUDED.ust`,
+              runId: sql`EXCLUDED.run_id`,
+            },
+          })
           .returning();
         allInserted.push(...inserted);
       }
 
-      // Insert vacancy invoices
+      // Upsert vacancy invoices
       if (vacancyInvoicesToCreate.length > 0) {
         const inserted = await tx.insert(monthlyInvoices)
           .values(vacancyInvoicesToCreate)
-          .onConflictDoNothing()
+          .onConflictDoUpdate({
+            target: [monthlyInvoices.tenantId, monthlyInvoices.year, monthlyInvoices.month],
+            set: {
+              grundmiete: sql`EXCLUDED.grundmiete`,
+              betriebskosten: sql`EXCLUDED.betriebskosten`,
+              heizungskosten: sql`EXCLUDED.heizungskosten`,
+              gesamtbetrag: sql`EXCLUDED.gesamtbetrag`,
+              ust: sql`EXCLUDED.ust`,
+              runId: sql`EXCLUDED.run_id`,
+            },
+          })
           .returning();
         allInserted.push(...inserted);
       }
@@ -513,12 +533,10 @@ export class InvoiceService {
       
       for (const invoice of allInserted) {
         if (invoice.isVacancy) {
-          // Vacancy invoice lines
           const unit = unitMap.get(invoice.unitId)!;
           const lines = this.buildVacancyInvoiceLines(invoice.id, unit, month, year);
           allLines.push(...lines);
         } else if (invoice.tenantId) {
-          // Tenant invoice lines
           const tenant = tenantMap.get(invoice.tenantId)!;
           const unitType = unitTypeMap.get(invoice.unitId || '') || 'wohnung';
           const vatRates = this.getVatRates(unitType);
@@ -527,17 +545,33 @@ export class InvoiceService {
         }
       }
 
+      // Upsert invoice lines with conflict on unique index
+      let upsertedLinesCount = 0;
       for (let i = 0; i < allLines.length; i += 500) {
         const batch = allLines.slice(i, i + 500);
         if (batch.length > 0) {
-          await tx.insert(invoiceLines).values(batch);
+          const result = await tx.insert(invoiceLines)
+            .values(batch)
+            .onConflictDoUpdate({
+              target: [invoiceLines.invoiceId, invoiceLines.unitId, invoiceLines.lineType, invoiceLines.description],
+              set: {
+                amount: sql`EXCLUDED.amount`,
+                taxRate: sql`EXCLUDED.tax_rate`,
+                meta: sql`COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || COALESCE(EXCLUDED.meta::jsonb, '{}'::jsonb)`,
+              },
+            })
+            .returning();
+          upsertedLinesCount += result.length;
         }
       }
 
+      // Audit log inside same transaction
       await writeAudit(tx, userId, 'monthly_invoices', 'bulk', 'bulk_create', null, {
         createdCount: allInserted.length,
         tenantInvoices: tenantInvoicesToCreate.length,
         vacancyInvoices: vacancyInvoicesToCreate.length,
+        upsertedLinesCount,
+        totalLinesExpected: allLines.length,
         month,
         year,
         invoiceIds: allInserted.map(inv => inv.id),
