@@ -59,6 +59,53 @@ export type Database = {
           },
         ]
       }
+      artifact_access_log: {
+        Row: {
+          action: string
+          artifact_id: string | null
+          created_at: string
+          file_path: string | null
+          id: string
+          ip_address: unknown
+          reason: string | null
+          run_id: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          artifact_id?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          ip_address?: unknown
+          reason?: string | null
+          run_id?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          artifact_id?: string | null
+          created_at?: string
+          file_path?: string | null
+          id?: string
+          ip_address?: unknown
+          reason?: string | null
+          run_id?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifact_access_log_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifact_metadata"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       artifact_metadata: {
         Row: {
           created_at: string
@@ -4926,7 +4973,14 @@ export type Database = {
       user_org_id: { Args: never; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "property_manager" | "finance" | "viewer" | "tester"
+      app_role:
+        | "admin"
+        | "property_manager"
+        | "finance"
+        | "viewer"
+        | "tester"
+        | "auditor"
+        | "ops"
       ausstattungskategorie: "A" | "B" | "C" | "D"
       billing_run_status:
         | "pending"
@@ -5128,7 +5182,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "property_manager", "finance", "viewer", "tester"],
+      app_role: [
+        "admin",
+        "property_manager",
+        "finance",
+        "viewer",
+        "tester",
+        "auditor",
+        "ops",
+      ],
       ausstattungskategorie: ["A", "B", "C", "D"],
       billing_run_status: [
         "pending",

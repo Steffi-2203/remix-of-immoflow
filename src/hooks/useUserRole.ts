@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester';
+export type AppRole = 'admin' | 'property_manager' | 'finance' | 'viewer' | 'tester' | 'auditor' | 'ops';
 
 export function useUserRole() {
   return useQuery({

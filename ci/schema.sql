@@ -31,7 +31,7 @@ DO $$ BEGIN CREATE TYPE mrg_bk_kategorie AS ENUM (
   'leitungswasserschaden', 'sturmschaden', 'glasversicherung',
   'grundsteuer', 'verwaltung', 'sonstige'
 ); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN CREATE TYPE app_role AS ENUM ('admin', 'manager', 'viewer', 'finance', 'accountant'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE app_role AS ENUM ('admin', 'manager', 'viewer', 'finance', 'accountant', 'property_manager', 'tester', 'auditor', 'ops'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ── Organizations ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS organizations (
@@ -440,5 +440,23 @@ CREATE OR REPLACE FUNCTION is_admin(_user_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM user_roles WHERE user_id = _user_id AND role = 'admin');
 $$;
+
+-- ── Artifact Access Log (CloudTrail-style) ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS artifact_access_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  artifact_id UUID REFERENCES artifact_metadata(id) ON DELETE SET NULL,
+  run_id TEXT,
+  action TEXT NOT NULL,
+  file_path TEXT,
+  ip_address INET,
+  user_agent TEXT,
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_access_log_user ON artifact_access_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_artifact_access_log_artifact ON artifact_access_log(artifact_id);
+CREATE INDEX IF NOT EXISTS idx_artifact_access_log_created ON artifact_access_log(created_at DESC);
 
 COMMIT;
