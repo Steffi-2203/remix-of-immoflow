@@ -10,7 +10,8 @@ import {
   distributionKeys,
   unitDistributionValues
 } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { waterReadings } from "../db/models/water_readings";
+import { eq, and, inArray, between, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
 import { roundMoney } from "@shared/utils";
 
@@ -52,6 +53,57 @@ interface SettlementSummary {
 }
 
 export class SettlementService {
+  /**
+   * Calculate consumption-based water cost shares for a property/year.
+   * Uses water_readings with coefficient, falls back to equal distribution.
+   */
+  async calculateWaterCostShares(
+    propertyId: string,
+    year: number,
+    totalWaterCost: number,
+    propertyUnits: Array<typeof units.$inferSelect>
+  ): Promise<Map<string, { share: number; provisional: boolean }>> {
+    const result = new Map<string, { share: number; provisional: boolean }>();
+    const periodStart = `${year}-01-01`;
+    const periodEnd = `${year}-12-31`;
+    const unitIds = propertyUnits.map(u => u.id);
+
+    if (unitIds.length === 0) return result;
+
+    // Fetch weighted consumption per unit
+    const readings = await db
+      .select({
+        unitId: waterReadings.unitId,
+        weightedTotal: sql<number>`SUM(${waterReadings.consumption} * ${waterReadings.coefficient})`,
+      })
+      .from(waterReadings)
+      .where(
+        and(
+          inArray(waterReadings.unitId, unitIds),
+          between(waterReadings.readingDate, periodStart, periodEnd)
+        )
+      )
+      .groupBy(waterReadings.unitId);
+
+    const buildingTotal = readings.reduce((sum, r) => sum + Number(r.weightedTotal || 0), 0);
+
+    if (buildingTotal > 0) {
+      for (const r of readings) {
+        const unitTotal = Number(r.weightedTotal || 0);
+        const share = roundMoney((unitTotal / buildingTotal) * totalWaterCost);
+        result.set(r.unitId, { share, provisional: false });
+      }
+    } else {
+      // Fallback: equal distribution
+      const perUnit = roundMoney(totalWaterCost / unitIds.length);
+      for (const uid of unitIds) {
+        result.set(uid, { share: perUnit, provisional: true });
+      }
+    }
+
+    return result;
+  }
+
   async calculatePropertyExpenses(propertyId: string, year: number): Promise<{
     totalExpenses: number;
     byCategory: Map<string, number>;
