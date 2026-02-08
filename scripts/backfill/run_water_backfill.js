@@ -1,23 +1,34 @@
+#!/usr/bin/env node
 /**
  * Water costs backfill runner.
- * Uses SettlementService.calculateWaterCostShares() to compute per-unit shares
- * and inserts adjustment invoice_lines for historical periods.
+ * Uses SettlementService.calculateWaterCostShares() logic to compute per-unit
+ * shares and inserts adjustment invoice_lines for historical periods.
  *
  * Usage:
- *   node scripts/backfill/run_water_backfill.js --dry-run
- *   node scripts/backfill/run_water_backfill.js --execute --year 2025 --property-id <uuid>
+ *   node scripts/backfill/run_water_backfill.js --year 2025 --dry-run
+ *   node scripts/backfill/run_water_backfill.js --year 2025 --property-id <uuid> --execute
  */
 
+const yargs = require("yargs");
+const { hideBin } = require("yargs/helpers");
 const { db } = require("../../server/db");
 const { sql } = require("drizzle-orm");
 
+const argv = yargs(hideBin(process.argv))
+  .option("year", { type: "number", default: new Date().getFullYear() - 1, describe: "Settlement year" })
+  .option("property-id", { type: "string", describe: "Limit to a single property" })
+  .option("execute", { type: "boolean", default: false, describe: "Actually insert lines (default: dry-run)" })
+  .option("dry-run", { type: "boolean", default: true, describe: "Preview only (default)" })
+  .check((args) => {
+    if (args.execute) args["dry-run"] = false;
+    return true;
+  })
+  .argv;
+
 async function main() {
-  const args = process.argv.slice(2);
-  const dryRun = !args.includes("--execute");
-  const yearIdx = args.indexOf("--year");
-  const year = yearIdx >= 0 ? parseInt(args[yearIdx + 1], 10) : new Date().getFullYear() - 1;
-  const propIdx = args.indexOf("--property-id");
-  const propertyFilter = propIdx >= 0 ? args[propIdx + 1] : null;
+  const year = argv.year;
+  const dryRun = !argv.execute;
+  const propertyFilter = argv["property-id"] || null;
 
   console.log(`Water costs backfill — year: ${year}, dryRun: ${dryRun}`);
 
@@ -33,29 +44,32 @@ async function main() {
   }
 
   const properties = await db.execute(sql.raw(propertyQuery));
-  console.log(`Found ${properties.rows?.length || 0} properties with water expenses`);
+  const propRows = properties.rows || properties || [];
+  console.log(`Found ${propRows.length} properties with water expenses`);
 
-  for (const prop of (properties.rows || [])) {
-    // Sum total water cost for the year
+  let totalInserted = 0;
+
+  for (const prop of propRows) {
     const costResult = await db.execute(sql.raw(`
       SELECT COALESCE(SUM(betrag), 0) as total
       FROM expenses
       WHERE property_id = '${prop.id}' AND year = ${year} AND category = 'wasser' AND ist_umlagefaehig = true
     `));
-    const totalWaterCost = Number(costResult.rows?.[0]?.total || 0);
+    const costRows = costResult.rows || costResult || [];
+    const totalWaterCost = Number(costRows[0]?.total || 0);
 
-    // Fetch units
     const unitsResult = await db.execute(sql.raw(`
       SELECT id, top_nummer FROM units WHERE property_id = '${prop.id}'
     `));
-    const unitIds = (unitsResult.rows || []).map(u => u.id);
+    const unitRows = unitsResult.rows || unitsResult || [];
+    const unitIds = unitRows.map(u => u.id);
 
     if (unitIds.length === 0 || totalWaterCost <= 0) {
       console.log(`  Skip ${prop.name}: no units or zero cost`);
       continue;
     }
 
-    // Fetch weighted consumption
+    // Fetch weighted consumption from water_readings
     const readingsResult = await db.execute(sql.raw(`
       SELECT unit_id, SUM(consumption * coefficient) as weighted
       FROM water_readings
@@ -63,8 +77,7 @@ async function main() {
         AND reading_date BETWEEN '${year}-01-01' AND '${year}-12-31'
       GROUP BY unit_id
     `));
-
-    const readings = readingsResult.rows || [];
+    const readings = readingsResult.rows || readingsResult || [];
     const buildingTotal = readings.reduce((s, r) => s + Number(r.weighted || 0), 0);
 
     const shares = [];
@@ -80,7 +93,8 @@ async function main() {
       }
     }
 
-    console.log(`  ${prop.name}: totalWaterCost=${totalWaterCost}, buildingTotal=${buildingTotal}`);
+    console.log(`  ${prop.name}: totalWaterCost=${totalWaterCost}, buildingTotal=${buildingTotal}, units=${shares.length}`);
+
     for (const s of shares) {
       const desc = `Wasserkosten-Nachverrechnung ${year}`;
       const meta = JSON.stringify({ backfill: true, provisional: s.provisional, year });
@@ -88,7 +102,7 @@ async function main() {
       if (dryRun) {
         console.log(`    [DRY-RUN] unit=${s.unitId} share=${s.share} provisional=${s.provisional}`);
       } else {
-        // Idempotent insert: skip if line already exists
+        // Idempotent: skip if adjustment line already exists for this unit/year
         await db.execute(sql.raw(`
           INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, amount, tax_rate, meta)
           SELECT inv.id, '${s.unitId}', 'wasserkosten_nachverrechnung', '${desc}', ${s.share}, 10,
@@ -104,11 +118,12 @@ async function main() {
           LIMIT 1
         `));
         console.log(`    [INSERTED] unit=${s.unitId} share=${s.share}`);
+        totalInserted++;
       }
     }
   }
 
-  console.log("Done.");
+  console.log(`Done. ${dryRun ? "Dry run" : `Inserted ${totalInserted} lines`}.`);
   process.exit(0);
 }
 
