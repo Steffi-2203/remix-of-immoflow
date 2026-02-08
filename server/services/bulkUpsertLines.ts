@@ -98,14 +98,19 @@ export async function bulkUpsertLines(opts: BulkUpsertOpts): Promise<BulkUpsertR
         jsonb_build_object(
           'run_id', ${runId},
           'actor', ${userId},
+          'operation', 'upsert',
           'invoice_id', u.invoice_id,
           'unit_id', u.unit_id,
           'line_type', u.line_type,
           'description', u.description,
+          'normalized_description', t.normalized_description,
           'new_amount', u.amount
         ),
         now()
       FROM upserted u
+      JOIN _tmp_invoice_lines t ON t.invoice_id = u.invoice_id
+        AND t.unit_id IS NOT DISTINCT FROM u.unit_id
+        AND t.line_type = u.line_type
       RETURNING id
     )
     SELECT

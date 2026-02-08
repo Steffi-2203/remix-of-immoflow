@@ -225,10 +225,12 @@ export class BillingService {
                   sql`(${userId}::uuid, 'invoice_lines', ${r.id}::text, 'invoice_line_upsert', ${JSON.stringify({
                     run_id: runId,
                     actor: userId,
+                    operation: 'upsert',
                     invoice_id: r.invoice_id,
                     unit_id: r.unit_id,
                     line_type: r.line_type,
                     description: r.description,
+                    normalized_description: normalizeDescription(r.description),
                     old_amount: r.old_amount != null ? Number(r.old_amount) : null,
                     new_amount: Number(r.amount),
                   })}::jsonb, now())`
