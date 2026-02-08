@@ -92,5 +92,6 @@ export const METRIC = {
   CONFLICT_COUNT: 'billing.conflict_count',
   RUN_DURATION_MS: 'billing.run_duration_ms',
   BATCH_SIZE: 'billing.batch_size',
+  BULK_PATH_USED: 'billing.bulk_path_used',
   ROUNDING_ADJUSTMENTS: 'billing.rounding_adjustments',
 } as const;
