@@ -5,10 +5,40 @@ import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { sendEmail } from "./lib/resend";
+import { createAuditLog, getClientInfo } from "./lib/auditLog";
 
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
+const MIN_PASSWORD_LENGTH = 10;
+
+function validatePasswordStrength(password: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Passwort muss mindestens ${MIN_PASSWORD_LENGTH} Zeichen lang sein`;
+  }
+  let categories = 0;
+  if (/[a-z]/.test(password)) categories++;
+  if (/[A-Z]/.test(password)) categories++;
+  if (/[0-9]/.test(password)) categories++;
+  if (/[^a-zA-Z0-9]/.test(password)) categories++;
+  if (categories < 3) {
+    return "Passwort muss mindestens 3 der folgenden enthalten: Kleinbuchstaben, Großbuchstaben, Ziffern, Sonderzeichen";
+  }
+  return null;
+}
+
+async function logAuthEvent(req: Request, action: string, email: string, userId: string | null, success: boolean, details?: Record<string, any>) {
+  const { ipAddress, userAgent } = getClientInfo(req);
+  await createAuditLog({
+    userId: userId || undefined,
+    tableName: 'auth',
+    recordId: userId || email,
+    action: action as any,
+    newData: { email, success, ...details },
+    ipAddress,
+    userAgent,
+  });
+}
 
 declare module "express-session" {
   interface SessionData {
@@ -59,8 +89,10 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "E-Mail und Passwort sind erforderlich" });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen lang sein" });
+      const passwordError = validatePasswordStrength(password);
+      if (passwordError) {
+        await logAuthEvent(req, 'register_failed', email, null, false, { reason: 'weak_password' });
+        return res.status(400).json({ error: passwordError });
       }
 
       const emailLower = email.toLowerCase();
@@ -175,6 +207,8 @@ export function setupAuth(app: Express) {
 
       const roles = await getUserRoles(profile.id);
       
+      await logAuthEvent(req, 'register', emailLower, profile.id, true);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
@@ -206,12 +240,14 @@ export function setupAuth(app: Express) {
       const profile = await getProfileByEmail(email.toLowerCase());
       
       if (!profile || !profile.passwordHash) {
+        await logAuthEvent(req, 'login_failed', email.toLowerCase(), null, false, { reason: 'unknown_email' });
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
       }
 
       const isValid = await bcrypt.compare(password, profile.passwordHash);
       
       if (!isValid) {
+        await logAuthEvent(req, 'login_failed', email.toLowerCase(), profile.id, false, { reason: 'wrong_password' });
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
       }
 
@@ -220,7 +256,8 @@ export function setupAuth(app: Express) {
 
       const roles = await getUserRoles(profile.id);
       
-      // Ensure session is saved before sending response
+      await logAuthEvent(req, 'login', profile.email, profile.id, true);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
@@ -241,12 +278,24 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    const userId = req.session?.userId || null;
+    const email = req.session?.email || 'unknown';
+    
+    await logAuthEvent(req, 'logout', email, userId, true);
+    
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieName = isProduction ? '__Secure-immo_sid' : 'immo_sid';
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Abmeldung fehlgeschlagen" });
       }
-      res.clearCookie("connect.sid");
+      res.clearCookie(cookieName, {
+        path: '/',
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+      });
       res.json({ message: "Erfolgreich abgemeldet" });
     });
   });
@@ -336,8 +385,9 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ error: "Token und Passwort sind erforderlich" });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen lang sein" });
+      const passwordError = validatePasswordStrength(password);
+      if (passwordError) {
+        return res.status(400).json({ error: passwordError });
       }
 
       const resetTokenResult = await db.select().from(schema.passwordResetTokens)
