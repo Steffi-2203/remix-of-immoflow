@@ -1174,6 +1174,42 @@ export type Database = {
           },
         ]
       }
+      job_runs: {
+        Row: {
+          attempts: number
+          created_at: string
+          id: string
+          job_id: string
+          job_type: string
+          last_error: string | null
+          status: string
+          trace_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          job_id: string
+          job_type: string
+          last_error?: string | null
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          id?: string
+          job_id?: string
+          job_type?: string
+          last_error?: string | null
+          status?: string
+          trace_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       journal_entries: {
         Row: {
           beleg_nummer: string | null
