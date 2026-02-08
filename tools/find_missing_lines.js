@@ -1,4 +1,11 @@
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Dynamic import of CJS module
+const { normalizeDescription } = await import(path.resolve(__dirname, '../server/lib/normalizeDescription.cjs'));
 
 const dryrunFile = process.argv[2] || 'dryrun.json';
 const dbLinesFile = process.argv[3] || 'db_lines.json';
@@ -30,6 +37,7 @@ dryrun.preview.forEach(p => {
       unitId: unitId,
       lineType: line.lineType,
       description: line.description,
+      normalizedDescription: normalizeDescription(line.description),
       amount: line.amount,
       taxRate: line.taxRate
     });
@@ -37,11 +45,14 @@ dryrun.preview.forEach(p => {
 });
 
 const dbLineSet = new Set(
-  dbLines.map(l => `${l.unit_id || l.unitId}|${l.line_type || l.lineType}|${l.description}`)
+  dbLines.map(l => {
+    const desc = normalizeDescription(l.description || l.normalized_description) || '';
+    return `${l.unit_id || l.unitId}|${l.line_type || l.lineType}|${desc}`;
+  })
 );
 
 const missingLines = expectedLines.filter(l => 
-  !dbLineSet.has(`${l.unitId}|${l.lineType}|${l.description}`)
+  !dbLineSet.has(`${l.unitId}|${l.lineType}|${l.normalizedDescription}`)
 );
 
 console.log(`Expected lines (dry-run): ${expectedLines.length}`);
