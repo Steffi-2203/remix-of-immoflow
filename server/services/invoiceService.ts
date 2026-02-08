@@ -553,7 +553,7 @@ export class InvoiceService {
           const result = await tx.insert(invoiceLines)
             .values(batch)
             .onConflictDoUpdate({
-              target: [invoiceLines.invoiceId, invoiceLines.unitId, invoiceLines.lineType, invoiceLines.normalizedDescription],
+              target: [invoiceLines.invoiceId, invoiceLines.unitId, invoiceLines.lineType, invoiceLines.description],
               set: {
                 amount: sql`EXCLUDED.amount`,
                 taxRate: sql`EXCLUDED.tax_rate`,
