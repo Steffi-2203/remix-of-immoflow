@@ -4,6 +4,7 @@ import { invoiceGenerator } from "./invoice.generator";
 import { roundMoney } from "@shared/utils";
 import { normalizeDescription } from "../lib/normalizeDescription";
 import { sql, eq, inArray } from "drizzle-orm";
+import { bulkUpsertLines, BULK_THRESHOLD } from "./bulkUpsertLines";
 import { metrics, METRIC } from "../lib/metrics";
 import {
   monthlyInvoices,
@@ -185,52 +186,58 @@ export class BillingService {
           allLines.push(...validLines);
         }
 
-        let insertedLinesCount = 0;
         let upsertedLinesCount = 0;
         let conflictCount = 0;
         const conflictKeys: { invoiceId: string; lineType: string; description: string }[] = [];
-        
-        const batches = chunk(allLines, 500);
-        for (const batch of batches) {
-          if (batch.length > 0) {
-            const values = batch.map(line => 
-              sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${normalizeDescription(line.description)}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
-            );
-            const result = await tx.execute(sql`
-              INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, normalized_description, amount, tax_rate, meta, created_at)
-              VALUES ${sql.join(values, sql`, `)}
-              ON CONFLICT (invoice_id, unit_id, line_type, normalized_description)
-              DO UPDATE SET
-                amount = EXCLUDED.amount,
-                tax_rate = EXCLUDED.tax_rate,
-                meta = COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || EXCLUDED.meta::jsonb,
-                created_at = LEAST(invoice_lines.created_at, EXCLUDED.created_at)
-              RETURNING id, invoice_id, unit_id, line_type, description, amount,
-                (SELECT il2.amount FROM invoice_lines il2 WHERE il2.id = invoice_lines.id) AS old_amount
-            `);
 
-            const upsertedRows = result.rows || [];
-            upsertedLinesCount += upsertedRows.length;
-            conflictCount += batch.length - upsertedRows.length;
-
-            // Audit log for each upserted row
-            if (upsertedRows.length > 0) {
-              const auditValues = upsertedRows.map((r: any) =>
-                sql`(${userId}::uuid, 'invoice_lines', ${r.id}::text, 'invoice_line_upsert', ${JSON.stringify({
-                  run_id: runId,
-                  actor: userId,
-                  invoice_id: r.invoice_id,
-                  unit_id: r.unit_id,
-                  line_type: r.line_type,
-                  description: r.description,
-                  old_amount: r.old_amount != null ? Number(r.old_amount) : null,
-                  new_amount: Number(r.amount),
-                })}::jsonb, now())`
+        if (allLines.length >= BULK_THRESHOLD) {
+          // P2-7: Bulk path via temp table + single CTE
+          const bulkResult = await bulkUpsertLines({ tx, allLines, userId, runId });
+          upsertedLinesCount = bulkResult.upsertedLinesCount;
+          conflictCount = bulkResult.conflictCount;
+        } else {
+          // Legacy path: 500-row chunks with parameterized VALUES
+          const batches = chunk(allLines, 500);
+          for (const batch of batches) {
+            if (batch.length > 0) {
+              const values = batch.map(line => 
+                sql`(${line.invoiceId}, ${line.unitId}, ${line.lineType}, ${line.description}, ${normalizeDescription(line.description)}, ${roundMoney(line.amount)}, ${line.taxRate}, ${JSON.stringify(line.meta || {})}::jsonb, now())`
               );
-              await tx.execute(sql`
-                INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
-                VALUES ${sql.join(auditValues, sql`, `)}
+              const result = await tx.execute(sql`
+                INSERT INTO invoice_lines (invoice_id, unit_id, line_type, description, normalized_description, amount, tax_rate, meta, created_at)
+                VALUES ${sql.join(values, sql`, `)}
+                ON CONFLICT (invoice_id, unit_id, line_type, normalized_description)
+                DO UPDATE SET
+                  amount = EXCLUDED.amount,
+                  tax_rate = EXCLUDED.tax_rate,
+                  meta = COALESCE(invoice_lines.meta::jsonb, '{}'::jsonb) || EXCLUDED.meta::jsonb,
+                  created_at = LEAST(invoice_lines.created_at, EXCLUDED.created_at)
+                RETURNING id, invoice_id, unit_id, line_type, description, amount,
+                  (SELECT il2.amount FROM invoice_lines il2 WHERE il2.id = invoice_lines.id) AS old_amount
               `);
+
+              const upsertedRows = result.rows || [];
+              upsertedLinesCount += upsertedRows.length;
+              conflictCount += batch.length - upsertedRows.length;
+
+              if (upsertedRows.length > 0) {
+                const auditValues = upsertedRows.map((r: any) =>
+                  sql`(${userId}::uuid, 'invoice_lines', ${r.id}::text, 'invoice_line_upsert', ${JSON.stringify({
+                    run_id: runId,
+                    actor: userId,
+                    invoice_id: r.invoice_id,
+                    unit_id: r.unit_id,
+                    line_type: r.line_type,
+                    description: r.description,
+                    old_amount: r.old_amount != null ? Number(r.old_amount) : null,
+                    new_amount: Number(r.amount),
+                  })}::jsonb, now())`
+                );
+                await tx.execute(sql`
+                  INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
+                  VALUES ${sql.join(auditValues, sql`, `)}
+                `);
+              }
             }
           }
         }
