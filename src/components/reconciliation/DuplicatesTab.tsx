@@ -12,6 +12,7 @@ import {
   type DuplicateGroup,
 } from '@/hooks/useDuplicateResolution';
 import { DuplicateResolutionDialog } from '@/components/banking/DuplicateResolutionDialog';
+import { MergeUndoPanel } from './MergeUndoPanel';
 
 export function ReconciliationDuplicates() {
   const { data, isLoading } = useDuplicateGroups();
@@ -22,7 +23,8 @@ export function ReconciliationDuplicates() {
   const groups = data?.groups || [];
 
   return (
-    <>
+    <div className="space-y-4">
+      <MergeUndoPanel />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -101,6 +103,6 @@ export function ReconciliationDuplicates() {
           onResolved={() => setSelectedGroupId(null)}
         />
       )}
-    </>
+    </div>
   );
 }

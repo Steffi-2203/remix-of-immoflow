@@ -982,6 +982,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string | null
+          deleted_at: string | null
           description: string | null
           id: string
           invoice_id: string
@@ -994,6 +995,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           invoice_id: string
@@ -1006,6 +1008,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string | null
+          deleted_at?: string | null
           description?: string | null
           id?: string
           invoice_id?: string
@@ -1690,6 +1693,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      merge_tombstones: {
+        Row: {
+          canonical_before_snapshot: Json
+          canonical_id: string
+          created_at: string
+          deleted_row_ids: string[]
+          deleted_rows_snapshot: Json
+          expires_at: string
+          group_id: string
+          id: string
+          merge_audit_log_id: string
+          merge_policy: string
+          merged_by: string | null
+          purged_at: string | null
+          undone_at: string | null
+        }
+        Insert: {
+          canonical_before_snapshot?: Json
+          canonical_id: string
+          created_at?: string
+          deleted_row_ids?: string[]
+          deleted_rows_snapshot?: Json
+          expires_at?: string
+          group_id: string
+          id?: string
+          merge_audit_log_id: string
+          merge_policy: string
+          merged_by?: string | null
+          purged_at?: string | null
+          undone_at?: string | null
+        }
+        Update: {
+          canonical_before_snapshot?: Json
+          canonical_id?: string
+          created_at?: string
+          deleted_row_ids?: string[]
+          deleted_rows_snapshot?: Json
+          expires_at?: string
+          group_id?: string
+          id?: string
+          merge_audit_log_id?: string
+          merge_policy?: string
+          merged_by?: string | null
+          purged_at?: string | null
+          undone_at?: string | null
+        }
+        Relationships: []
       }
       messages: {
         Row: {
