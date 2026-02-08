@@ -39,7 +39,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * verbleibt, wird ein Fehler geworfen — das darf bei korrekten Eingaben nie
  * passieren und deutet auf einen Logikfehler hin.
  */
-function reconcileRounding(lines: any[], expectedTotal: number): void {
+export function reconcileRounding(lines: any[], expectedTotal: number): void {
   const roundedSum = lines.reduce((s, l) => s + roundMoney(l.amount || 0), 0);
   let diff = roundMoney(expectedTotal - roundedSum);
   if (Math.abs(diff) < 0.01) return;
