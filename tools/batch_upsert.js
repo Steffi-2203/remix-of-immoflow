@@ -33,7 +33,7 @@ const copyFrom = require('pg-copy-streams').from;
 const CSV_PATH = path.resolve(process.cwd(), argv.csv || 'missing_lines.csv');
 const BATCH_SIZE = Number(argv['batch-size'] || 5000);
 const RUN_ID = argv['run-id'] || process.env.RUN_ID || 'manual-batch-' + Date.now();
-const DATABASE_URL = argv['database-url'] || process.env.DATABASE_POOLER_URL || process.env.DATABASE_URL;
+const DATABASE_URL = argv['database-url'] || argv['db'] || process.env.DATABASE_POOLER_URL || process.env.DATABASE_URL;
 const DRY_RUN = !!argv['dry-run'];
 const RESUME = !!argv['resume'];
 
