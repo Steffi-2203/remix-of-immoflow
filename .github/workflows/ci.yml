@@ -71,6 +71,9 @@ jobs:
         run: |
           for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
 
+      - name: Bootstrap CI schema
+        run: psql "$DATABASE_URL" -f ci/schema.sql
+
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
@@ -124,6 +127,9 @@ jobs:
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
+
+      - name: Bootstrap CI schema
+        run: psql "$DATABASE_URL" -f ci/schema.sql
 
       - name: Run migrations
         run: node migrations/run-migration.cjs
@@ -276,6 +282,9 @@ jobs:
         run: |
           for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
 
+      - name: Bootstrap CI schema
+        run: psql "$DATABASE_URL" -f ci/schema.sql
+
       - name: Run migrations
         run: node migrations/run-migration.cjs
 
@@ -294,7 +303,7 @@ jobs:
 
           # Seed dummy units
           psql "$DATABASE_URL" -c "
-            INSERT INTO units (id, property_id, top_nummer, qm, mea, created_at, updated_at)
+            INSERT INTO units (id, property_id, top_nummer, flaeche, nutzwert, created_at, updated_at)
             SELECT
               '00000000-0000-0000-0000-' || lpad((2000 + g)::text, 12, '0'),
               '00000000-0000-0000-0000-000000000001',
