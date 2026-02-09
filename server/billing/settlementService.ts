@@ -281,10 +281,9 @@ export class SettlementService {
     const propertyTenants = await db.select().from(tenants)
       .where(inArray(tenants.unitId, unitIds));
 
-    const tenantResults: TenantSettlementResult[] = [];
-
-    for (const tenant of propertyTenants) {
-      const result = await this.calculateTenantSettlement(
+    // Parallel tenant settlement calculation (Promise.all statt sequenziell)
+    const settlementPromises = propertyTenants.map(tenant =>
+      this.calculateTenantSettlement(
         tenant.id,
         propertyId,
         year,
@@ -292,11 +291,10 @@ export class SettlementService {
         byCategory,
         byDistributionKey,
         organizationId
-      );
-      if (result) {
-        tenantResults.push(result);
-      }
-    }
+      )
+    );
+    const settlementResults = await Promise.all(settlementPromises);
+    const tenantResults = settlementResults.filter((r): r is TenantSettlementResult => r !== null);
 
     const totalPrepayments = tenantResults.reduce((sum, r) => sum + r.istBetrag, 0);
     const totalDifference = tenantResults.reduce((sum, r) => sum + r.differenz, 0);
