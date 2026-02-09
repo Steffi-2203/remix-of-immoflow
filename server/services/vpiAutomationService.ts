@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { sql } from "drizzle-orm";
 import { tenants, units, properties, vpiAdjustments, rentHistory, monthlyInvoices } from "@shared/schema";
 import { eq, and, isNull, gte, lte, desc } from "drizzle-orm";
 import { format, addMonths } from "date-fns";
@@ -26,12 +27,73 @@ interface VpiAdjustmentResult {
 const SCHWELLENWERT = 0.05;
 
 export class VpiAutomationService {
+  /**
+   * Fetch the latest VPI value from the vpi_values table.
+   * Falls back to hardcoded value if table is empty.
+   */
   private async getCurrentVpi(): Promise<VpiData> {
-    return {
-      year: 2025,
-      month: 12,
-      value: 122.3,
-    };
+    try {
+      const result = await db.execute(sql`
+        SELECT year, month, value FROM vpi_values
+        ORDER BY year DESC, month DESC
+        LIMIT 1
+      `);
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+        return {
+          year: Number(row.year),
+          month: Number(row.month),
+          value: Number(row.value),
+        };
+      }
+    } catch (e) {
+      console.warn('VPI table not available, using fallback:', e);
+    }
+    // Fallback for environments without the table
+    return { year: 2025, month: 1, value: 122.3 };
+  }
+
+  /**
+   * Get a specific VPI value by year/month.
+   */
+  async getVpiValue(year: number, month: number): Promise<number | null> {
+    try {
+      const result = await db.execute(sql`
+        SELECT value FROM vpi_values
+        WHERE year = ${year} AND month = ${month}
+        LIMIT 1
+      `);
+      return result.rows.length > 0 ? Number(result.rows[0].value) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Add or update a VPI value (for admin UI).
+   */
+  async upsertVpiValue(year: number, month: number, value: number, source = 'manual', notes?: string): Promise<void> {
+    await db.execute(sql`
+      INSERT INTO vpi_values (year, month, value, source, notes)
+      VALUES (${year}, ${month}, ${value}, ${source}, ${notes ?? null})
+      ON CONFLICT (year, month) DO UPDATE
+      SET value = EXCLUDED.value, source = EXCLUDED.source, notes = EXCLUDED.notes, updated_at = now()
+    `);
+  }
+
+  /**
+   * List all stored VPI values, newest first.
+   */
+  async listVpiValues(): Promise<VpiData[]> {
+    const result = await db.execute(sql`
+      SELECT year, month, value FROM vpi_values
+      ORDER BY year DESC, month DESC
+    `);
+    return result.rows.map(r => ({
+      year: Number(r.year),
+      month: Number(r.month),
+      value: Number(r.value),
+    }));
   }
 
   async checkVpiAdjustments(organizationId: string): Promise<VpiAdjustmentResult[]> {

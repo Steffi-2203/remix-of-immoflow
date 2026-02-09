@@ -2902,7 +2902,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== Maintenance Reminder Routes =====
+  // ===== VPI Values CRUD =====
+  app.get("/api/vpi/values", isAuthenticated, async (req: any, res) => {
+    try {
+      const values = await vpiAutomationService.listVpiValues();
+      res.json({ values });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch VPI values" });
+    }
+  });
+
+  app.post("/api/vpi/values", isAuthenticated, async (req: any, res) => {
+    try {
+      const { year, month, value, source, notes } = snakeToCamel(req.body);
+      if (!year || !month || value == null) {
+        return res.status(400).json({ error: "year, month and value are required" });
+      }
+      await vpiAutomationService.upsertVpiValue(Number(year), Number(month), Number(value), source, notes);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save VPI value" });
+    }
+  });
+
+
   app.get("/api/maintenance/reminders", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
