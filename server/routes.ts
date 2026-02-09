@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, sql, and, or, lt, inArray, desc } from "drizzle-orm";
+import { eq, sql, and, or, lt, inArray, desc, asc, isNull, count } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -257,27 +257,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const profile = await getProfileFromSession(req);
       const roles = await getUserRoles(req);
-      let props = await storage.getPropertiesByOrganization(profile?.organizationId);
-      if (isTester(roles)) {
-        props = maskPersonalData(props);
-      }
-      
-      // Enrich properties with unit statistics
-      const allUnits = await storage.getUnitsByOrganization(profile?.organizationId);
-      const allTenants = await storage.getTenantsByOrganization(profile?.organizationId);
-      
-      const enrichedProps = props.map(prop => {
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
+
+      const whereCondition = and(
+        eq(schema.properties.organizationId, orgId),
+        isNull(schema.properties.deletedAt)
+      );
+
+      const [props, [{ total }]] = await Promise.all([
+        db.select().from(schema.properties)
+          .where(whereCondition)
+          .orderBy(asc(schema.properties.name))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.properties)
+          .where(whereCondition),
+      ]);
+
+      let maskedProps = isTester(roles) ? maskPersonalData(props) : props;
+
+      const allUnits = await storage.getUnitsByOrganization(orgId);
+      const allTenants = await storage.getTenantsByOrganization(orgId);
+
+      const enrichedProps = maskedProps.map((prop: any) => {
         const propertyUnits = allUnits.filter(u => u.propertyId === prop.id);
-        const totalQm = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche || u.qm) || 0), 0);
-        
-        // Count units with active tenants
+        const totalQm = propertyUnits.reduce((sum: number, u: any) => sum + (Number(u.flaeche || u.qm) || 0), 0);
+
         const rentedUnits = propertyUnits.filter(unit => {
-          return allTenants.some(t => 
-            t.unitId === unit.id && 
+          return allTenants.some(t =>
+            t.unitId === unit.id &&
             t.status === 'aktiv'
           );
         }).length;
-        
+
         return {
           ...prop,
           total_units: propertyUnits.length,
@@ -285,10 +300,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           total_qm: totalQm,
         };
       });
-      
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(enrichedProps, page, limit);
-      res.json(result);
+
+      res.json({ data: enrichedProps, pagination: { page, limit, total } });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch properties" });
     }
@@ -632,12 +645,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const allPayments = await storage.getPaymentsByOrganization(profile?.organizationId);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
+
+      const tenantIdsSq = db.select({ id: schema.tenants.id }).from(schema.tenants)
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(
+          eq(schema.properties.organizationId, orgId),
+          isNull(schema.properties.deletedAt),
+          isNull(schema.units.deletedAt),
+          isNull(schema.tenants.deletedAt)
+        ));
+
+      const whereCondition = inArray(schema.payments.tenantId, tenantIdsSq);
+
+      const [payments, [{ total }]] = await Promise.all([
+        db.select().from(schema.payments)
+          .where(whereCondition)
+          .orderBy(desc(schema.payments.buchungsDatum))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.payments)
+          .where(whereCondition),
+      ]);
+
       const roles = await getUserRoles(req);
-      const items = isTester(roles) ? maskPersonalData(allPayments) : allPayments;
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(items, page, limit);
-      res.json(result);
+      const items = isTester(roles) ? maskPersonalData(payments) : payments;
+      res.json({ data: items, pagination: { page, limit, total } });
     } catch (error) {
       console.error("Payments error:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
@@ -668,11 +705,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Automatically allocate payment to open invoices and update their status
       try {
-        await paymentService.allocatePayment(
-          payment.id,
-          Number(payment.betrag),
-          payment.tenantId
-        );
+        await paymentService.allocatePayment({
+          paymentId: payment.id,
+          tenantId: payment.tenantId,
+          amount: Number(payment.betrag),
+          bookingDate: payment.buchungsDatum,
+          paymentType: payment.paymentType || 'ueberweisung',
+          reference: payment.verwendungszweck || undefined,
+        });
       } catch (allocError) {
         console.error("Payment allocation error (non-critical):", allocError);
         // Don't fail the payment creation if allocation fails
@@ -752,12 +792,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const transactions = await storage.getTransactionsByOrganization(profile?.organizationId);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
+
+      const bankAccountIdsSq = db.select({ id: schema.bankAccounts.id }).from(schema.bankAccounts)
+        .where(eq(schema.bankAccounts.organizationId, orgId));
+
+      const whereCondition = inArray(schema.transactions.bankAccountId, bankAccountIdsSq);
+
+      const [txnRows, [{ total }]] = await Promise.all([
+        db.select({
+          transaction: schema.transactions,
+          propertyId: schema.bankAccounts.propertyId,
+        }).from(schema.transactions)
+          .leftJoin(schema.bankAccounts, eq(schema.transactions.bankAccountId, schema.bankAccounts.id))
+          .where(whereCondition)
+          .orderBy(desc(schema.transactions.transactionDate))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.transactions)
+          .where(whereCondition),
+      ]);
+
+      const transactions = txnRows.map(row => ({
+        ...row.transaction,
+        property_id: row.propertyId,
+      }));
+
       const roles = await getUserRoles(req);
       const items = isTester(roles) ? maskPersonalData(transactions) : transactions;
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(items, page, limit);
-      res.json(result);
+      res.json({ data: items, pagination: { page, limit, total } });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
@@ -850,10 +916,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const expenses = await storage.getExpensesByOrganization(profile?.organizationId);
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(expenses, page, limit);
-      res.json(result);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
+
+      const propertyIdsSq = db.select({ id: schema.properties.id }).from(schema.properties)
+        .where(and(
+          eq(schema.properties.organizationId, orgId),
+          isNull(schema.properties.deletedAt)
+        ));
+
+      const whereCondition = inArray(schema.expenses.propertyId, propertyIdsSq);
+
+      const [expenses, [{ total }]] = await Promise.all([
+        db.select().from(schema.expenses)
+          .where(whereCondition)
+          .orderBy(desc(schema.expenses.datum))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.expenses)
+          .where(whereCondition),
+      ]);
+
+      res.json({ data: expenses, pagination: { page, limit, total } });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
     }
@@ -976,17 +1062,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/units", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
-      const units = await storage.getUnitsByOrganization(profile?.organizationId);
-      // Add mea/qm/vs_personen aliases for frontend compatibility
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
+
+      const propertyIdsSq = db.select({ id: schema.properties.id }).from(schema.properties)
+        .where(and(
+          eq(schema.properties.organizationId, orgId),
+          isNull(schema.properties.deletedAt)
+        ));
+
+      const whereCondition = and(
+        inArray(schema.units.propertyId, propertyIdsSq),
+        isNull(schema.units.deletedAt)
+      );
+
+      const [units, [{ total }]] = await Promise.all([
+        db.select().from(schema.units)
+          .where(whereCondition)
+          .orderBy(asc(schema.units.topNummer))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.units)
+          .where(whereCondition),
+      ]);
+
       const unitsWithAliases = units.map(unit => ({
         ...unit,
         mea: unit.nutzwert,
         qm: unit.flaeche,
         vs_personen: unit.vsPersonen,
       }));
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(unitsWithAliases, page, limit);
-      res.json(result);
+
+      res.json({ data: unitsWithAliases, pagination: { page, limit, total } });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch units" });
     }
@@ -1400,17 +1509,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.json({ data: [], pagination: { page: 1, limit: 100, total: 0 } });
+
+      const { page, limit, offset } = parsePagination(req);
       const { year, month } = req.query;
-      const invoices = await storage.getMonthlyInvoicesByOrganization(
-        profile?.organizationId,
-        year ? parseInt(year as string) : undefined,
-        month ? parseInt(month as string) : undefined
-      );
+
+      const unitIdsSq = db.select({ id: schema.units.id }).from(schema.units)
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(
+          eq(schema.properties.organizationId, orgId),
+          isNull(schema.properties.deletedAt),
+          isNull(schema.units.deletedAt)
+        ));
+
+      const conditions: any[] = [inArray(schema.monthlyInvoices.unitId, unitIdsSq)];
+      if (year) conditions.push(eq(schema.monthlyInvoices.year, parseInt(year as string)));
+      if (year && month) conditions.push(eq(schema.monthlyInvoices.month, parseInt(month as string)));
+
+      const whereCondition = and(...conditions);
+
+      const [invoices, [{ total }]] = await Promise.all([
+        db.select().from(schema.monthlyInvoices)
+          .where(whereCondition)
+          .orderBy(desc(schema.monthlyInvoices.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(schema.monthlyInvoices)
+          .where(whereCondition),
+      ]);
+
       const roles = await getUserRoles(req);
       const items = isTester(roles) ? maskPersonalData(invoices) : invoices;
-      const { page, limit } = parsePagination(req);
-      const result = paginateArray(items, page, limit);
-      res.json(result);
+      res.json({ data: items, pagination: { page, limit, total } });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch invoices" });
     }
@@ -4311,11 +4442,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Also allocate payment to invoices
           if (newPayment) {
             try {
-              await paymentService.allocatePayment(
-                newPayment.id,
-                Number(newPayment.betrag),
-                newPayment.tenantId
-              );
+              await paymentService.allocatePayment({
+                paymentId: newPayment.id,
+                tenantId: newPayment.tenantId,
+                amount: Number(newPayment.betrag),
+                bookingDate: newPayment.buchungsDatum || undefined,
+                paymentType: newPayment.paymentType || 'ueberweisung',
+                reference: newPayment.verwendungszweck || undefined,
+              });
             } catch (allocError) {
               console.error('Payment allocation error (non-critical):', allocError);
             }
@@ -4387,11 +4521,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         for (const payment of tenantPayments) {
           try {
-            await paymentService.allocatePayment(
-              payment.id,
-              Number(payment.betrag),
-              payment.tenantId
-            );
+            await paymentService.allocatePayment({
+              paymentId: payment.id,
+              tenantId: payment.tenantId,
+              amount: Number(payment.betrag),
+              bookingDate: payment.buchungsDatum || undefined,
+              paymentType: payment.paymentType || 'ueberweisung',
+              reference: payment.verwendungszweck || undefined,
+            });
             allocated++;
           } catch (error) {
             console.error('Failed to allocate payment:', payment.id, error);

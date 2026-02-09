@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
-import { eq, and, isNull, desc, sql } from "drizzle-orm";
+import { eq, and, isNull, desc, sql, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { apiKeyAuth } from "../middleware/apiKey";
 
@@ -15,21 +15,44 @@ function parsePagination(req: Request) {
   return { page, limit, offset };
 }
 
+function requireOrgId(req: Request, res: Response): string | null {
+  const orgId = req.query.organization_id as string;
+  if (!orgId) {
+    res.status(400).json({ error: "organization_id query parameter is required" });
+    return null;
+  }
+  return orgId;
+}
+
+async function getPropertyIdsForOrg(orgId: string): Promise<string[]> {
+  const props = await db.select({ id: schema.properties.id })
+    .from(schema.properties)
+    .where(and(eq(schema.properties.organizationId, orgId), isNull(schema.properties.deletedAt)));
+  return props.map(p => p.id);
+}
+
+async function getUnitIdsForOrg(orgId: string): Promise<string[]> {
+  const propertyIds = await getPropertyIdsForOrg(orgId);
+  if (!propertyIds.length) return [];
+  const unitRows = await db.select({ id: schema.units.id })
+    .from(schema.units)
+    .where(and(inArray(schema.units.propertyId, propertyIds), isNull(schema.units.deletedAt)));
+  return unitRows.map(u => u.id);
+}
+
 router.get("/properties", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
-    const orgId = req.query.organization_id as string;
 
-    let query = db.select().from(schema.properties).where(isNull(schema.properties.deletedAt));
-    
-    if (orgId) {
-      query = db.select().from(schema.properties).where(
-        and(eq(schema.properties.organizationId, orgId), isNull(schema.properties.deletedAt))
-      );
-    }
+    const whereClause = and(eq(schema.properties.organizationId, orgId), isNull(schema.properties.deletedAt));
 
-    const properties = await query.limit(limit).offset(offset);
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.properties).where(isNull(schema.properties.deletedAt));
+    const properties = await db.select().from(schema.properties)
+      .where(whereClause)
+      .limit(limit).offset(offset);
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.properties).where(whereClause);
     
     res.json({
       data: properties,
@@ -43,8 +66,15 @@ router.get("/properties", async (req: Request, res: Response) => {
 
 router.get("/properties/:id", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
+
     const property = await db.select().from(schema.properties)
-      .where(and(eq(schema.properties.id, req.params.id), isNull(schema.properties.deletedAt)))
+      .where(and(
+        eq(schema.properties.id, req.params.id),
+        eq(schema.properties.organizationId, orgId),
+        isNull(schema.properties.deletedAt)
+      ))
       .limit(1);
     
     if (!property.length) {
@@ -59,13 +89,17 @@ router.get("/properties/:id", async (req: Request, res: Response) => {
 
 router.get("/units", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
     const propertyId = req.query.property_id as string;
 
-    let whereClause = isNull(schema.units.deletedAt);
-    if (propertyId) {
-      whereClause = and(eq(schema.units.propertyId, propertyId), isNull(schema.units.deletedAt))!;
+    const propertyIds = propertyId ? [propertyId] : await getPropertyIdsForOrg(orgId);
+    if (!propertyIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
     }
+
+    const whereClause = and(inArray(schema.units.propertyId, propertyIds), isNull(schema.units.deletedAt));
 
     const units = await db.select().from(schema.units).where(whereClause).limit(limit).offset(offset);
     const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.units).where(whereClause);
@@ -82,8 +116,20 @@ router.get("/units", async (req: Request, res: Response) => {
 
 router.get("/units/:id", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
+
+    const propertyIds = await getPropertyIdsForOrg(orgId);
+    if (!propertyIds.length) {
+      return res.status(404).json({ error: "Unit not found" });
+    }
+
     const unit = await db.select().from(schema.units)
-      .where(and(eq(schema.units.id, req.params.id), isNull(schema.units.deletedAt)))
+      .where(and(
+        eq(schema.units.id, req.params.id),
+        inArray(schema.units.propertyId, propertyIds),
+        isNull(schema.units.deletedAt)
+      ))
       .limit(1);
     
     if (!unit.length) {
@@ -98,14 +144,22 @@ router.get("/units/:id", async (req: Request, res: Response) => {
 
 router.get("/tenants", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
-    const unitId = req.query.unit_id as string;
-    const propertyId = req.query.property_id as string;
 
-    let whereClause = isNull(schema.tenants.deletedAt);
-    if (unitId) {
-      whereClause = and(eq(schema.tenants.unitId, unitId), isNull(schema.tenants.deletedAt))!;
+    const unitIds = await getUnitIdsForOrg(orgId);
+    if (!unitIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
     }
+
+    const unitId = req.query.unit_id as string;
+    const filteredUnitIds = unitId ? (unitIds.includes(unitId) ? [unitId] : []) : unitIds;
+    if (!filteredUnitIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const whereClause = and(inArray(schema.tenants.unitId, filteredUnitIds), isNull(schema.tenants.deletedAt));
 
     const tenants = await db.select().from(schema.tenants).where(whereClause).limit(limit).offset(offset);
     const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.tenants).where(whereClause);
@@ -122,8 +176,20 @@ router.get("/tenants", async (req: Request, res: Response) => {
 
 router.get("/tenants/:id", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
+
+    const unitIds = await getUnitIdsForOrg(orgId);
+    if (!unitIds.length) {
+      return res.status(404).json({ error: "Tenant not found" });
+    }
+
     const tenant = await db.select().from(schema.tenants)
-      .where(and(eq(schema.tenants.id, req.params.id), isNull(schema.tenants.deletedAt)))
+      .where(and(
+        eq(schema.tenants.id, req.params.id),
+        inArray(schema.tenants.unitId, unitIds),
+        isNull(schema.tenants.deletedAt)
+      ))
       .limit(1);
     
     if (!tenant.length) {
@@ -138,25 +204,33 @@ router.get("/tenants/:id", async (req: Request, res: Response) => {
 
 router.get("/invoices", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
+
+    const unitIds = await getUnitIdsForOrg(orgId);
+    if (!unitIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
     const tenantId = req.query.tenant_id as string;
     const year = req.query.year as string;
     const month = req.query.month as string;
 
-    let whereClause = sql`1=1`;
-    const conditions = [];
-    
+    const conditions: any[] = [inArray(schema.monthlyInvoices.unitId, unitIds)];
     if (tenantId) conditions.push(eq(schema.monthlyInvoices.tenantId, tenantId));
     if (year) conditions.push(eq(schema.monthlyInvoices.year, parseInt(year)));
     if (month) conditions.push(eq(schema.monthlyInvoices.month, parseInt(month)));
 
+    const whereClause = and(...conditions);
+
     const invoices = await db.select().from(schema.monthlyInvoices)
-      .where(conditions.length ? and(...conditions) : undefined)
+      .where(whereClause)
       .orderBy(desc(schema.monthlyInvoices.year), desc(schema.monthlyInvoices.month))
       .limit(limit).offset(offset);
 
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.monthlyInvoices)
-      .where(conditions.length ? and(...conditions) : undefined);
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.monthlyInvoices).where(whereClause);
     
     res.json({
       data: invoices,
@@ -170,8 +244,19 @@ router.get("/invoices", async (req: Request, res: Response) => {
 
 router.get("/invoices/:id", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
+
+    const unitIds = await getUnitIdsForOrg(orgId);
+    if (!unitIds.length) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
     const invoice = await db.select().from(schema.monthlyInvoices)
-      .where(eq(schema.monthlyInvoices.id, req.params.id))
+      .where(and(
+        eq(schema.monthlyInvoices.id, req.params.id),
+        inArray(schema.monthlyInvoices.unitId, unitIds)
+      ))
       .limit(1);
     
     if (!invoice.length) {
@@ -190,17 +275,38 @@ router.get("/invoices/:id", async (req: Request, res: Response) => {
 
 router.get("/payments", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
-    const tenantId = req.query.tenant_id as string;
 
-    let whereClause = tenantId ? eq(schema.payments.tenantId, tenantId) : undefined;
+    const unitIds = await getUnitIdsForOrg(orgId);
+    if (!unitIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const tenantRows = await db.select({ id: schema.tenants.id })
+      .from(schema.tenants)
+      .where(inArray(schema.tenants.unitId, unitIds));
+    const tenantIds = tenantRows.map(t => t.id);
+    if (!tenantIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const tenantId = req.query.tenant_id as string;
+    const filteredTenantIds = tenantId ? (tenantIds.includes(tenantId) ? [tenantId] : []) : tenantIds;
+    if (!filteredTenantIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const whereClause = inArray(schema.payments.tenantId, filteredTenantIds);
 
     const payments = await db.select().from(schema.payments)
       .where(whereClause)
       .orderBy(desc(schema.payments.buchungsDatum))
       .limit(limit).offset(offset);
 
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.payments).where(whereClause);
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.payments).where(whereClause);
     
     res.json({
       data: payments,
@@ -214,19 +320,30 @@ router.get("/payments", async (req: Request, res: Response) => {
 
 router.get("/expenses", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
-    const propertyId = req.query.property_id as string;
 
-    const conditions = [];
-    if (propertyId) conditions.push(eq(schema.expenses.propertyId, propertyId));
+    const propertyIds = await getPropertyIdsForOrg(orgId);
+    if (!propertyIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const propertyId = req.query.property_id as string;
+    const filteredIds = propertyId ? (propertyIds.includes(propertyId) ? [propertyId] : []) : propertyIds;
+    if (!filteredIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const whereClause = inArray(schema.expenses.propertyId, filteredIds);
 
     const expenses = await db.select().from(schema.expenses)
-      .where(conditions.length ? and(...conditions) : undefined)
+      .where(whereClause)
       .orderBy(desc(schema.expenses.datum))
       .limit(limit).offset(offset);
 
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.expenses)
-      .where(conditions.length ? and(...conditions) : undefined);
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.expenses).where(whereClause);
     
     res.json({
       data: expenses,
@@ -240,16 +357,29 @@ router.get("/expenses", async (req: Request, res: Response) => {
 
 router.get("/bank-accounts", async (req: Request, res: Response) => {
   try {
+    const orgId = requireOrgId(req, res);
+    if (!orgId) return;
     const { limit, offset, page } = parsePagination(req);
-    const propertyId = req.query.property_id as string;
 
-    let whereClause = propertyId ? eq(schema.bankAccounts.propertyId, propertyId) : undefined;
+    const propertyIds = await getPropertyIdsForOrg(orgId);
+    if (!propertyIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const propertyId = req.query.property_id as string;
+    const filteredIds = propertyId ? (propertyIds.includes(propertyId) ? [propertyId] : []) : propertyIds;
+    if (!filteredIds.length) {
+      return res.json({ data: [], pagination: { page, limit, total: 0 } });
+    }
+
+    const whereClause = inArray(schema.bankAccounts.propertyId, filteredIds);
 
     const accounts = await db.select().from(schema.bankAccounts)
       .where(whereClause)
       .limit(limit).offset(offset);
 
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(schema.bankAccounts).where(whereClause);
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.bankAccounts).where(whereClause);
     
     res.json({
       data: accounts,

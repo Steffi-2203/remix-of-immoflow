@@ -68,7 +68,7 @@ describe('BillingService', () => {
     expect(persistResult.created).toBe(dryCount);
   });
 
-  test('idempotency: re-running same period creates 0 new invoices', async () => {
+  test('idempotency: re-running same period is rejected with error', async () => {
     const firstRun = await billingService.generateMonthlyInvoices({
       userId: testUserId,
       propertyIds: [testPropertyId],
@@ -77,7 +77,6 @@ describe('BillingService', () => {
       dryRun: false
     });
     expect(firstRun.success).toBe(true);
-    const firstCount = firstRun.created || 0;
 
     const secondRun = await billingService.generateMonthlyInvoices({
       userId: testUserId,
@@ -86,8 +85,8 @@ describe('BillingService', () => {
       month: 6,
       dryRun: false
     });
-    expect(secondRun.success).toBe(true);
-    expect(secondRun.created).toBe(0);
+    expect(secondRun.error).toBeDefined();
+    expect(secondRun.error).toContain('bereits abgeschlossen');
   });
 
   test('run_id is set on created invoices', async () => {
