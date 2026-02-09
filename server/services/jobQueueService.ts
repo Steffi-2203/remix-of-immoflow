@@ -7,7 +7,8 @@ export type JobType =
   | 'settlement_calculation'
   | 'bulk_invoice_upsert'
   | 'dunning_run'
-  | 'report_generation';
+  | 'report_generation'
+  | 'ledger_sync';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'retrying';
 

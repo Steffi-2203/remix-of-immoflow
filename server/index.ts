@@ -237,6 +237,10 @@ async function initStripe() {
     return { runId: result.runId, created: result.created };
   });
 
+  // Register ledger sync handler
+  const { handleLedgerSync } = await import("./workers/ledgerSyncHandler");
+  jobQueueService.registerHandler('ledger_sync', handleLedgerSync);
+
   // Start job queue worker
   jobQueueService.start(5000);
 
