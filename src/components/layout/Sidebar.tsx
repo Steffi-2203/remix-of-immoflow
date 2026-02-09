@@ -103,7 +103,7 @@ export function Sidebar() {
 
   // Items panel content
   const itemsPanel = (
-    <div className="flex flex-col gap-0.5 p-2">
+    <div className="w-56 py-4 px-3 flex flex-col gap-0.5 border-r border-sidebar-border">
       <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white/50">
         {activeSection}
       </p>
@@ -175,7 +175,7 @@ export function Sidebar() {
 
           {/* Right panel */}
           {activeSectionData && (
-            <div className="w-52 bg-sidebar overflow-y-auto">
+            <div className="w-56 overflow-y-auto">
               {itemsPanel}
             </div>
           )}
@@ -192,7 +192,7 @@ export function Sidebar() {
       data-tour="sidebar"
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex',
-        panelOpen ? 'w-[17rem]' : 'w-16'
+        panelOpen ? 'w-[17.5rem]' : 'w-16'
       )}
     >
       {/* Left rail */}
