@@ -1,13 +1,13 @@
-export interface AuditEvent {
+export type AuditEvent = {
   runId?: string;
   actor: string;
   eventType: string;
   entity: string;
   entityId?: string;
-  operation: 'insert' | 'update' | 'delete' | 'merge' | 'allocate' | 'reconcile';
-  old?: unknown;
-  new?: unknown;
-}
+  operation: "insert" | "update" | "delete" | "merge" | "allocate" | "reconcile";
+  old?: any;
+  new?: any;
+};
 
 export interface AuditEventRow {
   id: string;
