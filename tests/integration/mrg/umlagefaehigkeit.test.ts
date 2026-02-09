@@ -1,72 +1,115 @@
 import { describe, test, expect } from 'vitest';
-import { hasDb, db, sql } from '../setup/db';
-import { roundMoney } from '@shared/utils';
+import { mrg } from '../../../server/mrg/mrgRules';
 
-/**
- * MRG §21 – Umlagefähigkeit von Betriebskosten
- */
-
-const UMLAGEFAEHIGE_KATEGORIEN = [
-  'versicherung', 'wasser', 'kanal', 'muell', 'strom',
-  'hausbetreuung', 'lift', 'garten', 'schneeraeumung',
-  'grundsteuer', 'verwaltung',
-];
-
-const NICHT_UMLAGEFAEHIG = [
-  'instandhaltung', 'reparatur',
-];
-
-describe('MRG §21 – Umlagefähigkeit', () => {
-  test('standard BK categories are umlagefähig', () => {
-    for (const cat of UMLAGEFAEHIGE_KATEGORIEN) {
-      expect(NICHT_UMLAGEFAEHIG.includes(cat)).toBe(false);
-    }
+describe('MRG – Umlagefähigkeit', () => {
+  test('Verwaltungskosten sind umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'verwaltung', amount: 1000 })).toBe(true);
   });
 
-  test('instandhaltung is not umlagefähig', () => {
-    expect(NICHT_UMLAGEFAEHIG).toContain('instandhaltung');
-    expect(NICHT_UMLAGEFAEHIG).toContain('reparatur');
+  test('Versicherung ist umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'versicherung', amount: 3000 })).toBe(true);
   });
 
-  test('BK-Abrechnung deadline: 30. Juni des Folgejahres', () => {
-    const abrechnungsjahr = 2024;
-    const deadline = new Date(abrechnungsjahr + 1, 5, 30); // June 30, 2025
-    const today = new Date('2025-06-30');
-    expect(deadline.getTime()).toBeLessThanOrEqual(today.getTime());
+  test('Hausbetreuung ist umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'hausbetreuung', amount: 500 })).toBe(true);
   });
 
-  test('Verjährungsfrist: 3 Jahre', () => {
-    const abrechnungsjahr = 2024;
-    const deadline = new Date(abrechnungsjahr + 1, 5, 30);
-    const verjaehrung = new Date(deadline);
-    verjaehrung.setFullYear(verjaehrung.getFullYear() + 3);
-    expect(verjaehrung.getFullYear()).toBe(2028);
-    expect(verjaehrung.getMonth()).toBe(5);
-    expect(verjaehrung.getDate()).toBe(30);
+  test('Instandhaltung ist NICHT umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'instandhaltung', amount: 2000 })).toBe(false);
   });
 
-  test('Leerstandsregel: leerstehende Einheit trägt anteilige BK', () => {
-    const totalBK = 8000;
-    const areas = [60, 60, 60, 60];
-    const totalArea = areas.reduce((s, a) => s + a, 0);
-    const occupiedUnits = [0, 1, 2];
-
-    const tenantShares = occupiedUnits.map(i =>
-      roundMoney(totalBK * (areas[i] / totalArea))
-    );
-    const landlordShare = roundMoney(totalBK * (areas[3] / totalArea));
-
-    const sum = roundMoney(tenantShares.reduce((s, v) => s + v, 0) + landlordShare);
-    expect(sum).toBe(totalBK);
-    expect(landlordShare).toBe(2000);
+  test('Finanzierungskosten sind NICHT umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'finanzierung', amount: 5000 })).toBe(false);
   });
 
-  test('Heizkosten-Split: 70/30 gem. HeizKG', () => {
-    const totalHeizkosten = 10000;
-    const verbrauchsanteil = roundMoney(totalHeizkosten * 0.70);
-    const grundkostenanteil = roundMoney(totalHeizkosten * 0.30);
-    expect(verbrauchsanteil).toBe(7000);
-    expect(grundkostenanteil).toBe(3000);
-    expect(roundMoney(verbrauchsanteil + grundkostenanteil)).toBe(totalHeizkosten);
+  test('Rücklagen sind NICHT umlagefähig', () => {
+    expect(mrg.isUmlagefaehig({ type: 'ruecklage', amount: 3000 })).toBe(false);
+  });
+});
+
+describe('MRG – Hauptmietzins', () => {
+  test('berechnet Hauptmietzins korrekt für Kategorie A', () => {
+    const result = mrg.calculateHauptmietzins({
+      flaeche: 80, kategorie: 'A', richtwert: 6.15,
+    });
+    expect(result).toBeCloseTo(492); // 80 × 6.15 × 1.0
+  });
+
+  test('Kategorie B = 75% des Richtwerts', () => {
+    const result = mrg.calculateHauptmietzins({
+      flaeche: 80, kategorie: 'B', richtwert: 6.15,
+    });
+    expect(result).toBeCloseTo(369); // 80 × 6.15 × 0.75
+  });
+
+  test('Kategorie D (Substandard) hat reduzierten Satz', () => {
+    const result = mrg.calculateHauptmietzins({
+      flaeche: 50, kategorie: 'D', richtwert: 6.15,
+    });
+    expect(result).toBeLessThan(200); // 50 × 6.15 × 0.25 = 76.88
+    expect(result).toBeCloseTo(76.88);
+  });
+});
+
+describe('MRG – VPI Wertsicherung', () => {
+  test('unter Schwelle → Miete unverändert', () => {
+    const result = mrg.calculateIndexAdjustment({
+      baseRent: 800, baseIndex: 100, currentIndex: 104,
+    });
+    expect(result.thresholdMet).toBe(false);
+    expect(result.adjustedRent).toBe(800);
+  });
+
+  test('Schwelle erreicht → Anpassung', () => {
+    const result = mrg.calculateIndexAdjustment({
+      baseRent: 800, baseIndex: 100, currentIndex: 106,
+    });
+    expect(result.thresholdMet).toBe(true);
+    expect(result.adjustedRent).toBeGreaterThan(800);
+  });
+
+  test('Hälfteregelung', () => {
+    const result = mrg.calculateIndexAdjustment({
+      baseRent: 1000, baseIndex: 100, currentIndex: 110, halfRule: true,
+    });
+    expect(result.appliedPercent).toBe(5);
+    expect(result.adjustedRent).toBe(1050);
+  });
+});
+
+describe('MRG – Fristen', () => {
+  test('Abrechnungsfrist: 30. Juni Folgejahr', () => {
+    const deadline = mrg.getAbrechnungsDeadline(2024);
+    expect(deadline.getFullYear()).toBe(2025);
+    expect(deadline.getMonth()).toBe(5);
+    expect(deadline.getDate()).toBe(30);
+  });
+
+  test('Verjährung: 3 Jahre nach Abrechnungsfrist', () => {
+    const deadline = mrg.getVerjaehrungsDeadline(2024);
+    expect(deadline.getFullYear()).toBe(2028);
+  });
+});
+
+describe('MRG – Befristungsabschlag', () => {
+  test('befristeter Vertrag: 25% Abschlag', () => {
+    const result = mrg.calculateBefristungsabschlag({
+      nettoMiete: 500, befristet: true,
+    });
+    expect(result).toBe(375);
+  });
+
+  test('unbefristeter Vertrag: kein Abschlag', () => {
+    const result = mrg.calculateBefristungsabschlag({
+      nettoMiete: 500, befristet: false,
+    });
+    expect(result).toBe(500);
+  });
+});
+
+describe('MRG – Verzugszinsen §1333 ABGB', () => {
+  test('4% p.a. auf 1000€ für 30 Tage', () => {
+    const zinsen = mrg.calculateVerzugszinsen(1000, 30);
+    expect(zinsen).toBeCloseTo(3.29, 1);
   });
 });
