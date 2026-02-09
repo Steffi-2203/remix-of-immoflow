@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
+import { logAuditEvent } from "../audit/auditEvents.service";
 import type { Tenant } from "@shared/schema";
 import { roundMoney } from "@shared/utils";
 
@@ -575,6 +576,21 @@ export class InvoiceService {
         month,
         year,
         invoiceIds: allInserted.map(inv => inv.id),
+      });
+
+      await logAuditEvent(tx, {
+        actor: userId,
+        type: 'invoice_bulk_create',
+        entity: 'monthly_invoices',
+        operation: 'insert',
+        new: {
+          createdCount: allInserted.length,
+          tenantInvoices: tenantInvoicesToCreate.length,
+          vacancyInvoices: vacancyInvoicesToCreate.length,
+          upsertedLinesCount,
+          month,
+          year,
+        },
       });
 
       return allInserted;
