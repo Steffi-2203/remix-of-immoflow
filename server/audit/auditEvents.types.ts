@@ -1,7 +1,7 @@
 export interface AuditEvent {
   runId?: string;
   actor: string;
-  type: string;
+  eventType: string;
   entity: string;
   entityId?: string;
   operation: 'insert' | 'update' | 'delete' | 'merge' | 'allocate' | 'reconcile';

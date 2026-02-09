@@ -146,7 +146,7 @@ export async function bulkUpsertLines(opts: BulkUpsertOpts): Promise<BulkUpsertR
   await logAuditEvent(tx, {
     runId,
     actor: userId,
-    type: 'invoice_line_bulk_upsert',
+    eventType: 'invoice_line_bulk_upsert',
     entity: 'invoice_lines',
     operation: 'insert',
     new: { upsertedLinesCount, conflictCount, totalLines: allLines.length },

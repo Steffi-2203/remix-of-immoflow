@@ -135,7 +135,7 @@ export class PaymentService {
 
         await logAuditEvent(tx, {
           actor: userId || 'system',
-          type: 'payment_allocated',
+          eventType: 'payment_allocated',
           entity: 'monthly_invoices',
           entityId: inv.id as string,
           operation: 'allocate',
