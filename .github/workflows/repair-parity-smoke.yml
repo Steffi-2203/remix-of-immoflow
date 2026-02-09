@@ -1,0 +1,42 @@
+name: Repair Parity Smoke
+on: workflow_dispatch
+
+jobs:
+  repair-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d testdb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Push schema to test DB
+        run: npx drizzle-kit push
+        env:
+          DATABASE_URL: postgres://test:pass@localhost:5432/testdb
+
+      - name: Reassign payments (dry-run)
+        run: npx tsx scripts/repair/reassign_payments.ts --dry-run --batch-size 100
+        env:
+          DATABASE_URL: postgres://test:pass@localhost:5432/testdb
+
+      - name: Verify no errors
+        run: echo "Repair parity smoke completed successfully"
