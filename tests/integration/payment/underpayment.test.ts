@@ -1,8 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../../../server/db';
-import { sql } from 'drizzle-orm';
+import { db, sql, hasDb, cleanupByPrefix } from '../setup/db';
+import { seedInvoice } from '../setup/seed';
 
-const hasDb = !!process.env.DATABASE_URL;
 const PREFIX = 'int-underpay';
 const TENANT_ID = `${PREFIX}-tenant-${Date.now()}`;
 const INV_ID = `${PREFIX}-inv-${Date.now()}`;
@@ -10,25 +9,12 @@ const PAY_ID = `${PREFIX}-pay-${Date.now()}`;
 
 describe.skipIf(!hasDb)('allocatePayment – underpayment / partial', () => {
   beforeAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM monthly_invoices WHERE id = ${INV_ID};
-    `);
-
-    await db.execute(sql`
-      INSERT INTO monthly_invoices (id, tenant_id, month, year, gesamtbetrag, paid_amount, status, faellig_am, created_at)
-      VALUES (${INV_ID}, ${TENANT_ID}, 4, 2025, 1000, 0, 'offen', '2025-04-05', now())
-      ON CONFLICT (id) DO NOTHING
-    `);
+    await cleanupByPrefix(PREFIX);
+    await seedInvoice({ id: INV_ID, tenantId: TENANT_ID, month: 4, year: 2025, gesamtbetrag: 1000 });
   });
 
   afterAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM monthly_invoices WHERE id = ${INV_ID};
-    `);
+    await cleanupByPrefix(PREFIX);
   });
 
   test('partial payment of €300 against €1000 invoice', async () => {

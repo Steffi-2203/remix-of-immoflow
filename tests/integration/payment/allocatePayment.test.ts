@@ -1,9 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../../../server/db';
-import { sql, eq } from 'drizzle-orm';
-import { paymentAllocations, monthlyInvoices } from '@shared/schema';
+import { db, sql, hasDb, cleanupByPrefix } from '../setup/db';
+import { seedInvoice } from '../setup/seed';
 
-const hasDb = !!process.env.DATABASE_URL;
 const PREFIX = 'int-alloc';
 const TENANT_ID = `${PREFIX}-tenant-${Date.now()}`;
 const INV_1 = `${PREFIX}-inv1-${Date.now()}`;
@@ -12,28 +10,13 @@ const PAY_ID = `${PREFIX}-pay-${Date.now()}`;
 
 describe.skipIf(!hasDb)('allocatePayment – standard allocation', () => {
   beforeAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM monthly_invoices WHERE id IN (${INV_1}, ${INV_2});
-    `);
-
-    // Create two invoices: Jan €800, Feb €600
-    await db.execute(sql`
-      INSERT INTO monthly_invoices (id, tenant_id, month, year, gesamtbetrag, paid_amount, status, faellig_am, created_at)
-      VALUES
-        (${INV_1}, ${TENANT_ID}, 1, 2025, 800, 0, 'offen', '2025-01-05', now()),
-        (${INV_2}, ${TENANT_ID}, 2, 2025, 600, 0, 'offen', '2025-02-05', now())
-      ON CONFLICT (id) DO NOTHING
-    `);
+    await cleanupByPrefix(PREFIX);
+    await seedInvoice({ id: INV_1, tenantId: TENANT_ID, month: 1, year: 2025, gesamtbetrag: 800 });
+    await seedInvoice({ id: INV_2, tenantId: TENANT_ID, month: 2, year: 2025, gesamtbetrag: 600 });
   });
 
   afterAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM monthly_invoices WHERE id IN (${INV_1}, ${INV_2});
-    `);
+    await cleanupByPrefix(PREFIX);
   });
 
   test('full payment covers exactly one invoice via FIFO', async () => {
