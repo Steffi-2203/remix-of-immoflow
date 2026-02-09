@@ -196,7 +196,7 @@ export function Sidebar() {
       )}
     >
       {/* Left rail */}
-      <div className="w-16 flex flex-col border-r border-sidebar-border shrink-0">
+      <div className="w-16 bg-sidebar text-sidebar-foreground flex flex-col items-center py-4 gap-2 border-r border-sidebar-border shrink-0">
         <div className="flex h-16 items-center justify-center border-b border-sidebar-border shrink-0">
           <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-10 w-10 object-contain" />
         </div>
