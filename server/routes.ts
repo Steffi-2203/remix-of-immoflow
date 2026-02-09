@@ -615,11 +615,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Automatically allocate payment to open invoices and update their status
       try {
-        await paymentService.allocatePayment(
-          payment.id,
-          Number(payment.betrag),
-          payment.tenantId
-        );
+        await paymentService.allocatePayment({
+          paymentId: payment.id,
+          amount: Number(payment.betrag),
+          tenantId: payment.tenantId,
+          userId: (req as any).session?.userId,
+        });
       } catch (allocError) {
         console.error("Payment allocation error (non-critical):", allocError);
         // Don't fail the payment creation if allocation fails
@@ -3955,11 +3956,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Also allocate payment to invoices
           if (newPayment) {
             try {
-              await paymentService.allocatePayment(
-                newPayment.id,
-                Number(newPayment.betrag),
-                newPayment.tenantId
-              );
+              await paymentService.allocatePayment({
+                paymentId: newPayment.id,
+                amount: Number(newPayment.betrag),
+                tenantId: newPayment.tenantId,
+              });
             } catch (allocError) {
               console.error('Payment allocation error (non-critical):', allocError);
             }
@@ -4031,11 +4032,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         for (const payment of tenantPayments) {
           try {
-            await paymentService.allocatePayment(
-              payment.id,
-              Number(payment.betrag),
-              payment.tenantId
-            );
+            await paymentService.allocatePayment({
+              paymentId: payment.id,
+              amount: Number(payment.betrag),
+              tenantId: payment.tenantId,
+            });
             allocated++;
           } catch (error) {
             console.error('Failed to allocate payment:', payment.id, error);
