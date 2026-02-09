@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.process-job-queue]
 verify_jwt = false
+
+[functions.send-vorschreibung]
+verify_jwt = false
