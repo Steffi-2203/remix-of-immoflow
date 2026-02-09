@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { NavLink } from '@/components/NavLink';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   X,
@@ -113,8 +112,11 @@ export function Sidebar() {
             key={item.href}
             to={item.href}
             onClick={handleLinkClick}
-            className="block px-3 py-2 rounded-md text-sm text-white/60 hover:bg-white/10 transition-colors"
-            activeClassName="bg-white/15 text-white"
+            className={({ isActive }) =>
+              `block px-3 py-2 rounded-md text-sm hover:bg-white/10 transition-colors ${
+                isActive ? 'bg-white/15 text-white' : 'text-white/60'
+              }`
+            }
           >
             {item.label}
           </NavLink>
