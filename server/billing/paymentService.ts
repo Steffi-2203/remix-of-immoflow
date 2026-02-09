@@ -70,6 +70,16 @@ export class PaymentService {
         FOR UPDATE
       `).then(r => r.rows);
 
+      // Resolve organization_id from tenant for overpayment tracking
+      const tenantRow = await tx.execute(sql`
+        SELECT t.id, u.property_id, p.organization_id
+        FROM tenants t
+        LEFT JOIN units u ON u.id = t.unit_id
+        LEFT JOIN properties p ON p.id = u.property_id
+        WHERE t.id = ${tenantId}
+      `).then(r => r.rows[0]);
+      const orgId = (tenantRow as any)?.organization_id || null;
+
       let remaining = roundedAmount;
       let appliedTotal = 0;
 
@@ -86,19 +96,15 @@ export class PaymentService {
         remaining = roundMoney(remaining - apply);
         appliedTotal = roundMoney(appliedTotal + apply);
 
-        const selectSql = `SELECT id, gesamtbetrag, COALESCE(paid_amount,0) AS paid_amount, version FROM monthly_invoices WHERE id = '${inv.id}'`;
-        const updateSqlBuilder = (_newValues: any, oldVersion: number) => {
-          const status = newPaid >= total ? "bezahlt" : newPaid > 0 ? "teilbezahlt" : "offen";
-          return {
-            sql: `UPDATE monthly_invoices SET paid_amount = ${newPaid}, status = '${status}', version = ${oldVersion + 1}, updated_at = now() WHERE id = '${inv.id}' AND version = ${oldVersion}`
-          };
-        };
+        const newStatus = newPaid >= total ? "bezahlt" : newPaid > 0 ? "teilbezahlt" : "offen";
 
         const optRes = await optimisticUpdate({
           tableName: "monthly_invoices",
           id: inv.id as string,
-          selectSql,
-          updateSqlBuilder,
+          updateFields: () => ({
+            paid_amount: newPaid,
+            status: newStatus,
+          }),
           maxRetries: 5,
           delayMs: 40,
           tx
@@ -115,7 +121,7 @@ export class PaymentService {
           `);
         }
 
-        // Record payment allocation in payment_allocations table
+        // Record payment allocation
         await tx.execute(sql`
           INSERT INTO payment_allocations (id, payment_id, invoice_id, applied_amount, allocation_type, created_at)
           VALUES (gen_random_uuid(), ${paymentId}, ${inv.id}, ${apply}, 'auto', now())
@@ -131,7 +137,7 @@ export class PaymentService {
       if (unapplied > 0) {
         await tx.execute(sql`
           INSERT INTO transactions (id, organization_id, bank_account_id, amount, transaction_date, booking_text, created_at)
-          VALUES (gen_random_uuid(), NULL, NULL, ${unapplied}, now()::date, ${'Überzahlung / Gutschrift für Tenant ' + tenantId}, now())
+          VALUES (gen_random_uuid(), ${orgId}, NULL, ${unapplied}, now()::date, ${'Überzahlung / Gutschrift für Tenant ' + tenantId}, now())
         `);
 
         await tx.execute(sql`
@@ -155,7 +161,6 @@ export class PaymentService {
         INSERT INTO job_queue (id, job_type, payload, status, created_at)
         VALUES (gen_random_uuid(), 'ledger_sync', ${JSON.stringify({ paymentId, tenantId, amount: roundedAmount, applied: appliedTotal, unapplied })}::jsonb, 'pending', now())
       `);
-
       return {
         success: true,
         paymentId,

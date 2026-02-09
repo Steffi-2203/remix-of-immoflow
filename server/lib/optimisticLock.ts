@@ -1,13 +1,15 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 
-export type UpdateFn<T> = (tx: any, currentRow: T) => Promise<{ updatedFields: Record<string, any> }>;
-
+/**
+ * Performs an optimistic update on a single row identified by `id`.
+ * Uses a `version` column to detect concurrent modifications.
+ * Fully parameterized – no sql.raw() with interpolated strings.
+ */
 export async function optimisticUpdate<T = any>(params: {
   tableName: string;
   id: string;
-  selectSql: string;
-  updateSqlBuilder: (newValues: Record<string, any>, oldVersion: number) => { sql: string; params?: any[] };
+  updateFields: (currentRow: T) => Record<string, any>;
   maxRetries?: number;
   delayMs?: number;
   tx?: any;
@@ -15,54 +17,52 @@ export async function optimisticUpdate<T = any>(params: {
   const {
     tableName,
     id,
-    selectSql,
-    updateSqlBuilder,
+    updateFields,
     maxRetries = 3,
     delayMs = 50,
-    tx
+    tx,
   } = params;
 
   let attempts = 0;
-  const runInExternalTx = !!tx;
 
   while (attempts < maxRetries) {
     attempts += 1;
 
-    if (runInExternalTx) {
-      const res = await tx.execute(sql`${sql.raw(selectSql)}`);
-      const row = res.rows[0];
-      if (!row) return { success: false, attempts };
+    const executor = tx ?? db;
 
-      const oldVersion = Number(row.version || 1);
-      const { sql: updateSql } = updateSqlBuilder({}, oldVersion);
+    // Parameterized SELECT
+    const selectRes = await executor.execute(
+      sql`SELECT * FROM ${sql.identifier(tableName)} WHERE id = ${id} FOR UPDATE`
+    );
+    const row = selectRes.rows[0] as T | undefined;
+    if (!row) return { success: false, attempts };
 
-      const updateRes = await tx.execute(sql.raw(updateSql));
-      if (updateRes.rowCount && updateRes.rowCount > 0) {
-        const newRes = await tx.execute(sql`${sql.raw(selectSql)}`);
-        return { success: true, attempts, updatedRow: newRes.rows[0] };
-      }
+    const oldVersion = Number((row as any).version || 1);
+    const fields = updateFields(row);
 
-      await new Promise(r => setTimeout(r, delayMs));
-      continue;
-    } else {
-      const result = await db.transaction(async (txLocal) => {
-        const res = await txLocal.execute(sql`${sql.raw(selectSql)}`);
-        const row = res.rows[0];
-        if (!row) return { ok: false, row: null };
+    // Build SET clause dynamically but parameterized
+    const setClauses: ReturnType<typeof sql>[] = [];
+    for (const [key, value] of Object.entries(fields)) {
+      setClauses.push(sql`${sql.identifier(key)} = ${value}`);
+    }
+    setClauses.push(sql`version = ${oldVersion + 1}`);
+    setClauses.push(sql`updated_at = now()`);
 
-        const oldVersion = Number(row.version || 1);
-        const { sql: updateSql } = updateSqlBuilder({}, oldVersion);
+    const setClause = sql.join(setClauses, sql`, `);
 
-        const updateRes = await txLocal.execute(sql.raw(updateSql));
-        if (updateRes.rowCount && updateRes.rowCount > 0) {
-          const newRes = await txLocal.execute(sql`${sql.raw(selectSql)}`);
-          return { ok: true, row: newRes.rows[0] };
-        }
-        return { ok: false, row: null };
-      });
+    const updateRes = await executor.execute(
+      sql`UPDATE ${sql.identifier(tableName)} SET ${setClause} WHERE id = ${id} AND version = ${oldVersion}`
+    );
 
-      if (result.ok) return { success: true, attempts, updatedRow: result.row as T };
-      await new Promise(r => setTimeout(r, delayMs));
+    if (updateRes.rowCount && updateRes.rowCount > 0) {
+      const newRes = await executor.execute(
+        sql`SELECT * FROM ${sql.identifier(tableName)} WHERE id = ${id}`
+      );
+      return { success: true, attempts, updatedRow: newRes.rows[0] as T };
+    }
+
+    if (attempts < maxRetries) {
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 
