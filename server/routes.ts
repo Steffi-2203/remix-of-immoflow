@@ -5292,6 +5292,106 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ── Ledger Analytics Endpoints (Überzahlungen + Verzugszinsen) ─────────────
+  app.get("/api/ledger/overpayments", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const pagination = parsePagination(req);
+      const result = await db.execute(sql`
+        SELECT le.id, le.tenant_id, le.payment_id, le.amount, le.booking_date, le.created_at,
+               t.first_name, t.last_name
+        FROM ledger_entries le
+        JOIN tenants t ON t.id = le.tenant_id
+        JOIN units u ON u.id = t.unit_id
+        JOIN properties p ON p.id = u.property_id
+        WHERE le.type = 'credit'
+          AND p.organization_id = ${profile.organizationId}
+        ORDER BY le.created_at DESC
+        LIMIT ${pagination.limit} OFFSET ${pagination.offset}
+      `);
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int as total
+        FROM ledger_entries le
+        JOIN tenants t ON t.id = le.tenant_id
+        JOIN units u ON u.id = t.unit_id
+        JOIN properties p ON p.id = u.property_id
+        WHERE le.type = 'credit'
+          AND p.organization_id = ${profile.organizationId}
+      `);
+
+      const total = (countResult.rows[0] as any)?.total || 0;
+      const totalPages = Math.max(1, Math.ceil(total / pagination.limit));
+
+      res.json({
+        data: result.rows,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          totalPages,
+          hasNextPage: pagination.page < totalPages,
+          hasPreviousPage: pagination.page > 1,
+        },
+      });
+    } catch (error) {
+      console.error("Overpayments fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch overpayments" });
+    }
+  });
+
+  app.get("/api/ledger/interest-accruals", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const pagination = parsePagination(req);
+      const result = await db.execute(sql`
+        SELECT le.id, le.tenant_id, le.invoice_id, le.payment_id, le.amount, le.type,
+               le.booking_date, le.created_at,
+               t.first_name, t.last_name
+        FROM ledger_entries le
+        JOIN tenants t ON t.id = le.tenant_id
+        JOIN units u ON u.id = t.unit_id
+        JOIN properties p ON p.id = u.property_id
+        WHERE le.type IN ('interest', 'fee')
+          AND p.organization_id = ${profile.organizationId}
+        ORDER BY le.created_at DESC
+        LIMIT ${pagination.limit} OFFSET ${pagination.offset}
+      `);
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int as total
+        FROM ledger_entries le
+        JOIN tenants t ON t.id = le.tenant_id
+        JOIN units u ON u.id = t.unit_id
+        JOIN properties p ON p.id = u.property_id
+        WHERE le.type IN ('interest', 'fee')
+          AND p.organization_id = ${profile.organizationId}
+      `);
+
+      const total = (countResult.rows[0] as any)?.total || 0;
+      const totalPages = Math.max(1, Math.ceil(total / pagination.limit));
+
+      res.json({
+        data: result.rows,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          totalPages,
+          hasNextPage: pagination.page < totalPages,
+          hasPreviousPage: pagination.page > 1,
+        },
+      });
+    } catch (error) {
+      console.error("Interest accruals fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch interest accruals" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
