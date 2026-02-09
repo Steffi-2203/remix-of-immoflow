@@ -592,6 +592,19 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const auditEvents = pgTable("audit_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id"),
+  actor: text("actor").notNull(),
+  eventType: text("event_type").notNull(),
+  entity: text("entity").notNull(),
+  entityId: uuid("entity_id"),
+  operation: text("operation").notNull(),
+  oldData: jsonb("old_data"),
+  newData: jsonb("new_data"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const invoiceRuns = pgTable("invoice_runs", {
   id: serial("id").primaryKey(),
   runId: uuid("run_id").notNull().unique(),
