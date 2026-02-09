@@ -367,7 +367,7 @@ export class SettlementService {
 
       await logAuditEvent(tx, {
         actor: createdBy,
-        type: 'settlement_create',
+        eventType: 'settlement_create',
         entity: 'settlements',
         entityId: newSettlement.id,
         operation: 'insert',

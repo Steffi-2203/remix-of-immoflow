@@ -1,4 +1,4 @@
-import { auditEvents } from "@shared/schema";
+import { auditEvents } from "./auditEvents.schema";
 import type { AuditEvent } from "./auditEvents.types";
 
 /**
@@ -12,7 +12,7 @@ export async function logAuditEvent(
   await db.insert(auditEvents).values({
     runId: event.runId,
     actor: event.actor,
-    eventType: event.type,
+    eventType: event.eventType,
     entity: event.entity,
     entityId: event.entityId,
     operation: event.operation,
@@ -33,7 +33,7 @@ export async function logAuditEventsBatch(
     events.map((event) => ({
       runId: event.runId,
       actor: event.actor,
-      eventType: event.type,
+      eventType: event.eventType,
       entity: event.entity,
       entityId: event.entityId,
       operation: event.operation,

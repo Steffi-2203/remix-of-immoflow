@@ -580,7 +580,7 @@ export class InvoiceService {
 
       await logAuditEvent(tx, {
         actor: userId,
-        type: 'invoice_bulk_create',
+        eventType: 'invoice_bulk_create',
         entity: 'monthly_invoices',
         operation: 'insert',
         new: {
