@@ -3,7 +3,7 @@ import { roundMoney, roundToCents } from '../../shared/utils';
 
 /**
  * Exported for testability — mirrors the reconcileRounding logic
- * from server/services/billing.service.ts with deterministic sorting.
+ * from server/billing/billing.service.ts with deterministic sorting.
  */
 function reconcileRounding(lines: { amount: number; lineType: string; unitId: string }[], expectedTotal: number): void {
   const roundedSum = lines.reduce((s, l) => s + roundMoney(l.amount || 0), 0);

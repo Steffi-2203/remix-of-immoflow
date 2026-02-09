@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { billingService } from '../../server/services/billing.service';
+import { billingService } from '../../server/billing/billing.service';
 import { setupTestDb, teardownTestDb, seedTestData, testPropertyId, testUserId } from '../helpers/db';
 
 describe('BillingService', () => {

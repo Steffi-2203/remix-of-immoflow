@@ -10,7 +10,7 @@ import { registerStripeRoutes } from "./stripeRoutes";
 import { runSimulation } from "./seed-2025-simulation";
 import { sepaExportService } from "./services/sepaExportService";
 import { demoService } from "./services/demoService";
-import { settlementPdfService } from "./services/settlementPdfService";
+import { settlementPdfService } from "./billing/settlementPdfService";
 import { automatedDunningService } from "./services/automatedDunningService";
 import { vpiAutomationService } from "./services/vpiAutomationService";
 import { maintenanceReminderService } from "./services/maintenanceReminderService";
@@ -1547,7 +1547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const targetMonth = month || (currentDate.getMonth() + 1);
 
       // Use consolidated invoiceService (single source of truth)
-      const { invoiceService } = await import("./services/invoiceService");
+      const { invoiceService } = await import("./billing/invoiceService");
       const { withAuditedErrorHandling } = await import("./lib/serviceErrorHandler");
 
       const result = await withAuditedErrorHandling({
