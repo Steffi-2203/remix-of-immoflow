@@ -272,11 +272,14 @@ export function calculateMonthlyDistribution(
   });
 }
 
+/** Gesetzliche Mindestdotierung in €/m²/Monat (WEG-Novelle 2022, §31 Abs 1) */
+export const WEG_MIN_RESERVE_PER_QM_MONTH = 0.9;
+
 export function checkMinReserve(
   reserveAnnual: number,
   totalQm: number,
+  minimumPerQmMonth: number = WEG_MIN_RESERVE_PER_QM_MONTH,
 ): { ok: boolean; perQmMonth: number; minimum: number } {
-  const minimum = 0.9;
   const perQmMonth = totalQm > 0 ? reserveAnnual / 12 / totalQm : 0;
-  return { ok: perQmMonth >= minimum, perQmMonth: Math.round(perQmMonth * 100) / 100, minimum };
+  return { ok: perQmMonth >= minimumPerQmMonth, perQmMonth: Math.round(perQmMonth * 100) / 100, minimum: minimumPerQmMonth };
 }
