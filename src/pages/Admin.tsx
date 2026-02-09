@@ -164,6 +164,12 @@ export default function Admin() {
             </Link>
           </Button>
           <Button variant="outline" asChild>
+            <Link to="/admin/payments-jobs">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Payments & Jobs
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
             <Link to="/admin/reconciliation">
               <FileText className="h-4 w-4 mr-2" />
               Reconciliation
