@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.ts', 'tests/seeds/**/*.test.ts'],
     deps: {
       inline: ['drizzle-zod', 'drizzle-orm', 'pg'],
     },
