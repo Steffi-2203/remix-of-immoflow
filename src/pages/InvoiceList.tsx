@@ -44,6 +44,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { generateVorschreibungPdf } from '@/utils/vorschreibungPdfExport';
+import { supabase } from '@/integrations/supabase/client';
 
 const statusLabels: Record<string, string> = {
   offen: 'Offen',
@@ -294,22 +295,25 @@ export default function InvoiceList() {
     setIsSendingEmails(true);
     let emailSent = 0;
     let noEmail: string[] = [];
-    let errors = 0;
+    let errorCount = 0;
 
     for (const invoice of filteredInvoices) {
+      // Skip cancelled invoices
+      if ((invoice.status as string) === 'storniert') continue;
+
       const tenant = getTenant(invoice.tenant_id);
-      if (!tenant) { errors++; continue; }
+      if (!tenant) { errorCount++; continue; }
 
       if (!tenant.email) {
         noEmail.push(`${tenant.first_name} ${tenant.last_name}`);
         continue;
       }
 
-      const unit = getUnit(tenant.unit_id);
+      const unit = tenant ? getUnit(tenant.unit_id) : null;
       const property = unit ? getProperty(unit.property_id) : null;
 
       try {
-        // Generate PDF
+        // Also generate & upload PDF as document
         const monthName = months[invoice.month - 1]?.label || '';
         const pdfBlob = generateVorschreibungPdf({
           tenantName: `${tenant.first_name} ${tenant.last_name}`,
@@ -336,7 +340,6 @@ export default function InvoiceList() {
           vortragSonstige: Number(invoice.vortrag_sonstige || 0),
         });
 
-        // Upload to tenant documents
         await uploadDocument.mutateAsync({
           tenantId: invoice.tenant_id,
           file: pdfBlob,
@@ -344,27 +347,54 @@ export default function InvoiceList() {
           type: 'vorschreibung',
         });
 
+        // Send actual email via Edge Function
+        const { error } = await supabase.functions.invoke('send-vorschreibung', {
+          body: {
+            invoiceId: invoice.id,
+            tenantEmail: tenant.email,
+            tenantName: `${tenant.first_name} ${tenant.last_name}`,
+            propertyName: property?.name || '',
+            propertyAddress: property?.address || '',
+            unitNumber: unit?.top_nummer || '',
+            month: invoice.month,
+            year: invoice.year,
+            grundmiete: Number(invoice.grundmiete),
+            betriebskosten: Number(invoice.betriebskosten),
+            heizungskosten: Number(invoice.heizungskosten),
+            ustSatzMiete: Number(invoice.ust_satz_miete || 0),
+            ustSatzBk: Number(invoice.ust_satz_bk || 0),
+            ustSatzHeizung: Number(invoice.ust_satz_heizung || 0),
+            ust: Number(invoice.ust || 0),
+            gesamtbetrag: Number(invoice.gesamtbetrag),
+            faelligAm: invoice.faellig_am,
+            iban: organization?.iban || undefined,
+            bic: organization?.bic || undefined,
+          },
+        });
+
+        if (error) throw error;
         emailSent++;
-      } catch {
-        errors++;
+      } catch (err) {
+        console.error('Error sending invoice email:', invoice.id, err);
+        errorCount++;
       }
     }
 
     setIsSendingEmails(false);
 
     const parts: string[] = [];
-    parts.push(`${emailSent} Vorschreibungen versendet.`);
+    parts.push(`${emailSent} Vorschreibungen per E-Mail versendet.`);
     if (noEmail.length > 0) {
       parts.push(`${noEmail.length} ohne E-Mail (PDF-Druck nötig): ${noEmail.join(', ')}`);
     }
-    if (errors > 0) {
-      parts.push(`${errors} Fehler.`);
+    if (errorCount > 0) {
+      parts.push(`${errorCount} Fehler.`);
     }
 
     toast({
       title: noEmail.length > 0 ? 'Versand mit Hinweisen' : 'Versand abgeschlossen',
       description: parts.join(' '),
-      variant: noEmail.length > 0 || errors > 0 ? 'destructive' : 'default',
+      variant: noEmail.length > 0 || errorCount > 0 ? 'destructive' : 'default',
     });
   };
 

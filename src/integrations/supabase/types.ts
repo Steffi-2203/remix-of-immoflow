@@ -2048,6 +2048,8 @@ export type Database = {
           betriebskosten: number
           bezahlt_am: string | null
           created_at: string
+          email_sent_at: string | null
+          email_status: string | null
           faellig_am: string
           gesamtbetrag: number
           grundmiete: number
@@ -2077,6 +2079,8 @@ export type Database = {
           betriebskosten?: number
           bezahlt_am?: string | null
           created_at?: string
+          email_sent_at?: string | null
+          email_status?: string | null
           faellig_am: string
           gesamtbetrag?: number
           grundmiete?: number
@@ -2106,6 +2110,8 @@ export type Database = {
           betriebskosten?: number
           bezahlt_am?: string | null
           created_at?: string
+          email_sent_at?: string | null
+          email_status?: string | null
           faellig_am?: string
           gesamtbetrag?: number
           grundmiete?: number
