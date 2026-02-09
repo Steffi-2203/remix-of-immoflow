@@ -16,6 +16,30 @@ export function testId(prefix: string, label: string): string {
  * Delete rows matching a prefix pattern across common tables.
  * Order respects FK constraints.
  */
+/**
+ * Hard-reset: truncate all test-relevant tables with CASCADE.
+ * Fast, deterministic, ideal for beforeAll/afterAll in integration suites.
+ */
+export async function resetDb() {
+  await db.execute(sql`
+    TRUNCATE TABLE
+      payment_allocations,
+      payments,
+      invoice_lines,
+      monthly_invoices,
+      expenses,
+      tenants,
+      units,
+      properties,
+      organizations
+    RESTART IDENTITY CASCADE
+  `);
+}
+
+/**
+ * Delete rows matching a prefix pattern across common tables.
+ * Order respects FK constraints. Use when you can't truncate shared tables.
+ */
 export async function cleanupByPrefix(prefix: string) {
   const like = prefix + '%';
   await db.execute(sql`DELETE FROM payment_allocations WHERE payment_id LIKE ${like}`);
