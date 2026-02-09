@@ -1,14 +1,9 @@
 import { describe, test, expect } from 'vitest';
-import { db } from '../../../server/db';
-import { sql } from 'drizzle-orm';
+import { db, sql, hasDb } from '../setup/db';
 import { roundMoney } from '@shared/utils';
-
-const hasDb = !!process.env.DATABASE_URL;
-const PREFIX = 'int-vorschr';
 
 describe.skipIf(!hasDb)('Vorschreibung – invoice generation integrity', () => {
   test('invoice line amounts sum to gesamtbetrag', async () => {
-    // Verify integrity across existing invoices (sample check)
     const rows = await db.execute(sql`
       SELECT mi.id, mi.gesamtbetrag,
         COALESCE(SUM(il.amount), 0) as lines_sum
@@ -22,7 +17,6 @@ describe.skipIf(!hasDb)('Vorschreibung – invoice generation integrity', () => 
     for (const row of rows) {
       const gesamtbetrag = Number(row.gesamtbetrag);
       const linesSum = Number(row.lines_sum);
-      // Lines should sum to gesamtbetrag within rounding tolerance
       expect(Math.abs(gesamtbetrag - linesSum)).toBeLessThanOrEqual(0.02);
     }
   });
@@ -42,10 +36,9 @@ describe.skipIf(!hasDb)('Vorschreibung – invoice generation integrity', () => 
   });
 
   test('pro-rata calculation for mid-month move-in', () => {
-    // Tenant moves in on 15th of a 30-day month
     const fullRent = 900;
     const daysInMonth = 30;
-    const occupiedDays = 16; // 15th to 30th inclusive
+    const occupiedDays = 16;
     const proRata = roundMoney(fullRent * (occupiedDays / daysInMonth));
 
     expect(proRata).toBe(480);

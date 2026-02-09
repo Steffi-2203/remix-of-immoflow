@@ -1,0 +1,144 @@
+import { db, sql } from './db';
+
+interface SeedOrgParams {
+  id: string;
+  name?: string;
+}
+
+interface SeedPropertyParams {
+  id: string;
+  organizationId: string;
+  name?: string;
+  address?: string;
+}
+
+interface SeedUnitParams {
+  id: string;
+  propertyId: string;
+  name?: string;
+  type?: string;
+  areaSqm?: number;
+}
+
+interface SeedTenantParams {
+  id: string;
+  unitId: string;
+  firstName?: string;
+  lastName?: string;
+  grundmiete?: number;
+  betriebskostenVorschuss?: number;
+  heizkostenVorschuss?: number;
+  mietbeginn?: string;
+}
+
+interface SeedInvoiceParams {
+  id: string;
+  tenantId: string;
+  month: number;
+  year: number;
+  gesamtbetrag: number;
+  paidAmount?: number;
+  status?: string;
+  faelligAm?: string;
+}
+
+interface SeedExpenseParams {
+  id: string;
+  propertyId: string;
+  bezeichnung: string;
+  betrag: number;
+  category: string;
+  expenseType?: string;
+  datum?: string;
+  year: number;
+  month: number;
+  istUmlagefaehig?: boolean;
+}
+
+export async function seedOrg({ id, name = 'Test Org' }: SeedOrgParams) {
+  await db.execute(sql`
+    INSERT INTO organizations (id, name, subscription_tier, subscription_status)
+    VALUES (${id}, ${name}, 'enterprise', 'active')
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+export async function seedProperty({ id, organizationId, name = 'Test Property', address = 'Testgasse 1' }: SeedPropertyParams) {
+  await db.execute(sql`
+    INSERT INTO properties (id, name, address, organization_id)
+    VALUES (${id}, ${name}, ${address}, ${organizationId})
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+export async function seedUnit({ id, propertyId, name = 'Top 1', type = 'wohnung', areaSqm = 65 }: SeedUnitParams) {
+  await db.execute(sql`
+    INSERT INTO units (id, property_id, name, type, area_sqm, status)
+    VALUES (${id}, ${propertyId}, ${name}, ${type}, ${areaSqm}, 'aktiv')
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+export async function seedTenant({
+  id, unitId, firstName = 'Test', lastName = 'Mieter',
+  grundmiete = 650, betriebskostenVorschuss = 120,
+  heizkostenVorschuss = 80, mietbeginn = '2024-01-01',
+}: SeedTenantParams) {
+  await db.execute(sql`
+    INSERT INTO tenants (id, unit_id, vorname, nachname, status, mietbeginn,
+      grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss)
+    VALUES (${id}, ${unitId}, ${firstName}, ${lastName}, 'aktiv', ${mietbeginn},
+      ${grundmiete}, ${betriebskostenVorschuss}, ${heizkostenVorschuss})
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+export async function seedInvoice({
+  id, tenantId, month, year, gesamtbetrag,
+  paidAmount = 0, status = 'offen', faelligAm,
+}: SeedInvoiceParams) {
+  const due = faelligAm ?? `${year}-${String(month).padStart(2, '0')}-05`;
+  await db.execute(sql`
+    INSERT INTO monthly_invoices (id, tenant_id, month, year, gesamtbetrag, paid_amount, status, faellig_am, created_at)
+    VALUES (${id}, ${tenantId}, ${month}, ${year}, ${gesamtbetrag}, ${paidAmount}, ${status}, ${due}, now())
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+export async function seedExpense({
+  id, propertyId, bezeichnung, betrag, category,
+  expenseType = 'betriebskosten', datum, year, month,
+  istUmlagefaehig = true,
+}: SeedExpenseParams) {
+  const d = datum ?? `${year}-${String(month).padStart(2, '0')}-15`;
+  await db.execute(sql`
+    INSERT INTO expenses (id, property_id, bezeichnung, betrag, category, expense_type, datum, year, month, ist_umlagefaehig)
+    VALUES (${id}, ${propertyId}, ${bezeichnung}, ${betrag}, ${category}, ${expenseType}, ${d}, ${year}, ${month}, ${istUmlagefaehig})
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+/**
+ * Seed a complete test portfolio: org → property → units → tenants.
+ */
+export async function seedPortfolio(prefix: string, unitCount: number, areas?: number[]) {
+  const orgId = `${prefix}-org-${Date.now()}`;
+  const propId = `${prefix}-prop-${Date.now()}`;
+  const unitIds: string[] = [];
+  const tenantIds: string[] = [];
+  const defaultAreas = areas ?? Array.from({ length: unitCount }, (_, i) => 50 + i * 10);
+
+  await seedOrg({ id: orgId });
+  await seedProperty({ id: propId, organizationId: orgId });
+
+  for (let i = 0; i < unitCount; i++) {
+    const uid = `${prefix}-unit-${i}-${Date.now()}`;
+    const tid = `${prefix}-ten-${i}-${Date.now()}`;
+    unitIds.push(uid);
+    tenantIds.push(tid);
+    await seedUnit({ id: uid, propertyId: propId, name: `Top ${i + 1}`, areaSqm: defaultAreas[i] });
+    await seedTenant({ id: tid, unitId: uid, lastName: `Mieter ${i + 1}` });
+  }
+
+  return { orgId, propId, unitIds, tenantIds };
+}

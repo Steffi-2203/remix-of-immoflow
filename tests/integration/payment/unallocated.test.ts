@@ -1,27 +1,17 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../../../server/db';
-import { sql } from 'drizzle-orm';
+import { db, sql, hasDb, cleanupByPrefix } from '../setup/db';
 
-const hasDb = !!process.env.DATABASE_URL;
 const PREFIX = 'int-unalloc';
 const TENANT_ID = `${PREFIX}-tenant-${Date.now()}`;
 const PAY_ID = `${PREFIX}-pay-${Date.now()}`;
 
 describe.skipIf(!hasDb)('allocatePayment – no open invoices (fully unallocated)', () => {
   beforeAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM transactions WHERE tenant_id = ${TENANT_ID};
-    `);
+    await cleanupByPrefix(PREFIX);
   });
 
   afterAll(async () => {
-    await db.execute(sql`
-      DELETE FROM payment_allocations WHERE payment_id LIKE ${PREFIX + '%'};
-      DELETE FROM payments WHERE id LIKE ${PREFIX + '%'};
-      DELETE FROM transactions WHERE tenant_id = ${TENANT_ID};
-    `);
+    await cleanupByPrefix(PREFIX);
   });
 
   test('payment with no open invoices is fully unallocated', async () => {
