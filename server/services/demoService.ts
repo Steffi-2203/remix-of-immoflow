@@ -358,7 +358,8 @@ async function createDemoData(organizationId: string): Promise<void> {
         betriebskosten: bk.toFixed(2),
         heizungskosten: hk.toFixed(2),
         gesamtbetrag: gesamt.toFixed(2),
-        status: m < currentMonth ? 'bezahlt' : 'offen',
+        status: 'offen',
+        paidAmount: '0.00',
         faelligAm: `${currentYear}-${String(m).padStart(2, '0')}-05`,
       });
     }
