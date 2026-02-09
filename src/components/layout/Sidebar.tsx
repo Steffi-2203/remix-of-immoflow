@@ -70,14 +70,14 @@ export function Sidebar() {
             onClick={() => toggleSection(section.label)}
             title={section.label}
             className={cn(
-              'flex flex-col items-center gap-1 rounded-lg px-2 py-3 text-xs font-medium transition-all w-full',
-              'text-white/70 hover:text-white hover:bg-white/10',
-              (isActive || containsCurrent) && 'bg-white/15 text-white'
+              'w-12 h-12 flex items-center justify-center rounded-lg text-xs font-medium transition-colors',
+              'hover:bg-white/10',
+              (isActive || containsCurrent)
+                ? 'bg-white/15 text-white'
+                : 'text-white/50'
             )}
           >
-            <span className="text-[10px] font-bold uppercase tracking-wider leading-tight text-center">
-              {section.label}
-            </span>
+            {section.label}
           </button>
         );
       })}
