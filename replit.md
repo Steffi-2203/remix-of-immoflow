@@ -110,6 +110,32 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
 - **CORS**: Whitelist-based origin validation
 - **Dependencies**: zxcvbn (password strength), bcrypt (12 rounds), HIBP API (leak check)
 
+## Testing Infrastructure (updated 2026-02-09)
+- **Test Runner**: Vitest with two configs:
+    - Default: `npx vitest run tests/unit/` (via `npm test`)
+    - Server config: `npx vitest run --config vitest.server.config.ts` (includes all tests)
+- **Test Count**: 166 tests across 15 files, all passing
+- **Test Coverage Areas**:
+    - FIFO multi-invoice payment allocation (10 tests)
+    - Payment storno/reversal with LIFO allocation reversal (14 tests)
+    - Deposit lifecycle: interest, deductions, Bar/Garantie/Sparbuch types (12 tests)
+    - Pro-rata billing: move-in/out, leap year, tenant changeover (16 tests)
+    - VPI index adjustment: threshold, chaining, MRG deflation protection (12 tests)
+    - Concurrent edge cases: optimistic locking, idempotency, duplicate detection (10 tests)
+    - Ledger sync: saldo calculation, audit hash chain, reconciliation (13 tests)
+    - Bank reconciliation: fuzzy matching, Levenshtein, IBAN, reference patterns (9 tests)
+    - SEPA XML validation, dunning, settlement calculations (36 tests)
+    - Billing service integration tests (6 tests)
+    - Invoice generation with MRG VAT rates (9 tests)
+    - Payment allocation MRG-compliant BK→HK→Miete (10 tests)
+    - Concurrency simulation (3 tests)
+    - Server startup validation (2 tests)
+    - roundMoney utility (4 tests)
+- **Data Integrity**:
+    - FIFO payment allocation repair completed (2026-02-09): 71 allocations, 56 invoices bezahlt, 2 teilbezahlt
+    - Integrity check endpoint: `GET /api/integrity/payment-allocations` (admin/finance only, paginated)
+    - All paid_amount values verified to match sum(payment_allocations) exactly
+
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service.
 - **Replit Auth**: Authentication service.
