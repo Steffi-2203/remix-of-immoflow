@@ -17,14 +17,14 @@ describe.skipIf(!hasDb)('MRG – BK-Abrechnung', () => {
   test('verteilt umlagefähige Kosten korrekt', async () => {
     await seedExpenses([
       { type: 'verwaltung', amount: 2000 },
-      { type: 'versicherung', amount: 3000 },
+      { type: 'instandhaltung', amount: 3000 }, // NOT umlagefähig
     ], { propertyId: propId, year: 2024 });
 
     const result = await bkAbrechnungService.generateBKAbrechnung({
       propertyId: propId, year: 2024, organizationId: orgId,
     });
 
-    expect(result.total).toBe(5000);
+    expect(result.total).toBe(2000); // nur verwaltung
     expect(result.items.length).toBe(10);
     // All items should have positive shares
     expect(result.items.every(i => i.sollBetrag > 0)).toBe(true);
