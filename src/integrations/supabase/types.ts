@@ -147,6 +147,45 @@ export type Database = {
           },
         ]
       }
+      audit_events: {
+        Row: {
+          actor: string
+          created_at: string
+          entity: string
+          entity_id: string | null
+          event_type: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          operation: string
+          run_id: string | null
+        }
+        Insert: {
+          actor: string
+          created_at?: string
+          entity: string
+          entity_id?: string | null
+          event_type: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation: string
+          run_id?: string | null
+        }
+        Update: {
+          actor?: string
+          created_at?: string
+          entity?: string
+          entity_id?: string | null
+          event_type?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          operation?: string
+          run_id?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
