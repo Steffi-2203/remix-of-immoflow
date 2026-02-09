@@ -65,6 +65,13 @@ interface BefristungsParams {
 
 export const mrg = {
   /**
+   * Kaufmännische Rundung auf 2 Dezimalstellen.
+   */
+  round(value: number): number {
+    return roundMoney(value);
+  },
+
+  /**
    * MRG §21 – Prüft ob eine Ausgabe umlagefähig ist.
    */
   isUmlagefaehig(expense: Expense): boolean {
