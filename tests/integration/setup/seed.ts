@@ -142,3 +142,46 @@ export async function seedPortfolio(prefix: string, unitCount: number, areas?: n
 
   return { orgId, propId, unitIds, tenantIds };
 }
+
+// ---------------------------------------------------------------------------
+// Factory helpers – insert & return the created row
+// ---------------------------------------------------------------------------
+
+export async function createTenant(data: Partial<SeedTenantParams> & { unitId: string }) {
+  const id = data.id ?? `fac-ten-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const row = await db.execute(sql`
+    INSERT INTO tenants (id, unit_id, vorname, nachname, status, mietbeginn,
+      grundmiete, betriebskosten_vorschuss, heizungskosten_vorschuss)
+    VALUES (
+      ${id}, ${data.unitId},
+      ${data.firstName ?? 'Test'}, ${data.lastName ?? 'Mieter'},
+      'aktiv', ${data.mietbeginn ?? '2024-01-01'},
+      ${data.grundmiete ?? 650}, ${data.betriebskostenVorschuss ?? 120}, ${data.heizkostenVorschuss ?? 80}
+    )
+    RETURNING *
+  `).then(r => r.rows[0]);
+  return row;
+}
+
+export async function createInvoice(data: Partial<SeedInvoiceParams> & { tenantId: string }) {
+  const id = data.id ?? `fac-inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const month = data.month ?? 1;
+  const year = data.year ?? 2025;
+  const due = data.faelligAm ?? `${year}-${String(month).padStart(2, '0')}-05`;
+  const row = await db.execute(sql`
+    INSERT INTO monthly_invoices (id, tenant_id, month, year, gesamtbetrag, paid_amount, status, faellig_am, created_at)
+    VALUES (${id}, ${data.tenantId}, ${month}, ${year}, ${data.gesamtbetrag ?? 100}, ${data.paidAmount ?? 0}, ${data.status ?? 'offen'}, ${due}, now())
+    RETURNING *
+  `).then(r => r.rows[0]);
+  return row;
+}
+
+export async function createPayment(data: { tenantId: string; amount?: number; bookingDate?: string }) {
+  const id = `fac-pay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const row = await db.execute(sql`
+    INSERT INTO payments (id, tenant_id, betrag, buchungs_datum, payment_type, created_at)
+    VALUES (${id}, ${data.tenantId}, ${data.amount ?? 100}, ${data.bookingDate ?? sql`now()::date`}, 'ueberweisung', now())
+    RETURNING *
+  `).then(r => r.rows[0]);
+  return row;
+}
