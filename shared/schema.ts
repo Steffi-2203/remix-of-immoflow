@@ -315,6 +315,21 @@ export const insertPaymentAllocationSchema = createInsertSchema(paymentAllocatio
 export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
 export type InsertPaymentAllocation = typeof paymentAllocations.$inferInsert;
 
+// ====== LEDGER ENTRIES (Kontobuch) ======
+export const ledgerEntries = pgTable("ledger_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  invoiceId: uuid("invoice_id").references(() => monthlyInvoices.id),
+  paymentId: uuid("payment_id").references(() => payments.id),
+  type: text("type").notNull(), // 'charge', 'payment', 'interest', 'fee', 'credit'
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  bookingDate: date("booking_date").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+export type InsertLedgerEntry = typeof ledgerEntries.$inferInsert;
+
 export const bankAccounts = pgTable("bank_accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),

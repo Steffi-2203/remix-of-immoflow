@@ -1,17 +1,18 @@
 import { db } from "../db";
-import { sql } from "drizzle-orm";
+import { sql, eq, and, inArray } from "drizzle-orm";
+import { ledgerEntries, payments, monthlyInvoices } from "@shared/schema";
 import { roundMoney } from "@shared/utils";
 
 /**
  * Ledger Sync Job Handler
- * 
+ *
  * Writes payment and charge entries into ledger_entries
  * after a payment has been allocated by PaymentService.
+ * All inserts are idempotent (skip if entry already exists).
  */
 export async function handleLedgerSync(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   const paymentId = payload.paymentId as string;
   const tenantId = payload.tenantId as string;
-  const applied = payload.applied as number | undefined;
   const unapplied = payload.unapplied as number | undefined;
 
   if (!paymentId || !tenantId) {
@@ -21,74 +22,77 @@ export async function handleLedgerSync(payload: Record<string, unknown>): Promis
   let entriesCreated = 0;
 
   await db.transaction(async (tx) => {
-    // 1. Record payment in ledger (idempotent – skip if already exists)
-    const existingPayment = await tx.execute(sql`
-      SELECT id FROM ledger_entries
-      WHERE payment_id = ${paymentId}::uuid AND type = 'payment'
-      LIMIT 1
-    `);
+    // 1. Record payment in ledger (idempotent)
+    const existingPayment = await tx
+      .select({ id: ledgerEntries.id })
+      .from(ledgerEntries)
+      .where(and(
+        eq(ledgerEntries.paymentId, paymentId),
+        eq(ledgerEntries.type, "payment")
+      ))
+      .limit(1);
 
-    if (!existingPayment.rows?.length) {
-      const payment = await tx.execute(sql`
-        SELECT id, tenant_id, betrag, buchungs_datum, invoice_id
-        FROM payments WHERE id = ${paymentId}::uuid
-      `).then(r => r.rows?.[0]);
+    if (!existingPayment.length) {
+      const [payment] = await tx
+        .select()
+        .from(payments)
+        .where(eq(payments.id, paymentId))
+        .limit(1);
 
       if (payment) {
-        await tx.execute(sql`
-          INSERT INTO ledger_entries (tenant_id, payment_id, invoice_id, type, amount, booking_date)
-          VALUES (
-            ${tenantId}::uuid,
-            ${paymentId}::uuid,
-            ${(payment as any).invoice_id || null},
-            'payment',
-            ${roundMoney(Number((payment as any).betrag || 0))},
-            COALESCE(${(payment as any).buchungs_datum}::date, now()::date)
-          )
-        `);
+        await tx.insert(ledgerEntries).values({
+          tenantId,
+          paymentId: payment.id,
+          invoiceId: payment.invoiceId,
+          type: "payment",
+          amount: String(roundMoney(Number(payment.betrag || 0))),
+          bookingDate: payment.buchungsDatum,
+        });
         entriesCreated++;
       }
     }
 
-    // 2. Sync outstanding invoice charges (idempotent per invoice)
-    const invoices = await tx.execute(sql`
-      SELECT id, gesamtbetrag, faellig_am
-      FROM monthly_invoices
-      WHERE tenant_id = ${tenantId}::uuid
-        AND status IN ('offen', 'teilbezahlt')
-        AND id NOT IN (
-          SELECT invoice_id FROM ledger_entries
-          WHERE tenant_id = ${tenantId}::uuid AND type = 'charge' AND invoice_id IS NOT NULL
-        )
-      ORDER BY year, month
-    `).then(r => r.rows || []);
+    // 2. Sync outstanding invoice charges (skip already-tracked invoices)
+    const existingChargeInvoiceIds = await tx
+      .select({ invoiceId: ledgerEntries.invoiceId })
+      .from(ledgerEntries)
+      .where(and(
+        eq(ledgerEntries.tenantId, tenantId),
+        eq(ledgerEntries.type, "charge")
+      ));
 
-    for (const inv of invoices) {
-      await tx.execute(sql`
-        INSERT INTO ledger_entries (tenant_id, invoice_id, type, amount, booking_date)
-        VALUES (
-          ${tenantId}::uuid,
-          ${(inv as any).id}::uuid,
-          'charge',
-          ${roundMoney(Number((inv as any).gesamtbetrag || 0))},
-          COALESCE(${(inv as any).faellig_am}::date, now()::date)
-        )
-      `);
+    const trackedIds = new Set(existingChargeInvoiceIds.map(r => r.invoiceId).filter(Boolean));
+
+    const openInvoices = await tx
+      .select()
+      .from(monthlyInvoices)
+      .where(and(
+        eq(monthlyInvoices.tenantId, tenantId),
+        inArray(monthlyInvoices.status, ["offen", "teilbezahlt"])
+      ));
+
+    for (const inv of openInvoices) {
+      if (trackedIds.has(inv.id)) continue;
+
+      await tx.insert(ledgerEntries).values({
+        tenantId,
+        invoiceId: inv.id,
+        type: "charge",
+        amount: String(roundMoney(Number(inv.gesamtbetrag || 0))),
+        bookingDate: inv.faelligAm,
+      });
       entriesCreated++;
     }
 
-    // 3. Record overpayment as credit if applicable
+    // 3. Record overpayment as credit
     if (unapplied && unapplied > 0) {
-      await tx.execute(sql`
-        INSERT INTO ledger_entries (tenant_id, payment_id, type, amount, booking_date)
-        VALUES (
-          ${tenantId}::uuid,
-          ${paymentId}::uuid,
-          'credit',
-          ${roundMoney(unapplied)},
-          now()::date
-        )
-      `);
+      await tx.insert(ledgerEntries).values({
+        tenantId,
+        paymentId,
+        type: "credit",
+        amount: String(roundMoney(unapplied)),
+        bookingDate: new Date().toISOString().split("T")[0],
+      });
       entriesCreated++;
     }
   });
