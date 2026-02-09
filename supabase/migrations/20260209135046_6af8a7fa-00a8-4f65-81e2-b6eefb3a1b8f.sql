@@ -1,0 +1,1 @@
+CREATE INDEX idx_ledger_type_date ON public.ledger_entries(type, booking_date);
