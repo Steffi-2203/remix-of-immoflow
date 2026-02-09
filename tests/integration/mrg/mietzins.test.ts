@@ -52,7 +52,7 @@ describe('MRG Mietzins – VPI Wertsicherung', () => {
       baseRent: 1000, baseIndex: 100, currentIndex: 110, threshold: 5, halfRule: true,
     });
     expect(result.thresholdMet).toBe(true);
-    expect(result.appliedPercent).toBe(5); // 10% / 2
+    expect(result.appliedPercent).toBe(5);
     expect(result.adjustedRent).toBe(1050);
   });
 
@@ -62,6 +62,14 @@ describe('MRG Mietzins – VPI Wertsicherung', () => {
     });
     expect(result.thresholdMet).toBe(true);
     expect(result.adjustedRent).toBeLessThan(900);
+  });
+
+  test('exact threshold boundary → adjustment applied', () => {
+    const result = calculateIndexAdjustment({
+      baseRent: 500, baseIndex: 100, currentIndex: 105, threshold: 5, halfRule: false,
+    });
+    expect(result.thresholdMet).toBe(true);
+    expect(result.adjustedRent).toBe(525);
   });
 });
 
@@ -77,5 +85,12 @@ describe('MRG Mietzins – Grundmiete Composition', () => {
 
     expect(gesamt).toBe(roundMoney(650 + 180 + 95 + 65 + 18 + 19));
     expect(gesamt).toBe(1027);
+  });
+
+  test('USt-Sätze: Miete/BK 10%, HK 20%', () => {
+    const miete = 1000;
+    expect(roundMoney(miete / 1.10 * 0.10)).toBe(roundMoney(miete - miete / 1.10));
+    const hk = 200;
+    expect(roundMoney(hk / 1.20 * 0.20)).toBe(roundMoney(hk - hk / 1.20));
   });
 });

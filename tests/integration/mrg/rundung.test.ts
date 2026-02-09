@@ -2,8 +2,7 @@ import { describe, test, expect } from 'vitest';
 import { roundMoney } from '@shared/utils';
 
 /**
- * MRG Settlement Rounding Tests
- * Ensures deterministic cent-level rounding across large portfolios.
+ * MRG Rundung – Settlement Determinism
  */
 
 function calculateTenantShares(
@@ -16,6 +15,28 @@ function calculateTenantShares(
   );
   const sum = roundMoney(shares.reduce((s, v) => s + v, 0));
   return { shares, sum, drift: roundMoney(sum - totalExpense) };
+}
+
+function reconcileRounding(shares: number[], targetTotal: number): number[] {
+  const sum = roundMoney(shares.reduce((s, v) => s + v, 0));
+  const diff = roundMoney(targetTotal - sum);
+  if (diff === 0) return [...shares];
+
+  const indexed = shares
+    .map((s, i) => ({ amount: s, idx: i }))
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount) || a.idx - b.idx);
+
+  const result = [...shares];
+  const step = diff > 0 ? 0.01 : -0.01;
+  let remaining = Math.abs(Math.round(diff * 100));
+
+  for (const entry of indexed) {
+    if (remaining <= 0) break;
+    result[entry.idx] = roundMoney(result[entry.idx] + step);
+    remaining--;
+  }
+
+  return result;
 }
 
 describe('MRG Rundung – Settlement Determinism', () => {
@@ -34,20 +55,13 @@ describe('MRG Rundung – Settlement Determinism', () => {
   });
 
   test('reconcileRounding: cent difference assigned deterministically', () => {
-    // 3 units equally splitting 100€ → 33.33 + 33.33 + 33.33 = 99.99
     const areas = [1, 1, 1];
     const { shares, drift } = calculateTenantShares(100, areas);
     expect(shares).toEqual([33.33, 33.33, 33.33]);
     expect(drift).toBe(-0.01);
 
-    // After reconciliation, the 1 cent should go to a deterministic tenant
-    // (sorted by abs amount desc, then line type, then unit id)
-    const sorted = shares
-      .map((s, i) => ({ amount: s, idx: i }))
-      .sort((a, b) => b.amount - a.amount || a.idx - b.idx);
-    sorted[0].amount = roundMoney(sorted[0].amount + 0.01);
-
-    const reconciledSum = roundMoney(sorted.reduce((s, v) => s + v.amount, 0));
+    const reconciled = reconcileRounding(shares, 100);
+    const reconciledSum = roundMoney(reconciled.reduce((s, v) => s + v, 0));
     expect(reconciledSum).toBe(100);
   });
 
@@ -55,5 +69,13 @@ describe('MRG Rundung – Settlement Determinism', () => {
     const areas = Array.from({ length: 200 }, (_, i) => 20 + (i * 11 % 150));
     const { drift } = calculateTenantShares(567890.12, areas);
     expect(Math.abs(drift)).toBeLessThanOrEqual(2.00);
+  });
+
+  test('reconcileRounding on large portfolio eliminates drift', () => {
+    const areas = Array.from({ length: 200 }, (_, i) => 20 + (i * 11 % 150));
+    const { shares } = calculateTenantShares(567890.12, areas);
+    const reconciled = reconcileRounding(shares, 567890.12);
+    const sum = roundMoney(reconciled.reduce((s, v) => s + v, 0));
+    expect(sum).toBe(567890.12);
   });
 });

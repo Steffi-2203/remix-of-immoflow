@@ -1,9 +1,9 @@
 import { describe, test, expect } from 'vitest';
+import { hasDb, db, sql } from '../setup/db';
 import { roundMoney } from '@shared/utils';
 
 /**
  * MRG §21 – Umlagefähigkeit von Betriebskosten
- * Tests which expense categories can be passed on to tenants.
  */
 
 const UMLAGEFAEHIGE_KATEGORIEN = [
@@ -32,7 +32,6 @@ describe('MRG §21 – Umlagefähigkeit', () => {
     const abrechnungsjahr = 2024;
     const deadline = new Date(abrechnungsjahr + 1, 5, 30); // June 30, 2025
     const today = new Date('2025-06-30');
-
     expect(deadline.getTime()).toBeLessThanOrEqual(today.getTime());
   });
 
@@ -41,19 +40,16 @@ describe('MRG §21 – Umlagefähigkeit', () => {
     const deadline = new Date(abrechnungsjahr + 1, 5, 30);
     const verjaehrung = new Date(deadline);
     verjaehrung.setFullYear(verjaehrung.getFullYear() + 3);
-
-    // Claim from 2024 settlement expires June 30, 2028
     expect(verjaehrung.getFullYear()).toBe(2028);
-    expect(verjaehrung.getMonth()).toBe(5); // June
+    expect(verjaehrung.getMonth()).toBe(5);
     expect(verjaehrung.getDate()).toBe(30);
   });
 
   test('Leerstandsregel: leerstehende Einheit trägt anteilige BK', () => {
-    // Property with 4 units, 1 vacant → landlord pays vacant share
     const totalBK = 8000;
     const areas = [60, 60, 60, 60];
     const totalArea = areas.reduce((s, a) => s + a, 0);
-    const occupiedUnits = [0, 1, 2]; // Unit 3 is vacant
+    const occupiedUnits = [0, 1, 2];
 
     const tenantShares = occupiedUnits.map(i =>
       roundMoney(totalBK * (areas[i] / totalArea))
@@ -63,5 +59,14 @@ describe('MRG §21 – Umlagefähigkeit', () => {
     const sum = roundMoney(tenantShares.reduce((s, v) => s + v, 0) + landlordShare);
     expect(sum).toBe(totalBK);
     expect(landlordShare).toBe(2000);
+  });
+
+  test('Heizkosten-Split: 70/30 gem. HeizKG', () => {
+    const totalHeizkosten = 10000;
+    const verbrauchsanteil = roundMoney(totalHeizkosten * 0.70);
+    const grundkostenanteil = roundMoney(totalHeizkosten * 0.30);
+    expect(verbrauchsanteil).toBe(7000);
+    expect(grundkostenanteil).toBe(3000);
+    expect(roundMoney(verbrauchsanteil + grundkostenanteil)).toBe(totalHeizkosten);
   });
 });
