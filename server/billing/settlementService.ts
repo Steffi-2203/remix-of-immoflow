@@ -13,6 +13,7 @@ import {
 import { waterReadings } from "../db/models/water_readings";
 import { eq, and, inArray, between, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
+import { logAuditEvent } from "../audit/auditEvents.service";
 import { roundMoney } from "@shared/utils";
 
 interface TenantSettlementResult {
@@ -362,6 +363,22 @@ export class SettlementService {
         totalPrepayments,
         totalDifference,
         tenantCount: tenantResults.length,
+      });
+
+      await logAuditEvent(tx, {
+        actor: createdBy,
+        type: 'settlement_create',
+        entity: 'settlements',
+        entityId: newSettlement.id,
+        operation: 'insert',
+        new: {
+          propertyId,
+          year,
+          totalExpenses,
+          totalPrepayments,
+          totalDifference,
+          tenantCount: tenantResults.length,
+        },
       });
 
       return [newSettlement];

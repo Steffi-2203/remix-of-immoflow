@@ -3,6 +3,7 @@ import { normalizeDescription } from "../lib/normalizeDescription";
 import { roundMoney } from "@shared/utils";
 import { metrics, METRIC } from "../lib/metrics";
 import { createTrace, withSpan, BILLING_SPANS, type Trace, type TraceResult } from "../lib/tracing";
+import { logAuditEvent } from "../audit/auditEvents.service";
 
 /**
  * Configurable threshold – lines below this use the legacy 500-chunk path.
@@ -140,6 +141,15 @@ export async function bulkUpsertLines(opts: BulkUpsertOpts): Promise<BulkUpsertR
     span.setAttribute('audit_rows', Number(row.audit_count || 0));
 
     return { upsertedLinesCount: upserted, conflictCount: conflicts };
+  });
+
+  await logAuditEvent(tx, {
+    runId,
+    actor: userId,
+    type: 'invoice_line_bulk_upsert',
+    entity: 'invoice_lines',
+    operation: 'insert',
+    new: { upsertedLinesCount, conflictCount, totalLines: allLines.length },
   });
 
   const traceResult = trace.finish();

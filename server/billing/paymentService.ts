@@ -13,6 +13,7 @@ import {
 import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
 import { optimisticUpdate } from "../lib/optimisticLock";
+import { logAuditEvent } from "../audit/auditEvents.service";
 
 interface DunningLevel {
   level: 1 | 2 | 3;
@@ -131,6 +132,16 @@ export class PaymentService {
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)
           VALUES (${userId || null}, 'monthly_invoices', ${inv.id}, 'payment_allocated', ${JSON.stringify({ paymentId, applied: apply })}::jsonb, now())
         `);
+
+        await logAuditEvent(tx, {
+          actor: userId || 'system',
+          type: 'payment_allocated',
+          entity: 'monthly_invoices',
+          entityId: inv.id as string,
+          operation: 'allocate',
+          old: { paidAmount: paid, status: inv.status },
+          new: { paidAmount: newPaid, status: newStatus, applied: apply },
+        });
       }
 
       let unapplied = remaining;
