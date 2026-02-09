@@ -17,7 +17,7 @@ import { maintenanceReminderService } from "./services/maintenanceReminderServic
 import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
-import { paymentService } from "./services/paymentService";
+import { paymentService } from "./billing/paymentService";
 import readonlyRoutes from "./routes/readonly";
 import { requirePermission } from "./middleware/rbac";
 import crypto from "crypto";
