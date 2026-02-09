@@ -232,11 +232,11 @@ export class SettlementService {
           propertyUnits
         );
 
-        const share = totalValue > 0 ? (exp.amount * unitValue / totalValue) : 0;
-        categoryShare += share;
+        const share = totalValue > 0 ? roundMoney(exp.amount * unitValue / totalValue) : 0;
+        categoryShare = roundMoney(categoryShare + share);
       }
       
-      totalShare += categoryShare;
+      totalShare = roundMoney(totalShare + categoryShare);
       
       const primaryKey = categoryExpenses.find(e => e.keyId)?.keyId;
       const keyName = primaryKey ? keyMap.get(primaryKey)?.name : 
