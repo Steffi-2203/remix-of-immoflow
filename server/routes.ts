@@ -5306,6 +5306,85 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  app.get("/api/integrity/payment-allocations", isAuthenticated, requireRole('admin', 'finance'), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation" });
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const [mismatchCount, mismatches, summary, allocSummary] = await Promise.all([
+        db.execute(sql`
+          SELECT COUNT(*) AS cnt
+          FROM monthly_invoices mi
+          JOIN units u ON u.id = mi.unit_id
+          JOIN properties pr ON pr.id = u.property_id
+          LEFT JOIN (
+            SELECT invoice_id, ROUND(SUM(CAST(applied_amount AS numeric)), 2) AS total_allocated
+            FROM payment_allocations GROUP BY invoice_id
+          ) alloc ON alloc.invoice_id = mi.id
+          WHERE pr.organization_id = ${profile.organizationId}
+            AND (COALESCE(mi.paid_amount, 0) != COALESCE(alloc.total_allocated, 0)
+                 OR (mi.status = 'bezahlt' AND COALESCE(mi.paid_amount, 0) = 0)
+                 OR (mi.status = 'offen' AND COALESCE(mi.paid_amount, 0) > 0))
+        `).then(r => Number(r.rows[0]?.cnt || 0)),
+        db.execute(sql`
+          SELECT mi.id, mi.tenant_id, mi.year, mi.month, mi.status,
+            COALESCE(mi.paid_amount, 0) AS paid_amount,
+            COALESCE(alloc.total_allocated, 0) AS allocation_sum,
+            ROUND(COALESCE(mi.paid_amount, 0) - COALESCE(alloc.total_allocated, 0), 2) AS diff
+          FROM monthly_invoices mi
+          JOIN units u ON u.id = mi.unit_id
+          JOIN properties pr ON pr.id = u.property_id
+          LEFT JOIN (
+            SELECT invoice_id, ROUND(SUM(CAST(applied_amount AS numeric)), 2) AS total_allocated
+            FROM payment_allocations GROUP BY invoice_id
+          ) alloc ON alloc.invoice_id = mi.id
+          WHERE pr.organization_id = ${profile.organizationId}
+            AND (COALESCE(mi.paid_amount, 0) != COALESCE(alloc.total_allocated, 0)
+                 OR (mi.status = 'bezahlt' AND COALESCE(mi.paid_amount, 0) = 0)
+                 OR (mi.status = 'offen' AND COALESCE(mi.paid_amount, 0) > 0))
+          ORDER BY mi.year, mi.month
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+        db.execute(sql`
+          SELECT 
+            COUNT(*) AS total_invoices,
+            SUM(CASE WHEN status = 'bezahlt' THEN 1 ELSE 0 END) AS paid_count,
+            SUM(CASE WHEN status = 'teilbezahlt' THEN 1 ELSE 0 END) AS partial_count,
+            SUM(CASE WHEN status = 'offen' THEN 1 ELSE 0 END) AS open_count,
+            ROUND(SUM(CAST(gesamtbetrag AS numeric)), 2) AS total_invoiced,
+            ROUND(SUM(COALESCE(paid_amount, 0)), 2) AS total_paid
+          FROM monthly_invoices mi
+          JOIN units u ON u.id = mi.unit_id
+          JOIN properties pr ON pr.id = u.property_id
+          WHERE pr.organization_id = ${profile.organizationId}
+        `),
+        db.execute(sql`
+          SELECT COUNT(*) AS allocation_count,
+            ROUND(SUM(CAST(applied_amount AS numeric)), 2) AS total_allocated
+          FROM payment_allocations pa
+          JOIN monthly_invoices mi ON mi.id = pa.invoice_id
+          JOIN units u ON u.id = mi.unit_id
+          JOIN properties pr ON pr.id = u.property_id
+          WHERE pr.organization_id = ${profile.organizationId}
+        `)
+      ]);
+
+      res.json({
+        healthy: mismatchCount === 0,
+        mismatches: mismatches.rows,
+        mismatchCount,
+        pagination: { limit, offset, hasMore: offset + limit < mismatchCount },
+        summary: summary.rows[0],
+        allocations: allocSummary.rows[0],
+      });
+    } catch (error) {
+      console.error("Integrity check error:", error);
+      res.status(500).json({ error: "Integritätsprüfung fehlgeschlagen" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
