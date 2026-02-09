@@ -4496,6 +4496,39 @@ export type Database = {
         }
         Relationships: []
       }
+      vpi_values: {
+        Row: {
+          created_at: string
+          id: string
+          month: number
+          notes: string | null
+          source: string | null
+          updated_at: string
+          value: number
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: number
+          notes?: string | null
+          source?: string | null
+          updated_at?: string
+          value: number
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: number
+          notes?: string | null
+          source?: string | null
+          updated_at?: string
+          value?: number
+          year?: number
+        }
+        Relationships: []
+      }
       water_readings: {
         Row: {
           coefficient: number | null
