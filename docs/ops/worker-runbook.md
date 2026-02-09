@@ -54,7 +54,7 @@ SELECT job_id, status, last_error, trace_id FROM job_runs ORDER BY created_at DE
 
 | Typ | Handler | Status |
 |-----|---------|--------|
-| `billing_run` | `server/services/billing.service.ts` | ✅ Aktiv |
+| `billing_run` | `server/billing/billing.service.ts` | ✅ Aktiv |
 | `sepa_export` | — | ⏳ Offen |
 | `settlement_calculation` | — | ⏳ Offen |
 | `dunning_run` | — | ⏳ Offen |

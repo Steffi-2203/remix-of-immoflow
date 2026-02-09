@@ -13,7 +13,7 @@ import { setupAuth } from "./auth";
 import { pool } from "./db";
 import { seedDistributionKeys } from "./seedDistributionKeys";
 import { jobQueueService } from "./services/jobQueueService";
-import { billingService } from "./services/billing.service";
+import { billingService } from "./billing/billing.service";
 import SESSION_SECRET from "./config/session";
 
 const app = express();

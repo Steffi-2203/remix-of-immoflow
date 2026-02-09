@@ -1,4 +1,4 @@
-import { billingService } from "../server/services/billing.service";
+import { billingService } from "../server/billing/billing.service";
 import { db } from "../server/db";
 import { properties, invoiceLines, monthlyInvoices } from "@shared/schema";
 import { eq, isNull, inArray, and } from "drizzle-orm";

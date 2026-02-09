@@ -3,7 +3,7 @@ import { db } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/resend";
 import OpenAI from "openai";
-import { invoiceService } from "./services/invoiceService";
+import { invoiceService } from "./billing/invoiceService";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
