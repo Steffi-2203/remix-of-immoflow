@@ -72,6 +72,13 @@ export const mrg = {
   },
 
   /**
+   * Berechnet den Richtwert (Fläche × Richtwert pro m²).
+   */
+  calculateRichtwert(params: { flaeche: number; richtwert: number }): number {
+    return roundMoney(params.flaeche * params.richtwert);
+  },
+
+  /**
    * Berechnet den Hauptmietzins basierend auf Richtwert und Kategorie.
    * Hauptmietzins = Fläche × Richtwert × Kategorie-Faktor
    */
