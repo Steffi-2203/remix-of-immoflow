@@ -185,3 +185,64 @@ export async function createPayment(data: { tenantId: string; amount?: number; b
   `).then(r => r.rows[0]);
   return row;
 }
+
+// ---------------------------------------------------------------------------
+// Batch convenience helpers for tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed N units (with org, property, and tenants) in one call.
+ * Returns all created IDs.
+ */
+export async function seedUnits(count: number, options?: { propertyId?: string; orgId?: string }) {
+  const ts = Date.now();
+  const orgId = options?.orgId ?? `batch-org-${ts}`;
+  const propId = options?.propertyId ?? `batch-prop-${ts}`;
+
+  if (!options?.orgId) await seedOrg({ id: orgId });
+  if (!options?.propertyId) await seedProperty({ id: propId, organizationId: orgId });
+
+  const unitIds: string[] = [];
+  const tenantIds: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const uid = `batch-unit-${i}-${ts}`;
+    const tid = `batch-ten-${i}-${ts}`;
+    unitIds.push(uid);
+    tenantIds.push(tid);
+    await seedUnit({ id: uid, propertyId: propId, name: `Top ${i + 1}`, areaSqm: 50 + i * 5 });
+    await seedTenant({ id: tid, unitId: uid, lastName: `Mieter ${i + 1}` });
+  }
+
+  return { orgId, propId, unitIds, tenantIds };
+}
+
+/**
+ * Seed expenses for a property.
+ */
+export async function seedExpenses(
+  items: Array<{ type: string; amount: number }>,
+  options?: { propertyId?: string; year?: number; month?: number }
+) {
+  const ts = Date.now();
+  const propertyId = options?.propertyId ?? `batch-prop-${ts}`;
+  const year = options?.year ?? 2024;
+  const month = options?.month ?? 6;
+
+  const ids: string[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const id = `batch-exp-${i}-${ts}`;
+    ids.push(id);
+    await seedExpense({
+      id,
+      propertyId,
+      bezeichnung: items[i].type,
+      betrag: items[i].amount,
+      category: items[i].type,
+      year,
+      month,
+      istUmlagefaehig: !['instandhaltung', 'reparatur', 'finanzierung', 'ruecklage'].includes(items[i].type),
+    });
+  }
+
+  return ids;
+}

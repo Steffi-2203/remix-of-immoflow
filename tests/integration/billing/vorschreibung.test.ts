@@ -1,46 +1,71 @@
-import { describe, test, expect } from 'vitest';
-import { db, sql, hasDb } from '../setup/db';
+import { describe, test, expect, beforeEach } from 'vitest';
+import { hasDb, resetDb } from '../setup/db';
+import { seedUnits, createTenant } from '../setup/seed';
+import { vorschreibungService } from '../../../server/billing/vorschreibungService';
 import { roundMoney } from '@shared/utils';
 
-describe.skipIf(!hasDb)('Vorschreibung – invoice generation integrity', () => {
-  test('invoice line amounts sum to gesamtbetrag', async () => {
-    const rows = await db.execute(sql`
-      SELECT mi.id, mi.gesamtbetrag,
-        COALESCE(SUM(il.amount), 0) as lines_sum
-      FROM monthly_invoices mi
-      LEFT JOIN invoice_lines il ON il.invoice_id = mi.id AND il.deleted_at IS NULL
-      GROUP BY mi.id, mi.gesamtbetrag
-      HAVING COUNT(il.id) > 0
-      LIMIT 20
-    `).then(r => r.rows);
+describe.skipIf(!hasDb)('MRG – Vorschreibung', () => {
+  let unitId: string;
 
-    for (const row of rows) {
-      const gesamtbetrag = Number(row.gesamtbetrag);
-      const linesSum = Number(row.lines_sum);
-      expect(Math.abs(gesamtbetrag - linesSum)).toBeLessThanOrEqual(0.02);
-    }
+  beforeEach(async () => {
+    await resetDb();
+    const result = await seedUnits(1);
+    unitId = result.unitIds[0];
   });
 
-  test('USt calculation: 10% on Miete/BK, 20% on HK', () => {
-    const grundmiete = 650;
-    const betriebskosten = 180;
-    const heizkosten = 95;
+  test('Vorschreibung enthält alle Positionen', async () => {
+    const tenant = await createTenant({
+      unitId, grundmiete: 650, betriebskostenVorschuss: 180, heizkostenVorschuss: 95,
+    });
 
-    const ustMiete = roundMoney(grundmiete - grundmiete / 1.10);
-    const ustBk = roundMoney(betriebskosten - betriebskosten / 1.10);
-    const ustHk = roundMoney(heizkosten - heizkosten / 1.20);
+    const result = await vorschreibungService.generateVorschreibung({
+      tenantId: tenant.id as string, year: 2025, month: 3,
+    });
 
-    expect(ustMiete).toBe(59.09);
-    expect(ustBk).toBe(16.36);
-    expect(ustHk).toBe(15.83);
+    expect(result).not.toBeNull();
+    expect(result!.grundmiete).toBe(650);
+    expect(result!.betriebskosten).toBe(180);
+    expect(result!.heizungskosten).toBe(95);
+    expect(result!.lines.length).toBe(3);
   });
 
-  test('pro-rata calculation for mid-month move-in', () => {
-    const fullRent = 900;
-    const daysInMonth = 30;
-    const occupiedDays = 16;
-    const proRata = roundMoney(fullRent * (occupiedDays / daysInMonth));
+  test('USt korrekt: 10% Miete/BK, 20% HK', async () => {
+    const tenant = await createTenant({
+      unitId, grundmiete: 1000, betriebskostenVorschuss: 200, heizkostenVorschuss: 100,
+    });
 
+    const result = await vorschreibungService.generateVorschreibung({
+      tenantId: tenant.id as string, year: 2025, month: 1,
+    });
+
+    expect(result!.ust).toBe(roundMoney(1000 * 0.10 + 200 * 0.10 + 100 * 0.20));
+  });
+
+  test('Fälligkeitsdatum ist der 5. des Monats', async () => {
+    const tenant = await createTenant({ unitId });
+
+    const result = await vorschreibungService.generateVorschreibung({
+      tenantId: tenant.id as string, year: 2025, month: 7,
+    });
+
+    expect(result!.faelligAm).toBe('2025-07-05');
+  });
+
+  test('pro-rata bei Einzug Monatsmitte', () => {
+    const proRata = vorschreibungService.calculateProRata(900, 30, 16);
     expect(proRata).toBe(480);
+  });
+
+  test('Gesamtbetrag = Netto + USt', async () => {
+    const tenant = await createTenant({
+      unitId, grundmiete: 500, betriebskostenVorschuss: 100, heizkostenVorschuss: 50,
+    });
+
+    const result = await vorschreibungService.generateVorschreibung({
+      tenantId: tenant.id as string, year: 2025, month: 2,
+    });
+
+    const expectedNetto = 500 + 100 + 50;
+    expect(result!.gesamtbetrag).toBe(roundMoney(expectedNetto + result!.ust));
   });
 });
