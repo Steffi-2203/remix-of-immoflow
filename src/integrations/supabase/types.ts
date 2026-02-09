@@ -2017,6 +2017,7 @@ export type Database = {
           mahnstufe: number
           mahnung_am: string | null
           month: number
+          paid_amount: number
           status: Database["public"]["Enums"]["invoice_status"]
           tenant_id: string
           unit_id: string
@@ -2024,6 +2025,7 @@ export type Database = {
           ust_satz_bk: number
           ust_satz_heizung: number
           ust_satz_miete: number
+          version: number
           vortrag_bk: number
           vortrag_gesamt: number | null
           vortrag_hk: number
@@ -2044,6 +2046,7 @@ export type Database = {
           mahnstufe?: number
           mahnung_am?: string | null
           month: number
+          paid_amount?: number
           status?: Database["public"]["Enums"]["invoice_status"]
           tenant_id: string
           unit_id: string
@@ -2051,6 +2054,7 @@ export type Database = {
           ust_satz_bk?: number
           ust_satz_heizung?: number
           ust_satz_miete?: number
+          version?: number
           vortrag_bk?: number
           vortrag_gesamt?: number | null
           vortrag_hk?: number
@@ -2071,6 +2075,7 @@ export type Database = {
           mahnstufe?: number
           mahnung_am?: string | null
           month?: number
+          paid_amount?: number
           status?: Database["public"]["Enums"]["invoice_status"]
           tenant_id?: string
           unit_id?: string
@@ -2078,6 +2083,7 @@ export type Database = {
           ust_satz_bk?: number
           ust_satz_heizung?: number
           ust_satz_miete?: number
+          version?: number
           vortrag_bk?: number
           vortrag_gesamt?: number | null
           vortrag_hk?: number
@@ -2446,6 +2452,48 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_allocations: {
+        Row: {
+          allocation_type: string | null
+          applied_amount: number
+          created_at: string | null
+          id: string
+          invoice_id: string
+          payment_id: string
+        }
+        Insert: {
+          allocation_type?: string | null
+          applied_amount: number
+          created_at?: string | null
+          id?: string
+          invoice_id: string
+          payment_id: string
+        }
+        Update: {
+          allocation_type?: string | null
+          applied_amount?: number
+          created_at?: string | null
+          id?: string
+          invoice_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
             referencedColumns: ["id"]
           },
         ]
