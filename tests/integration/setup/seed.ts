@@ -217,32 +217,47 @@ export async function seedUnits(count: number, options?: { propertyId?: string; 
 }
 
 /**
- * Seed expenses for a property.
+ * Create a single expense and return the row.
+ */
+export async function createExpense(data: {
+  propertyId: string;
+  type: string;
+  amount: number;
+  year?: number;
+  month?: number;
+  istUmlagefaehig?: boolean;
+}) {
+  const id = `fac-exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const year = data.year ?? 2024;
+  const month = data.month ?? 6;
+  const umlagefaehig = data.istUmlagefaehig ??
+    !['instandhaltung', 'reparatur', 'finanzierung', 'ruecklage'].includes(data.type);
+  const datum = `${year}-${String(month).padStart(2, '0')}-15`;
+
+  const row = await db.execute(sql`
+    INSERT INTO expenses (id, property_id, bezeichnung, betrag, category, expense_type, datum, year, month, ist_umlagefaehig)
+    VALUES (${id}, ${data.propertyId}, ${data.type}, ${data.amount}, ${data.type}, 'betriebskosten', ${datum}, ${year}, ${month}, ${umlagefaehig})
+    RETURNING *
+  `).then(r => r.rows[0]);
+  return row;
+}
+
+/**
+ * Seed multiple expenses for a property.
  */
 export async function seedExpenses(
-  items: Array<{ type: string; amount: number }>,
+  items: Array<{ type: string; amount: number; year?: number }>,
   options?: { propertyId?: string; year?: number; month?: number }
 ) {
-  const ts = Date.now();
-  const propertyId = options?.propertyId ?? `batch-prop-${ts}`;
-  const year = options?.year ?? 2024;
-  const month = options?.month ?? 6;
+  const propertyId = options?.propertyId ?? `batch-prop-${Date.now()}`;
 
-  const ids: string[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const id = `batch-exp-${i}-${ts}`;
-    ids.push(id);
-    await seedExpense({
-      id,
+  for (const e of items) {
+    await createExpense({
       propertyId,
-      bezeichnung: items[i].type,
-      betrag: items[i].amount,
-      category: items[i].type,
-      year,
-      month,
-      istUmlagefaehig: !['instandhaltung', 'reparatur', 'finanzierung', 'ruecklage'].includes(items[i].type),
+      type: e.type,
+      amount: e.amount,
+      year: e.year ?? options?.year ?? 2024,
+      month: options?.month,
     });
   }
-
-  return ids;
 }
