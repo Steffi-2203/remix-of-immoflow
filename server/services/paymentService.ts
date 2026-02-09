@@ -150,6 +150,12 @@ export class PaymentService {
         })}::jsonb, now())
       `);
 
+      // Enqueue async ledger sync job
+      await tx.execute(sql`
+        INSERT INTO job_queue (id, job_type, payload, status, created_at)
+        VALUES (gen_random_uuid(), 'ledger_sync', ${JSON.stringify({ paymentId, tenantId, amount: roundedAmount, applied: appliedTotal, unapplied })}::jsonb, 'pending', now())
+      `);
+
       return {
         success: true,
         paymentId,
