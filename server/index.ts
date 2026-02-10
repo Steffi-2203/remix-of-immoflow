@@ -15,6 +15,7 @@ import { seedDistributionKeys } from "./seedDistributionKeys";
 import { jobQueueService } from "./services/jobQueueService";
 import { billingService } from "./billing/billing.service";
 import SESSION_SECRET from "./config/session";
+import { verifyCsrf, csrfTokenEndpoint } from "./middleware/csrf";
 
 const app = express();
 
@@ -84,6 +85,12 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 8, // 8 hours
   },
 }));
+
+// CSRF token endpoint (must be before verifyCsrf middleware)
+app.get("/api/auth/csrf-token", csrfTokenEndpoint);
+
+// CSRF protection for all mutating requests (POST/PUT/PATCH/DELETE)
+app.use(verifyCsrf);
 
 // Stricter rate limit for Stripe webhooks
 const webhookLimiter = rateLimit({
