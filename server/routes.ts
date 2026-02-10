@@ -17,9 +17,12 @@ import { ownerReportingService } from "./services/ownerReportingService";
 import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import { paymentService } from "./services/paymentService";
+import { generateVorschreibungPdf, type VorschreibungData } from "./services/pdfService";
 import { jobQueueService } from "./services/jobQueueService";
+import { parseCamt053 } from "./services/camt053Service";
 import readonlyRoutes from "./routes/readonly";
 import featureRoutes from "./routes/featureRoutes";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import crypto from "crypto";
 import multer from "multer";
 import OpenAI from "openai";
@@ -195,6 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.use("/api/readonly", readonlyRoutes);
   app.use(featureRoutes);
+  registerObjectStorageRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -1568,6 +1572,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/invoices/:id/pdf", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      const unit = await storage.getUnit(invoice.unitId);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+
+      const property = await storage.getProperty(unit.propertyId);
+      if (!property || property.organizationId !== profile?.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const org = profile?.organizationId
+        ? await storage.getOrganization(profile.organizationId)
+        : null;
+
+      let tenant = null;
+      if (invoice.tenantId) {
+        tenant = await storage.getTenant(invoice.tenantId);
+      }
+
+      const lines = await db.select().from(schema.invoiceLines)
+        .where(eq(schema.invoiceLines.invoiceId, invoice.id));
+
+      const MONATSNAMEN = [
+        '', 'Jaenner', 'Februar', 'Maerz', 'April', 'Mai', 'Juni',
+        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+      ];
+
+      const positionen: VorschreibungData['positionen'] = [];
+
+      if (lines.length > 0) {
+        for (const line of lines) {
+          const netto = Number(line.amount) || 0;
+          const taxRate = line.taxRate || 0;
+          const ust = Math.round(netto * taxRate) / 100;
+          positionen.push({
+            bezeichnung: line.description || line.lineType || 'Position',
+            netto,
+            ustSatz: taxRate,
+            ust,
+            brutto: netto + ust,
+          });
+        }
+      } else {
+        const grundmiete = Number(invoice.grundmiete) || 0;
+        const bk = Number(invoice.betriebskosten) || 0;
+        const hk = Number(invoice.heizungskosten) || 0;
+        const wk = Number(invoice.wasserkosten) || 0;
+        const ustMiete = invoice.ustSatzMiete || 10;
+        const ustBk = invoice.ustSatzBk || 10;
+        const ustHeizung = invoice.ustSatzHeizung || 20;
+        const ustWasser = invoice.ustSatzWasser || 10;
+
+        if (grundmiete > 0) {
+          const ust = Math.round(grundmiete * ustMiete) / 100;
+          positionen.push({ bezeichnung: 'Grundmiete', netto: grundmiete, ustSatz: ustMiete, ust, brutto: grundmiete + ust });
+        }
+        if (bk > 0) {
+          const ust = Math.round(bk * ustBk) / 100;
+          positionen.push({ bezeichnung: 'Betriebskosten', netto: bk, ustSatz: ustBk, ust, brutto: bk + ust });
+        }
+        if (hk > 0) {
+          const ust = Math.round(hk * ustHeizung) / 100;
+          positionen.push({ bezeichnung: 'Heizkosten', netto: hk, ustSatz: ustHeizung, ust, brutto: hk + ust });
+        }
+        if (wk > 0) {
+          const ust = Math.round(wk * ustWasser) / 100;
+          positionen.push({ bezeichnung: 'Wasserkosten', netto: wk, ustSatz: ustWasser, ust, brutto: wk + ust });
+        }
+      }
+
+      const gesamtNetto = positionen.reduce((s, p) => s + p.netto, 0);
+      const gesamtUst = positionen.reduce((s, p) => s + p.ust, 0);
+      const gesamtBrutto = positionen.reduce((s, p) => s + p.brutto, 0);
+
+      const monatName = MONATSNAMEN[invoice.month] || `Monat ${invoice.month}`;
+
+      const vorschreibungData: VorschreibungData = {
+        hausverwaltung: {
+          name: org?.name || 'Hausverwaltung',
+          address: [org?.address, org?.postalCode, org?.city].filter(Boolean).join(', ') || '',
+          tel: org?.phone || undefined,
+          email: org?.email || undefined,
+        },
+        mieter: {
+          name: tenant ? `${tenant.firstName || ''} ${tenant.lastName || ''}`.trim() : 'Leerstand',
+          address: `${property.address}, ${property.postalCode} ${property.city}`,
+        },
+        liegenschaft: property.name || '',
+        einheit: unit.topNummer || '',
+        monat: `${monatName} ${invoice.year}`,
+        year: invoice.year,
+        month: invoice.month,
+        faelligkeitsdatum: invoice.faelligAm || `01.${String(invoice.month).padStart(2, '0')}.${invoice.year}`,
+        positionen,
+        gesamtNetto,
+        gesamtUst,
+        gesamtBrutto,
+        bankverbindung: org?.iban ? {
+          iban: org.iban,
+          bic: org.bic || '',
+          bank: org.name || '',
+        } : undefined,
+        rechnungsnummer: `VS-${invoice.year}-${String(invoice.month).padStart(2, '0')}-${invoice.id.substring(0, 8).toUpperCase()}`,
+      };
+
+      const pdfBuffer = await generateVorschreibungPdf(vorschreibungData);
+
+      const filename = `Vorschreibung_${invoice.year}_${String(invoice.month).padStart(2, '0')}_${unit.topNummer || 'unit'}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Generate invoice PDF error:", error);
+      res.status(500).json({ error: "Failed to generate invoice PDF" });
+    }
+  });
+
   app.post("/api/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -2523,6 +2653,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/bank-import/camt053", isAuthenticated, async (req: any, res) => {
+    try {
+      const xmlContent = typeof req.body === 'string' ? req.body : req.body?.xml || req.body?.content;
+      if (!xmlContent || typeof xmlContent !== 'string') {
+        return res.status(400).json({ error: "XML-Inhalt fehlt. Senden Sie den XML-Text als Body oder als { xml: '...' }" });
+      }
+      const result = parseCamt053(xmlContent);
+      res.json(result);
+    } catch (error: any) {
+      console.error('CAMT.053 parse error:', error);
+      res.status(400).json({ error: `CAMT.053 Parsing-Fehler: ${error.message || 'Unbekannter Fehler'}` });
+    }
+  });
+
+  app.post("/api/bank-import/camt053/apply", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) {
+        return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      }
+
+      const { accountIban, transactions: txns, bankAccountId } = req.body;
+      if (!txns || !Array.isArray(txns) || txns.length === 0) {
+        return res.status(400).json({ error: "Keine Transaktionen zum Importieren" });
+      }
+
+      let resolvedBankAccountId = bankAccountId;
+      if (!resolvedBankAccountId && accountIban) {
+        const orgBankAccounts = await storage.getBankAccountsByOrganization(orgId);
+        const normalizedIban = accountIban.replace(/\s/g, '').toUpperCase();
+        const matched = orgBankAccounts.find((ba: any) =>
+          ba.iban && ba.iban.replace(/\s/g, '').toUpperCase() === normalizedIban
+        );
+        if (matched) {
+          resolvedBankAccountId = matched.id;
+        }
+      }
+
+      const created = [];
+      for (const tx of txns) {
+        const signedAmount = tx.creditDebit === 'DBIT'
+          ? -Math.abs(tx.amount)
+          : Math.abs(tx.amount);
+
+        const transaction = await db.insert(schema.transactions).values({
+          organizationId: orgId,
+          bankAccountId: resolvedBankAccountId || null,
+          amount: signedAmount.toFixed(2),
+          transactionDate: tx.bookingDate || tx.valueDate,
+          bookingText: tx.remittanceInfo || null,
+          partnerName: tx.counterpartyName || null,
+          partnerIban: tx.counterpartyIban || null,
+          reference: tx.endToEndId || tx.remittanceInfo || null,
+          rawData: tx,
+        }).returning();
+        created.push(transaction[0]);
+      }
+
+      if (resolvedBankAccountId) {
+        const balance = await storage.getBankAccountBalance(resolvedBankAccountId);
+        await storage.updateBankAccount(resolvedBankAccountId, {
+          currentBalance: balance.toString(),
+          lastSyncedAt: new Date(),
+        });
+      }
+
+      res.json({
+        success: true,
+        importedCount: created.length,
+        bankAccountId: resolvedBankAccountId || null,
+        transactions: created,
+      });
+    } catch (error: any) {
+      console.error('CAMT.053 apply error:', error);
+      res.status(500).json({ error: `Import-Fehler: ${error.message || 'Unbekannter Fehler'}` });
+    }
+  });
+
   app.get("/api/properties/:propertyId/settlements", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -3353,6 +3562,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== VPI Values Management =====
+  app.get("/api/vpi/values", isAuthenticated, async (req: any, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT id, year, month, value, source, created_at, updated_at
+        FROM vpi_values ORDER BY year DESC, month DESC
+      `);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("VPI values error:", error);
+      res.status(500).json({ error: "Fehler beim Laden der VPI-Werte" });
+    }
+  });
+
+  app.post("/api/vpi/values", isAuthenticated, requireRole("admin", "finance"), async (req: any, res) => {
+    try {
+      const { year, month, value, source } = req.body;
+      if (!year || !month || value === undefined) {
+        return res.status(400).json({ error: "Jahr, Monat und Wert sind erforderlich" });
+      }
+      const result = await db.execute(sql`
+        INSERT INTO vpi_values (year, month, value, source)
+        VALUES (${year}, ${month}, ${value}, ${source || 'manual'})
+        ON CONFLICT (year, month) DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source, updated_at = NOW()
+        RETURNING *
+      `);
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("VPI value create error:", error);
+      res.status(500).json({ error: "Fehler beim Speichern des VPI-Werts" });
+    }
+  });
+
+  app.delete("/api/vpi/values/:id", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+    try {
+      await db.execute(sql`DELETE FROM vpi_values WHERE id = ${req.params.id}::uuid`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("VPI value delete error:", error);
+      res.status(500).json({ error: "Fehler beim Löschen des VPI-Werts" });
+    }
+  });
+
   // ===== VPI Automation Routes =====
   app.get("/api/vpi/check-adjustments", isAuthenticated, async (req: any, res) => {
     try {
@@ -3622,11 +3874,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/storage/upload", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
     try {
-      // Placeholder for file upload - would integrate with Object Storage in production
+      const { ObjectStorageService } = await import("./replit_integrations/object_storage");
+      const oss = new ObjectStorageService();
+      const uploadURL = await oss.getObjectEntityUploadURL();
+      const objectPath = oss.normalizeObjectEntityPath(uploadURL);
       res.json({ 
         success: true, 
-        path: `/uploads/${Date.now()}-file`,
-        message: "File upload endpoint placeholder" 
+        uploadURL,
+        objectPath,
+        path: objectPath,
       });
     } catch (error) {
       console.error('Upload error:', error);

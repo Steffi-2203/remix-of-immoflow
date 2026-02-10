@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { tenants, units, properties, vpiAdjustments, rentHistory, monthlyInvoices } from "@shared/schema";
-import { eq, and, isNull, gte, lte, desc } from "drizzle-orm";
+import { tenants, units, properties, vpiAdjustments, rentHistory, monthlyInvoices, vpiValues } from "@shared/schema";
+import { eq, and, isNull, gte, lte, desc, sql } from "drizzle-orm";
 import { format, addMonths } from "date-fns";
 import { de } from "date-fns/locale";
 
@@ -27,11 +27,19 @@ const SCHWELLENWERT = 0.05;
 
 export class VpiAutomationService {
   private async getCurrentVpi(): Promise<VpiData> {
-    return {
-      year: 2025,
-      month: 12,
-      value: 122.3,
-    };
+    const latest = await db.select()
+      .from(vpiValues)
+      .orderBy(desc(vpiValues.year), desc(vpiValues.month))
+      .limit(1);
+    
+    if (latest.length > 0) {
+      return {
+        year: latest[0].year,
+        month: latest[0].month,
+        value: Number(latest[0].value),
+      };
+    }
+    return { year: 2025, month: 12, value: 122.3 };
   }
 
   async checkVpiAdjustments(organizationId: string): Promise<VpiAdjustmentResult[]> {

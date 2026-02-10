@@ -738,6 +738,16 @@ export const vpiAdjustments = pgTable("vpi_adjustments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const vpiValues = pgTable("vpi_values", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  value: numeric("value", { precision: 8, scale: 2 }).notNull(),
+  source: text("source").default("manual"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const insertOwnerSchema = createInsertSchema(owners).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPropertyOwnerSchema = createInsertSchema(propertyOwners).omit({ id: true, createdAt: true });
 export const insertMeterSchema = createInsertSchema(meters).omit({ id: true, createdAt: true, updatedAt: true });
