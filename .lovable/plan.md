@@ -1,138 +1,175 @@
 
-# Hardening: Alle verbleibenden bare-ID Lookups auf `assertOwnership` umstellen
 
-## Ueberblick
+# Monitoring, Retention, E2E-Tests und Testabdeckung -- die letzten 10 %
 
-Es gibt noch ~20 Endpunkte in `server/routes.ts`, die Ressourcen per `storage.getX(id)` laden und dann manuell `organizationId` vergleichen, anstatt den zentralen `assertOwnership`-Helper zu verwenden. Ausserdem fehlen bei einigen Pruefungen harte 404-Antworten (statt 403), was ID-Enumeration ermoeglicht.
+## 1. Structured Logging (Pino)
 
-Zusaetzlich gibt es in `server/storage.ts` Mutations-Methoden (`updateBankAccount`, `deleteBankAccount`, `updateProperty`, `deleteProperty`, `updateUnit`, `updateExpense`, `updateDistributionKey`, `deleteDistributionKey`, `softDeleteUnit`, `softDeleteTenant`), die nur auf `id` filtern -- ohne Org-Scoping. Da die Absicherung auf Route-Ebene erfolgt, ist das akzeptabel, aber bei jedem Aufruf muss sichergestellt sein, dass vorher `assertOwnership` geprueft wurde.
+**Aktuell:** 1278 `console.*` Aufrufe verteilt auf 34 Dateien -- kein einheitliches Format, keine Log-Level-Steuerung, kein Correlation-ID.
 
-## Betroffene Endpunkte in `server/routes.ts`
+**Umsetzung:**
 
-### Kategorie A: Direkte Tabellen (einfach umstellbar)
+- Neues Modul `server/lib/logger.ts` mit Pino als JSON-Logger
+- Log-Level via `LOG_LEVEL` Environment-Variable steuerbar (default: `info`)
+- Automatische Request-ID (`x-request-id`) als Correlation-ID in jedem Log
+- Child-Logger fuer Services: `logger.child({ service: 'billing' })`
+- Express-Middleware `server/middleware/requestLogger.ts` ersetzt den manuellen `onFinished`-Block in `server/index.ts`
+- Schrittweise Migration: zuerst die kritischen Pfade (Billing, Payments, Auth), dann den Rest
 
-| Zeile | Endpunkt | Aktueller Code | Aenderung |
-|---|---|---|---|
-| 246 | `GET /api/properties/:id` | `storage.getProperty` + manueller Vergleich | `assertOwnership(req, res, id, "properties")` |
-| 262 | `GET /api/properties/:propertyId/units` | `storage.getProperty` + manueller Vergleich | `assertOwnership(req, res, propertyId, "properties")` |
-| 519 | `PATCH /api/properties/:id` | `storage.getProperty` + manueller Vergleich | `assertOwnership(req, res, id, "properties")` |
-| 963 | `GET /api/units/:id` | `storage.getUnit` + `getProperty` + Vergleich | `assertOwnership(req, res, id, "units")` |
-| 1019 | `PATCH /api/units/:id` | `storage.getUnit` + `getProperty` + Vergleich | `assertOwnership(req, res, id, "units")` |
-| 1059 | `GET /api/units/:unitId/tenants` | `storage.getUnit` + `getProperty` + Vergleich | `assertOwnership(req, res, unitId, "units")` |
-| 1090 | `GET /api/tenants/:id` | `storage.getTenant` + `getUnit` + `getProperty` | `assertOwnership(req, res, id, "tenants")` |
-| 1111 | `DELETE /api/units/:id` | `storage.getUnit` + `getProperty` + Vergleich | `assertOwnership(req, res, id, "units")` |
-| 1129 | `DELETE /api/tenants/:id` | `storage.getTenant` + `getUnit` + `getProperty` | `assertOwnership(req, res, id, "tenants")` |
-| 1208 | `GET /api/tenants/:tenantId/rent-history` | Manuell 3-Stufen Lookup | `assertOwnership(req, res, tenantId, "tenants")` |
-| 1230 | `POST /api/tenants/:tenantId/rent-history` | Manuell 3-Stufen Lookup | `assertOwnership(req, res, tenantId, "tenants")` |
-| 1635 | `GET /api/properties/:propertyId/expenses` | `storage.getProperty` + Vergleich | `assertOwnership(req, res, propertyId, "properties")` |
-| 1654 | `GET /api/properties/:propertyId/vacancy-report` | `storage.getProperty` + Vergleich | `assertOwnership(req, res, propertyId, "properties")` |
+**Kein Refactoring aller 1278 Stellen auf einmal** -- stattdessen wird der Logger exportiert und neue/geaenderte Dateien nutzen ihn. Bestehende `console.*` Aufrufe bleiben vorerst funktional.
 
-### Kategorie B: Indirekte / Mutations-Eingangspruefung
+## 2. Security-Event-Logging
 
-| Zeile | Endpunkt | Aktueller Code | Aenderung |
-|---|---|---|---|
-| 602 | `POST /api/payments` | `getTenant` -> `getUnit` -> `getProperty` | `assertOwnership(req, res, tenantId, "tenants")` |
-| 644 | `PATCH /api/payments/:id` | `getPayment` -> `getTenant` -> `getUnit` -> `getProperty` | `assertOwnership(req, res, id, "payments")` |
-| 686 | `GET /api/payments/:id` | `getPayment` -> `getTenant` -> `getUnit` -> `getProperty` | `assertOwnership(req, res, id, "payments")` |
-| 723 | `POST /api/transactions` | `getBankAccount` + manueller Vergleich | `assertOwnership(req, res, bankAccountId, "bank_accounts")` |
-| 745 | `GET /api/transactions/:id` | `getBankAccount` + manueller Vergleich | Neuer `transactions` Case in `assertOrgOwnership` oder expliziter Bank-Account-Check |
-| 765 | `DELETE /api/transactions/:id` | `getBankAccount` + manueller Vergleich | Wie `GET /api/transactions/:id` |
-| 828 | `PATCH /api/expenses/:id` | `getExpense` -> `getProperty` | `assertOwnership(req, res, id, "expenses")` |
-| 987 | `POST /api/units` | `getProperty` + manueller Vergleich | `assertOwnership(req, res, propertyId, "properties")` |
-| 1150 | `POST /api/tenants` | `getUnit` -> `getProperty` + Vergleich | `assertOwnership(req, res, unitId, "units")` |
-| 1416 | `POST /api/invoices` | `getTenant` -> `getUnit` -> `getProperty` | `assertOwnership(req, res, tenantId, "tenants")` |
+**Aktuell:** `OrgOwnershipError`, `PeriodLockError`, und Auth-Fehler werden nur als HTTP-Responses gesendet, nicht separat protokolliert.
 
-### Kategorie C: Sicherheitsluecken (schwache Pruefungen)
+**Umsetzung:**
 
-Einige Endpunkte verwenden "weiche" Pruefungen, die bei fehlendem Zwischenresultat stillschweigend weitermachen:
+- Neues Modul `server/lib/securityEvents.ts` mit typisierten Events:
+  - `ownership_violation` -- wenn `assertOrgOwnership` fehlschlaegt
+  - `period_lock_violation` -- wenn gesperrte Periode manipuliert werden soll
+  - `auth_failure` -- fehlgeschlagene Logins
+  - `csrf_rejection` -- CSRF-Token ungueltig
+  - `rate_limit_hit` -- Rate-Limiter greift
+- Events werden ueber den Pino-Logger mit `level: 'warn'` und `category: 'security'` ausgegeben
+- Integration in `assertOwnership` (catch-Block), `periodLock.ts`, `csrf.ts` und `auth.ts`
 
-```text
-// Zeile 693-702 (GET /api/payments/:id) – PROBLEM
-if (tenant) {           // <-- wenn tenant fehlt, kein Fehler!
-  const unit = ...
-  if (unit) {           // <-- wenn unit fehlt, kein Fehler!
-    const property = ...
-    if (property && property.orgId !== profileOrgId) {
-      return 403;
-    }
-  }
+## 3. Prometheus-Metriken-Endpoint
+
+**Aktuell:** `server/lib/metrics.ts` sammelt In-Memory-Metriken, `tools/metrics.cjs` nutzt `prom-client` -- aber es gibt keinen HTTP-Endpoint.
+
+**Umsetzung:**
+
+- Neuer Endpoint `GET /metrics` (oder `/api/metrics` mit Basic-Auth)
+- Nutzt die bestehende `MetricsCollector`-Klasse aus `server/lib/metrics.ts`
+- Zusaetzliche Standard-Metriken: `http_requests_total`, `http_request_duration_seconds`, `active_connections`
+- Express-Middleware zaehlt Request-Rate und Latency automatisch
+- Queue-Laenge aus `job_runs` Tabelle als Gauge
+
+## 4. BAO/GoBD Retention-Enforcement
+
+**Aktuell:** `archiveService.ts` implementiert 7-Jahre-Logik und Soft-Delete, aber:
+- Kein Deletion-Freeze fuer steuerrelevante aktive Dokumente
+- Kein GoBD-10-Jahres-Pfad
+- Kein strukturierter Export
+
+**Umsetzung:**
+
+- `archiveService.ts` erweitern:
+  - `RETENTION_YEARS_GOBD = 10` als Konfig-Option neben BAO 7 Jahre
+  - `isDeletionFrozen(invoiceId)` -- prueft ob Dokument innerhalb Retention liegt und verhindert harte Loeschung
+  - Deletion-Freeze als Guard in der `DELETE /api/invoices/:id` Route
+- Neuer Endpoint `GET /api/archive/export` -- generiert ein ZIP-Paket mit:
+  - Rechnungen als PDF/CSV
+  - Zahlungsjournal
+  - Audit-Trail fuer den Zeitraum
+  - SHA-256 Pruefsumme pro Datei
+- Integration mit dem bestehenden `tools/export_audit_package.js`
+
+## 5. E2E-Test-Flows (Playwright + Supertest)
+
+**Aktuell:** 38 Unit-Test-Dateien, 3 Integration-Suites -- aber keine durchgehenden User-Journey-Tests.
+
+**Neue Testdateien:**
+
+| Datei | Flow |
+|---|---|
+| `tests/integration/payment-to-lock.spec.ts` | Zahlung -> Allocation -> BK-Abschluss -> Period-Lock |
+| `tests/integration/owner-change-flow.spec.ts` | Eigentuemerwechsel -> Vorschreibung -> Abrechnung |
+| `tests/integration/dunning-storno-flow.spec.ts` | Mahnlauf -> Zahlung -> Storno -> Reconciliation |
+| `tests/integration/auth-csrf-flow.spec.ts` | Login -> CSRF-geschuetzter POST -> Logout |
+
+Jeder Test nutzt die bestehenden `resetDb()` und `seedPortfolio()` Helpers aus `tests/helpers/`.
+
+## 6. Fehlende Testbereiche (Enterprise-kritisch)
+
+| Testdatei | Was wird getestet |
+|---|---|
+| `tests/unit/race-condition-payments.test.ts` | Gleichzeitige Payment-Allocations mit `Promise.all` + Assertions auf finale Salden |
+| `tests/unit/period-lock-edge-cases.test.ts` | Monatswechsel (31.1. vs 1.2.), Jahreswechsel, Schaltjahr |
+| `tests/unit/settlement-warning-edge.test.ts` | MRG-Frist genau am 30.06., einen Tag davor/danach |
+| `tests/unit/ownership-bypass.test.ts` | ID-Manipulation, UUID einer fremden Org, SQL-Injection in ID-Feld |
+
+## Technische Details
+
+### Pino Logger Setup
+
+```typescript
+// server/lib/logger.ts
+import pino from 'pino';
+
+export const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  serializers: {
+    err: pino.stdSerializers.err,
+    req: pino.stdSerializers.req,
+    res: pino.stdSerializers.res,
+  },
+});
+```
+
+### Security Event Schema
+
+```typescript
+interface SecurityEvent {
+  category: 'security';
+  eventType: 'ownership_violation' | 'period_lock_violation' | 
+             'auth_failure' | 'csrf_rejection' | 'rate_limit_hit';
+  severity: 'warn' | 'error';
+  ip: string;
+  userId?: string;
+  resourceId?: string;
+  resourceType?: string;
+  details: Record<string, unknown>;
 }
-// Hier wird das Payment trotzdem zurueckgegeben
 ```
 
-Gleiches Muster bei:
-- `GET /api/units/:unitId/tenants` (Zeile 1063)
-- `GET /api/tenants/:id` (Zeile 1098)
-- `DELETE /api/tenants/:id` (Zeile 1137)
-
-Diese werden durch `assertOwnership` behoben, da dieser bei fehlenden Zwischenresultaten immer 404 wirft.
-
-## Umsetzungsschritte
-
-### 1. `server/routes.ts` refactoren (~20 Endpunkte)
-
-Jeden der oben gelisteten Endpunkte wie folgt umstellen:
-
-**Vorher (Beispiel GET /api/properties/:id):**
-```typescript
-const profile = await getProfileFromSession(req);
-const property = await storage.getProperty(req.params.id);
-if (!property) return res.status(404)...;
-if (property.organizationId !== profile?.organizationId) return res.status(403)...;
-res.json(property);
-```
-
-**Nachher:**
-```typescript
-const property = await assertOwnership(req, res, req.params.id, "properties");
-if (!property) return;
-res.json(property);
-```
-
-### 2. `assertOrgOwnership.ts` erweitern
-
-Neuen Case `"transactions"` hinzufuegen:
-- Lookup: `storage.getTransaction(id)` -> `storage.getBankAccount(bankAccountId)` -> Org-Vergleich
-- Gleiche Kette wie die bestehende manuelle Pruefung, aber zentralisiert
-
-`ResourceTable` Type um `"transactions"` erweitern.
-
-### 3. Generische `assertOrgOwnershipDirect` Funktion hinzufuegen
-
-Wie im vorherigen Plan besprochen -- die generische Drizzle-basierte Funktion fuer Direkttabellen:
+### Retention Guard
 
 ```typescript
-export async function assertOrgOwnershipDirect<T extends PgTable>({
-  table, id, organizationId,
-  idColumn, orgColumn,
-}) { ... }
+// In DELETE /api/invoices/:id route
+const frozen = await archiveService.isDeletionFrozen(id);
+if (frozen) {
+  return res.status(409).json({ 
+    error: 'Dokument unterliegt der gesetzlichen Aufbewahrungspflicht',
+    retentionUntil: frozen.retentionUntil 
+  });
+}
 ```
-
-Die bestehenden Switch-Cases fuer `contractors`, `maintenance_contracts`, `maintenance_tasks`, `settlements` werden darauf umgestellt.
-
-### 4. Bestehende Tests erweitern
-
-In `tests/unit/cross-tenant-isolation.test.ts`:
-- Tests fuer `transactions`-Case hinzufuegen
-- Tests fuer die Kategorie-C "weiche Pruefungen" sicherstellen (Payment ohne validen Tenant darf nicht durchrutschen)
-
-## Sicherheitsbewertung
-
-| Risiko | Schwere | Betroffene Endpunkte |
-|---|---|---|
-| Weiche Pruefungen (Kategorie C) | **HOCH** | 4 Endpunkte geben Daten zurueck wenn Zwischenresultat fehlt |
-| Inkonsistente Fehler-Codes (403 statt 404) | MITTEL | ~10 Endpunkte leaken Existenz durch 403 |
-| Fehlende Pruefung bei Mutations-Inputs | MITTEL | `POST /api/units`, `POST /api/tenants`, `POST /api/invoices` |
 
 ## Dateiaenderungen
 
 | Datei | Aenderung |
 |---|---|
-| `server/routes.ts` | ~20 Endpunkte auf `assertOwnership` umstellen |
-| `server/middleware/assertOrgOwnership.ts` | `transactions` Case und `assertOrgOwnershipDirect` hinzufuegen |
-| `tests/unit/cross-tenant-isolation.test.ts` | Tests fuer Transactions und schwache Pruefungen |
+| `server/lib/logger.ts` | **NEU** -- Pino Logger |
+| `server/lib/securityEvents.ts` | **NEU** -- Security Event Emitter |
+| `server/middleware/requestLogger.ts` | **NEU** -- Request-Logging Middleware |
+| `server/middleware/assertOrgOwnership.ts` | Security-Event bei Ownership-Fehler |
+| `server/middleware/periodLock.ts` | Security-Event bei Period-Lock-Verletzung |
+| `server/middleware/csrf.ts` | Security-Event bei CSRF-Rejection |
+| `server/billing/archiveService.ts` | Retention-Enforcement + Export |
+| `server/routes.ts` | `/metrics` Endpoint + Retention-Guard bei Invoice-Delete |
+| `server/index.ts` | Pino-Middleware statt manuelles Logging |
+| `tests/integration/payment-to-lock.spec.ts` | **NEU** -- E2E Flow |
+| `tests/integration/owner-change-flow.spec.ts` | **NEU** -- E2E Flow |
+| `tests/integration/dunning-storno-flow.spec.ts` | **NEU** -- E2E Flow |
+| `tests/integration/auth-csrf-flow.spec.ts` | **NEU** -- E2E Flow |
+| `tests/unit/race-condition-payments.test.ts` | **NEU** |
+| `tests/unit/period-lock-edge-cases.test.ts` | **NEU** |
+| `tests/unit/settlement-warning-edge.test.ts` | **NEU** |
+| `tests/unit/ownership-bypass.test.ts` | **NEU** |
+| `package.json` | `pino` Dependency hinzufuegen |
 
-## Keine Breaking Changes
+## Abhaengigkeiten
 
-- Alle API-Antworten bleiben identisch (JSON-Struktur unveraendert)
-- Einzige Verhaltensaenderung: Kategorie-C Endpunkte geben jetzt korrekt 404 zurueck statt Daten ohne Org-Pruefung durchzulassen
+Neues npm-Paket: `pino` (keine weiteren Abhaengigkeiten noetig -- `prom-client` ist bereits via `tools/metrics.cjs` vorhanden)
+
+## Reihenfolge
+
+1. Pino Logger + Security Events (Grundlage fuer alles Weitere)
+2. Retention-Enforcement (BAO/GoBD)
+3. Prometheus-Endpoint
+4. Unit-Tests (Edge Cases)
+5. E2E-Flow-Tests
+
