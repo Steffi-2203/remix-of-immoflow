@@ -3,6 +3,7 @@ import { eq, and, sql, type InferSelectModel } from "drizzle-orm";
 import type { PgTable, PgColumn } from "drizzle-orm/pg-core";
 import * as schema from "@shared/schema";
 import { storage } from "../storage";
+import { logOwnershipViolation } from "../lib/securityEvents";
 
 /**
  * OrgOwnershipError – thrown when a resource does not belong
@@ -350,6 +351,13 @@ export async function assertOwnership<T = any>(
     return resource;
   } catch (err) {
     if (err instanceof OrgOwnershipError) {
+      logOwnershipViolation({
+        ip: req.ip || req.connection?.remoteAddress || "unknown",
+        userId: req.session?.userId,
+        resourceId,
+        resourceType: table,
+        organizationId: profile?.organizationId,
+      });
       res.status(err.status).json({ error: err.message });
       return null;
     }

@@ -3,7 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import onFinished from "on-finished";
+import { requestLoggerMiddleware } from "./middleware/requestLogger";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
@@ -141,60 +141,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Sanitize sensitive data from logs
-function sanitize(obj: unknown): unknown {
-  if (!obj || typeof obj !== "object") return obj;
-
-  const clone = structuredClone(obj) as Record<string, unknown>;
-  const sensitiveKeys = ["password", "token", "access_token", "refresh_token", "session", "secret", "apiKey", "api_key", "authorization"];
-
-  for (const key of sensitiveKeys) {
-    if (clone[key]) clone[key] = "***REDACTED***";
-  }
-
-  return clone;
-}
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
-
-  const isDev = process.env.NODE_ENV !== "production";
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  onFinished(res, () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      const requestBody = isDev && req.body && Object.keys(req.body).length > 0 ? sanitize(req.body) : undefined;
-      const responseToLog = isDev ? capturedJsonResponse : sanitize(capturedJsonResponse);
-      
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (requestBody) {
-        logLine += ` body=${JSON.stringify(requestBody)}`;
-      }
-      if (responseToLog) {
-        logLine += ` response=${JSON.stringify(responseToLog)}`;
-      }
-
-      if (logLine.length > 200) {
-        logLine = logLine.slice(0, 199) + "…";
-      }
-
-      if (res.statusCode >= 400) {
-        logError(logLine);
-      } else {
-        logInfo(logLine);
-      }
-    }
-  });
-
-  next();
-});
+// Structured request logging (Pino-based, replaces manual onFinished block)
+app.use(requestLoggerMiddleware);
 
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;

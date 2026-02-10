@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
+import { logCsrfRejection } from "../lib/securityEvents";
 
 const CSRF_SECRET_KEY = "_csrfSecret";
 const CSRF_HEADER = "x-csrf-token";
@@ -55,11 +56,13 @@ export function verifyCsrf(req: Request, res: Response, next: NextFunction) {
 
   // If there's no session secret yet, the user hasn't fetched a token
   if (!secret) {
+    logCsrfRejection({ ip: req.ip || "unknown", userId: (req.session as any)?.userId, path: req.path, method: req.method });
     return res.status(403).json({ error: "CSRF-Token fehlt. Bitte Seite neu laden." });
   }
 
   const clientToken = req.headers[CSRF_HEADER] as string | undefined;
   if (!clientToken) {
+    logCsrfRejection({ ip: req.ip || "unknown", userId: (req.session as any)?.userId, path: req.path, method: req.method });
     return res.status(403).json({ error: "CSRF-Token fehlt." });
   }
 
@@ -67,6 +70,7 @@ export function verifyCsrf(req: Request, res: Response, next: NextFunction) {
   const expected = crypto.createHmac("sha256", secret).update("*").digest("hex");
 
   if (!crypto.timingSafeEqual(Buffer.from(clientToken), Buffer.from(expected))) {
+    logCsrfRejection({ ip: req.ip || "unknown", userId: (req.session as any)?.userId, path: req.path, method: req.method });
     return res.status(403).json({ error: "Ungültiger CSRF-Token." });
   }
 

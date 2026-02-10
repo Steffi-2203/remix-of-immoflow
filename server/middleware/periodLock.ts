@@ -4,6 +4,7 @@
  */
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import { logPeriodLockViolation } from "../lib/securityEvents";
 
 export class PeriodLockError extends Error {
   public readonly status = 409;
@@ -34,6 +35,12 @@ export async function assertPeriodOpen(params: {
 
   const row = rows.rows[0] as any;
   if (row?.is_locked) {
+    logPeriodLockViolation({
+      ip: "server",
+      organizationId,
+      year,
+      month,
+    });
     throw new PeriodLockError(year, month);
   }
 }
