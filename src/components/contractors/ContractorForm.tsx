@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Star } from 'lucide-react';
 import { Contractor, ContractorInsert, SPECIALIZATIONS, useCreateContractor, useUpdateContractor } from '@/hooks/useContractors';
+import { validateIBAN, validateBIC } from '@/utils/austrianValidation';
 
 interface ContractorFormProps {
   open: boolean;
@@ -74,8 +75,26 @@ export function ContractorForm({ open, onOpenChange, contractor }: ContractorFor
     }
   }, [contractor, open]);
   
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate IBAN and BIC
+    const errors: Record<string, string> = {};
+    if (formData.iban) {
+      const ibanResult = validateIBAN(formData.iban);
+      if (!ibanResult.valid) errors.iban = ibanResult.error || 'Ungültige IBAN';
+    }
+    if (formData.bic) {
+      const bicResult = validateBIC(formData.bic);
+      if (!bicResult.valid) errors.bic = bicResult.error || 'Ungültiger BIC';
+    }
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors({});
     
     if (!formData.company_name) return;
     
@@ -268,9 +287,14 @@ export function ContractorForm({ open, onOpenChange, contractor }: ContractorFor
                 <Input
                   id="iban"
                   value={formData.iban}
-                  onChange={(e) => setFormData({ ...formData, iban: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, iban: e.target.value });
+                    if (validationErrors.iban) setValidationErrors(prev => ({ ...prev, iban: '' }));
+                  }}
                   placeholder="AT00 0000 0000 0000 0000"
+                  className={validationErrors.iban ? 'border-destructive' : ''}
                 />
+                {validationErrors.iban && <p className="text-xs text-destructive">{validationErrors.iban}</p>}
               </div>
               
               <div className="space-y-2">
@@ -278,8 +302,13 @@ export function ContractorForm({ open, onOpenChange, contractor }: ContractorFor
                 <Input
                   id="bic"
                   value={formData.bic}
-                  onChange={(e) => setFormData({ ...formData, bic: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, bic: e.target.value });
+                    if (validationErrors.bic) setValidationErrors(prev => ({ ...prev, bic: '' }));
+                  }}
+                  className={validationErrors.bic ? 'border-destructive' : ''}
                 />
+                {validationErrors.bic && <p className="text-xs text-destructive">{validationErrors.bic}</p>}
               </div>
             </div>
           </div>

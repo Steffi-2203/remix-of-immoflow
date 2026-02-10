@@ -347,7 +347,17 @@ export default function InvoiceList() {
           type: 'vorschreibung',
         });
 
-        // Send actual email via Edge Function
+        // Convert PDF to base64 for email attachment
+        const pdfArrayBuffer = await pdfBlob.arrayBuffer();
+        const pdfBytes = new Uint8Array(pdfArrayBuffer);
+        let binary = '';
+        for (let i = 0; i < pdfBytes.length; i++) {
+          binary += String.fromCharCode(pdfBytes[i]);
+        }
+        const pdfBase64 = btoa(binary);
+        const pdfFilename = `Vorschreibung_${monthName}_${invoice.year}_Top${unit?.top_nummer || ''}.pdf`;
+
+        // Send actual email via Edge Function with PDF attachment
         const { error } = await supabase.functions.invoke('send-vorschreibung', {
           body: {
             invoiceId: invoice.id,
@@ -369,6 +379,8 @@ export default function InvoiceList() {
             faelligAm: invoice.faellig_am,
             iban: organization?.iban || undefined,
             bic: organization?.bic || undefined,
+            pdfBase64,
+            pdfFilename,
           },
         });
 

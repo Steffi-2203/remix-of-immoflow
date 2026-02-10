@@ -46,6 +46,8 @@ interface VorschreibungEmailRequest {
   faelligAm: string;
   iban?: string;
   bic?: string;
+  pdfBase64?: string;
+  pdfFilename?: string;
 }
 
 function formatCurrency(amount: number): string {
@@ -75,7 +77,7 @@ serve(async (req) => {
       invoiceId, tenantEmail, tenantName, propertyName, propertyAddress,
       unitNumber, month, year, grundmiete, betriebskosten, heizungskosten,
       ustSatzMiete, ustSatzBk, ustSatzHeizung, ust, gesamtbetrag, faelligAm,
-      iban, bic,
+      iban, bic, pdfBase64, pdfFilename,
     } = data;
 
     if (!tenantEmail) {
@@ -170,12 +172,24 @@ serve(async (req) => {
 
     console.log(`Sending Vorschreibung email to ${tenantEmail} for ${monthName} ${year}`);
 
-    const emailResponse = await resend.emails.send({
+    const emailPayload: Record<string, unknown> = {
       from: "Hausverwaltung <onboarding@resend.dev>",
       to: [tenantEmail],
       subject: `Vorschreibung ${monthName} ${year} – ${propertyName} – Top ${unitNumber}`,
       html: htmlContent,
-    });
+    };
+
+    // Attach PDF if provided
+    if (pdfBase64) {
+      emailPayload.attachments = [
+        {
+          filename: pdfFilename || `Vorschreibung_${monthName}_${year}_Top${unitNumber}.pdf`,
+          content: pdfBase64,
+        },
+      ];
+    }
+
+    const emailResponse = await resend.emails.send(emailPayload as any);
 
     console.log("Email sent:", emailResponse);
 

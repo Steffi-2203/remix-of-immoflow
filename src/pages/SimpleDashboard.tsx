@@ -20,6 +20,7 @@ import { UpcomingMaintenanceWidget } from "@/components/dashboard/UpcomingMainte
 import { CalendarWidget } from "@/components/dashboard/CalendarWidget";
 import { PropertyKPIsWidget } from "@/components/dashboard/PropertyKPIsWidget";
 import { ManagementCockpit } from "@/components/dashboard/ManagementCockpit";
+import { KPICharts } from "@/components/dashboard/KPICharts";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -218,6 +219,9 @@ export default function SimpleDashboard() {
 
         {/* Management Cockpit - Executive Overview */}
         <ManagementCockpit />
+
+        {/* KPI Charts - Grafische Auswertungen */}
+        <KPICharts />
 
         <div className="mt-6">
           <OffenePostenWidget />

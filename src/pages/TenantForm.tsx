@@ -31,6 +31,7 @@ import { useTenant, useCreateTenant, useUpdateTenant } from '@/hooks/useTenants'
 import { useDistributionKeysByProperty } from '@/hooks/useDistributionKeys';
 import { format } from 'date-fns';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
+import { validateIBAN, validateBIC } from '@/utils/austrianValidation';
 
 interface SonstigeKostenPosition {
   name: string;
@@ -53,8 +54,14 @@ const tenantSchema = z.object({
   heizungskosten_vorschuss: z.coerce.number().min(0, 'Heizungskosten-Vorschuss muss positiv sein'),
   wasserkosten_vorschuss: z.coerce.number().min(0, 'Wasserkosten-Vorschuss muss positiv sein'),
   sepa_mandat: z.boolean(),
-  iban: z.string().trim().max(34).optional().or(z.literal('')),
-  bic: z.string().trim().max(11).optional().or(z.literal('')),
+  iban: z.string().trim().max(34).optional().or(z.literal('')).refine(
+    (val) => !val || validateIBAN(val).valid,
+    (val) => ({ message: val ? validateIBAN(val).error || 'Ungültige IBAN' : '' })
+  ),
+  bic: z.string().trim().max(11).optional().or(z.literal('')).refine(
+    (val) => !val || validateBIC(val).valid,
+    (val) => ({ message: val ? validateBIC(val).error || 'Ungültiger BIC' : '' })
+  ),
   mandat_reference: z.string().trim().max(35).optional().or(z.literal('')),
   status: z.enum(['aktiv', 'leerstand', 'beendet']),
 });
