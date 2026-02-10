@@ -228,6 +228,7 @@ async function initStripe() {
   // Register job queue handlers
   jobQueueService.registerHandler('billing_run', async (payload) => {
     const result = await billingService.generateMonthlyInvoices({
+      organizationId: payload.organizationId as string,
       userId: payload.userId as string,
       propertyIds: payload.propertyIds as string[],
       year: payload.year as number,

@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { billingService } from '../../server/billing/billing.service';
-import { setupTestDb, teardownTestDb, seedTestData, testPropertyId, testUserId } from '../helpers/db';
+import { setupTestDb, teardownTestDb, seedTestData, testPropertyId, testUserId, testOrganizationId } from '../helpers/db';
 
 describe('BillingService', () => {
   beforeAll(async () => {
@@ -14,6 +14,7 @@ describe('BillingService', () => {
 
   test('dry-run returns preview without persisting', async () => {
     const result = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -30,6 +31,7 @@ describe('BillingService', () => {
 
   test('persist creates invoices and returns success', async () => {
     const result = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -45,6 +47,7 @@ describe('BillingService', () => {
 
   test('dry-run matches persist results', async () => {
     const dryResult = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -57,6 +60,7 @@ describe('BillingService', () => {
     const dryTotal = dryResult.summary?.total || 0;
 
     const persistResult = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -70,6 +74,7 @@ describe('BillingService', () => {
 
   test('idempotency: re-running same period creates 0 new invoices', async () => {
     const firstRun = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -80,6 +85,7 @@ describe('BillingService', () => {
     const firstCount = firstRun.created || 0;
 
     const secondRun = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -92,6 +98,7 @@ describe('BillingService', () => {
 
   test('run_id is set on created invoices', async () => {
     const result = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,
@@ -106,6 +113,7 @@ describe('BillingService', () => {
 
   test('invoice lines use correct field names', async () => {
     const result = await billingService.generateMonthlyInvoices({
+      organizationId: testOrganizationId,
       userId: testUserId,
       propertyIds: [testPropertyId],
       year: 2026,

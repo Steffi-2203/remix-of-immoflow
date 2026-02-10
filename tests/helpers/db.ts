@@ -69,4 +69,4 @@ export async function seedTestData() {
   return { testOrgId, testPropertyId, testUnitId, testTenantId, testUserId };
 }
 
-export { testOrgId, testPropertyId, testUnitId, testTenantId, testUserId };
+export { testOrgId, testOrgId as testOrganizationId, testPropertyId, testUnitId, testTenantId, testUserId };
