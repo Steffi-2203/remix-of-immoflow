@@ -6,6 +6,10 @@ interface Recipient {
   name: string;
   address: string;
   unit: string;
+  email?: string;
+  mietbeginn?: string;
+  grundmiete?: string;
+  propertyName?: string;
 }
 
 interface LetterData {
@@ -70,6 +74,11 @@ export function generateSerialLetterPdf(
     let personalizedBody = letter.body
       .replace(/\{\{name\}\}/g, recipient.name)
       .replace(/\{\{einheit\}\}/g, recipient.unit)
+      .replace(/\{\{adresse\}\}/g, recipient.address)
+      .replace(/\{\{liegenschaft\}\}/g, recipient.propertyName || '')
+      .replace(/\{\{email\}\}/g, recipient.email || '')
+      .replace(/\{\{mietbeginn\}\}/g, recipient.mietbeginn || '')
+      .replace(/\{\{grundmiete\}\}/g, recipient.grundmiete || '')
       .replace(/\{\{datum\}\}/g, format(new Date(letter.date), 'dd.MM.yyyy'));
 
     const lines = doc.splitTextToSize(personalizedBody, maxWidth);

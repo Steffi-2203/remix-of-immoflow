@@ -140,6 +140,10 @@ export default function SerialLetters() {
         name: `${t.first_name} ${t.last_name}`,
         address: selectedProperty ? `${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}` : '',
         unit: `Top ${t.unit?.top_nummer || '?'}`,
+        email: t.email || '',
+        mietbeginn: t.mietbeginn || '',
+        grundmiete: t.grundmiete ? `€ ${Number(t.grundmiete).toFixed(2)}` : '',
+        propertyName: selectedProperty?.name || '',
       }));
 
       if (sendVia === 'pdf' || sendVia === 'both') {
@@ -164,6 +168,11 @@ export default function SerialLetters() {
                 body: body
                   .replace(/\{\{name\}\}/g, `${t.first_name} ${t.last_name}`)
                   .replace(/\{\{einheit\}\}/g, `Top ${t.unit?.top_nummer || '?'}`)
+                  .replace(/\{\{adresse\}\}/g, selectedProperty ? `${selectedProperty.address}, ${selectedProperty.postal_code} ${selectedProperty.city}` : '')
+                  .replace(/\{\{liegenschaft\}\}/g, selectedProperty?.name || '')
+                  .replace(/\{\{email\}\}/g, t.email || '')
+                  .replace(/\{\{mietbeginn\}\}/g, t.mietbeginn || '')
+                  .replace(/\{\{grundmiete\}\}/g, t.grundmiete ? `€ ${Number(t.grundmiete).toFixed(2)}` : '')
                   .replace(/\{\{datum\}\}/g, format(new Date(), 'dd.MM.yyyy')),
               },
             });
@@ -323,7 +332,7 @@ export default function SerialLetters() {
               <Label>Text</Label>
               <Textarea value={body} onChange={e => setBody(e.target.value)} rows={10} placeholder="Brieftext... Platzhalter: {{name}}, {{einheit}}, {{datum}}" />
               <p className="text-xs text-muted-foreground">
-                Verfügbare Platzhalter: {'{{name}}'}, {'{{einheit}}'}, {'{{datum}}'}
+                Platzhalter: {'{{name}}'}, {'{{einheit}}'}, {'{{datum}}'}, {'{{adresse}}'}, {'{{liegenschaft}}'}, {'{{mietbeginn}}'}, {'{{grundmiete}}'}
               </p>
             </div>
 
