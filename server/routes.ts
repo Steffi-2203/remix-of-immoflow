@@ -1404,18 +1404,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const invoice = await storage.getInvoice(req.params.id);
-      if (!invoice) {
-        return res.status(404).json({ error: "Invoice not found" });
-      }
-      const unit = await storage.getUnit(invoice.unitId);
-      if (unit) {
-        const property = await storage.getProperty(unit.propertyId);
-        if (property && property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const invoice = await assertOwnership(req, res, req.params.id, "invoices");
+      if (!invoice) return;
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(invoice) : invoice);
     } catch (error) {
@@ -1453,23 +1443,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const existingInvoice = await storage.getInvoice(req.params.id);
-      if (!existingInvoice) {
-        return res.status(404).json({ error: "Invoice not found" });
-      }
-      const tenant = await storage.getTenant(existingInvoice.tenantId);
-      if (!tenant) {
-        return res.status(403).json({ error: "Access denied - tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const existing = await assertOwnership(req, res, req.params.id, "invoices");
+      if (!existing) return;
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertMonthlyInvoiceSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
