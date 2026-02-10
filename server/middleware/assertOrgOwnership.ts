@@ -356,7 +356,7 @@ export async function assertOwnership<T = any>(
         userId: req.session?.userId,
         resourceId,
         resourceType: table,
-        organizationId: profile?.organizationId,
+        organizationId: req._cachedProfile?.organizationId,
       });
       res.status(err.status).json({ error: err.message });
       return null;

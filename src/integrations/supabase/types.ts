@@ -3238,6 +3238,7 @@ export type Database = {
       retention_locks: {
         Row: {
           created_at: string
+          created_by: string | null
           entity_id: string
           entity_type: string
           id: string
@@ -3246,9 +3247,11 @@ export type Database = {
           organization_id: string | null
           reason: string | null
           retention_standard: string
+          standard: string | null
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           entity_id: string
           entity_type: string
           id?: string
@@ -3257,9 +3260,11 @@ export type Database = {
           organization_id?: string | null
           reason?: string | null
           retention_standard?: string
+          standard?: string | null
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           entity_id?: string
           entity_type?: string
           id?: string
@@ -3268,6 +3273,7 @@ export type Database = {
           organization_id?: string | null
           reason?: string | null
           retention_standard?: string
+          standard?: string | null
         }
         Relationships: [
           {
