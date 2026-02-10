@@ -6,6 +6,7 @@ import {
   expenses,
   tenants,
   units,
+  properties,
   monthlyInvoices,
   distributionKeys,
   unitDistributionValues
@@ -193,9 +194,13 @@ export class SettlementService {
     byDistributionKey: Map<string, { amount: number; keyId: string | null }[]>,
     organizationId: string
   ): Promise<TenantSettlementResult | null> {
-    const tenant = await db.select().from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
+    const tenant = await db.select({ t: tenants })
+      .from(tenants)
+      .innerJoin(units, eq(tenants.unitId, units.id))
+      .innerJoin(properties, eq(units.propertyId, properties.id))
+      .where(and(eq(tenants.id, tenantId), eq(properties.organizationId, organizationId)))
+      .limit(1)
+      .then(r => r.map(row => row.t));
     
     if (!tenant.length) return null;
 

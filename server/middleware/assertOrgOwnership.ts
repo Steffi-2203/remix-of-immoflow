@@ -163,30 +163,46 @@ export async function assertOrgOwnership<T = any>(opts: {
     }
 
     case "account_categories": {
+      // First try org-scoped lookup
       const rows = await db
         .select()
         .from(schema.accountCategories)
-        .where(eq(schema.accountCategories.id, resourceId))
+        .where(
+          and(
+            eq(schema.accountCategories.id, resourceId),
+            eq(schema.accountCategories.organizationId, organizationId)
+          )
+        )
         .limit(1);
-      const row = rows[0];
-      if (!row) throw new OrgOwnershipError("Account category not found");
-      if (row.isSystem) return row as T;
-      if (row.organizationId !== organizationId)
-        throw new OrgOwnershipError("Account category not found");
-      return row as T;
+      if (rows[0]) return rows[0] as T;
+      // Check if it's a system category (no org)
+      const systemRows = await db
+        .select()
+        .from(schema.accountCategories)
+        .where(
+          and(
+            eq(schema.accountCategories.id, resourceId),
+            eq(schema.accountCategories.isSystem, true)
+          )
+        )
+        .limit(1);
+      if (systemRows[0]) return systemRows[0] as T;
+      throw new OrgOwnershipError("Account category not found");
     }
 
     case "settlements": {
       const rows = await db
         .select()
         .from(schema.settlements)
-        .where(eq(schema.settlements.id, resourceId))
+        .where(
+          and(
+            eq(schema.settlements.id, resourceId),
+            eq(schema.settlements.organizationId, organizationId)
+          )
+        )
         .limit(1);
-      const row = rows[0];
-      if (!row) throw new OrgOwnershipError("Settlement not found");
-      if (row.organizationId !== organizationId)
-        throw new OrgOwnershipError("Settlement not found");
-      return row as T;
+      if (!rows[0]) throw new OrgOwnershipError("Settlement not found");
+      return rows[0] as T;
     }
 
     // ── Indirect via property ──────────────────────────────────────

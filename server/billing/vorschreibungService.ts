@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { tenants, units, monthlyInvoices, invoiceLines } from "@shared/schema";
+import { tenants, units, properties, monthlyInvoices, invoiceLines } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
 import { InvoiceService } from "./invoiceService";
@@ -11,6 +11,7 @@ import { InvoiceService } from "./invoiceService";
 
 interface VorschreibungParams {
   tenantId: string;
+  organizationId: string;
   year: number;
   month: number;
 }
@@ -44,17 +45,24 @@ export class VorschreibungService {
    * Calculate a Vorschreibung (monthly prescription) for a tenant.
    */
   async generateVorschreibung(params: VorschreibungParams): Promise<VorschreibungResult | null> {
-    const { tenantId, year, month } = params;
+    const { tenantId, organizationId, year, month } = params;
 
-    const tenant = await db.select().from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .then(r => r[0]);
+    if (!organizationId) {
+      throw new Error("organizationId is required for Vorschreibung generation.");
+    }
 
+    // Org-scoped tenant lookup via unit → property
+    const result = await db.select({ tenant: tenants, unit: units })
+      .from(tenants)
+      .innerJoin(units, eq(tenants.unitId, units.id))
+      .innerJoin(properties, eq(units.propertyId, properties.id))
+      .where(and(eq(tenants.id, tenantId), eq(properties.organizationId, organizationId)))
+      .limit(1);
+
+    const tenant = result[0]?.tenant;
     if (!tenant) return null;
 
-    const unit = tenant.unitId
-      ? await db.select().from(units).where(eq(units.id, tenant.unitId)).then(r => r[0])
-      : null;
+    const unit = result[0]?.unit || null;
 
     const unitType = unit?.type || 'wohnung';
     const vatRates = invoiceSvc.getVatRates(unitType);
