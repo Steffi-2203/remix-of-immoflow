@@ -811,6 +811,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const expense = await assertOwnership(req, res, req.params.id, "expenses");
       if (!expense) return;
+
+      // GoBD retention guard (10 years for BK-relevant expenses)
+      const { assertRetentionAllowed } = await import("./middleware/retentionGuard");
+      const retCheck = await assertRetentionAllowed("expenses", req.params.id);
+      if (!retCheck.allowed) {
+        return res.status(403).json({
+          error: retCheck.reason,
+          retentionUntil: retCheck.retentionUntil,
+          standard: retCheck.standard,
+        });
+      }
+
       await storage.deleteExpense(req.params.id);
       res.json({ success: true });
     } catch (error) {

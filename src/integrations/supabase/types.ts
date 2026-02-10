@@ -3235,6 +3235,50 @@ export type Database = {
           },
         ]
       }
+      retention_locks: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          locked_at: string
+          locked_until: string
+          organization_id: string | null
+          reason: string | null
+          retention_standard: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          locked_at?: string
+          locked_until: string
+          organization_id?: string | null
+          reason?: string | null
+          retention_standard?: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          locked_at?: string
+          locked_until?: string
+          organization_id?: string | null
+          reason?: string | null
+          retention_standard?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retention_locks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       role_permissions: {
         Row: {
           can_approve_invoices: boolean | null
