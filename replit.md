@@ -110,11 +110,11 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
 - **CORS**: Whitelist-based origin validation
 - **Dependencies**: zxcvbn (password strength), bcrypt (12 rounds), HIBP API (leak check)
 
-## Testing Infrastructure (updated 2026-02-09)
+## Testing Infrastructure (updated 2026-02-10)
 - **Test Runner**: Vitest with two configs:
     - Default: `npx vitest run tests/unit/` (via `npm test`)
     - Server config: `npx vitest run --config vitest.server.config.ts` (includes all tests)
-- **Test Count**: 166 tests across 15 files, all passing
+- **Test Count**: 175 tests across 16 files, all passing
 - **Test Coverage Areas**:
     - FIFO multi-invoice payment allocation (10 tests)
     - Payment storno/reversal with LIFO allocation reversal (14 tests)
@@ -131,6 +131,7 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
     - Concurrency simulation (3 tests)
     - Server startup validation (2 tests)
     - roundMoney utility (4 tests)
+    - Cross-tenant isolation: billing org-scoping, GDPR org-check, storage layer isolation (9 tests)
 - **Data Integrity**:
     - FIFO payment allocation repair completed (2026-02-09): 71 allocations, 56 invoices bezahlt, 2 teilbezahlt
     - Integrity check endpoint: `GET /api/integrity/payment-allocations` (admin/finance only, paginated)
