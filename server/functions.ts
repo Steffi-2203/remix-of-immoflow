@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { sendEmail } from "./lib/resend";
 import OpenAI from "openai";
 import { invoiceService } from "./billing/invoiceService";
+import { assertOwnership } from "./middleware/assertOrgOwnership";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -205,8 +206,13 @@ export function registerFunctionRoutes(app: Express) {
     }
   });
 
-  app.post("/api/functions/send-dunning", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/functions/send-dunning", isAuthenticated, async (req: any, res: Response) => {
     try {
+      // Verify invoice ownership before updating
+      if (req.body.invoiceId) {
+        const invoice = await assertOwnership(req, res, req.body.invoiceId, "invoices");
+        if (!invoice) return;
+      }
       const { 
         invoiceId, dunningLevel, tenantEmail, tenantName, 
         propertyName, unitNumber, amount, dueDate, invoiceMonth, invoiceYear 

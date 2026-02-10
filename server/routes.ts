@@ -7,6 +7,7 @@ import { parsePagination, paginateArray } from "./lib/pagination";
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
+import { assertOwnership } from "./middleware/assertOrgOwnership";
 import { runSimulation } from "./seed-2025-simulation";
 import { sepaExportService } from "./services/sepaExportService";
 import { demoService } from "./services/demoService";
@@ -394,6 +395,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/settlements/:id/finalize", isAuthenticated, async (req: any, res) => {
     try {
+      const settlement = await assertOwnership(req, res, req.params.id, "settlements");
+      if (!settlement) return;
       await storage.updateSettlement(req.params.id, {
         status: 'abgeschlossen',
         finalizedAt: new Date(),
@@ -532,8 +535,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/properties/:id", isAuthenticated, requirePermission('properties', 'delete'), async (req, res) => {
+  app.delete("/api/properties/:id", isAuthenticated, requirePermission('properties', 'delete'), async (req: any, res) => {
     try {
+      const property = await assertOwnership(req, res, req.params.id, "properties");
+      if (!property) return;
       await storage.deleteProperty(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -664,8 +669,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/payments/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/payments/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const payment = await assertOwnership(req, res, req.params.id, "payments");
+      if (!payment) return;
       await storage.deletePayment(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -752,8 +759,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/transactions/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/transactions/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction) return res.status(404).json({ error: "Transaction not found" });
+      // Verify org ownership via bank account
+      if (transaction.bankAccountId) {
+        const bankAccount = await storage.getBankAccount(transaction.bankAccountId);
+        if (bankAccount && bankAccount.organizationId !== profile?.organizationId) {
+          return res.status(404).json({ error: "Transaction not found" });
+        }
+      }
       await storage.deleteTransactionSplits(req.params.id);
       await storage.deleteExpensesByTransactionId(req.params.id);
       await storage.deleteTransaction(req.params.id);
@@ -839,8 +856,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const expense = await assertOwnership(req, res, req.params.id, "expenses");
+      if (!expense) return;
       await storage.deleteExpense(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -911,6 +930,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const category = await assertOwnership(req, res, req.params.id, "account_categories");
+      if (!category) return;
       await storage.deleteAccountCategory(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1257,10 +1278,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/leases/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const lease = await storage.getLease(req.params.id);
-      if (!lease) {
-        return res.status(404).json({ error: "Lease not found" });
-      }
+      const lease = await assertOwnership(req, res, req.params.id, "leases");
+      if (!lease) return;
       res.json(lease);
     } catch (error) {
       console.error("Get lease error:", error);
@@ -1284,6 +1303,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/leases/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const existing = await assertOwnership(req, res, req.params.id, "leases");
+      if (!existing) return;
       const lease = await storage.updateLease(req.params.id, req.body);
       if (!lease) {
         return res.status(404).json({ error: "Lease not found" });
@@ -1332,6 +1353,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/payment-allocations/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const alloc = await assertOwnership(req, res, req.params.id, "payment_allocations");
+      if (!alloc) return;
       await storage.deletePaymentAllocation(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1438,8 +1461,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/invoices/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const invoice = await assertOwnership(req, res, req.params.id, "invoices");
+      if (!invoice) return;
       await storage.deleteInvoice(req.params.id);
       res.json({ success: true });
     } catch (error) {
