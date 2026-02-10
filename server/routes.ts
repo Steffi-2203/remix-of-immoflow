@@ -245,14 +245,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/properties/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const property = await storage.getProperty(req.params.id);
-      if (!property) {
-        return res.status(404).json({ error: "Property not found" });
-      }
-      if (property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const property = await assertOwnership(req, res, req.params.id, "properties");
+      if (!property) return;
       res.json(property);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch property" });
@@ -261,11 +255,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res) => {
     try {
+      const property = await assertOwnership(req, res, req.params.propertyId, "properties");
+      if (!property) return;
       const profile = await getProfileFromSession(req);
-      const property = await storage.getProperty(req.params.propertyId);
-      if (property && property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
       const units = await storage.getUnitsByProperty(req.params.propertyId);
       
       // Add aliases for frontend compatibility
@@ -518,14 +510,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/properties/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const existingProperty = await storage.getProperty(req.params.id);
-      if (!existingProperty) {
-        return res.status(404).json({ error: "Property not found" });
-      }
-      if (existingProperty.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const existingProperty = await assertOwnership(req, res, req.params.id, "properties");
+      if (!existingProperty) return;
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertPropertySchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
@@ -601,24 +587,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/payments", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertPaymentSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
-      const tenant = await storage.getTenant(validationResult.data.tenantId);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      // Verify tenant ownership (traces through unit → property → org)
+      const tenant = await assertOwnership(req, res, validationResult.data.tenantId, "tenants");
+      if (!tenant) return;
       const payment = await storage.createPayment(validationResult.data);
       
       // Automatically allocate payment to open invoices and update their status
@@ -643,23 +619,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/payments/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const existingPayment = await storage.getPayment(req.params.id);
-      if (!existingPayment) {
-        return res.status(404).json({ error: "Payment not found" });
-      }
-      const tenant = await storage.getTenant(existingPayment.tenantId);
-      if (!tenant) {
-        return res.status(403).json({ error: "Access denied - tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const existingPayment = await assertOwnership(req, res, req.params.id, "payments");
+      if (!existingPayment) return;
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertPaymentSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
@@ -685,21 +646,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/payments/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const payment = await storage.getPayment(req.params.id);
-      if (!payment) {
-        return res.status(404).json({ error: "Payment not found" });
-      }
-      const tenant = await storage.getTenant(payment.tenantId);
-      if (tenant) {
-        const unit = await storage.getUnit(tenant.unitId);
-        if (unit) {
-          const property = await storage.getProperty(unit.propertyId);
-          if (property && property.organizationId !== profile?.organizationId) {
-            return res.status(403).json({ error: "Access denied" });
-          }
-        }
-      }
+      const payment = await assertOwnership(req, res, req.params.id, "payments");
+      if (!payment) return;
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payment) : payment);
     } catch (error) {
@@ -722,17 +670,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertTransactionSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       if (validationResult.data.bankAccountId) {
-        const bankAccount = await storage.getBankAccount(validationResult.data.bankAccountId);
-        if (!bankAccount || bankAccount.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
+        const bankAccount = await assertOwnership(req, res, validationResult.data.bankAccountId, "bank_accounts");
+        if (!bankAccount) return;
       }
       const transaction = await storage.createTransaction(validationResult.data);
       res.json(transaction);
@@ -744,17 +689,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/transactions/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const transaction = await storage.getTransaction(req.params.id);
-      if (!transaction) {
-        return res.status(404).json({ error: "Transaction not found" });
-      }
-      if (transaction.bankAccountId) {
-        const bankAccount = await storage.getBankAccount(transaction.bankAccountId);
-        if (bankAccount && bankAccount.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const transaction = await assertOwnership(req, res, req.params.id, "transactions");
+      if (!transaction) return;
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(transaction) : transaction);
     } catch (error) {
@@ -764,16 +700,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/transactions/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const transaction = await storage.getTransaction(req.params.id);
-      if (!transaction) return res.status(404).json({ error: "Transaction not found" });
-      // Verify org ownership via bank account
-      if (transaction.bankAccountId) {
-        const bankAccount = await storage.getBankAccount(transaction.bankAccountId);
-        if (bankAccount && bankAccount.organizationId !== profile?.organizationId) {
-          return res.status(404).json({ error: "Transaction not found" });
-        }
-      }
+      const transaction = await assertOwnership(req, res, req.params.id, "transactions");
+      if (!transaction) return;
       await storage.deleteTransactionSplits(req.params.id);
       await storage.deleteExpensesByTransactionId(req.params.id);
       await storage.deleteTransaction(req.params.id);
@@ -792,10 +720,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
       if (validationResult.data.propertyId) {
-        const property = await storage.getProperty(validationResult.data.propertyId);
-        if (!property || property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
+        const property = await assertOwnership(req, res, validationResult.data.propertyId, "properties");
+        if (!property) return;
       }
       if (validationResult.data.distributionKeyId) {
         const key = await storage.getDistributionKey(validationResult.data.distributionKeyId);
@@ -827,17 +753,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/expenses/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const existingExpense = await storage.getExpense(req.params.id);
-      if (!existingExpense) {
-        return res.status(404).json({ error: "Expense not found" });
-      }
-      if (existingExpense.propertyId) {
-        const property = await storage.getProperty(existingExpense.propertyId);
-        if (!property || property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const expense = await assertOwnership(req, res, req.params.id, "expenses");
+      if (!expense) return;
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertExpenseSchema.partial().safeParse(normalizedBody);
       if (!validationResult.success) {
@@ -962,15 +879,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/units/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const unit = await storage.getUnit(req.params.id);
-      if (!unit) {
-        return res.status(404).json({ error: "Unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (property && property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const unit = await assertOwnership(req, res, req.params.id, "units");
+      if (!unit) return;
       // Add mea/qm/vs_personen aliases for frontend compatibility
       const unitWithAliases = {
         ...unit,
@@ -986,14 +896,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/units", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
       const body = snakeToCamel(req.body);
       
       // Validate property access
-      const property = await storage.getProperty(body.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const property = await assertOwnership(req, res, body.propertyId, "properties");
+      if (!property) return;
 
       const unitData = {
         propertyId: body.propertyId,
@@ -1018,15 +925,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/units/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const unit = await storage.getUnit(req.params.id);
-      if (!unit) {
-        return res.status(404).json({ error: "Unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const unit = await assertOwnership(req, res, req.params.id, "units");
+      if (!unit) return;
 
       const body = snakeToCamel(req.body);
       const updateData: any = {};
@@ -1058,14 +958,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const unit = await storage.getUnit(req.params.unitId);
-      if (unit) {
-        const property = await storage.getProperty(unit.propertyId);
-        if (property && property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const unit = await assertOwnership(req, res, req.params.unitId, "units");
+      if (!unit) return;
       const tenants = await storage.getTenantsByUnit(req.params.unitId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(tenants) : tenants);
@@ -1089,18 +983,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const tenant = await storage.getTenant(req.params.id);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (unit) {
-        const property = await storage.getProperty(unit.propertyId);
-        if (property && property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const tenant = await assertOwnership(req, res, req.params.id, "tenants");
+      if (!tenant) return;
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(tenant) : tenant);
     } catch (error) {
@@ -1110,15 +994,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/units/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const unit = await storage.getUnit(req.params.id);
-      if (!unit) {
-        return res.status(404).json({ error: "Unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (property && property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const unit = await assertOwnership(req, res, req.params.id, "units");
+      if (!unit) return;
       await storage.softDeleteUnit(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1128,18 +1005,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const tenant = await storage.getTenant(req.params.id);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (unit) {
-        const property = await storage.getProperty(unit.propertyId);
-        if (property && property.organizationId !== profile?.organizationId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-      }
+      const tenant = await assertOwnership(req, res, req.params.id, "tenants");
+      if (!tenant) return;
       await storage.softDeleteTenant(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -1152,15 +1019,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const profile = await getProfileFromSession(req);
       const body = snakeToCamel(req.body);
       
-      const unit = await storage.getUnit(body.unitId);
-      if (!unit) {
-        return res.status(404).json({ error: "Einheit nicht gefunden" });
-      }
-      
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Zugriff verweigert" });
-      }
+      const unit = await assertOwnership(req, res, body.unitId, "units");
+      if (!unit) return;
       
       // Filter to only valid tenant fields (OCR data may include extra fields like topNummer, address)
       const tenantData = {
@@ -1207,19 +1067,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const tenant = await storage.getTenant(req.params.tenantId);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const tenant = await assertOwnership(req, res, req.params.tenantId, "tenants");
+      if (!tenant) return;
       const history = await storage.getRentHistoryByTenant(req.params.tenantId);
       res.json(history);
     } catch (error) {
@@ -1229,19 +1078,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const tenant = await storage.getTenant(req.params.tenantId);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const tenant = await assertOwnership(req, res, req.params.tenantId, "tenants");
+      if (!tenant) return;
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertRentHistorySchema.safeParse({
         ...normalizedBody,
@@ -1415,24 +1253,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invoices", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
       const normalizedBody = snakeToCamel(req.body);
       const validationResult = insertMonthlyInvoiceSchema.safeParse(normalizedBody);
       if (!validationResult.success) {
         return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
       }
-      const tenant = await storage.getTenant(validationResult.data.tenantId);
-      if (!tenant) {
-        return res.status(404).json({ error: "Tenant not found" });
-      }
-      const unit = await storage.getUnit(tenant.unitId);
-      if (!unit) {
-        return res.status(403).json({ error: "Access denied - unit not found" });
-      }
-      const property = await storage.getProperty(unit.propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      // Verify tenant ownership (traces through unit → property → org)
+      const tenant = await assertOwnership(req, res, validationResult.data.tenantId, "tenants");
+      if (!tenant) return;
       const invoice = await storage.createInvoice(validationResult.data);
       res.json(invoice);
     } catch (error) {
@@ -1634,11 +1462,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/properties/:propertyId/expenses", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const property = await storage.getProperty(req.params.propertyId);
-      if (property && property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const property = await assertOwnership(req, res, req.params.propertyId, "properties");
+      if (!property) return;
       const { year } = req.query;
       const expenses = await storage.getExpensesByProperty(
         req.params.propertyId,
@@ -1653,15 +1478,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Leerstand-Report: Identifiziert leere Einheiten und berechnet SOLL-Vorschreibung für Eigentümer
   app.get("/api/properties/:propertyId/vacancy-report", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      const property = await storage.getProperty(req.params.propertyId);
-      
-      if (!property) {
-        return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
-      }
-      if (property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Zugriff verweigert" });
-      }
+      const property = await assertOwnership(req, res, req.params.propertyId, "properties");
+      if (!property) return;
       
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
       const month = parseInt(req.query.month as string) || null;

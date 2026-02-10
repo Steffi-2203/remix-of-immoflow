@@ -1,5 +1,6 @@
 import { db } from "../db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, type InferSelectModel } from "drizzle-orm";
+import type { PgTable, PgColumn } from "drizzle-orm/pg-core";
 import * as schema from "@shared/schema";
 import { storage } from "../storage";
 
@@ -46,7 +47,40 @@ type ResourceTable =
   | "account_categories"
   | "settlements"
   | "leases"
-  | "payment_allocations";
+  | "payment_allocations"
+  | "transactions";
+
+/**
+ * Generic ownership check for tables with a direct `organizationId` column.
+ * Performs a single SQL query: WHERE id = $1 AND organization_id = $2.
+ */
+export async function assertOrgOwnershipDirect<T extends PgTable>({
+  table,
+  id,
+  organizationId,
+  idColumn = (table as any).id,
+  orgColumn = (table as any).organizationId,
+}: {
+  table: T;
+  id: string;
+  organizationId: string;
+  idColumn?: PgColumn;
+  orgColumn?: PgColumn;
+}): Promise<InferSelectModel<T>> {
+  if (!organizationId) {
+    throw new OrgOwnershipError("organizationId is required", 403);
+  }
+  if (!id) {
+    throw new OrgOwnershipError("resourceId is required", 404);
+  }
+  const rows = await db
+    .select()
+    .from(table)
+    .where(and(eq(idColumn, id), eq(orgColumn, organizationId)))
+    .limit(1);
+  if (!rows[0]) throw new OrgOwnershipError("Not found");
+  return rows[0] as InferSelectModel<T>;
+}
 
 /**
  * Assert that a resource with `resourceId` in `table` belongs to `organizationId`.
@@ -107,50 +141,26 @@ export async function assertOrgOwnership<T = any>(opts: {
       return row as T;
     }
 
-    case "contractors": {
-      const rows = await db
-        .select()
-        .from(schema.contractors)
-        .where(
-          and(
-            eq(schema.contractors.id, resourceId),
-            eq(schema.contractors.organizationId, organizationId)
-          )
-        )
-        .limit(1);
-      if (!rows[0]) throw new OrgOwnershipError("Contractor not found");
-      return rows[0] as T;
-    }
+    case "contractors":
+      return assertOrgOwnershipDirect({
+        table: schema.contractors,
+        id: resourceId,
+        organizationId,
+      }) as Promise<T>;
 
-    case "maintenance_contracts": {
-      const rows = await db
-        .select()
-        .from(schema.maintenanceContracts)
-        .where(
-          and(
-            eq(schema.maintenanceContracts.id, resourceId),
-            eq(schema.maintenanceContracts.organizationId, organizationId)
-          )
-        )
-        .limit(1);
-      if (!rows[0]) throw new OrgOwnershipError("Maintenance contract not found");
-      return rows[0] as T;
-    }
+    case "maintenance_contracts":
+      return assertOrgOwnershipDirect({
+        table: schema.maintenanceContracts,
+        id: resourceId,
+        organizationId,
+      }) as Promise<T>;
 
-    case "maintenance_tasks": {
-      const rows = await db
-        .select()
-        .from(schema.maintenanceTasks)
-        .where(
-          and(
-            eq(schema.maintenanceTasks.id, resourceId),
-            eq(schema.maintenanceTasks.organizationId, organizationId)
-          )
-        )
-        .limit(1);
-      if (!rows[0]) throw new OrgOwnershipError("Maintenance task not found");
-      return rows[0] as T;
-    }
+    case "maintenance_tasks":
+      return assertOrgOwnershipDirect({
+        table: schema.maintenanceTasks,
+        id: resourceId,
+        organizationId,
+      }) as Promise<T>;
 
     case "distribution_keys": {
       const row = await storage.getDistributionKey(resourceId);
@@ -190,20 +200,12 @@ export async function assertOrgOwnership<T = any>(opts: {
       throw new OrgOwnershipError("Account category not found");
     }
 
-    case "settlements": {
-      const rows = await db
-        .select()
-        .from(schema.settlements)
-        .where(
-          and(
-            eq(schema.settlements.id, resourceId),
-            eq(schema.settlements.organizationId, organizationId)
-          )
-        )
-        .limit(1);
-      if (!rows[0]) throw new OrgOwnershipError("Settlement not found");
-      return rows[0] as T;
-    }
+    case "settlements":
+      return assertOrgOwnershipDirect({
+        table: schema.settlements,
+        id: resourceId,
+        organizationId,
+      }) as Promise<T>;
 
     // ── Indirect via property ──────────────────────────────────────
     case "units": {
@@ -296,6 +298,21 @@ export async function assertOrgOwnership<T = any>(opts: {
           throw new OrgOwnershipError("Payment allocation not found");
       }
       return alloc as T;
+    }
+
+    // ── Indirect via bank_account ──────────────────────────────────
+    case "transactions": {
+      const transaction = await storage.getTransaction(resourceId);
+      if (!transaction) throw new OrgOwnershipError("Transaction not found");
+      if (transaction.bankAccountId) {
+        const bankAccount = await storage.getBankAccount(transaction.bankAccountId);
+        if (!bankAccount || bankAccount.organizationId !== organizationId)
+          throw new OrgOwnershipError("Transaction not found");
+      } else {
+        // Transaction without bank account – cannot verify ownership
+        throw new OrgOwnershipError("Transaction not found");
+      }
+      return transaction as T;
     }
 
     default:
