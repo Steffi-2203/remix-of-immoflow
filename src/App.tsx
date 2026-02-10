@@ -53,6 +53,7 @@ import BatchOperations from "./pages/BatchOperations";
 import OwnerPortal from "./pages/OwnerPortal";
 import ReconciliationDashboard from "./pages/ReconciliationDashboard";
 import AdminPaymentsJobs from "./pages/AdminPaymentsJobs";
+import TenantLogin from "./pages/TenantLogin";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/impressum" element={<Impressum />} />
             <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="/agb" element={<AGB />} />
+            <Route path="/mieter-login" element={<TenantLogin />} />
             
             {/* Protected routes - wrapped with DemoDataProvider */}
             <Route path="/dashboard" element={<ProtectedRoute><DemoDataProvider><SimpleDashboard /></DemoDataProvider></ProtectedRoute>} />

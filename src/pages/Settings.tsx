@@ -20,6 +20,7 @@ import { OrganizationEditDialog } from '@/components/settings/OrganizationEditDi
 import { UserRoleManager } from '@/components/settings/UserRoleManager';
 import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
+import { ArchiveManagement } from '@/components/archive/ArchiveManagement';
 import { SubscriptionSettings } from '@/components/settings/SubscriptionSettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
@@ -81,6 +82,7 @@ export default function Settings() {
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
             {isAdmin && <TabsTrigger value="admin">Administration</TabsTrigger>}
+            <TabsTrigger value="archive">Archivierung</TabsTrigger>
           </TabsList>
 
           <TabsContent value="account" className="space-y-6">
@@ -272,6 +274,10 @@ export default function Settings() {
               </Card>
             </TabsContent>
           )}
+
+          <TabsContent value="archive">
+            <ArchiveManagement />
+          </TabsContent>
         </Tabs>
       </div>
 

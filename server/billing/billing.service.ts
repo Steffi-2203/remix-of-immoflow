@@ -16,6 +16,7 @@ import {
 } from "@shared/schema";
 
 type GenerateOpts = {
+  organizationId: string;
   userId: string;
   propertyIds: string[];
   year: number;
@@ -84,7 +85,12 @@ function unitTypeFromTenant(unitId: string | null, unitTypeMap: Map<string, stri
 
 export class BillingService {
   async generateMonthlyInvoices(opts: GenerateOpts) {
-    const { userId, propertyIds, year, month, dryRun = true } = opts;
+    const { organizationId, userId, propertyIds, year, month, dryRun = true } = opts;
+
+    if (!organizationId) {
+      throw new Error("BillingService.generateMonthlyInvoices requires organizationId (mandanten-scope).");
+    }
+
     const runId = uuidv4();
     const period = `${year}-${String(month).padStart(2, '0')}`;
     const isJanuary = month === 1;

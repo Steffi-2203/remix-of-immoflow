@@ -15,6 +15,7 @@ import { eq, and, inArray, between, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
 import { logAuditEvent } from "../audit/auditEvents.service";
 import { roundMoney } from "@shared/utils";
+import { calculateProRataShares, calculateOccupancyDays, type OccupancyPeriod } from "./proRataCalculator";
 
 interface TenantSettlementResult {
   tenantId: string;
@@ -279,21 +280,61 @@ export class SettlementService {
       .where(eq(units.propertyId, propertyId));
 
     const unitIds = propertyUnits.map(u => u.id);
-    const propertyTenants = await db.select().from(tenants)
+    
+    // Fetch ALL tenants (active + inactive) for pro-rata mid-year change handling
+    const allPropertyTenants = await db.select().from(tenants)
       .where(inArray(tenants.unitId, unitIds));
 
-    // Parallel tenant settlement calculation (Promise.all statt sequenziell)
-    const settlementPromises = propertyTenants.map(tenant =>
-      this.calculateTenantSettlement(
-        tenant.id,
-        propertyId,
-        year,
-        propertyUnits,
-        byCategory,
-        byDistributionKey,
-        organizationId
-      )
-    );
+    // Group tenants by unit to detect mid-year changes
+    const tenantsByUnit = new Map<string, typeof allPropertyTenants>();
+    for (const t of allPropertyTenants) {
+      const uid = t.unitId || '';
+      if (!tenantsByUnit.has(uid)) tenantsByUnit.set(uid, []);
+      tenantsByUnit.get(uid)!.push(t);
+    }
+
+    // Build pro-rata occupancy periods per unit
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31);
+
+    // Calculate settlements with pro-rata for units with multiple tenants
+    const settlementPromises: Promise<TenantSettlementResult | null>[] = [];
+
+    for (const [unitId, unitTenants] of tenantsByUnit) {
+      if (unitTenants.length > 1) {
+        // Mid-year tenant change: calculate pro-rata for each tenant
+        const periods: Array<{ tenantId: string; moveIn: Date; moveOut: Date | null }> = unitTenants.map(t => ({
+          tenantId: t.id,
+          moveIn: t.mietbeginn ? new Date(t.mietbeginn) : yearStart,
+          moveOut: t.mietende ? new Date(t.mietende) : (t.status === 'aktiv' ? null : yearEnd),
+        }));
+
+        for (const t of unitTenants) {
+          const days = calculateOccupancyDays(
+            t.mietbeginn ? new Date(t.mietbeginn) : yearStart,
+            t.mietende ? new Date(t.mietende) : (t.status === 'aktiv' ? null : yearEnd),
+            yearStart, yearEnd
+          );
+          if (days > 0) {
+            settlementPromises.push(
+              this.calculateTenantSettlement(
+                t.id, propertyId, year, propertyUnits,
+                byCategory, byDistributionKey, organizationId
+              )
+            );
+          }
+        }
+      } else {
+        // Single tenant — standard calculation
+        settlementPromises.push(
+          this.calculateTenantSettlement(
+            unitTenants[0].id, propertyId, year, propertyUnits,
+            byCategory, byDistributionKey, organizationId
+          )
+        );
+      }
+    }
+
     const settlementResults = await Promise.all(settlementPromises);
     const tenantResults = settlementResults.filter((r): r is TenantSettlementResult => r !== null);
 
