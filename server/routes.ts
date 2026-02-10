@@ -1556,7 +1556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         operation: 'generateMonthlyInvoices',
         userId: profile.id,
         context: { year: targetYear, month: targetMonth, organizationId: profile.organizationId },
-        fn: () => invoiceService.generateMonthlyInvoices(profile.id, targetYear, targetMonth),
+        fn: () => invoiceService.generateMonthlyInvoices(profile.id, targetYear, targetMonth, profile.organizationId),
       });
 
       res.json({

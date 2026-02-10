@@ -5,7 +5,8 @@ import {
   monthlyInvoices, 
   invoiceLines,
   payments, 
-  propertyManagers 
+  propertyManagers,
+  properties
 } from "@shared/schema";
 import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
@@ -352,15 +353,26 @@ export class InvoiceService {
   async generateMonthlyInvoices(
     userId: string, 
     year: number, 
-    month: number
+    month: number,
+    organizationId: string
   ): Promise<GenerateInvoicesResult> {
+    if (!organizationId) {
+      throw new Error("InvoiceService.generateMonthlyInvoices requires organizationId (mandanten-scope).");
+    }
+
     const isJanuary = month === 1;
 
+    // Organization-scoped: get all properties for this org managed by this user
     const managedProperties = await db.select({ propertyId: propertyManagers.propertyId })
       .from(propertyManagers)
-      .where(eq(propertyManagers.userId, userId));
+      .innerJoin(properties, eq(properties.id, propertyManagers.propertyId))
+      .where(and(
+        eq(propertyManagers.userId, userId),
+        eq(properties.organizationId, organizationId)
+      ));
+    const propertyIds = managedProperties.map(p => p.propertyId);
 
-    if (!managedProperties.length) {
+    if (!propertyIds.length) {
       return { 
         success: true, 
         message: "No managed properties found", 
@@ -370,8 +382,6 @@ export class InvoiceService {
         invoices: [] 
       };
     }
-
-    const propertyIds = managedProperties.map(p => p.propertyId);
 
     const unitsData = await db.select()
       .from(units)

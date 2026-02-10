@@ -31,7 +31,11 @@ async function main() {
   console.log(`Properties: ${propertyIds.length}`);
 
   const userId = getArg("user") || "e118c1df-eb5d-4939-960d-cdf61b56d6e4";
-  const organizationId = getArg("org") || "00000000-0000-0000-0000-000000000000";
+  const organizationId = getArg("org");
+  if (!organizationId) {
+    console.error("Fehler: --org=<organizationId> ist erforderlich");
+    process.exit(1);
+  }
   
   const result = await billingService.generateMonthlyInvoices({
     organizationId,
