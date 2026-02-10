@@ -136,11 +136,16 @@ export function registerFunctionRoutes(app: Express) {
         return res.status(401).json({ success: false, error: 'Authentication required' });
       }
 
+      const organizationId = user.organizationId || req.body.organizationId;
+      if (!organizationId) {
+        return res.status(400).json({ success: false, error: 'organizationId is required' });
+      }
+
       const now = new Date();
       const year = req.body.year || now.getFullYear();
       const month = req.body.month || now.getMonth() + 1;
 
-      const result = await invoiceService.generateMonthlyInvoices(user.id, year, month);
+      const result = await invoiceService.generateMonthlyInvoices(user.id, year, month, organizationId);
       res.json(result);
     } catch (error) {
       console.error("Error generating invoices:", error);
