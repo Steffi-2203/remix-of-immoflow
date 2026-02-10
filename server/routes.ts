@@ -152,6 +152,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Prometheus-style metrics endpoint
+  app.get("/api/metrics", async (_req, res) => {
+    try {
+      const { metrics } = await import("./lib/metrics");
+      const snapshot = metrics.snapshot();
+
+      // Also fetch queue stats
+      const queueStats = await db.execute(sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+          COUNT(*) FILTER (WHERE status = 'running')::int AS running,
+          COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+        FROM job_runs
+      `);
+
+      const queueRow = queueStats.rows?.[0] as any;
+
+      res.json({
+        billing: snapshot,
+        queue: {
+          pending: queueRow?.pending || 0,
+          running: queueRow?.running || 0,
+          failed: queueRow?.failed || 0,
+        },
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch metrics" });
+    }
+  });
+
   app.get("/api/organizations", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
@@ -1287,6 +1320,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const invoice = await assertOwnership(req, res, req.params.id, "invoices");
       if (!invoice) return;
+
+      // BAO/GoBD retention guard: prevent deletion of legally protected documents
+      const { archiveService } = await import("./billing/archiveService");
+      const freeze = await archiveService.isDeletionFrozen(req.params.id);
+      if (freeze.frozen) {
+        return res.status(409).json({
+          error: "Dokument unterliegt der gesetzlichen Aufbewahrungspflicht",
+          retentionUntil: freeze.retentionUntil,
+          standard: freeze.standard,
+          reason: freeze.reason,
+        });
+      }
+
       await storage.deleteInvoice(req.params.id);
       res.json({ success: true });
     } catch (error) {

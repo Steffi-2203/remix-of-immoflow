@@ -1,13 +1,28 @@
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
+import { billingLogger } from "../lib/logger";
 
 /**
  * Austrian BAO §132: 7-year retention for accounting documents.
- * This service manages document lifecycle and archival.
+ * German GoBD: 10-year retention for tax-relevant documents.
+ * This service manages document lifecycle, archival, and deletion-freeze.
  */
 
-const RETENTION_YEARS = 7;
+const RETENTION_YEARS_BAO = 7;
+const RETENTION_YEARS_GOBD = 10;
+
+type RetentionStandard = "bao" | "gobd";
+
+interface RetentionConfig {
+  standard: RetentionStandard;
+  years: number;
+}
+
+const RETENTION_CONFIGS: Record<RetentionStandard, RetentionConfig> = {
+  bao: { standard: "bao", years: RETENTION_YEARS_BAO },
+  gobd: { standard: "gobd", years: RETENTION_YEARS_GOBD },
+};
 
 interface ArchiveResult {
   archivedCount: number;
@@ -21,16 +36,85 @@ interface ArchiveStatus {
   withinRetention: number;
   expiredRetention: number;
   oldestDocument: string | null;
+  retentionStandard: RetentionStandard;
+  retentionYears: number;
 }
 
+interface DeletionFreezeResult {
+  frozen: boolean;
+  retentionUntil: string | null;
+  standard: RetentionStandard;
+  reason?: string;
+}
+
+const logger = billingLogger.child({ module: "archive" });
+
 export class ArchiveService {
+  private retentionStandard: RetentionStandard;
+
+  constructor(standard: RetentionStandard = "bao") {
+    this.retentionStandard = standard;
+  }
+
+  get config(): RetentionConfig {
+    return RETENTION_CONFIGS[this.retentionStandard];
+  }
+
   /**
    * Get the cutoff date: documents older than this may be deleted.
    */
-  getCutoffDate(): Date {
+  getCutoffDate(standard?: RetentionStandard): Date {
+    const years = RETENTION_CONFIGS[standard || this.retentionStandard].years;
     const cutoff = new Date();
-    cutoff.setFullYear(cutoff.getFullYear() - RETENTION_YEARS);
+    cutoff.setFullYear(cutoff.getFullYear() - years);
     return cutoff;
+  }
+
+  /**
+   * Check if a specific invoice is within its legal retention period.
+   * Active (non-cancelled) invoices are ALWAYS frozen during retention.
+   */
+  async isDeletionFrozen(invoiceId: string): Promise<DeletionFreezeResult> {
+    const result = await db.execute(sql`
+      SELECT id, created_at, status
+      FROM monthly_invoices
+      WHERE id = ${invoiceId}::uuid
+      LIMIT 1
+    `);
+
+    const row = result.rows?.[0] as any;
+    if (!row) {
+      return { frozen: false, retentionUntil: null, standard: this.retentionStandard };
+    }
+
+    const createdAt = new Date(row.created_at);
+    const retentionEnd = new Date(createdAt);
+    retentionEnd.setFullYear(retentionEnd.getFullYear() + this.config.years);
+    const retentionUntil = retentionEnd.toISOString().split("T")[0];
+
+    const now = new Date();
+
+    // Active documents within retention: ALWAYS frozen
+    if (row.status !== "storniert" && now < retentionEnd) {
+      return {
+        frozen: true,
+        retentionUntil,
+        standard: this.retentionStandard,
+        reason: `Aktives Dokument innerhalb der ${this.config.years}-Jahres-Aufbewahrungsfrist (${this.retentionStandard.toUpperCase()})`,
+      };
+    }
+
+    // Cancelled documents within retention: still frozen
+    if (row.status === "storniert" && now < retentionEnd) {
+      return {
+        frozen: true,
+        retentionUntil,
+        standard: this.retentionStandard,
+        reason: `Storniertes Dokument innerhalb der Aufbewahrungsfrist`,
+      };
+    }
+
+    return { frozen: false, retentionUntil: null, standard: this.retentionStandard };
   }
 
   /**
@@ -39,7 +123,9 @@ export class ArchiveService {
    */
   async markExpiredForArchival(userId: string): Promise<ArchiveResult> {
     const cutoff = this.getCutoffDate();
-    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+
+    logger.info({ cutoffDate: cutoffStr, standard: this.retentionStandard }, "Starting archive run");
 
     // Archive old invoices
     const invoiceResult = await db.execute(sql`
@@ -59,19 +145,26 @@ export class ArchiveService {
       RETURNING id
     `);
 
-    const archivedCount = (invoiceResult.rows?.length || 0) + (auditResult.rows?.length || 0);
+    const archivedCount =
+      (invoiceResult.rows?.length || 0) + (auditResult.rows?.length || 0);
 
-    await writeAudit(db, userId, 'system', 'archive', 'archive_run', null, {
+    await writeAudit(db, userId, "system", "archive", "archive_run", null, {
       cutoffDate: cutoffStr,
-      retentionYears: RETENTION_YEARS,
+      retentionYears: this.config.years,
+      retentionStandard: this.retentionStandard,
       archivedInvoices: invoiceResult.rows?.length || 0,
       archivedAuditLogs: auditResult.rows?.length || 0,
     });
 
+    logger.info(
+      { archivedCount, cutoffDate: cutoffStr },
+      "Archive run completed"
+    );
+
     return {
       archivedCount,
       deletedCount: 0,
-      retentionYears: RETENTION_YEARS,
+      retentionYears: this.config.years,
       cutoffDate: cutoffStr,
     };
   }
@@ -81,7 +174,7 @@ export class ArchiveService {
    */
   async getArchiveStatus(organizationId: string): Promise<ArchiveStatus> {
     const cutoff = this.getCutoffDate();
-    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const cutoffStr = cutoff.toISOString().split("T")[0];
 
     const stats = await db.execute(sql`
       SELECT 
@@ -104,6 +197,8 @@ export class ArchiveService {
       withinRetention: row?.within_retention || 0,
       expiredRetention: row?.expired || 0,
       oldestDocument: row?.oldest || null,
+      retentionStandard: this.retentionStandard,
+      retentionYears: this.config.years,
     };
   }
 
@@ -114,7 +209,7 @@ export class ArchiveService {
    */
   async purgeExpired(userId: string): Promise<{ purgedCount: number }> {
     const cutoff = this.getCutoffDate();
-    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const cutoffStr = cutoff.toISOString().split("T")[0];
 
     // Only purge cancelled/voided invoices beyond retention
     const result = await db.execute(sql`
@@ -127,14 +222,26 @@ export class ArchiveService {
     const purgedCount = result.rows?.length || 0;
 
     if (purgedCount > 0) {
-      await writeAudit(db, userId, 'system', 'archive', 'purge_expired', null, {
+      logger.info({ purgedCount, cutoffDate: cutoffStr }, "Purged expired documents");
+
+      await writeAudit(db, userId, "system", "archive", "purge_expired", null, {
         cutoffDate: cutoffStr,
         purgedCount,
+        retentionStandard: this.retentionStandard,
       });
     }
 
     return { purgedCount };
   }
+
+  /**
+   * Switch retention standard (e.g. from BAO to GoBD for German-regulated entities).
+   */
+  setRetentionStandard(standard: RetentionStandard): void {
+    this.retentionStandard = standard;
+    logger.info({ standard }, "Retention standard changed");
+  }
 }
 
-export const archiveService = new ArchiveService();
+// Default: Austrian BAO (7 years)
+export const archiveService = new ArchiveService("bao");
