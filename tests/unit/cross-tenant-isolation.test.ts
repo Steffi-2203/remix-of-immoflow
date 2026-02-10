@@ -2,7 +2,8 @@ import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { db } from '../../server/db';
 import { sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { assertOrgOwnership, OrgOwnershipError } from '../../server/middleware/assertOrgOwnership';
+import { assertOrgOwnership, assertOrgOwnershipDirect, OrgOwnershipError } from '../../server/middleware/assertOrgOwnership';
+import * as schema from '@shared/schema';
 
 // Two completely separate organizations
 const orgA = {
@@ -12,6 +13,7 @@ const orgA = {
   unitId: uuidv4(),
   tenantId: uuidv4(),
   bankAccountId: uuidv4(),
+  transactionId: uuidv4(),
   userId: uuidv4(),
 };
 
@@ -22,6 +24,7 @@ const orgB = {
   unitId: uuidv4(),
   tenantId: uuidv4(),
   bankAccountId: uuidv4(),
+  transactionId: uuidv4(),
   userId: uuidv4(),
 };
 
@@ -56,9 +59,15 @@ async function seedOrg(org: typeof orgA) {
     VALUES (${org.bankAccountId}::uuid, ${org.id}::uuid, 'Konto ' || ${org.name}, NOW())
     ON CONFLICT (id) DO NOTHING
   `);
+  await db.execute(sql`
+    INSERT INTO transactions (id, bank_account_id, amount, booking_date, description, created_at)
+    VALUES (${org.transactionId}::uuid, ${org.bankAccountId}::uuid, 100, '2025-01-15', 'Test ' || ${org.name}, NOW())
+    ON CONFLICT (id) DO NOTHING
+  `);
 }
 
 async function cleanupOrg(org: typeof orgA) {
+  await db.execute(sql`DELETE FROM transactions WHERE id = ${org.transactionId}::uuid`);
   await db.execute(sql`DELETE FROM tenants WHERE id = ${org.tenantId}::uuid`);
   await db.execute(sql`DELETE FROM units WHERE id = ${org.unitId}::uuid`);
   await db.execute(sql`DELETE FROM bank_accounts WHERE id = ${org.bankAccountId}::uuid`);
@@ -207,5 +216,62 @@ describe('Cross-Tenant Isolation', () => {
         table: 'tenants',
       })
     ).rejects.toThrow(OrgOwnershipError);
+  });
+
+  // ── Transactions: indirect via bank_account ─────────────────────
+
+  test('Org A can access own transaction', async () => {
+    const result = await assertOrgOwnership({
+      organizationId: orgA.id,
+      resourceId: orgA.transactionId,
+      table: 'transactions',
+    });
+    expect(result).toBeDefined();
+  });
+
+  test('Org A CANNOT access Org B transaction', async () => {
+    await expect(
+      assertOrgOwnership({
+        organizationId: orgA.id,
+        resourceId: orgB.transactionId,
+        table: 'transactions',
+      })
+    ).rejects.toThrow(OrgOwnershipError);
+  });
+
+  // ── Generic assertOrgOwnershipDirect ────────────────────────────
+
+  test('assertOrgOwnershipDirect works for direct tables (bank_accounts)', async () => {
+    const result = await assertOrgOwnershipDirect({
+      table: schema.bankAccounts,
+      id: orgA.bankAccountId,
+      organizationId: orgA.id,
+    });
+    expect(result).toBeDefined();
+    expect(result.id).toBe(orgA.bankAccountId);
+  });
+
+  test('assertOrgOwnershipDirect rejects cross-org access', async () => {
+    await expect(
+      assertOrgOwnershipDirect({
+        table: schema.bankAccounts,
+        id: orgB.bankAccountId,
+        organizationId: orgA.id,
+      })
+    ).rejects.toThrow(OrgOwnershipError);
+  });
+
+  test('assertOrgOwnershipDirect rejects empty organizationId', async () => {
+    try {
+      await assertOrgOwnershipDirect({
+        table: schema.bankAccounts,
+        id: orgA.bankAccountId,
+        organizationId: '',
+      });
+      expect.fail('Should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OrgOwnershipError);
+      expect((err as OrgOwnershipError).status).toBe(403);
+    }
   });
 });
