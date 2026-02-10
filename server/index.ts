@@ -235,14 +235,6 @@ async function initStripe() {
   setupAuth(app);
   const server = await registerRoutes(app);
 
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    const status = (err as { status?: number })?.status || (err as { statusCode?: number })?.statusCode || 500;
-    const message = (err as { message?: string })?.message || "Internal Server Error";
-
-    console.error('Error:', err);
-    res.status(status).json({ message });
-  });
-
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {

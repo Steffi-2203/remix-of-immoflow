@@ -1,8 +1,10 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, sql, and, or, lt, inArray, desc, asc, isNull, count } from "drizzle-orm";
+import { requestIdMiddleware, globalErrorHandler } from "./middleware/errorHandler";
+import packageJson from "../package.json" with { type: "json" };
 import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
@@ -18,7 +20,9 @@ import { bmdDatevExportService } from "./services/bmdDatevExportService";
 import { finanzOnlineService } from "./services/finanzOnlineService";
 import { paymentService } from "./services/paymentService";
 import { generateVorschreibungPdf, type VorschreibungData } from "./services/pdfService";
+import { billingService } from "./services/billing.service";
 import { jobQueueService } from "./services/jobQueueService";
+import { exportTenantData, anonymizeTenantData } from "./services/gdprService";
 import { parseCamt053 } from "./services/camt053Service";
 import readonlyRoutes from "./routes/readonly";
 import featureRoutes from "./routes/featureRoutes";
@@ -195,14 +199,40 @@ function isTester(roles: string[]): boolean {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
+  app.use(requestIdMiddleware);
+
+  app.get("/api/health", async (_req, res) => {
+    let dbStatus: "connected" | "disconnected" = "disconnected";
+    try {
+      await db.execute(sql`SELECT 1`);
+      dbStatus = "connected";
+    } catch {}
+
+    const status = dbStatus === "connected" ? "ok" : "degraded";
+    const payload = {
+      status,
+      database: dbStatus,
+      uptime: Math.floor(process.uptime()),
+      version: packageJson.version,
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(status === "ok" ? 200 : 503).json(payload);
+  });
+
+  app.get("/api/ready", async (_req, res) => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      res.json({ ready: true });
+    } catch {
+      res.status(503).json({ ready: false, reason: "database not available" });
+    }
+  });
+
   app.use("/api/readonly", readonlyRoutes);
   app.use(featureRoutes);
   registerObjectStorageRoutes(app);
-
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
 
   app.get("/api/organizations", isAuthenticated, async (req: any, res) => {
     try {
@@ -2085,6 +2115,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Generate invoices error:', error);
       res.status(500).json({ error: "Vorschreibungen konnten nicht erstellt werden" });
+    }
+  });
+
+  app.post("/api/billing/generate", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Organization not found" });
+      }
+
+      const { year, month, propertyIds, dryRun } = req.body;
+      
+      const currentDate = new Date();
+      const targetYear = year || currentDate.getFullYear();
+      const targetMonth = month || (currentDate.getMonth() + 1);
+
+      let finalPropertyIds = propertyIds;
+      if (!finalPropertyIds || !Array.isArray(finalPropertyIds) || finalPropertyIds.length === 0) {
+        const allProps = await storage.getPropertiesByOrganization(profile.organizationId);
+        finalPropertyIds = allProps.map(p => p.id);
+      }
+
+      const result = await billingService.generateMonthlyInvoices({
+        userId: profile.userId,
+        organizationId: profile.organizationId,
+        propertyIds: finalPropertyIds,
+        year: targetYear,
+        month: targetMonth,
+        dryRun: dryRun ?? false
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Billing generate error:", error);
+      res.status(500).json({ error: "Failed to generate invoices" });
     }
   });
 
@@ -5641,10 +5706,48 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // ===== DSGVO / GDPR Routes =====
+  app.get("/api/gdpr/export/:tenantId", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "Keine Organisation zugeordnet" });
+      }
+      const data = await exportTenantData(req.params.tenantId, profile.organizationId);
+      res.json(data);
+    } catch (error: any) {
+      console.error("DSGVO export error:", error);
+      res.status(error.message?.includes("gehört nicht") ? 403 : 500).json({
+        error: error.message || "Fehler beim Datenexport",
+      });
+    }
+  });
+
+  app.post("/api/gdpr/anonymize/:tenantId", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "Keine Organisation zugeordnet" });
+      }
+      const result = await anonymizeTenantData(req.params.tenantId, profile.organizationId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("DSGVO anonymize error:", error);
+      const status = error.message?.includes("gehört nicht") ? 403
+        : error.message?.includes("bereits anonymisiert") ? 409
+        : 500;
+      res.status(status).json({
+        error: error.message || "Fehler bei der Datenanonymisierung",
+      });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
   jobQueueService.startPolling(5000);
+
+  app.use(globalErrorHandler);
 
   const httpServer = createServer(app);
   return httpServer;
