@@ -297,6 +297,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!propertyId || !year) {
         return res.status(400).json({ error: "Missing propertyId or year" });
       }
+      // Verify property ownership
+      const property = await assertOwnership(req, res, propertyId as string, "properties");
+      if (!property) return;
       const settlement = await storage.getSettlementByPropertyAndYear(propertyId as string, parseInt(year as string));
       if (!settlement) return res.status(404).json({ error: "Settlement not found" });
       
@@ -908,8 +911,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/account-categories/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
-      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      const category = await assertOwnership(req, res, req.params.id, "account_categories");
+      if (!category) return;
       
       const normalizedBody = snakeToCamel(req.body);
       const { name, type, defaultDistributionKeyId } = normalizedBody;
@@ -1258,6 +1261,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== LEASES (Mietverträge) ======
   app.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: any, res) => {
     try {
+      const tenant = await assertOwnership(req, res, req.params.tenantId, "tenants");
+      if (!tenant) return;
       const leases = await storage.getLeasesByTenant(req.params.tenantId);
       res.json(leases);
     } catch (error) {
@@ -1268,6 +1273,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/units/:unitId/leases", isAuthenticated, async (req: any, res) => {
     try {
+      const unit = await assertOwnership(req, res, req.params.unitId, "units");
+      if (!unit) return;
       const leases = await storage.getLeasesByUnit(req.params.unitId);
       res.json(leases);
     } catch (error) {
@@ -1290,6 +1297,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leases", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = schema.insertLeaseSchema.parse(req.body);
+      // Verify unit ownership before creating lease
+      const unit = await assertOwnership(req, res, validatedData.unitId, "units");
+      if (!unit) return;
       const lease = await storage.createLease(validatedData);
       res.status(201).json(lease);
     } catch (error: any) {
@@ -1319,6 +1329,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== PAYMENT ALLOCATIONS (Zahlungszuordnungen) ======
   app.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: any, res) => {
     try {
+      const payment = await assertOwnership(req, res, req.params.paymentId, "payments");
+      if (!payment) return;
       const allocations = await storage.getPaymentAllocationsByPayment(req.params.paymentId);
       res.json(allocations);
     } catch (error) {
@@ -1329,6 +1341,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: any, res) => {
     try {
+      const invoice = await assertOwnership(req, res, req.params.invoiceId, "invoices");
+      if (!invoice) return;
       const allocations = await storage.getPaymentAllocationsByInvoice(req.params.invoiceId);
       res.json(allocations);
     } catch (error) {
@@ -1340,6 +1354,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/payment-allocations", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = schema.insertPaymentAllocationSchema.parse(req.body);
+      // Verify ownership of both payment and invoice
+      const payment = await assertOwnership(req, res, validatedData.paymentId, "payments");
+      if (!payment) return;
+      if (validatedData.invoiceId) {
+        const invoice = await assertOwnership(req, res, validatedData.invoiceId, "invoices");
+        if (!invoice) return;
+      }
       const allocation = await storage.createPaymentAllocation(validatedData);
       res.status(201).json(allocation);
     } catch (error: any) {
@@ -1602,6 +1623,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any, res) => {
     try {
+      const invoice = await assertOwnership(req, res, req.params.invoiceId, "invoices");
+      if (!invoice) return;
       const payments = await storage.getPaymentsByInvoice(req.params.invoiceId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payments) : payments);
@@ -1612,6 +1635,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/invoices", isAuthenticated, async (req: any, res) => {
     try {
+      const tenant = await assertOwnership(req, res, req.params.tenantId, "tenants");
+      if (!tenant) return;
       const invoices = await storage.getInvoicesByTenant(req.params.tenantId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(invoices) : invoices);
@@ -1622,6 +1647,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/payments", isAuthenticated, async (req: any, res) => {
     try {
+      const tenant = await assertOwnership(req, res, req.params.tenantId, "tenants");
+      if (!tenant) return;
       const payments = await storage.getPaymentsByTenant(req.params.tenantId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payments) : payments);
@@ -1921,8 +1948,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const account = await storage.getBankAccount(req.params.id);
-      if (!account) return res.status(404).json({ error: "Bank account not found" });
+      const account = await assertOwnership(req, res, req.params.id, "bank_accounts");
+      if (!account) return;
       res.json(account);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bank account" });
@@ -2018,6 +2045,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/bank-accounts/:id/transactions", isAuthenticated, async (req: any, res) => {
     try {
+      const account = await assertOwnership(req, res, req.params.id, "bank_accounts");
+      if (!account) return;
       const transactions = await storage.getTransactionsByBankAccount(req.params.id);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(transactions) : transactions);
@@ -2256,13 +2285,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/distribution-keys/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.session?.userId;
-      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const key = await assertOwnership(req, res, req.params.id, "distribution_keys");
+      if (!key) return;
 
-      const { id } = req.params;
       const normalizedBody = snakeToCamel(req.body);
-
-      const updated = await storage.updateDistributionKey(id, normalizedBody);
+      const updated = await storage.updateDistributionKey(req.params.id, normalizedBody);
       if (!updated) return res.status(404).json({ error: "Key not found" });
       res.json(updated);
     } catch (error) {
