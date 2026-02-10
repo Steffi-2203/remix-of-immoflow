@@ -13,6 +13,7 @@ import {
 import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
 import { optimisticUpdate } from "../lib/optimisticLock";
+import { verifyTenantOwnership } from "../lib/ownershipCheck";
 
 interface DunningLevel {
   level: 1 | 2 | 3;
@@ -51,8 +52,15 @@ export class PaymentService {
     paymentType?: string;
     reference?: string;
     userId?: string;
+    organizationId?: string;
   }) {
-    const { paymentId, tenantId, amount, bookingDate, paymentType = "ueberweisung", reference, userId } = params;
+    const { paymentId, tenantId, amount, bookingDate, paymentType = "ueberweisung", reference, userId, organizationId } = params;
+    if (organizationId) {
+      const isOwner = await verifyTenantOwnership(tenantId, organizationId);
+      if (!isOwner) {
+        throw new Error("Mieter gehört nicht zu dieser Organisation");
+      }
+    }
     const roundedAmount = roundMoney(amount);
 
     return await db.transaction(async (tx) => {

@@ -28,6 +28,7 @@ import readonlyRoutes from "./routes/readonly";
 import featureRoutes from "./routes/featureRoutes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import crypto from "crypto";
+import { verifyPropertyOwnership, verifyUnitOwnership, verifyTenantOwnership, verifyInvoiceOwnership, verifyPaymentOwnership } from "./lib/ownershipCheck";
 import multer from "multer";
 import OpenAI from "openai";
 import { 
@@ -360,6 +361,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -668,6 +672,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile) {
         return res.status(403).json({ error: "Profile not found" });
       }
+      if (!profile.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       
       await storage.deletePropertyManager(profile.id, req.params.propertyId);
       res.json({ success: true });
@@ -746,6 +753,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           bookingDate: payment.buchungsDatum,
           paymentType: payment.paymentType || 'ueberweisung',
           reference: payment.verwendungszweck || undefined,
+          organizationId: profile?.organizationId,
         });
       } catch (allocError) {
         console.error("Payment allocation error (non-critical):", allocError);
@@ -1234,6 +1242,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyUnitOwnership(req.params.unitId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const unit = await storage.getUnit(req.params.unitId);
       if (unit) {
         const property = await storage.getProperty(unit.propertyId);
@@ -1384,6 +1395,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const tenant = await storage.getTenant(req.params.tenantId);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
@@ -1406,6 +1420,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tenants/:tenantId/rent-history", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const tenant = await storage.getTenant(req.params.tenantId);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
@@ -1437,6 +1454,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== LEASES (Mietverträge) ======
   app.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const leases = await storage.getLeasesByTenant(req.params.tenantId);
       res.json(leases);
     } catch (error) {
@@ -1447,6 +1468,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/units/:unitId/leases", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyUnitOwnership(req.params.unitId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const leases = await storage.getLeasesByUnit(req.params.unitId);
       res.json(leases);
     } catch (error) {
@@ -1498,6 +1523,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ====== PAYMENT ALLOCATIONS (Zahlungszuordnungen) ======
   app.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPaymentOwnership(req.params.paymentId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const allocations = await storage.getPaymentAllocationsByPayment(req.params.paymentId);
       res.json(allocations);
     } catch (error) {
@@ -1508,6 +1537,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyInvoiceOwnership(req.params.invoiceId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const allocations = await storage.getPaymentAllocationsByInvoice(req.params.invoiceId);
       res.json(allocations);
     } catch (error) {
@@ -2155,6 +2188,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyInvoiceOwnership(req.params.invoiceId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const payments = await storage.getPaymentsByInvoice(req.params.invoiceId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payments) : payments);
@@ -2165,6 +2202,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/invoices", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const invoices = await storage.getInvoicesByTenant(req.params.tenantId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(invoices) : invoices);
@@ -2175,6 +2216,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/payments", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const payments = await storage.getPaymentsByTenant(req.params.tenantId);
       const roles = await getUserRoles(req);
       res.json(isTester(roles) ? maskPersonalData(payments) : payments);
@@ -2186,6 +2231,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/expenses", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -2205,6 +2253,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/vacancy-report", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwnerVacancy = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwnerVacancy) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       
       if (!property) {
@@ -2353,6 +2404,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/yield-report", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwnerYield = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwnerYield) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       
       if (!property) {
@@ -2800,6 +2854,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/settlements", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -2814,6 +2871,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/maintenance-contracts", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (property && property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -2934,6 +2994,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -2948,6 +3011,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -2981,6 +3047,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/units/:unitId/distribution-values", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyUnitOwnership(req.params.unitId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const unit = await storage.getUnit(req.params.unitId);
       if (!unit) return res.status(404).json({ error: "Unit not found" });
       const property = await storage.getProperty(unit.propertyId);
@@ -2997,6 +3066,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/properties/:propertyId/distribution-values", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const property = await storage.getProperty(req.params.propertyId);
       if (!property || property.organizationId !== profile?.organizationId) {
         return res.status(403).json({ error: "Access denied" });
@@ -3011,6 +3083,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/units/:unitId/distribution-values", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyUnitOwnership(req.params.unitId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const unit = await storage.getUnit(req.params.unitId);
       if (!unit) return res.status(404).json({ error: "Unit not found" });
       const property = await storage.getProperty(unit.propertyId);
@@ -3039,6 +3114,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyUnitOwnership(req.params.unitId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const unit = await storage.getUnit(req.params.unitId);
       if (!unit) return res.status(404).json({ error: "Unit not found" });
       const property = await storage.getProperty(unit.propertyId);
@@ -4501,6 +4579,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== Property Documents =====
   app.get("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const { propertyId } = req.params;
       const orgId = req.session.organizationId;
       const documents = await db.select()
@@ -4525,6 +4607,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/properties/:propertyId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const { propertyId } = req.params;
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
@@ -4556,6 +4642,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwner = await verifyPropertyOwnership(req.params.propertyId, profile.organizationId);
+      if (!isOwner) return res.status(403).json({ error: "Zugriff verweigert" });
       const { id } = req.params;
       const orgId = req.session.organizationId;
       await db.delete(schema.propertyDocuments).where(and(eq(schema.propertyDocuments.id, id), eq(schema.propertyDocuments.organizationId, orgId)));
@@ -4592,6 +4682,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwnerTenantDoc = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwnerTenantDoc) return res.status(403).json({ error: "Zugriff verweigert" });
       const { tenantId } = req.params;
       const documents = await db.select()
         .from(schema.tenantDocuments)
@@ -4615,6 +4709,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tenants/:tenantId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+      const isOwnerTenantDoc = await verifyTenantOwnership(req.params.tenantId, profile.organizationId);
+      if (!isOwnerTenantDoc) return res.status(403).json({ error: "Zugriff verweigert" });
       const { tenantId } = req.params;
       const orgId = req.session.organizationId;
       const body = snakeToCamel(req.body);
@@ -4770,6 +4868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 bookingDate: newPayment.buchungsDatum || undefined,
                 paymentType: newPayment.paymentType || 'ueberweisung',
                 reference: newPayment.verwendungszweck || undefined,
+                organizationId: orgId,
               });
             } catch (allocError) {
               console.error('Payment allocation error (non-critical):', allocError);
@@ -4849,6 +4948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               bookingDate: payment.buchungsDatum || undefined,
               paymentType: payment.paymentType || 'ueberweisung',
               reference: payment.verwendungszweck || undefined,
+              organizationId: orgId,
             });
             allocated++;
           } catch (error) {
