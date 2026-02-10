@@ -18,6 +18,7 @@ import SESSION_SECRET from "./config/session";
 import { verifyCsrf, csrfTokenEndpoint } from "./middleware/csrf";
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 const PgSession = connectPgSimple(session);
 
@@ -25,8 +26,23 @@ app.set("trust proxy", 1);
 
 // Security: Helmet for HTTP headers
 app.use(helmet({
-  contentSecurityPolicy: false, // Disabled for development (Vite injects scripts)
+  contentSecurityPolicy: isProduction ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://*.supabase.co", "https://api.stripe.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  } : false, // Disabled for development (Vite injects scripts)
   crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
 }));
 
 // Security: Rate limiting - 100 requests per 15 minutes per IP
@@ -66,7 +82,6 @@ app.use((req, res, next) => {
   next();
 });
 
-const isProduction = process.env.NODE_ENV === 'production';
 
 app.use(session({
   name: isProduction ? '__Secure-immo_sid' : 'immo_sid',
@@ -205,6 +220,12 @@ async function initStripe() {
   // Register ledger sync handler
   const { handleLedgerSync } = await import("./workers/ledgerSyncHandler");
   jobQueueService.registerHandler('ledger_sync', handleLedgerSync);
+
+  // Register retention cron handler
+  const { runRetentionCron } = await import("./jobs/retentionCron");
+  jobQueueService.registerHandler('retention_check', async () => {
+    return runRetentionCron();
+  });
 
   // Start job queue worker
   jobQueueService.start(5000);

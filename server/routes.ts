@@ -668,6 +668,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const payment = await assertOwnership(req, res, req.params.id, "payments");
       if (!payment) return;
+
+      // BAO retention guard (7 years for payments)
+      const { assertRetentionAllowed } = await import("./middleware/retentionGuard");
+      const retCheck = await assertRetentionAllowed("payments", req.params.id);
+      if (!retCheck.allowed) {
+        return res.status(403).json({
+          error: retCheck.reason,
+          retentionUntil: retCheck.retentionUntil,
+          standard: retCheck.standard,
+        });
+      }
+
       await storage.deletePayment(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -5413,6 +5425,71 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     } catch (error) {
       console.error("Interest accruals fetch error:", error);
       res.status(500).json({ error: "Failed to fetch interest accruals" });
+    }
+  });
+
+  // ====== WEG/MRG COMPLIANCE ENDPOINTS ======
+
+  // WEG §31: Reserve fund compliance check
+  app.get("/api/properties/:propertyId/reserve-compliance", isAuthenticated, async (req: any, res) => {
+    try {
+      const property = await assertOwnership(req, res, req.params.propertyId, "properties");
+      if (!property) return;
+
+      const { checkReserveCompliance } = await import("./services/wegComplianceService");
+      const currentReserve = Number(req.query.currentReserve || 0);
+      const result = await checkReserveCompliance(req.params.propertyId, currentReserve);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check reserve compliance" });
+    }
+  });
+
+  // MRG §27b: Deposit return deadline check
+  app.get("/api/compliance/deposit-returns", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const { checkDepositReturnDeadlines } = await import("./services/wegComplianceService");
+      const checks = await checkDepositReturnDeadlines(profile.organizationId);
+      res.json(checks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check deposit return deadlines" });
+    }
+  });
+
+  // Retention status overview
+  app.get("/api/compliance/retention-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const { archiveService } = await import("./billing/archiveService");
+      const baoStatus = await archiveService.getArchiveStatus(profile.organizationId);
+
+      // Get retention locks count
+      const lockStats = await db.execute(sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE locked_until > NOW())::int AS active_locks,
+          COUNT(*) FILTER (WHERE locked_until <= NOW())::int AS expired_locks,
+          COUNT(*) FILTER (WHERE standard = 'gobd')::int AS gobd_count,
+          COUNT(*) FILTER (WHERE standard = 'bao')::int AS bao_count
+        FROM retention_locks
+      `);
+      const lockRow = lockStats.rows?.[0] as any;
+
+      res.json({
+        archive: baoStatus,
+        retentionLocks: {
+          active: lockRow?.active_locks || 0,
+          expired: lockRow?.expired_locks || 0,
+          gobd: lockRow?.gobd_count || 0,
+          bao: lockRow?.bao_count || 0,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch retention status" });
     }
   });
 
