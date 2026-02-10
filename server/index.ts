@@ -4,6 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import onFinished from "on-finished";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
@@ -13,6 +14,8 @@ import { setupAuth } from "./auth";
 import { pool } from "./db";
 import { seedDistributionKeys } from "./seedDistributionKeys";
 import SESSION_SECRET from "./config/session";
+import { csrfTokenMiddleware, csrfProtection, getCsrfToken } from "./middleware/csrf";
+import { inputSanitizer } from "./middleware/sanitize";
 
 const app = express();
 
@@ -65,7 +68,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-csrf-token');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -74,6 +77,10 @@ app.use((req, res, next) => {
 });
 
 const isProduction = process.env.NODE_ENV === 'production';
+
+app.use(cookieParser());
+
+app.use(csrfTokenMiddleware);
 
 app.use(session({
   name: isProduction ? '__Secure-immo_sid' : 'immo_sid',
@@ -132,6 +139,11 @@ app.post(
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+
+app.use(inputSanitizer);
+
+app.get("/api/csrf-token", getCsrfToken);
+app.use(csrfProtection);
 
 // Sanitize sensitive data from logs
 function sanitize(obj: unknown): unknown {

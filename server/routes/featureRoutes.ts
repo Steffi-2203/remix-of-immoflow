@@ -338,6 +338,20 @@ router.post("/api/weg/owner-votes", async (req: Request, res: Response) => {
   }
 });
 
+// ====== WEG VOTE RESULT (§24 Quorum Validation) ======
+
+router.get("/api/weg/votes/:id/result", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  try {
+    const { calculateVoteResult } = await import("../services/wegVotingService");
+    const result = await calculateVoteResult(req.params.id, ctx.orgId);
+    res.json(objectToCamelCase(result));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // ====== WEG BUDGET PLANS (Wirtschaftsplan § 31 WEG 2002) ======
 
 router.get("/api/weg/budget-plans", async (req: Request, res: Response) => {
@@ -2323,6 +2337,60 @@ router.delete("/api/vpi-adjustments/:id", async (req: Request, res: Response) =>
   } catch (error) {
     console.error("Error deleting VPI adjustment:", error);
     res.status(500).json({ error: "Fehler beim Löschen der VPI-Anpassung" });
+  }
+});
+
+// ====== BUCHUNGSPERIODEN-SPERRE (BAO §132) ======
+
+router.get("/api/period-locks", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  try {
+    const { getLockedPeriods } = await import("../services/periodLockService");
+    const locks = await getLockedPeriods(ctx.orgId);
+    res.json(locks);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/period-locks", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  if (!(await checkMutationPermission(req, res))) return;
+  try {
+    const { year, month } = req.body;
+    if (!year || !month) return res.status(400).json({ error: "Jahr und Monat erforderlich" });
+    const { lockPeriod } = await import("../services/periodLockService");
+    await lockPeriod(ctx.orgId, year, month, ctx.userId);
+    res.json({ success: true, message: `Periode ${month}/${year} gesperrt` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/period-locks/:year/:month", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  if (!(await checkMutationPermission(req, res))) return;
+  try {
+    const { unlockPeriod } = await import("../services/periodLockService");
+    await unlockPeriod(ctx.orgId, parseInt(req.params.year), parseInt(req.params.month));
+    res.json({ success: true, message: `Periode ${req.params.month}/${req.params.year} entsperrt` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/settlement-deadlines", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  try {
+    const { checkSettlementDeadlines } = await import("../services/settlementDeadlineService");
+    const warnings = await checkSettlementDeadlines(ctx.orgId);
+    res.json(warnings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

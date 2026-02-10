@@ -80,7 +80,7 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
 - **Payment Allocations**: `payment_allocations` table for flexible payment-to-invoice mapping.
 - **Migrated Functions**: Key business logic functions integrated directly into the Express.js backend.
 
-## Security Configuration (updated 2026-02-08)
+## Security Configuration (updated 2026-02-10)
 - **Password Policy**:
     - Minimum length: 12 characters
     - zxcvbn complexity threshold: score ≥ 3 (out of 4)
@@ -102,19 +102,37 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
     - Session name: `__Secure-immo_sid` (prod) / `immo_sid` (dev)
     - maxAge: 24 hours
     - Storage: PostgreSQL via `connect-pg-simple` (`user_sessions` table)
+- **CSRF Protection** (added 2026-02-10):
+    - Double-Submit Cookie pattern with `crypto.timingSafeEqual` validation
+    - Token: 32 bytes random, stored in non-httpOnly cookie for JS access
+    - Exempt paths: Stripe webhooks, health checks, demo endpoints
+    - Frontend sends token via `x-csrf-token` header on all mutating requests
+    - Endpoint: `GET /api/csrf-token` to retrieve/initialize token
+- **IDOR Protection** (added 2026-02-10):
+    - Centralized `server/lib/ownershipCheck.ts` with 5 verify functions
+    - All 28 ID-param routes in `routes.ts` now verify org ownership via DB joins
+    - Pattern: tenant→unit→property→organization chain verification
+    - Returns 403 "Zugriff verweigert" for cross-org access attempts
+- **Input Sanitization** (added 2026-02-10):
+    - `server/middleware/sanitize.ts` HTML-escapes all string inputs on POST/PUT/PATCH
+    - Exempts: Stripe webhooks, OCR endpoints
+    - Prevents stored XSS by encoding `< > " ' /`
+- **Runtime Service Guards** (added 2026-02-10):
+    - BillingService: `organizationId` is now **required** (throws if missing/empty)
+    - PaymentService: `allocatePayment()` verifies tenant belongs to org before transaction
 - **Auth Event Audit Logging**:
     - All login/register/logout events logged to `audit_logs` table via centralized `createAuditLog`
     - Captures: action, email, userId, IP address, user agent, success/failure, failure reason
     - Events: `login`, `login_failed` (unknown_email, wrong_password, account_locked), `register`, `register_failed`, `logout`
 - **HTTP Security Headers**: Helmet.js (CSP, HSTS, etc.)
 - **CORS**: Whitelist-based origin validation
-- **Dependencies**: zxcvbn (password strength), bcrypt (12 rounds), HIBP API (leak check)
+- **Dependencies**: zxcvbn (password strength), bcrypt (12 rounds), HIBP API (leak check), cookie-parser
 
 ## Testing Infrastructure (updated 2026-02-10)
 - **Test Runner**: Vitest with two configs:
     - Default: `npx vitest run tests/unit/` (via `npm test`)
     - Server config: `npx vitest run --config vitest.server.config.ts` (includes all tests)
-- **Test Count**: 175 tests across 16 files, all passing
+- **Test Count**: 186 tests across 17 files, all passing
 - **Test Coverage Areas**:
     - FIFO multi-invoice payment allocation (10 tests)
     - Payment storno/reversal with LIFO allocation reversal (14 tests)
@@ -132,6 +150,7 @@ The frontend uses React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive u
     - Server startup validation (2 tests)
     - roundMoney utility (4 tests)
     - Cross-tenant isolation: billing org-scoping, GDPR org-check, storage layer isolation (9 tests)
+    - Security guards: IDOR ownership checks, billing/payment org guards, BAO period locks (11 tests)
 - **Data Integrity**:
     - FIFO payment allocation repair completed (2026-02-09): 71 allocations, 56 invoices bezahlt, 2 teilbezahlt
     - Integrity check endpoint: `GET /api/integrity/payment-allocations` (admin/finance only, paginated)
