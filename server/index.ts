@@ -132,6 +132,15 @@ app.post(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
+// Global input sanitization: strip HTML tags, control chars from all request bodies
+import { sanitizeInput } from "./lib/sanitize";
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.body && typeof req.body === "object") {
+    req.body = sanitizeInput(req.body);
+  }
+  next();
+});
+
 // Sanitize sensitive data from logs
 function sanitize(obj: unknown): unknown {
   if (!obj || typeof obj !== "object") return obj;

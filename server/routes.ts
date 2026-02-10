@@ -8,6 +8,7 @@ import * as schema from "@shared/schema";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { assertOwnership } from "./middleware/assertOrgOwnership";
+import { assertPeriodOpenForDate, PeriodLockError } from "./middleware/periodLock";
 import { runSimulation } from "./seed-2025-simulation";
 import { sepaExportService } from "./services/sepaExportService";
 import { demoService } from "./services/demoService";
@@ -406,7 +407,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Formel: (BK gesamt + HK gesamt) / 12 × 1,03 = neue monatliche Vorschreibung
   app.post("/api/advances/update", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await getProfileFromSession(req);
       const { propertyId, totalBkKosten, totalHkKosten, units, totals } = req.body;
 
       if (!propertyId || !units || !totals) {
@@ -414,10 +414,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify property ownership
-      const property = await storage.getProperty(propertyId);
-      if (!property || property.organizationId !== profile?.organizationId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      const property = await assertOwnership(req, res, propertyId, "properties");
+      if (!property) return;
 
       const SICHERHEITSRESERVE = 1.03; // 3% MRG-konforme Reserve
       let updatedCount = 0;
@@ -2767,6 +2765,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to save VPI value" });
+    }
+  });
+
+  // ===== Booking Period Lock Management =====
+
+  app.get("/api/booking-periods", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      const rows = await db.execute(sql`
+        SELECT * FROM booking_periods
+        WHERE organization_id = ${profile.organizationId}::uuid
+        ORDER BY year DESC, month DESC
+      `);
+      res.json(rows.rows);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch booking periods" });
+    }
+  });
+
+  app.post("/api/booking-periods/lock", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      const { year, month } = req.body;
+      if (!year || !month) return res.status(400).json({ error: "year and month required" });
+
+      await db.execute(sql`
+        INSERT INTO booking_periods (organization_id, year, month, is_locked, locked_at, locked_by)
+        VALUES (${profile.organizationId}::uuid, ${year}, ${month}, true, NOW(), ${profile.id}::uuid)
+        ON CONFLICT (organization_id, year, month)
+        DO UPDATE SET is_locked = true, locked_at = NOW(), locked_by = ${profile.id}::uuid, updated_at = NOW()
+      `);
+      res.json({ success: true, year, month, isLocked: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to lock period" });
+    }
+  });
+
+  app.post("/api/booking-periods/unlock", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      const { year, month } = req.body;
+      if (!year || !month) return res.status(400).json({ error: "year and month required" });
+
+      await db.execute(sql`
+        UPDATE booking_periods SET is_locked = false, updated_at = NOW()
+        WHERE organization_id = ${profile.organizationId}::uuid AND year = ${year} AND month = ${month}
+      `);
+      res.json({ success: true, year, month, isLocked: false });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to unlock period" });
+    }
+  });
+
+  // ===== BK-Abrechnung Warning Check =====
+  // Returns properties where the annual settlement for a completed year has not been finalized
+  app.get("/api/settlement-warnings", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const currentYear = new Date().getFullYear();
+      // Check previous year (and optionally year before)
+      const checkYears = [currentYear - 1, currentYear - 2];
+
+      const warnings: Array<{ propertyId: string; propertyName: string; year: number; message: string }> = [];
+
+      const props = await storage.getPropertiesByOrganization(profile.organizationId);
+
+      for (const prop of props) {
+        for (const year of checkYears) {
+          const settlement = await storage.getSettlementByPropertyAndYear(prop.id, year);
+          if (!settlement || settlement.status !== 'abgeschlossen') {
+            // § 21 Abs 3 MRG deadline: 30.06 of the following year
+            const deadline = new Date(year + 1, 5, 30);
+            const isOverdue = new Date() > deadline;
+            if (isOverdue) {
+              warnings.push({
+                propertyId: prop.id,
+                propertyName: prop.name,
+                year,
+                message: `BK-Abrechnung ${year} für "${prop.name}" wurde nicht abgeschlossen. Frist gem. § 21 Abs 3 MRG (30.06.${year + 1}) ist abgelaufen.`,
+              });
+            } else if (!settlement) {
+              warnings.push({
+                propertyId: prop.id,
+                propertyName: prop.name,
+                year,
+                message: `BK-Abrechnung ${year} für "${prop.name}" fehlt noch. Frist: 30.06.${year + 1}.`,
+              });
+            }
+          }
+        }
+      }
+
+      res.json({ warnings, count: warnings.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check settlement warnings" });
     }
   });
 

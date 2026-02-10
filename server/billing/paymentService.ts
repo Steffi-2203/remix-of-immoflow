@@ -14,6 +14,7 @@ import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
 import { optimisticUpdate } from "../lib/optimisticLock";
 import { logAuditEvent } from "../audit/auditEvents.service";
+import { assertPeriodOpenForDate } from "../middleware/periodLock";
 
 interface DunningLevel {
   level: 1 | 2 | 3;
@@ -55,6 +56,26 @@ export class PaymentService {
   }) {
     const { paymentId, tenantId, amount, bookingDate, paymentType = "ueberweisung", reference, userId } = params;
     const roundedAmount = roundMoney(amount);
+
+    // Resolve org context for period lock check
+    const tenantCtx = await db.execute(sql`
+      SELECT p.organization_id
+      FROM tenants t
+      LEFT JOIN units u ON u.id = t.unit_id
+      LEFT JOIN properties p ON p.id = u.property_id
+      WHERE t.id = ${tenantId}
+    `).then(r => r.rows[0] as any);
+
+    if (!tenantCtx?.organization_id) {
+      throw new Error("Cannot resolve organization for tenant – payment blocked");
+    }
+
+    // Check period lock for booking date
+    const effectiveDate = bookingDate ?? new Date().toISOString().slice(0, 10);
+    await assertPeriodOpenForDate({
+      organizationId: tenantCtx.organization_id,
+      date: effectiveDate,
+    });
 
     return await db.transaction(async (tx) => {
       await tx.execute(sql`
