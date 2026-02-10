@@ -15,6 +15,7 @@ import {
 
 type GenerateOpts = {
   userId: string;
+  organizationId?: string;
   propertyIds: string[];
   year: number;
   month: number;
@@ -73,7 +74,7 @@ function unitTypeFromTenant(unitId: string | null, unitTypeMap: Map<string, stri
 
 export class BillingService {
   async generateMonthlyInvoices(opts: GenerateOpts) {
-    const { userId, propertyIds, year, month, dryRun = true } = opts;
+    const { userId, organizationId, propertyIds, year, month, dryRun = true } = opts;
     const runId = uuidv4();
     const period = `${year}-${String(month).padStart(2, '0')}`;
     const isJanuary = month === 1;
@@ -175,11 +176,18 @@ export class BillingService {
       return { runId, dryRun: true, period, count: preview.length, summary, preview };
     }
 
-    const existingPeriodRun = await db.execute(sql`
-      SELECT id, run_id, status, period FROM invoice_runs 
-      WHERE period = ${period} 
-      ORDER BY created_at DESC LIMIT 1
-    `);
+    const orgId = organizationId || null;
+    const existingPeriodRun = orgId
+      ? await db.execute(sql`
+          SELECT id, run_id, status, period FROM invoice_runs 
+          WHERE period = ${period} AND organization_id = ${orgId}
+          ORDER BY created_at DESC LIMIT 1
+        `)
+      : await db.execute(sql`
+          SELECT id, run_id, status, period FROM invoice_runs 
+          WHERE period = ${period} AND organization_id IS NULL
+          ORDER BY created_at DESC LIMIT 1
+        `);
 
     if (existingPeriodRun.rows && existingPeriodRun.rows.length > 0) {
       const existing = existingPeriodRun.rows[0] as any;
@@ -203,8 +211,8 @@ export class BillingService {
       }
     } else {
       await db.execute(sql`
-        INSERT INTO invoice_runs (run_id, period, initiated_by, status)
-        VALUES (${runId}::uuid, ${period}, ${userId}::uuid, 'started')
+        INSERT INTO invoice_runs (run_id, period, initiated_by, status, organization_id)
+        VALUES (${runId}::uuid, ${period}, ${userId}::uuid, 'started', ${organizationId || null})
       `);
     }
 
