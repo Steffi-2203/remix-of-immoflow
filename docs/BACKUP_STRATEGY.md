@@ -29,9 +29,8 @@ archive_timeout = 300
 
 # WAL-Level für PITR
 wal_level = replica
-max_wal_senders = 5
-max_wal_size = 2GB
-min_wal_size = 512MB
+max_wal_senders = 3
+wal_keep_size = '1GB'
 ```
 
 ### pgBackRest Konfiguration (`/etc/pgbackrest/pgbackrest.conf`)
