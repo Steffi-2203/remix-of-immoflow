@@ -2394,4 +2394,28 @@ router.get("/api/settlement-deadlines", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/api/compliance-check", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  try {
+    const { runFullComplianceCheck } = await import("../services/legalComplianceService");
+    const warnings = await runFullComplianceCheck(ctx.orgId);
+    res.json({ warnings, checkedAt: new Date().toISOString() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/audit-chain/verify", async (req: Request, res: Response) => {
+  const ctx = await getAuthContext(req, res);
+  if (!ctx) return;
+  try {
+    const { verifyAuditChain } = await import("../services/auditHashService");
+    const result = await verifyAuditChain(ctx.orgId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -205,18 +205,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/health", async (_req, res) => {
     let dbStatus: "connected" | "disconnected" = "disconnected";
+    let dbLatencyMs = -1;
     try {
+      const dbStart = Date.now();
       await db.execute(sql`SELECT 1`);
+      dbLatencyMs = Date.now() - dbStart;
       dbStatus = "connected";
     } catch {}
 
+    const memUsage = process.memoryUsage();
     const status = dbStatus === "connected" ? "ok" : "degraded";
     const payload = {
       status,
       database: dbStatus,
+      dbLatencyMs,
       uptime: Math.floor(process.uptime()),
       version: packageJson.version,
       timestamp: new Date().toISOString(),
+      memory: {
+        heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+        rssMB: Math.round(memUsage.rss / 1024 / 1024),
+      },
+      node: process.version,
     };
 
     res.status(status === "ok" ? 200 : 503).json(payload);

@@ -16,18 +16,44 @@ import { seedDistributionKeys } from "./seedDistributionKeys";
 import SESSION_SECRET from "./config/session";
 import { csrfTokenMiddleware, csrfProtection, getCsrfToken } from "./middleware/csrf";
 import { inputSanitizer } from "./middleware/sanitize";
+import { logger, createRequestLogger } from "./lib/logger";
+import { apiErrorHandler } from "./lib/apiErrors";
+import { ensureIndexes } from "./lib/ensureIndexes";
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 const PgSession = connectPgSimple(session);
 
 app.set("trust proxy", 1);
 
-// Security: Helmet for HTTP headers
+app.use(createRequestLogger());
+
+// Security: Helmet for HTTP headers with CSP
 app.use(helmet({
-  contentSecurityPolicy: false, // Disabled for development (Vite injects scripts)
+  contentSecurityPolicy: isProduction ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://*.replit.dev", "https://*.replit.app"],
+      frameSrc: ["'self'", "https://js.stripe.com"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.app"],
+    },
+  } : false,
   crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 }));
+
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
+  next();
+});
 
 // Security: Rate limiting - general API (100 req / 15 min per IP)
 const apiLimiter = rateLimit({
@@ -75,8 +101,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-const isProduction = process.env.NODE_ENV === 'production';
 
 app.use(cookieParser());
 
@@ -164,7 +188,7 @@ app.use((req, res, next) => {
   const path = req.path;
   let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
-  const isDev = process.env.NODE_ENV !== "production";
+  const isDev = !isProduction;
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
@@ -174,25 +198,27 @@ app.use((req, res, next) => {
   onFinished(res, () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      const requestBody = isDev && req.body && Object.keys(req.body).length > 0 ? sanitize(req.body) : undefined;
-      const responseToLog = isDev ? capturedJsonResponse : sanitize(capturedJsonResponse);
-      
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (requestBody) {
-        logLine += ` body=${JSON.stringify(requestBody)}`;
-      }
-      if (responseToLog) {
-        logLine += ` response=${JSON.stringify(responseToLog)}`;
+      const meta: Record<string, unknown> = {
+        method: req.method,
+        path,
+        statusCode: res.statusCode,
+        duration,
+        requestId: req.requestId,
+        ip: req.ip,
+      };
+
+      if (isDev && req.body && Object.keys(req.body).length > 0) {
+        meta.body = sanitize(req.body);
       }
 
-      if (logLine.length > 200) {
-        logLine = logLine.slice(0, 199) + "…";
-      }
+      const logLine = `${req.method} ${path} ${res.statusCode} ${duration}ms`;
 
-      if (res.statusCode >= 400) {
-        logError(logLine);
+      if (res.statusCode >= 500) {
+        logger.error(logLine, meta);
+      } else if (res.statusCode >= 400) {
+        logger.warn(logLine, meta);
       } else {
-        logInfo(logLine);
+        logger.info(logLine, meta);
       }
     }
   });
@@ -244,8 +270,11 @@ async function initStripe() {
 (async () => {
   await initStripe();
   await seedDistributionKeys();
+  await ensureIndexes();
   setupAuth(app);
   const server = await registerRoutes(app);
+
+  app.use(apiErrorHandler);
 
   if (app.get("env") === "development") {
     await setupVite(app, server);
@@ -259,6 +288,7 @@ async function initStripe() {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
+    logger.info(`ImmoflowMe server started`, { port, env: app.get("env"), pid: process.pid });
     log(`serving on port ${port}`);
   });
 })();
