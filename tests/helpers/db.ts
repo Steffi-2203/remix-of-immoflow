@@ -42,9 +42,10 @@ export async function seedTestData() {
     ON CONFLICT (id) DO NOTHING
   `);
 
+  const testEmail = `test-${testUserId.slice(0, 8)}@test.at`;
   await db.execute(sql`
     INSERT INTO profiles (id, email, full_name, organization_id, created_at)
-    VALUES (${testUserId}::uuid, 'test-billing@test.at', 'Test User', ${testOrgId}::uuid, NOW())
+    VALUES (${testUserId}::uuid, ${testEmail}, 'Test User', ${testOrgId}::uuid, NOW())
     ON CONFLICT (id) DO NOTHING
   `);
 
