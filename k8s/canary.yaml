@@ -1,0 +1,167 @@
+# Kubernetes Canary Deployment with Traffic Splitting
+#
+# Uses Istio VirtualService for weighted traffic routing.
+# Alternative: Nginx Ingress canary annotations (shown below as comments).
+#
+# kubectl apply -f k8s/canary.yaml
+
+# ── Canary Deployment ──
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immoflowme-canary
+  labels:
+    app: immoflowme
+    version: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immoflowme
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: immoflowme
+        version: canary
+    spec:
+      serviceAccountName: immoflowme-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/org/immoflowme:canary  # replaced by CI/CD
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: '3000'
+            - name: DEPLOYMENT_SLOT
+              value: canary
+          envFrom:
+            - secretRef:
+                name: immoflowme-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi
+
+---
+# ── Istio VirtualService: traffic splitting ──
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: immoflowme-vs
+  labels:
+    app: immoflowme
+spec:
+  hosts:
+    - immoflowme  # internal service name
+  http:
+    - route:
+        # Stable: 95% of traffic
+        - destination:
+            host: immoflowme
+            subset: stable
+          weight: 95
+        # Canary: 5% of traffic
+        - destination:
+            host: immoflowme
+            subset: canary
+          weight: 5
+      # Canary-specific fault injection for testing
+      # fault:
+      #   abort:
+      #     percentage:
+      #       value: 0.1
+      #     httpStatus: 503
+
+---
+# ── Istio DestinationRule: subsets ──
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: immoflowme-dr
+  labels:
+    app: immoflowme
+spec:
+  host: immoflowme
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+# ─────────────────────────────────────────────
+# Alternative: Nginx Ingress Canary Annotations
+# ─────────────────────────────────────────────
+# If using Nginx Ingress instead of Istio, create a second Ingress:
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: immoflowme-canary
+#   annotations:
+#     nginx.ingress.kubernetes.io/canary: "true"
+#     nginx.ingress.kubernetes.io/canary-weight: "5"
+# spec:
+#   rules:
+#     - host: app.immoflowme.com
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: immoflowme-canary
+#                 port:
+#                   number: 80

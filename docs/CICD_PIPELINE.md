@@ -160,3 +160,149 @@ Vor jedem Deployment wird `tools/verify-image.sh` ausgefuehrt:
 Prueft:
 1. ✅ Cosign-Signatur
 2. ✅ Trivy CRITICAL/HIGH Scan
+
+---
+
+## Canary Traffic Splitting
+
+Canary-Releases routen einen kleinen Prozentsatz (default 5%) des Traffics auf die neue Version.
+
+### Workflow-Parameter
+
+| Parameter | Default | Beschreibung |
+|---|---|---|
+| `traffic_percent` | 5 | Prozent des Traffics fuer Canary |
+| `error_rate_threshold` | 5% | Max Fehlerrate vor Auto-Rollback |
+| `latency_p99_threshold_ms` | 2000 | Max p99 Latenz vor Auto-Rollback |
+| `health_timeout_minutes` | 5 | Monitoring-Dauer |
+
+### Kubernetes (Istio)
+
+Traffic-Splitting wird ueber `k8s/canary.yaml` konfiguriert:
+- `VirtualService`: weighted routing (95/5 stable/canary)
+- `DestinationRule`: subset definitions
+- Alternative: Nginx Ingress `canary-weight` Annotation
+
+### Monitoring waehrend Canary
+
+1. Error-Rate vergleichen (canary vs stable)
+2. p99 Latenz vergleichen
+3. Bei Ueberschreitung: automatischer Rollback + Webhook-Notification
+
+---
+
+## Blue/Green Deployments
+
+Fuer schema-safe Releases oder groessere Infrastruktur-Aenderungen.
+
+### Workflow: `blue-green.yml`
+
+| Phase | Beschreibung |
+|---|---|
+| Preflight | Signatur-Verifikation, Slot-Erkennung |
+| Deploy Inactive | Image auf inaktiven Slot deployen |
+| Migration Check | Schema-Kompatibilitaet pruefen |
+| Smoke Tests | Billing Parity gegen neuen Slot |
+| Switch Traffic | Production-Tag umhaengen |
+
+### Rollback
+
+```bash
+# Einfach den alten Slot wieder als production taggen:
+docker tag ghcr.io/org/app:blue ghcr.io/org/app:production
+docker push ghcr.io/org/app:production
+```
+
+---
+
+## Feature Flags
+
+Deployment ist von Release entkoppelt via `server/lib/featureFlags.ts`.
+
+### Verwendung
+
+```typescript
+import { isFeatureEnabled, FLAGS } from './lib/featureFlags';
+
+if (await isFeatureEnabled(FLAGS.NEW_SETTLEMENT_ENGINE, { userId, orgId })) {
+  // Neue Logik
+} else {
+  // Bestehende Logik
+}
+```
+
+### Konfiguration
+
+| Methode | Beispiel |
+|---|---|
+| Environment | `FF_NEW_SETTLEMENT_ENGINE=true` |
+| API | `setFlag({ key: 'new-settlement-engine', enabled: true, rollout_percentage: 10 })` |
+| User Targeting | `allowed_users: ['user-id-1']` |
+| Org Targeting | `allowed_orgs: ['org-id-1']` |
+
+### Externe Provider
+
+Adapter-Pattern fuer Unleash/LaunchDarkly:
+```typescript
+import { setFeatureFlagProvider } from './lib/featureFlags';
+setFeatureFlagProvider(new UnleashProvider(config));
+```
+
+---
+
+## DB Migration Safety
+
+### Regeln (tools/migration_safety_check.sh)
+
+| Pattern | Bewertung | Empfehlung |
+|---|---|---|
+| DROP TABLE | ❌ Blockiert | Separater Deploy nach Code-Entfernung |
+| DROP COLUMN | ❌ Blockiert | 2-Step: Code anpassen, dann droppen |
+| NOT NULL ohne DEFAULT | ❌ Blockiert | DEFAULT hinzufuegen |
+| RENAME COLUMN | ⚠️ Warnung | Transition mit altem + neuem Namen |
+| CREATE INDEX (ohne CONCURRENTLY) | ⚠️ Warnung | CONCURRENTLY verwenden |
+| TRUNCATE | ❌ Blockiert | Explizite Genehmigung erforderlich |
+
+### Backward/Forward Compatible Pattern
+
+```
+Deploy 1: ADD COLUMN new_col DEFAULT 'x'     -- backward compatible
+Deploy 2: Code liest/schreibt new_col         -- forward compatible
+Deploy 3: Backfill old rows                   -- data migration
+Deploy 4: DROP COLUMN old_col                 -- cleanup
+```
+
+---
+
+## Runtime Hardening (Kubernetes)
+
+### Manifests: `k8s/`
+
+| Datei | Inhalt |
+|---|---|
+| `deployment.yaml` | Deployment, HPA, PDB, NetworkPolicy, ServiceAccount |
+| `canary.yaml` | Canary Deployment + Istio VirtualService |
+| `secrets.yaml` | ExternalSecret (Vault/KMS Integration) |
+
+### Resource Limits
+
+| Resource | Request | Limit |
+|---|---|---|
+| CPU | 250m | 1000m |
+| Memory | 256Mi | 512Mi |
+
+### HPA Metriken
+
+- CPU Utilization > 70%
+- Memory Utilization > 80%
+- HTTP p99 Latenz > 1.5s (custom metric)
+- Job Queue Laenge > 50 (custom metric)
+
+### Security
+
+- Non-root Container (UID 1001)
+- Read-only Root Filesystem
+- Alle Capabilities gedroppt
+- NetworkPolicy: nur Ingress + PostgreSQL + HTTPS erlaubt
+- ServiceAccount ohne Token-Mount
+- Secrets via External Secrets Operator (Vault/KMS, 5min Rotation)
