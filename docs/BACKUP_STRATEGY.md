@@ -24,7 +24,7 @@
 ```ini
 # WAL-Archiving aktivieren
 archive_mode = on
-archive_command = 'pgbackrest --stanza=prod archive-push %p'
+archive_command = 'envdir /etc/wal-g.d wal-g wal-push %p'
 archive_timeout = 300
 
 # WAL-Level für PITR
