@@ -1,6 +1,6 @@
-# Grafana Dashboards — Kubernetes Manifests
+# Grafana Dashboard Suite — ImmoflowMe
 #
-# Includes: SLO dashboard, Business KPIs, Billing Operations
+# 5 dashboards: Overview, Business, SLO/SLA, Database, Security
 # kubectl apply -f k8s/monitoring/grafana-dashboards.yaml
 
 apiVersion: v1
@@ -20,13 +20,11 @@ data:
         url: http://prometheus:9090
         isDefault: true
         editable: false
-
       - name: Loki
         type: loki
         access: proxy
         url: http://loki:3100
         editable: false
-
       - name: Tempo
         type: tempo
         access: proxy
@@ -40,6 +38,268 @@ data:
             datasourceUid: prometheus
 
 ---
+# ════════════════════════════════════════════════════════════════
+# DASHBOARD 1: CLUSTER & APP OVERVIEW
+# ════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-overview
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  overview-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "ImmoflowMe — Overview",
+        "uid": "immo-overview",
+        "tags": ["overview", "immoflowme"],
+        "timezone": "Europe/Vienna",
+        "refresh": "15s",
+        "panels": [
+          {
+            "title": "App Health",
+            "type": "stat",
+            "gridPos": {"x":0,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "up{job=\"immoflowme\"}", "legendFormat": "{{instance}}"}],
+            "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "UP", "color": "green"}, "0": {"text": "DOWN", "color": "red"}}}]}}
+          },
+          {
+            "title": "Error Rate (5m)",
+            "type": "stat",
+            "gridPos": {"x":4,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))", "legendFormat": "Error Rate"}],
+            "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":0.005,"color":"yellow"},{"value":0.01,"color":"red"}]}}}
+          },
+          {
+            "title": "Request Rate",
+            "type": "stat",
+            "gridPos": {"x":8,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(rate(http_requests_total[5m]))", "legendFormat": "req/s"}],
+            "fieldConfig": {"defaults": {"unit": "reqps"}}
+          },
+          {
+            "title": "p95 Latency",
+            "type": "stat",
+            "gridPos": {"x":12,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"}],
+            "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":1,"color":"yellow"},{"value":2,"color":"red"}]}}}
+          },
+          {
+            "title": "p99 Latency",
+            "type": "stat",
+            "gridPos": {"x":16,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99"}],
+            "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":1.5,"color":"yellow"},{"value":2,"color":"red"}]}}}
+          },
+          {
+            "title": "In-Flight",
+            "type": "stat",
+            "gridPos": {"x":20,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "http_requests_in_flight", "legendFormat": "in-flight"}]
+          },
+          {
+            "title": "Request Rate by Status",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":4,"w":12,"h":7},
+            "targets": [
+              {"expr": "sum(rate(http_requests_total{status=~\"2..\"}[5m]))", "legendFormat": "2xx"},
+              {"expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m]))", "legendFormat": "4xx"},
+              {"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "5xx"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "reqps"}}
+          },
+          {
+            "title": "Latency Distribution (p50/p95/p99)",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":4,"w":12,"h":7},
+            "targets": [
+              {"expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50"},
+              {"expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"},
+              {"expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "s", "custom": {"thresholdsStyle": {"mode":"line"}}, "thresholds": {"steps": [{"value":2,"color":"red"}]}}}
+          },
+          {
+            "title": "Pod CPU Usage",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":11,"w":8,"h":6},
+            "targets": [{"expr": "rate(process_cpu_seconds_total[5m])", "legendFormat": "{{instance}}"}],
+            "fieldConfig": {"defaults": {"unit": "short"}}
+          },
+          {
+            "title": "Pod Memory (RSS)",
+            "type": "timeseries",
+            "gridPos": {"x":8,"y":11,"w":8,"h":6},
+            "targets": [
+              {"expr": "process_resident_memory_bytes", "legendFormat": "RSS"},
+              {"expr": "nodejs_heap_used_bytes", "legendFormat": "Heap Used"},
+              {"expr": "nodejs_heap_total_bytes", "legendFormat": "Heap Total"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "bytes"}}
+          },
+          {
+            "title": "Pod Restarts",
+            "type": "timeseries",
+            "gridPos": {"x":16,"y":11,"w":8,"h":6},
+            "targets": [{"expr": "increase(kube_pod_container_status_restarts_total{container=\"app\"}[1h])", "legendFormat": "{{pod}}"}]
+          },
+          {
+            "title": "Event Loop Lag",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":17,"w":8,"h":5},
+            "targets": [{"expr": "nodejs_eventloop_lag_seconds", "legendFormat": "lag"}],
+            "fieldConfig": {"defaults": {"unit": "s"}}
+          },
+          {
+            "title": "Active Handles & Requests",
+            "type": "timeseries",
+            "gridPos": {"x":8,"y":17,"w":8,"h":5},
+            "targets": [
+              {"expr": "nodejs_active_handles", "legendFormat": "Handles"},
+              {"expr": "nodejs_active_requests", "legendFormat": "Requests"}
+            ]
+          },
+          {
+            "title": "Job Queue",
+            "type": "timeseries",
+            "gridPos": {"x":16,"y":17,"w":8,"h":5},
+            "targets": [
+              {"expr": "job_queue_pending_total", "legendFormat": "Pending"},
+              {"expr": "job_queue_processing_total", "legendFormat": "Processing"}
+            ]
+          }
+        ]
+      }
+    }
+
+---
+# ════════════════════════════════════════════════════════════════
+# DASHBOARD 2: BUSINESS KPIs
+# ════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-business
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  business-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "ImmoflowMe — Business KPIs",
+        "uid": "immo-business",
+        "tags": ["business", "billing", "immoflowme"],
+        "timezone": "Europe/Vienna",
+        "refresh": "1m",
+        "panels": [
+          {
+            "title": "Payments Allocated / min",
+            "type": "stat",
+            "gridPos": {"x":0,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(rate(payment_allocations_total{status=\"success\"}[5m])) * 60", "legendFormat": "alloc/min"}]
+          },
+          {
+            "title": "BK Settlements Generated (24h)",
+            "type": "stat",
+            "gridPos": {"x":4,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(settlement_generated_total{status=\"finalized\"}[24h]))", "legendFormat": "BKs"}]
+          },
+          {
+            "title": "SEPA Files Created (24h)",
+            "type": "stat",
+            "gridPos": {"x":8,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(sepa_files_created_total[24h]))", "legendFormat": "Files"}]
+          },
+          {
+            "title": "Failed Payments (24h)",
+            "type": "stat",
+            "gridPos": {"x":12,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(payments_failed_total[24h]))", "legendFormat": "Failed"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":1,"color":"yellow"},{"value":5,"color":"red"}]}}}
+          },
+          {
+            "title": "Settlement Warnings (24h)",
+            "type": "stat",
+            "gridPos": {"x":16,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(settlement_warnings_total[24h]))", "legendFormat": "Warnings"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":5,"color":"yellow"},{"value":20,"color":"red"}]}}}
+          },
+          {
+            "title": "Invoices Generated (24h)",
+            "type": "stat",
+            "gridPos": {"x":20,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(billing_invoices_generated_total{status=\"success\"}[24h]))", "legendFormat": "Invoices"}]
+          },
+          {
+            "title": "Payment Allocations Over Time",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":4,"w":12,"h":7},
+            "targets": [
+              {"expr": "sum(rate(payment_allocations_total{status=\"success\"}[5m])) * 60", "legendFormat": "Success/min"},
+              {"expr": "sum(rate(payment_allocations_total{status=\"failed\"}[5m])) * 60", "legendFormat": "Failed/min"},
+              {"expr": "sum(rate(payment_allocations_total{status=\"partial\"}[5m])) * 60", "legendFormat": "Partial/min"}
+            ]
+          },
+          {
+            "title": "SEPA Collections by Status",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":4,"w":12,"h":7},
+            "targets": [
+              {"expr": "sum(rate(sepa_collections_total{status=\"success\"}[5m])) * 60", "legendFormat": "Success"},
+              {"expr": "sum(rate(sepa_collections_total{status=\"failed\"}[5m])) * 60", "legendFormat": "Failed"}
+            ]
+          },
+          {
+            "title": "Billing Run Duration",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":11,"w":12,"h":6},
+            "targets": [
+              {"expr": "histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h]))", "legendFormat": "p99"},
+              {"expr": "histogram_quantile(0.50, rate(billing_run_duration_seconds_bucket[1h]))", "legendFormat": "p50"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "s", "custom": {"thresholdsStyle": {"mode":"line"}}, "thresholds": {"steps": [{"value":1800,"color":"red"}]}}}
+          },
+          {
+            "title": "Settlement Duration",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":11,"w":12,"h":6},
+            "targets": [
+              {"expr": "histogram_quantile(0.99, rate(settlement_duration_seconds_bucket[1h]))", "legendFormat": "p99"},
+              {"expr": "histogram_quantile(0.50, rate(settlement_duration_seconds_bucket[1h]))", "legendFormat": "p50"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "s"}}
+          },
+          {
+            "title": "Billing Conflicts",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":17,"w":8,"h":5},
+            "targets": [{"expr": "rate(billing_conflicts_total[5m])", "legendFormat": "conflicts/s"}]
+          },
+          {
+            "title": "Payment Volume (cents)",
+            "type": "timeseries",
+            "gridPos": {"x":8,"y":17,"w":8,"h":5},
+            "targets": [{"expr": "increase(payment_amount_cents_total[1h])/100", "legendFormat": "EUR/h"}],
+            "fieldConfig": {"defaults": {"unit": "currencyEUR"}}
+          },
+          {
+            "title": "SEPA Volume (cents)",
+            "type": "timeseries",
+            "gridPos": {"x":16,"y":17,"w":8,"h":5},
+            "targets": [{"expr": "increase(sepa_amount_cents_total[1h])/100", "legendFormat": "EUR/h"}],
+            "fieldConfig": {"defaults": {"unit": "currencyEUR"}}
+          }
+        ]
+      }
+    }
+
+---
+# ════════════════════════════════════════════════════════════════
+# DASHBOARD 3: SLO / SLA
+# ════════════════════════════════════════════════════════════════
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -51,237 +311,282 @@ data:
   slo-dashboard.json: |
     {
       "dashboard": {
-        "title": "ImmoflowMe — SLO Dashboard",
-        "uid": "immoflowme-slo",
-        "tags": ["slo", "immoflowme"],
+        "title": "ImmoflowMe — SLO / SLA",
+        "uid": "immo-slo",
+        "tags": ["slo", "sla", "immoflowme"],
         "timezone": "Europe/Vienna",
         "refresh": "30s",
         "panels": [
           {
-            "title": "Availability (Target: 99.9%)",
+            "title": "Availability (30d, Target: 99.9%)",
             "type": "gauge",
-            "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
-            "targets": [{
-              "expr": "1 - (sum(rate(http_requests_total{status=~\"5..\"}[30d])) / sum(rate(http_requests_total[30d])))",
-              "legendFormat": "Availability"
-            }],
-            "fieldConfig": {
-              "defaults": {
-                "thresholds": {
-                  "steps": [
-                    { "value": 0, "color": "red" },
-                    { "value": 0.999, "color": "yellow" },
-                    { "value": 0.9995, "color": "green" }
-                  ]
-                },
-                "unit": "percentunit",
-                "min": 0.99,
-                "max": 1
-              }
-            }
+            "gridPos": {"x":0,"y":0,"w":8,"h":8},
+            "targets": [{"expr": "1 - (sum(rate(http_requests_total{status=~\"5..\"}[30d])) / sum(rate(http_requests_total[30d])))", "legendFormat": "Availability"}],
+            "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0.99, "max": 1, "thresholds": {"steps": [{"value":0,"color":"red"},{"value":0.999,"color":"yellow"},{"value":0.9995,"color":"green"}]}}}
           },
           {
             "title": "Error Budget Remaining (30d)",
+            "type": "gauge",
+            "gridPos": {"x":8,"y":0,"w":8,"h":8},
+            "targets": [{"expr": "1 - ((sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / 0.001)", "legendFormat": "Budget"}],
+            "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"steps": [{"value":0,"color":"red"},{"value":0.25,"color":"yellow"},{"value":0.5,"color":"green"}]}}}
+          },
+          {
+            "title": "Error Budget Burn Rate",
             "type": "stat",
-            "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
-            "targets": [{
-              "expr": "1 - ((sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / 0.001)",
-              "legendFormat": "Budget"
-            }],
-            "fieldConfig": {
-              "defaults": {
-                "unit": "percentunit",
-                "thresholds": {
-                  "steps": [
-                    { "value": 0, "color": "red" },
-                    { "value": 0.25, "color": "yellow" },
-                    { "value": 0.5, "color": "green" }
-                  ]
-                }
-              }
-            }
+            "gridPos": {"x":16,"y":0,"w":8,"h":8},
+            "targets": [{"expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h]))) / 0.001 * 720", "legendFormat": "Burn rate (30d normalized)"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":1,"color":"yellow"},{"value":2,"color":"red"}]}}}
           },
           {
-            "title": "p99 Latency (Target: < 2s)",
+            "title": "Error Budget Burn Over Time",
             "type": "timeseries",
-            "gridPos": { "x": 12, "y": 0, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
-              "legendFormat": "p99"
-            }, {
-              "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
-              "legendFormat": "p95"
-            }, {
-              "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
-              "legendFormat": "p50"
-            }],
-            "fieldConfig": {
-              "defaults": {
-                "unit": "s",
-                "custom": {
-                  "thresholdsStyle": { "mode": "line" }
-                },
-                "thresholds": {
-                  "steps": [
-                    { "value": 2, "color": "red" }
-                  ]
-                }
-              }
-            }
+            "gridPos": {"x":0,"y":8,"w":24,"h":7},
+            "targets": [
+              {"expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h]))) / 0.001 * 720", "legendFormat": "1h burn rate"},
+              {"expr": "(sum(rate(http_requests_total{status=~\"5..\"}[6h])) / sum(rate(http_requests_total[6h]))) / 0.001 * 720", "legendFormat": "6h burn rate"}
+            ],
+            "fieldConfig": {"defaults": {"custom": {"thresholdsStyle": {"mode":"line"}}, "thresholds": {"steps": [{"value":1,"color":"yellow"},{"value":2,"color":"red"}]}}}
           },
           {
-            "title": "Request Rate",
+            "title": "Billing SLO: Run < 30min",
             "type": "timeseries",
-            "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "sum(rate(http_requests_total[5m]))",
-              "legendFormat": "Total req/s"
-            }, {
-              "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))",
-              "legendFormat": "5xx/s"
-            }, {
-              "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m]))",
-              "legendFormat": "4xx/s"
-            }],
-            "fieldConfig": { "defaults": { "unit": "reqps" } }
+            "gridPos": {"x":0,"y":15,"w":12,"h":6},
+            "targets": [
+              {"expr": "histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h]))", "legendFormat": "p99 duration"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "s", "custom": {"thresholdsStyle": {"mode":"line+area"}}, "thresholds": {"steps": [{"value":1800,"color":"red"}]}}}
           },
           {
-            "title": "In-Flight Requests",
+            "title": "Billing SLO: Conflicts < 10%",
             "type": "timeseries",
-            "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "http_requests_in_flight",
-              "legendFormat": "{{ instance }}"
-            }]
-          },
-          {
-            "title": "Billing Run Duration",
-            "type": "timeseries",
-            "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h]))",
-              "legendFormat": "p99"
-            }, {
-              "expr": "histogram_quantile(0.50, rate(billing_run_duration_seconds_bucket[1h]))",
-              "legendFormat": "p50"
-            }],
-            "fieldConfig": {
-              "defaults": {
-                "unit": "s",
-                "thresholds": {
-                  "steps": [{ "value": 1800, "color": "red" }]
-                }
-              }
-            }
-          },
-          {
-            "title": "Billing Conflicts Rate",
-            "type": "timeseries",
-            "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "rate(billing_conflicts_total[5m])",
-              "legendFormat": "conflicts/s"
-            }]
+            "gridPos": {"x":12,"y":15,"w":12,"h":6},
+            "targets": [
+              {"expr": "billing_conflicts_total / billing_lines_upserted_total", "legendFormat": "Conflict rate"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "percentunit", "custom": {"thresholdsStyle": {"mode":"line"}}, "thresholds": {"steps": [{"value":0.1,"color":"red"}]}}}
           }
         ]
       }
     }
 
 ---
+# ════════════════════════════════════════════════════════════════
+# DASHBOARD 4: DATABASE
+# ════════════════════════════════════════════════════════════════
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-business
+  name: grafana-dashboard-database
   namespace: monitoring
   labels:
     grafana_dashboard: "1"
 data:
-  business-kpi-dashboard.json: |
+  database-dashboard.json: |
     {
       "dashboard": {
-        "title": "ImmoflowMe — Business KPIs",
-        "uid": "immoflowme-business",
-        "tags": ["business", "kpi", "immoflowme"],
+        "title": "ImmoflowMe — Database",
+        "uid": "immo-database",
+        "tags": ["database", "postgresql", "immoflowme"],
         "timezone": "Europe/Vienna",
-        "refresh": "5m",
+        "refresh": "15s",
         "panels": [
           {
-            "title": "Invoices Generated (24h)",
+            "title": "Active Connections",
             "type": "stat",
-            "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-            "targets": [{
-              "expr": "increase(billing_invoices_generated_total{status=\"success\"}[24h])",
-              "legendFormat": "Invoices"
-            }],
-            "fieldConfig": { "defaults": { "unit": "short" } }
+            "gridPos": {"x":0,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "db_connections_active", "legendFormat": "Active"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":80,"color":"yellow"},{"value":100,"color":"red"}]}}}
           },
           {
-            "title": "Lines Upserted (24h)",
+            "title": "Idle Connections",
             "type": "stat",
-            "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
-            "targets": [{
-              "expr": "increase(billing_lines_upserted_total[24h])",
-              "legendFormat": "Lines"
-            }],
-            "fieldConfig": { "defaults": { "unit": "short" } }
+            "gridPos": {"x":4,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "db_connections_idle", "legendFormat": "Idle"}]
           },
           {
-            "title": "Job Queue Status",
+            "title": "Waiting Connections",
             "type": "stat",
-            "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
-            "targets": [{
-              "expr": "job_queue_pending_total",
-              "legendFormat": "Pending"
-            }, {
-              "expr": "job_queue_processing_total",
-              "legendFormat": "Processing"
-            }],
-            "fieldConfig": {
-              "defaults": {
-                "thresholds": {
-                  "steps": [
-                    { "value": 0, "color": "green" },
-                    { "value": 50, "color": "yellow" },
-                    { "value": 100, "color": "red" }
-                  ]
-                }
-              }
-            }
+            "gridPos": {"x":8,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "db_connections_waiting", "legendFormat": "Waiting"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":5,"color":"yellow"},{"value":10,"color":"red"}]}}}
           },
           {
-            "title": "Billing Runs (7d)",
+            "title": "Replication Lag",
             "type": "stat",
-            "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
-            "targets": [{
-              "expr": "increase(billing_runs_total[7d])",
-              "legendFormat": "{{ status }}"
-            }]
+            "gridPos": {"x":12,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "db_replication_lag_seconds", "legendFormat": "Lag"}],
+            "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":5,"color":"yellow"},{"value":30,"color":"red"}]}}}
           },
           {
-            "title": "Memory Usage",
+            "title": "WAL Archive Lag",
+            "type": "stat",
+            "gridPos": {"x":16,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "wal_archive_lag_seconds", "legendFormat": "WAL Lag"}],
+            "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":60,"color":"yellow"},{"value":300,"color":"red"}]}}}
+          },
+          {
+            "title": "Slow Queries / 5m",
+            "type": "stat",
+            "gridPos": {"x":20,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(db_query_slow_total[5m]))", "legendFormat": "Slow"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":5,"color":"yellow"},{"value":20,"color":"red"}]}}}
+          },
+          {
+            "title": "Query Duration by Operation (p95)",
             "type": "timeseries",
-            "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "nodejs_heap_used_bytes",
-              "legendFormat": "Heap Used"
-            }, {
-              "expr": "nodejs_heap_total_bytes",
-              "legendFormat": "Heap Total"
-            }, {
-              "expr": "process_resident_memory_bytes",
-              "legendFormat": "RSS"
-            }],
-            "fieldConfig": { "defaults": { "unit": "bytes" } }
+            "gridPos": {"x":0,"y":4,"w":12,"h":7},
+            "targets": [{"expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, operation))", "legendFormat": "{{operation}} p95"}],
+            "fieldConfig": {"defaults": {"unit": "s"}}
           },
           {
-            "title": "CPU Usage",
+            "title": "Connection Pool Over Time",
             "type": "timeseries",
-            "gridPos": { "x": 12, "y": 4, "w": 12, "h": 6 },
-            "targets": [{
-              "expr": "rate(process_cpu_seconds_total[5m])",
-              "legendFormat": "CPU cores"
-            }],
-            "fieldConfig": { "defaults": { "unit": "short" } }
+            "gridPos": {"x":12,"y":4,"w":12,"h":7},
+            "targets": [
+              {"expr": "db_connections_active", "legendFormat": "Active"},
+              {"expr": "db_connections_idle", "legendFormat": "Idle"},
+              {"expr": "db_connections_waiting", "legendFormat": "Waiting"}
+            ]
+          },
+          {
+            "title": "WAL & Replication Lag Over Time",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":11,"w":12,"h":6},
+            "targets": [
+              {"expr": "wal_archive_lag_seconds", "legendFormat": "WAL Lag"},
+              {"expr": "db_replication_lag_seconds", "legendFormat": "Replication Lag"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "s"}}
+          },
+          {
+            "title": "Slow Queries Over Time",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":11,"w":12,"h":6},
+            "targets": [{"expr": "sum by (operation) (rate(db_query_slow_total[5m]))", "legendFormat": "{{operation}}"}]
+          },
+          {
+            "title": "Last Backup",
+            "type": "stat",
+            "gridPos": {"x":0,"y":17,"w":6,"h":5},
+            "targets": [{"expr": "time() - backup_last_success_timestamp", "legendFormat": "Ago"}],
+            "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"steps": [{"value":0,"color":"green"},{"value":86400,"color":"yellow"},{"value":172800,"color":"red"}]}}}
+          },
+          {
+            "title": "Backup Success/Failure",
+            "type": "timeseries",
+            "gridPos": {"x":6,"y":17,"w":9,"h":5},
+            "targets": [
+              {"expr": "increase(backup_success_total[24h])", "legendFormat": "Success"},
+              {"expr": "increase(backup_failure_total[24h])", "legendFormat": "Failure"}
+            ]
+          },
+          {
+            "title": "Backup Size",
+            "type": "timeseries",
+            "gridPos": {"x":15,"y":17,"w":9,"h":5},
+            "targets": [{"expr": "backup_size_bytes", "legendFormat": "Size"}],
+            "fieldConfig": {"defaults": {"unit": "bytes"}}
+          }
+        ]
+      }
+    }
+
+---
+# ════════════════════════════════════════════════════════════════
+# DASHBOARD 5: SECURITY
+# ════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-security
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  security-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "ImmoflowMe — Security",
+        "uid": "immo-security",
+        "tags": ["security", "compliance", "immoflowme"],
+        "timezone": "Europe/Vienna",
+        "refresh": "30s",
+        "panels": [
+          {
+            "title": "CSRF Failures (1h)",
+            "type": "stat",
+            "gridPos": {"x":0,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(csrf_failures_total[1h]))", "legendFormat": "CSRF"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":1,"color":"yellow"},{"value":10,"color":"red"}]}}}
+          },
+          {
+            "title": "IDOR Attempts (1h)",
+            "type": "stat",
+            "gridPos": {"x":4,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(idor_attempts_total[1h]))", "legendFormat": "IDOR"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":1,"color":"yellow"},{"value":5,"color":"red"}]}}}
+          },
+          {
+            "title": "Auth Failures (1h)",
+            "type": "stat",
+            "gridPos": {"x":8,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(auth_failures_total[1h]))", "legendFormat": "Auth"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":10,"color":"yellow"},{"value":50,"color":"red"}]}}}
+          },
+          {
+            "title": "Rate Limit Hits (1h)",
+            "type": "stat",
+            "gridPos": {"x":12,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(rate_limit_hits_total[1h]))", "legendFormat": "429s"}],
+            "fieldConfig": {"defaults": {"thresholds": {"steps": [{"value":0,"color":"green"},{"value":50,"color":"yellow"},{"value":200,"color":"red"}]}}}
+          },
+          {
+            "title": "Period Lock Errors (1h)",
+            "type": "stat",
+            "gridPos": {"x":16,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(period_lock_errors_total[1h]))", "legendFormat": "Lock"}]
+          },
+          {
+            "title": "Retention Freeze Blocks (1h)",
+            "type": "stat",
+            "gridPos": {"x":20,"y":0,"w":4,"h":4},
+            "targets": [{"expr": "sum(increase(retention_freeze_blocks_total[1h]))", "legendFormat": "Freeze"}]
+          },
+          {
+            "title": "Security Events Over Time",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":4,"w":12,"h":7},
+            "targets": [{"expr": "sum by (event_type) (rate(security_events_total[5m])) * 60", "legendFormat": "{{event_type}}/min"}]
+          },
+          {
+            "title": "CSRF Failures by Route",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":4,"w":12,"h":7},
+            "targets": [{"expr": "sum by (route) (increase(csrf_failures_total[1h]))", "legendFormat": "{{route}}"}]
+          },
+          {
+            "title": "IDOR Attempts by Table",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":11,"w":12,"h":6},
+            "targets": [{"expr": "sum by (table) (increase(idor_attempts_total[1h]))", "legendFormat": "{{table}}"}]
+          },
+          {
+            "title": "Auth Failures by Type",
+            "type": "timeseries",
+            "gridPos": {"x":12,"y":11,"w":12,"h":6},
+            "targets": [{"expr": "sum by (type) (increase(auth_failures_total[1h]))", "legendFormat": "{{type}}"}]
+          },
+          {
+            "title": "Suspicious Spike Detection",
+            "type": "timeseries",
+            "gridPos": {"x":0,"y":17,"w":24,"h":6},
+            "targets": [
+              {"expr": "sum(rate(security_events_total[5m])) * 60", "legendFormat": "Total events/min"},
+              {"expr": "sum(rate(security_events_total[5m] offset 1h)) * 60", "legendFormat": "1h ago (baseline)"},
+              {"expr": "(sum(rate(security_events_total[5m])) - sum(rate(security_events_total[5m] offset 1h))) / sum(rate(security_events_total[5m] offset 1h)) * 100", "legendFormat": "% change vs baseline"}
+            ],
+            "fieldConfig": {"overrides": [{"matcher": {"id": "byName", "options": "% change vs baseline"}, "properties": [{"id": "custom.axisPlacement", "value": "right"}, {"id": "unit", "value": "percent"}]}]}
           }
         ]
       }
