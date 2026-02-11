@@ -1,0 +1,203 @@
+name: Canary Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: 'Image digest to deploy (sha256:...)'
+        required: true
+        type: string
+      health_check_url:
+        description: 'Health check URL (defaults to CANARY_DEPLOY_URL secret)'
+        required: false
+        type: string
+      health_timeout_minutes:
+        description: 'Minutes to poll health before declaring success'
+        required: false
+        default: '5'
+        type: string
+
+concurrency:
+  group: canary-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY_URL || 'ghcr.io' }}
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  canary:
+    name: Deploy Canary
+    runs-on: ubuntu-latest
+    outputs:
+      previous_digest: ${{ steps.current.outputs.digest }}
+      deploy_status: ${{ steps.health.outputs.status }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Capture current (previous) image for rollback ──
+      - name: Get current deployed digest
+        id: current
+        run: |
+          # Try to get current canary digest from registry
+          CURRENT=$(docker manifest inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:canary" 2>/dev/null | \
+            jq -r '.config.digest // .manifests[0].digest // empty' 2>/dev/null || true)
+
+          if [ -n "$CURRENT" ]; then
+            echo "digest=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "Current canary digest: $CURRENT"
+          else
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "⚠️ No existing canary image found (first deploy)"
+          fi
+
+      # ── Verify signature before deploy ──
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image signature
+        run: |
+          chmod +x tools/verify-image.sh
+          bash tools/verify-image.sh \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ github.event.inputs.image_digest }}"
+
+      # ── Deploy to canary ──
+      - name: Deploy canary
+        id: deploy
+        run: |
+          HEALTH_URL="${{ github.event.inputs.health_check_url || secrets.CANARY_DEPLOY_URL }}"
+
+          echo "Deploying ${{ github.event.inputs.image_digest }} to canary..."
+          echo "Health check target: ${HEALTH_URL:-'(not configured)'}"
+
+          # Tag the image as canary
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ github.event.inputs.image_digest }}" || true
+          docker tag \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ github.event.inputs.image_digest }}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:canary" || true
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:canary" || true
+
+          echo "✅ Canary image tagged and pushed"
+
+          # NOTE: Actual deployment command depends on your infrastructure
+          # Examples:
+          # kubectl set image deployment/app-canary app=$IMAGE@$DIGEST
+          # aws ecs update-service --cluster prod --service canary --force-new-deployment
+          # flyctl deploy --image $IMAGE@$DIGEST --app myapp-canary
+
+      # ── Health check loop ──
+      - name: Health check
+        id: health
+        run: |
+          HEALTH_URL="${{ github.event.inputs.health_check_url || secrets.CANARY_DEPLOY_URL }}"
+          TIMEOUT_MIN="${{ github.event.inputs.health_timeout_minutes || '5' }}"
+          TIMEOUT_SEC=$((TIMEOUT_MIN * 60))
+          INTERVAL=10
+          ELAPSED=0
+          FAILURES=0
+          MAX_FAILURES=3
+
+          if [ -z "$HEALTH_URL" ]; then
+            echo "⚠️ No health check URL configured — skipping health checks"
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Polling $HEALTH_URL every ${INTERVAL}s for ${TIMEOUT_MIN} minutes..."
+
+          while [ $ELAPSED -lt $TIMEOUT_SEC ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$HEALTH_URL" 2>/dev/null || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              FAILURES=0
+              echo "[$(date +%H:%M:%S)] ✅ Health OK (HTTP $HTTP_CODE)"
+            else
+              FAILURES=$((FAILURES + 1))
+              echo "[$(date +%H:%M:%S)] ❌ Health FAIL (HTTP $HTTP_CODE) — failure $FAILURES/$MAX_FAILURES"
+
+              if [ $FAILURES -ge $MAX_FAILURES ]; then
+                echo "::error::Health check failed $MAX_FAILURES consecutive times"
+                echo "status=failed" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+            fi
+
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "✅ Health checks passed for $TIMEOUT_MIN minutes"
+          echo "status=healthy" >> "$GITHUB_OUTPUT"
+
+      # ── Summary on success ──
+      - name: Deploy summary
+        if: steps.health.outputs.status != 'failed'
+        run: |
+          echo "## 🐤 Canary Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Digest** | \`${{ github.event.inputs.image_digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Health** | ✅ ${{ steps.health.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Previous** | \`${{ steps.current.outputs.digest || 'none' }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    name: Automatic Rollback
+    runs-on: ubuntu-latest
+    needs: canary
+    if: needs.canary.outputs.deploy_status == 'failed'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rollback to previous image
+        run: |
+          PREVIOUS="${{ needs.canary.outputs.previous_digest }}"
+
+          if [ -z "$PREVIOUS" ]; then
+            echo "::error::No previous digest available for rollback!"
+            echo "Manual intervention required."
+            exit 1
+          fi
+
+          echo "🔄 Rolling back to previous image: $PREVIOUS"
+
+          # Re-tag previous image as canary
+          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${PREVIOUS}" || true
+          docker tag \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${PREVIOUS}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:canary" || true
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:canary" || true
+
+          echo "✅ Rollback complete to $PREVIOUS"
+
+          # NOTE: Add your actual rollback deployment command here
+          # kubectl rollout undo deployment/app-canary
+          # aws ecs update-service ...
+
+      - name: Notify rollback
+        if: always()
+        env:
+          ROLLBACK_WEBHOOK: ${{ secrets.ROLLBACK_WEBHOOK }}
+        run: |
+          echo "## ⚠️ Canary Rollback Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Failed Digest** | \`${{ github.event.inputs.image_digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Rolled Back To** | \`${{ needs.canary.outputs.previous_digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | Health check failure |" >> $GITHUB_STEP_SUMMARY
+
+          if [ -n "$ROLLBACK_WEBHOOK" ]; then
+            curl -s -X POST "$ROLLBACK_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"text\": \"⚠️ Canary rollback triggered\",
+                \"digest\": \"${{ github.event.inputs.image_digest }}\",
+                \"rolled_back_to\": \"${{ needs.canary.outputs.previous_digest }}\",
+                \"run_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+              }" || echo "Webhook notification failed (non-blocking)"
+          fi

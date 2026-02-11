@@ -1,0 +1,179 @@
+name: Promote Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: 'Image digest to promote (sha256:...)'
+        required: true
+        type: string
+      source_env:
+        description: 'Source environment'
+        required: true
+        type: choice
+        options: [dev, staging, canary]
+      target_env:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [staging, canary, production]
+
+concurrency:
+  group: promote-${{ github.event.inputs.target_env }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY_URL || 'ghcr.io' }}
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate-promotion:
+    name: Validate Promotion Path
+    runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.check.outputs.valid }}
+    steps:
+      - name: Check promotion path
+        id: check
+        run: |
+          SOURCE="${{ github.event.inputs.source_env }}"
+          TARGET="${{ github.event.inputs.target_env }}"
+          VALID="false"
+
+          case "$SOURCE:$TARGET" in
+            dev:staging)       VALID="true" ;;
+            staging:canary)    VALID="true" ;;
+            canary:production) VALID="true" ;;
+            *)
+              echo "::error::Invalid promotion path: $SOURCE → $TARGET"
+              echo "Allowed: dev→staging, staging→canary, canary→production"
+              exit 1
+              ;;
+          esac
+
+          echo "valid=$VALID" >> "$GITHUB_OUTPUT"
+          echo "✅ Promotion path $SOURCE → $TARGET is valid"
+
+  verify-and-promote:
+    name: Verify → Test → Promote
+    runs-on: ubuntu-latest
+    needs: validate-promotion
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: promote_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d promote_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/promote_test
+      SESSION_SECRET: ci-promote-secret-not-for-production
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      # ── Cosign Signature Verification ──
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image signature
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ github.event.inputs.image_digest }}"
+
+          if [ -n "$COSIGN_PRIVATE_KEY" ]; then
+            cosign verify --key env://COSIGN_PRIVATE_KEY "$IMAGE" 2>&1 || {
+              echo "::error::Signature verification FAILED for $IMAGE"
+              exit 1
+            }
+          else
+            cosign verify --certificate-identity-regexp=".*" \
+              --certificate-oidc-issuer-regexp=".*" "$IMAGE" 2>&1 || {
+              echo "::error::Keyless signature verification FAILED for $IMAGE"
+              exit 1
+            }
+          fi
+          echo "✅ Signature verified for $IMAGE"
+
+      # ── DB Migration Dry-Run ──
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
+
+      - name: Bootstrap CI schema
+        run: psql "$DATABASE_URL" -f ci/schema.sql
+
+      - name: Run migrations
+        run: node migrations/run-migration.cjs
+
+      - name: Schema compatibility gate
+        run: |
+          chmod +x tools/schema_compat_check.sh
+          bash tools/schema_compat_check.sh
+
+      # ── Smoke Tests ──
+      - name: Run billing parity smoke tests
+        run: npx vitest run tests/unit/billing.service.test.ts --reporter=verbose
+
+      - name: Run normalizeDescription parity
+        run: npx vitest run src/test/normalizeDescription.test.ts --reporter=verbose
+
+      # ── Contract Tests (optional) ──
+      - name: Run contract tests
+        if: hashFiles('tests/contract/**') != ''
+        run: npx vitest run tests/contract/ --reporter=verbose
+        continue-on-error: true
+
+      # ── Re-Tag for Target Environment ──
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Re-tag image for target environment
+        run: |
+          SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ github.event.inputs.image_digest }}"
+          TARGET_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.target_env }}"
+
+          # Pull by digest, tag for target env, push
+          docker pull "$SOURCE"
+          docker tag "$SOURCE" "$TARGET_TAG"
+          docker push "$TARGET_TAG"
+
+          echo "✅ Promoted $SOURCE → $TARGET_TAG"
+
+      # ── Summary ──
+      - name: Promotion summary
+        run: |
+          echo "## 🚀 Promotion Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Source** | ${{ github.event.inputs.source_env }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target** | ${{ github.event.inputs.target_env }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Digest** | \`${{ github.event.inputs.image_digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Signature** | ✅ Verified |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Schema** | ✅ Compatible |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Smoke Tests** | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
