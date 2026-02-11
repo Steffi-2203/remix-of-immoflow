@@ -3,6 +3,8 @@ import fs from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
+import { injectNonce, injectSri } from "./lib/htmlTransform";
+import { getSriMap } from "./lib/sri";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { type Server } from "http";
@@ -44,6 +46,11 @@ export async function setupVite(app: Express, server: Server) {
 
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = await vite.transformIndexHtml(url, template);
+      // Inject CSP nonce into script/style/link tags (dev mode, no SRI)
+      const nonce = res.locals.cspNonce;
+      if (nonce) {
+        template = injectNonce(template, nonce);
+      }
       res.status(200).set({
         "Content-Type": "text/html",
         "Cache-Control": "private, no-store, must-revalidate",
@@ -72,11 +79,24 @@ export function serveStatic(app: Express) {
   }));
 
   app.use("/{*splat}", (_req, res) => {
+    const indexPath = path.resolve(distPath, "index.html");
+    let html = fs.readFileSync(indexPath, 'utf-8');
+
+    // Inject CSP nonce
+    const nonce = res.locals.cspNonce;
+    if (nonce) {
+      html = injectNonce(html, nonce);
+    }
+
+    // Inject SRI attributes for production assets
+    html = injectSri(html, getSriMap(distPath));
+
     res.set({
+      'Content-Type': 'text/html',
       'Cache-Control': 'private, no-store, must-revalidate',
       'Pragma': 'no-cache',
     });
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.send(html);
   });
 }
 

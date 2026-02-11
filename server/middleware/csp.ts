@@ -23,6 +23,8 @@ const cspLog = logger.child({ service: 'csp' });
  * Generates a per-request 24-byte random nonce, sets it on res.locals,
  * then delegates to helmet's contentSecurityPolicy for header generation.
  */
+const CSP_REPORT_ONLY = process.env.CSP_REPORT_ONLY !== 'false'; // default true for safe rollout
+
 export function cspNonceMiddleware(req: Request, res: Response, next: NextFunction): void {
   const nonce = crypto.randomBytes(24).toString('base64');
   res.locals.cspNonce = nonce;
@@ -33,7 +35,9 @@ export function cspNonceMiddleware(req: Request, res: Response, next: NextFuncti
 
   // Detect if a downstream proxy strips the CSP header
   res.on('finish', () => {
-    if (!res.getHeader('content-security-policy')) {
+    const enforceHeader = res.getHeader('content-security-policy');
+    const reportHeader = res.getHeader('content-security-policy-report-only');
+    if (!enforceHeader && !reportHeader) {
       cspLog.error({ url: req.originalUrl }, 'CSP header was stripped by a downstream proxy');
       registry.increment('csp_header_stripped_total');
     }
@@ -54,7 +58,17 @@ export function cspNonceMiddleware(req: Request, res: Response, next: NextFuncti
       frameAncestors: ["'none'"],
       reportUri: "/api/csp-report",
     },
-  })(req, res, next);
+  })(req, res, () => {
+    // After helmet sets Content-Security-Policy, optionally switch to Report-Only
+    if (CSP_REPORT_ONLY) {
+      const cspValue = res.getHeader('content-security-policy');
+      if (cspValue) {
+        res.removeHeader('content-security-policy');
+        res.setHeader('content-security-policy-report-only', cspValue);
+      }
+    }
+    next();
+  });
 }
 
 /**
