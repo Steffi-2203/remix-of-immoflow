@@ -1,0 +1,288 @@
+# Grafana Dashboards — Kubernetes Manifests
+#
+# Includes: SLO dashboard, Business KPIs, Billing Operations
+# kubectl apply -f k8s/monitoring/grafana-dashboards.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: false
+
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200
+        editable: false
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            filterByTraceID: true
+          serviceMap:
+            datasourceUid: prometheus
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-slo
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  slo-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "ImmoflowMe — SLO Dashboard",
+        "uid": "immoflowme-slo",
+        "tags": ["slo", "immoflowme"],
+        "timezone": "Europe/Vienna",
+        "refresh": "30s",
+        "panels": [
+          {
+            "title": "Availability (Target: 99.9%)",
+            "type": "gauge",
+            "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+            "targets": [{
+              "expr": "1 - (sum(rate(http_requests_total{status=~\"5..\"}[30d])) / sum(rate(http_requests_total[30d])))",
+              "legendFormat": "Availability"
+            }],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    { "value": 0, "color": "red" },
+                    { "value": 0.999, "color": "yellow" },
+                    { "value": 0.9995, "color": "green" }
+                  ]
+                },
+                "unit": "percentunit",
+                "min": 0.99,
+                "max": 1
+              }
+            }
+          },
+          {
+            "title": "Error Budget Remaining (30d)",
+            "type": "stat",
+            "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
+            "targets": [{
+              "expr": "1 - ((sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / 0.001)",
+              "legendFormat": "Budget"
+            }],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percentunit",
+                "thresholds": {
+                  "steps": [
+                    { "value": 0, "color": "red" },
+                    { "value": 0.25, "color": "yellow" },
+                    { "value": 0.5, "color": "green" }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "p99 Latency (Target: < 2s)",
+            "type": "timeseries",
+            "gridPos": { "x": 12, "y": 0, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+              "legendFormat": "p99"
+            }, {
+              "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+              "legendFormat": "p95"
+            }, {
+              "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+              "legendFormat": "p50"
+            }],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "custom": {
+                  "thresholdsStyle": { "mode": "line" }
+                },
+                "thresholds": {
+                  "steps": [
+                    { "value": 2, "color": "red" }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "Request Rate",
+            "type": "timeseries",
+            "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "sum(rate(http_requests_total[5m]))",
+              "legendFormat": "Total req/s"
+            }, {
+              "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))",
+              "legendFormat": "5xx/s"
+            }, {
+              "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m]))",
+              "legendFormat": "4xx/s"
+            }],
+            "fieldConfig": { "defaults": { "unit": "reqps" } }
+          },
+          {
+            "title": "In-Flight Requests",
+            "type": "timeseries",
+            "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "http_requests_in_flight",
+              "legendFormat": "{{ instance }}"
+            }]
+          },
+          {
+            "title": "Billing Run Duration",
+            "type": "timeseries",
+            "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h]))",
+              "legendFormat": "p99"
+            }, {
+              "expr": "histogram_quantile(0.50, rate(billing_run_duration_seconds_bucket[1h]))",
+              "legendFormat": "p50"
+            }],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "thresholds": {
+                  "steps": [{ "value": 1800, "color": "red" }]
+                }
+              }
+            }
+          },
+          {
+            "title": "Billing Conflicts Rate",
+            "type": "timeseries",
+            "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "rate(billing_conflicts_total[5m])",
+              "legendFormat": "conflicts/s"
+            }]
+          }
+        ]
+      }
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-business
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  business-kpi-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "ImmoflowMe — Business KPIs",
+        "uid": "immoflowme-business",
+        "tags": ["business", "kpi", "immoflowme"],
+        "timezone": "Europe/Vienna",
+        "refresh": "5m",
+        "panels": [
+          {
+            "title": "Invoices Generated (24h)",
+            "type": "stat",
+            "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+            "targets": [{
+              "expr": "increase(billing_invoices_generated_total{status=\"success\"}[24h])",
+              "legendFormat": "Invoices"
+            }],
+            "fieldConfig": { "defaults": { "unit": "short" } }
+          },
+          {
+            "title": "Lines Upserted (24h)",
+            "type": "stat",
+            "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+            "targets": [{
+              "expr": "increase(billing_lines_upserted_total[24h])",
+              "legendFormat": "Lines"
+            }],
+            "fieldConfig": { "defaults": { "unit": "short" } }
+          },
+          {
+            "title": "Job Queue Status",
+            "type": "stat",
+            "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+            "targets": [{
+              "expr": "job_queue_pending_total",
+              "legendFormat": "Pending"
+            }, {
+              "expr": "job_queue_processing_total",
+              "legendFormat": "Processing"
+            }],
+            "fieldConfig": {
+              "defaults": {
+                "thresholds": {
+                  "steps": [
+                    { "value": 0, "color": "green" },
+                    { "value": 50, "color": "yellow" },
+                    { "value": 100, "color": "red" }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "Billing Runs (7d)",
+            "type": "stat",
+            "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+            "targets": [{
+              "expr": "increase(billing_runs_total[7d])",
+              "legendFormat": "{{ status }}"
+            }]
+          },
+          {
+            "title": "Memory Usage",
+            "type": "timeseries",
+            "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "nodejs_heap_used_bytes",
+              "legendFormat": "Heap Used"
+            }, {
+              "expr": "nodejs_heap_total_bytes",
+              "legendFormat": "Heap Total"
+            }, {
+              "expr": "process_resident_memory_bytes",
+              "legendFormat": "RSS"
+            }],
+            "fieldConfig": { "defaults": { "unit": "bytes" } }
+          },
+          {
+            "title": "CPU Usage",
+            "type": "timeseries",
+            "gridPos": { "x": 12, "y": 4, "w": 12, "h": 6 },
+            "targets": [{
+              "expr": "rate(process_cpu_seconds_total[5m])",
+              "legendFormat": "CPU cores"
+            }],
+            "fieldConfig": { "defaults": { "unit": "short" } }
+          }
+        ]
+      }
+    }
