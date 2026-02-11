@@ -35,10 +35,10 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **WEG Management**: Comprehensive support for Wohnungseigentumsgesetz 2002, including owner assignments, assembly tracking, agenda items, MEA-weighted voting, annual budget plans, reserve fund tracking, special assessments, maintenance tracking, and ownership transfer workflows.
 - **Additional Features**: Insurance management, deadline calendar, serial letters, management contracts, heating cost import, owner payouts, and multi-mandant support via an organization switcher.
 - **Observability**: Structured logging, request logger, enhanced health checks, and readiness probes.
-- **Compliance**: BAO §132 retention, GoBD audit hash chain with tamper detection, WEG §31 reserve checks, WEG §24 invitation deadline validation, MRG §27 deposit return tracking, and a compliance dashboard.
+- **Compliance**: BAO §132 retention, GoBD audit hash chain with tamper detection (integrated into invoice/payment/settlement mutations with enriched payloads), WEG §31 MEA-weighted reserve checks with per-unit analysis, WEG §24 invitation deadline validation, MRG §27 deposit return tracking, and a compliance dashboard.
 - **API Standards**: Centralized error handling with `ApiError` class and standardized error codes.
 - **DB Performance**: 16 performance indexes on frequently queried columns.
-- **Security**: Password policy (length, complexity, leak check, history), account lockout, API rate limiting, session security (HTTP-only, secure cookies, PostgreSQL storage), CSRF protection (double-submit cookie), IDOR protection (centralized ownership checks), input sanitization (HTML-escaping), runtime service guards, authentication event audit logging, and HTTP security headers (Helmet.js).
+- **Security**: Password policy (length, complexity, leak check, history), account lockout, API rate limiting, session security (HTTP-only, secure cookies, PostgreSQL storage), CSRF protection (double-submit cookie), IDOR protection (centralized ownership checks), input sanitization (HTML-escaping), runtime service guards, authentication event audit logging, HTTP security headers (Helmet.js), and nonce-based CSP (script-src with per-request nonce, script-src-attr 'none', upgrade-insecure-requests).
 
 **System Design Choices:**
 - **Modular Structure**: Clear separation of `server/`, `shared/`, and `src/` directories.
