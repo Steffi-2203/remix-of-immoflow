@@ -2,6 +2,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { writeAudit } from "../lib/auditLog";
 import { billingLogger } from "../lib/logger";
+import { logBackupEvent } from "../lib/backupAudit";
 
 /**
  * Austrian BAO §132: 7-year retention for accounting documents.
@@ -156,6 +157,21 @@ export class ArchiveService {
       archivedAuditLogs: auditResult.rows?.length || 0,
     });
 
+    // Log backup audit event for compliance trail
+    await logBackupEvent({
+      eventType: "archive_export_created",
+      actor: userId,
+      entityType: "archive_package",
+      entityId: `archive-run-${cutoffStr}`,
+      details: {
+        cutoffDate: cutoffStr,
+        retentionYears: this.config.years,
+        retentionStandard: this.retentionStandard,
+        archivedInvoices: invoiceResult.rows?.length || 0,
+        archivedAuditLogs: auditResult.rows?.length || 0,
+      },
+    });
+
     logger.info(
       { archivedCount, cutoffDate: cutoffStr },
       "Archive run completed"
@@ -228,6 +244,18 @@ export class ArchiveService {
         cutoffDate: cutoffStr,
         purgedCount,
         retentionStandard: this.retentionStandard,
+      });
+
+      await logBackupEvent({
+        eventType: "archive_purge_executed",
+        actor: userId,
+        entityType: "archive_package",
+        entityId: `purge-${cutoffStr}`,
+        details: {
+          cutoffDate: cutoffStr,
+          purgedCount,
+          retentionStandard: this.retentionStandard,
+        },
       });
     }
 
