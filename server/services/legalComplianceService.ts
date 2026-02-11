@@ -11,24 +11,99 @@ export interface ComplianceWarning {
 export async function checkWEGReserveCompliance(propertyId: string): Promise<ComplianceWarning[]> {
   const warnings: ComplianceWarning[] = [];
   try {
-    const result = await db.execute(sql`
-      SELECT COALESCE(SUM(CAST(ruecklage_beitrag AS NUMERIC)), 0) as total_reserve
-      FROM weg_wirtschaftsplaene
-      WHERE property_id = ${propertyId}::uuid AND jahr = EXTRACT(YEAR FROM NOW())
+    const ownerData = await db.execute(sql`
+      SELECT unit_id, mea_share
+      FROM weg_unit_owners
+      WHERE property_id = ${propertyId}::uuid
+        AND (valid_to IS NULL OR valid_to > NOW())
     `);
-    const totalReserve = parseFloat((result as any).rows?.[0]?.total_reserve || '0');
-    
-    const unitCount = await db.execute(sql`
-      SELECT COUNT(*) as cnt FROM units WHERE property_id = ${propertyId}::uuid
+    const owners = (ownerData as any).rows || [];
+
+    const ownerByUnit = new Map<string, number>();
+    let totalMea = 0;
+    for (const o of owners) {
+      const mea = parseFloat(o.mea_share || '0');
+      ownerByUnit.set(o.unit_id, (ownerByUnit.get(o.unit_id) || 0) + mea);
+      totalMea += mea;
+    }
+
+    if (ownerByUnit.size === 0 || totalMea <= 0) {
+      const unitCount = await db.execute(sql`
+        SELECT COUNT(*) as cnt FROM units WHERE property_id = ${propertyId}::uuid
+      `);
+      const count = parseInt((unitCount as any).rows?.[0]?.cnt || '0');
+      if (count > 0) {
+        warnings.push({
+          type: 'weg_reserve',
+          severity: 'info',
+          message: `WEG §31: Keine MEA-Daten vorhanden – Rücklagenprüfung nicht möglich (${count} Einheiten ohne WEG-Zuordnung)`,
+          details: { propertyId, unitCount: count },
+        });
+      }
+      return warnings;
+    }
+
+    const reserveData = await db.execute(sql`
+      SELECT unit_id, COALESCE(SUM(CAST(amount AS NUMERIC)), 0) as total_reserve
+      FROM weg_reserve_fund
+      WHERE property_id = ${propertyId}::uuid AND year = EXTRACT(YEAR FROM NOW())
+      GROUP BY unit_id
     `);
-    const count = parseInt((unitCount as any).rows?.[0]?.cnt || '0');
-    
-    if (count > 0 && totalReserve < count * 50) {
+    const reserveByUnit = new Map<string, number>();
+    let actualReserve = 0;
+    for (const r of (reserveData as any).rows || []) {
+      const amt = parseFloat(r.total_reserve || '0');
+      reserveByUnit.set(r.unit_id, amt);
+      actualReserve += amt;
+    }
+
+    const budgetResult = await db.execute(sql`
+      SELECT COALESCE(reserve_contribution, 0) as planned_reserve
+      FROM weg_budget_plans
+      WHERE property_id = ${propertyId}::uuid AND year = EXTRACT(YEAR FROM NOW())
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    const plannedReserve = parseFloat((budgetResult as any).rows?.[0]?.planned_reserve || '0');
+
+    const MIN_RESERVE_PER_MEA_PERCENT = 0.50;
+    const recommendedMinimum = plannedReserve > 0 ? plannedReserve : totalMea * MIN_RESERVE_PER_MEA_PERCENT * 100;
+
+    const unitsWithLowReserve: { unitId: string; meaShare: number; reserve: number; expected: number }[] = [];
+    for (const [unitId, unitMea] of ownerByUnit.entries()) {
+      const reserve = reserveByUnit.get(unitId) || 0;
+      const meaPercent = unitMea / totalMea;
+      const expectedReserve = recommendedMinimum * meaPercent;
+      if (reserve < expectedReserve * 0.8) {
+        unitsWithLowReserve.push({ unitId, meaShare: unitMea, reserve, expected: Math.round(expectedReserve * 100) / 100 });
+      }
+    }
+
+    if (actualReserve < recommendedMinimum) {
       warnings.push({
         type: 'weg_reserve',
-        severity: 'warnung',
-        message: `WEG §31: Rücklage unter Empfehlung (${totalReserve.toFixed(2)} EUR für ${count} Einheiten)`,
-        details: { propertyId, totalReserve, unitCount: count, recommendedMinimum: count * 50 },
+        severity: actualReserve < recommendedMinimum * 0.5 ? 'fehler' : 'warnung',
+        message: `WEG §31: Rücklage unter MEA-gewichteter Empfehlung (${actualReserve.toFixed(2)} EUR, empfohlen: ${recommendedMinimum.toFixed(2)} EUR)`,
+        details: {
+          propertyId,
+          totalReserve: actualReserve,
+          totalMea,
+          unitCount: ownerByUnit.size,
+          recommendedMinimum,
+          plannedReserve,
+          unitsWithLowReserve: unitsWithLowReserve.slice(0, 5),
+        },
+      });
+    } else if (unitsWithLowReserve.length > 0) {
+      warnings.push({
+        type: 'weg_reserve',
+        severity: 'info',
+        message: `WEG §31: ${unitsWithLowReserve.length} Einheit(en) mit unterdurchschnittlicher Rücklage (MEA-gewichtet)`,
+        details: {
+          propertyId,
+          totalReserve: actualReserve,
+          totalMea,
+          unitsWithLowReserve: unitsWithLowReserve.slice(0, 5),
+        },
       });
     }
   } catch {}

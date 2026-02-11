@@ -777,7 +777,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           entityId: payment.id,
           organizationId: profile?.organizationId,
           userId: profile?.userId,
-          data: { tenantId: payment.tenantId, amount: payment.betrag, type: payment.paymentType },
+          data: {
+            tenantId: payment.tenantId,
+            amount: payment.betrag,
+            type: payment.paymentType,
+            propertyId: property.id,
+            buchungsDatum: payment.buchungsDatum,
+            verwendungszweck: payment.verwendungszweck,
+          },
         });
       } catch {}
       
@@ -1828,7 +1835,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           entityId: invoice.id,
           organizationId: profile?.organizationId,
           userId: profile?.userId,
-          data: { tenantId: invoice.tenantId, amount: invoice.gesamtBetrag, period: invoice.abrechnungsZeitraum },
+          data: {
+            tenantId: invoice.tenantId,
+            amount: invoice.gesamtBetrag,
+            period: invoice.abrechnungsZeitraum,
+            propertyId: property.id,
+            unitId: unit.id,
+            invoiceType: invoice.rechnungsTyp,
+          },
         });
       } catch {}
 

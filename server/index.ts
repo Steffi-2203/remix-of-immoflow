@@ -29,26 +29,38 @@ app.set("trust proxy", 1);
 
 app.use(createRequestLogger());
 
-// Security: Helmet for HTTP headers with CSP
-app.use(helmet({
-  contentSecurityPolicy: isProduction ? {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://*.replit.dev", "https://*.replit.app"],
-      frameSrc: ["'self'", "https://js.stripe.com"],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-      frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.app"],
-    },
-  } : false,
-  crossOriginEmbedderPolicy: false,
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-}));
+// Security: Helmet for HTTP headers with CSP (nonce-based in production)
+import crypto from "crypto";
+
+app.use((req: any, _res, next) => {
+  req.cspNonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+app.use((req: any, res, next) => {
+  const nonce = req.cspNonce;
+  helmet({
+    contentSecurityPolicy: isProduction ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", `'nonce-${nonce}'`],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://*.replit.dev", "https://*.replit.app"],
+        frameSrc: ["'self'", "https://js.stripe.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.app"],
+        upgradeInsecureRequests: [],
+      },
+    } : false,
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  })(req, res, next);
+});
 
 app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
