@@ -149,40 +149,52 @@ export type Database = {
       }
       audit_events: {
         Row: {
-          actor: string
+          actor_id: string | null
+          actor_org: string | null
+          chain_index: number
           created_at: string
-          entity: string
-          entity_id: string | null
+          entity_id: string
+          entity_type: string
           event_type: string
           id: string
-          new_data: Json | null
-          old_data: Json | null
-          operation: string
-          run_id: string | null
+          immutable: boolean
+          payload: Json
+          payload_hash: string
+          prev_hash: string | null
+          retention_until: string
+          signature: string | null
         }
         Insert: {
-          actor: string
+          actor_id?: string | null
+          actor_org?: string | null
+          chain_index: number
           created_at?: string
-          entity: string
-          entity_id?: string | null
+          entity_id: string
+          entity_type: string
           event_type: string
           id?: string
-          new_data?: Json | null
-          old_data?: Json | null
-          operation: string
-          run_id?: string | null
+          immutable?: boolean
+          payload: Json
+          payload_hash: string
+          prev_hash?: string | null
+          retention_until: string
+          signature?: string | null
         }
         Update: {
-          actor?: string
+          actor_id?: string | null
+          actor_org?: string | null
+          chain_index?: number
           created_at?: string
-          entity?: string
-          entity_id?: string | null
+          entity_id?: string
+          entity_type?: string
           event_type?: string
           id?: string
-          new_data?: Json | null
-          old_data?: Json | null
-          operation?: string
-          run_id?: string | null
+          immutable?: boolean
+          payload?: Json
+          payload_hash?: string
+          prev_hash?: string | null
+          retention_until?: string
+          signature?: string | null
         }
         Relationships: []
       }
