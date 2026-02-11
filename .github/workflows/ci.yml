@@ -152,6 +152,36 @@ jobs:
           chmod +x tools/security_audit.sh
           bash tools/security_audit.sh || echo "::warning::Security audit found issues (review required)"
 
+      # ── Trivy Filesystem Scan ──
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      # ── SBOM Generation ──
+      - name: Generate dependency SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom-deps.spdx.json
+          upload-artifact: true
+          upload-artifact-retention: 90
+
+      # ── npm audit gate ──
+      - name: npm audit (critical gate)
+        run: |
+          npm audit --audit-level=critical --omit=dev 2>&1 || {
+            echo "::error::npm audit found critical vulnerabilities"
+            exit 1
+          }
+          echo "✅ No critical vulnerabilities found"
+
       - name: Duplicate precheck
         run: |
           DUPES=$(psql "$DATABASE_URL" -t -A -c "
