@@ -128,13 +128,65 @@ pgbackrest --stanza=prod restore --type=time "--target=2026-02-11 15:30:00"
 sudo systemctl start postgresql
 ```
 
-### 4.2 Full Restore (letztes Backup)
+### 4.2 Katastrophenfall — Full Restore
 
-```bash
-pgbackrest --stanza=prod --type=default restore
-```
+**Schritt-für-Schritt:**
 
-### 4.3 Validierung nach Restore
+1. **Neuen Host provisionieren** (VM, Bare-Metal oder RDS Instance)
+2. **Datenbank stoppen & Datenverzeichnis sichern**
+   ```bash
+   sudo systemctl stop postgresql
+   mv /var/lib/postgresql/16/main /var/lib/postgresql/16/main.bak
+   ```
+3. **Full Restore ausführen**
+   ```bash
+   # Self-hosted
+   pgbackrest --stanza=prod restore
+
+   # AWS RDS Alternative
+   # aws rds restore-db-instance-to-point-in-time ...
+   ```
+4. **Datenbank starten & Smoke-Tests**
+   ```bash
+   sudo systemctl start postgresql
+
+   # API Health Check
+   curl -f https://api.immoflow.at/health
+
+   # Datenintegrität
+   psql -c "SELECT count(*) FROM organizations;"
+   psql -c "SELECT count(*) FROM monthly_invoices;"
+   psql -c "SELECT count(*) FROM audit_logs WHERE hash IS NOT NULL;"
+
+   # Payment Reconciliation
+   psql -c "SELECT count(*) FROM ledger_entries WHERE booking_date > now() - interval '7 days';"
+   ```
+5. **LoadBalancer / DNS umschalten** auf neuen Host
+6. **Post-Restore Aufgaben**
+   ```bash
+   # Reindex
+   psql -c "REINDEX DATABASE postgres;"
+
+   # VACUUM
+   psql -c "VACUUM ANALYZE;"
+
+   # Ledger-Reconciliation
+   psql -c "SELECT tenant_id, sum(amount) FROM ledger_entries GROUP BY tenant_id HAVING sum(amount) != 0;"
+
+   # Automatisierter DR-Test
+   bash tools/dr_restore_test.sh "$DATABASE_URL"
+   ```
+
+### 4.3 Entscheidungstabelle
+
+| Szenario | Methode | Befehl |
+|---|---|---|
+| Einzelne Tabelle wiederherstellen | Logischer Dump aus Backup-DB | `pg_dump --table=<table> backup_db \| psql prod_db` |
+| Vollständige DB-Korruption | Full Restore + WAL Replay | `pgbackrest --stanza=prod restore` |
+| Zeitpunktgenaue Wiederherstellung | PITR | `pgbackrest --stanza=prod restore --type=time "--target=..."` |
+| RDS Instance | AWS Console / CLI | `aws rds restore-db-instance-to-point-in-time` |
+
+### 4.4 Validierung nach Restore
 
 ```bash
 # Automatisierter DR-Test
