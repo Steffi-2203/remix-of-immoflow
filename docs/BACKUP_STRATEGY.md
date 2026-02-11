@@ -395,7 +395,102 @@ Empfohlene Panels:
 
 ---
 
-## 8. Lovable Cloud (Aktuelle Umgebung)
+## 8. Security & Compliance
+
+### 8.1 Verschlüsselung
+
+| Schicht | Methode | Details |
+|---|---|---|
+| S3 at-rest | SSE-KMS (AWS KMS) | Bereits in `server/lib/wormStorage.ts` implementiert |
+| S3 in-transit | TLS 1.2+ | Erzwungen via Bucket Policy (`aws:SecureTransport`) |
+| pgBackRest at-rest | AES-256-CBC | `repo1-cipher-type=aes-256-cbc` |
+| Datenbank at-rest | AES-256 | Plattformebene (Lovable Cloud / RDS) |
+
+### 8.2 IAM & Zugangskontrolle
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BackupAgentS3Access",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::immoflow-backup-prod",
+        "arn:aws:s3:::immoflow-backup-prod/*"
+      ]
+    },
+    {
+      "Sid": "BackupAgentKMSAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Resource": "arn:aws:kms:eu-central-1:*:key/<backup-kms-key-id>"
+    }
+  ]
+}
+```
+
+> **WICHTIG**: Keine Access Keys in Repos oder Config-Dateien!
+> Ausschließlich IAM Instance Roles / IRSA (EKS) / Task Roles (ECS) verwenden.
+
+### 8.3 WORM / Object Lock (GoBD 10 Jahre)
+
+```bash
+# Object Lock aktivieren (bei Bucket-Erstellung)
+aws s3api create-bucket \
+  --bucket immoflow-audit-worm \
+  --object-lock-enabled-for-object-lock
+
+# Default Retention: 10 Jahre (GoBD/BAO)
+aws s3api put-object-lock-configuration \
+  --bucket immoflow-audit-worm \
+  --object-lock-configuration '{
+    "ObjectLockEnabled": "Enabled",
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "COMPLIANCE",
+        "Years": 10
+      }
+    }
+  }'
+```
+
+**Im Code implementiert:**
+- `server/lib/wormStorage.ts` — S3 Object Lock mit KMS-Verschlüsselung
+- `tools/export_audit_package.js --worm` — Automatischer Upload mit COMPLIANCE-Lock
+- `GET /api/compliance/worm-status` — Dashboard für Retention-Status
+
+### 8.4 Backup Audit Events
+
+Alle Backup-Aktionen werden über `server/lib/backupAudit.ts` revisionssicher protokolliert:
+
+| Event | Felder | Beispiel |
+|---|---|---|
+| `backup.full.started` | actor, timestamp, stanza | System-Cron startet Full Backup |
+| `backup.full.completed` | actor, timestamp, duration, size | Full Backup erfolgreich (42 GB, 18 min) |
+| `backup.full.failed` | actor, timestamp, error | pgBackRest Exit-Code != 0 |
+| `restore.pitr.started` | actor, timestamp, target_time | Admin initiiert PITR |
+| `restore.pitr.completed` | actor, timestamp, duration | Restore abgeschlossen |
+| `worm.upload.completed` | actor, timestamp, file, retention | GoBD-Export mit 10y Lock |
+| `restore_test.passed` | actor, timestamp, duration | Wöchentlicher Staging-Test OK |
+| `restore_test.failed` | actor, timestamp, error | Test fehlgeschlagen → Alert |
+
+> Events werden in `audit_events`-Tabelle gespeichert (Write-Once, SHA-256 Hash-Chain).
+> API: `GET /api/compliance/backup-events`
+
+---
+
+## 9. Lovable Cloud (Aktuelle Umgebung)
 
 In der Lovable Cloud Umgebung ist die Backup-Infrastruktur **vollständig verwaltet**:
 
@@ -417,13 +512,17 @@ In der Lovable Cloud Umgebung ist die Backup-Infrastruktur **vollständig verwal
 
 ---
 
-## 9. Checkliste
+## 10. Checkliste
 
 - [ ] pgBackRest Stanza initialisiert (`pgbackrest --stanza=prod stanza-create`)
 - [ ] Full Backup erfolgreich (`pgbackrest --stanza=prod --type=full backup`)
 - [ ] WAL-Archiving verifiziert (`pgbackrest --stanza=prod check`)
 - [ ] PITR-Restore getestet
 - [ ] S3 Bucket mit Versioning + TLS-Policy
+- [ ] SSE-KMS für Backup-Bucket aktiviert
+- [ ] IAM Role für Backup-Agent konfiguriert (keine Keys im Repo)
+- [ ] WORM Object Lock für GoBD-Bucket (10 Jahre COMPLIANCE)
+- [ ] Backup Audit Events in `backupAudit.ts` aktiv
 - [ ] Monitoring-Alerts konfiguriert
-- [ ] DR-Restore-Test monatlich ausgeführt
-- [ ] WORM-Locks für steuerrelevante Exporte aktiv
+- [ ] Wöchentlicher Restore-Test (Staging) läuft
+- [ ] Monatliche DR-Übung durchgeführt
