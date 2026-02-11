@@ -49,6 +49,10 @@ import NotFound from "./pages/NotFound";
 import Impressum from "./pages/Impressum";
 import Datenschutz from "./pages/Datenschutz";
 import AGB from "./pages/AGB";
+import DsgvoCompliance from "./pages/DsgvoCompliance";
+import SecurityDashboard from "./pages/SecurityDashboard";
+import SupportTickets from "./pages/SupportTickets";
+import GuidedWorkflows from "./pages/GuidedWorkflows";
 
 const queryClient = new QueryClient();
 
@@ -104,6 +108,10 @@ const App = () => (
             <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/hv-vertraege" element={<ProtectedRoute><DemoDataProvider><ManagementContracts /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/dsgvo" element={<ProtectedRoute><DemoDataProvider><DsgvoCompliance /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/sicherheit" element={<ProtectedRoute><DemoDataProvider><SecurityDashboard /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/tickets" element={<ProtectedRoute><DemoDataProvider><SupportTickets /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/workflows" element={<ProtectedRoute><DemoDataProvider><GuidedWorkflows /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

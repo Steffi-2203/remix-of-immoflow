@@ -6,6 +6,9 @@ import rateLimit from "express-rate-limit";
 import onFinished from "on-finished";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
+import { registerDsgvoRoutes } from "./routes/dsgvoRoutes";
+import { registerSecurityRoutes, trackSession } from "./routes/securityRoutes";
+import { registerTicketRoutes } from "./routes/ticketRoutes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
@@ -284,6 +287,10 @@ async function initStripe() {
   await seedDistributionKeys();
   await ensureIndexes();
   setupAuth(app);
+  app.use(trackSession);
+  registerDsgvoRoutes(app);
+  registerSecurityRoutes(app);
+  registerTicketRoutes(app);
   const server = await registerRoutes(app);
 
   app.use(apiErrorHandler);

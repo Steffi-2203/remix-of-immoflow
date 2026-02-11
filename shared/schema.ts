@@ -1468,3 +1468,160 @@ export const reconcileRuns = pgTable("reconcile_runs", {
 export const insertReconcileRunSchema = createInsertSchema(reconcileRuns).omit({ id: true, createdAt: true });
 export type ReconcileRun = typeof reconcileRuns.$inferSelect;
 export type InsertReconcileRun = typeof reconcileRuns.$inferInsert;
+
+// ====== DSGVO CONSENT RECORDS ======
+export const consentRecords = pgTable("consent_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  consentType: text("consent_type").notNull(),
+  consentVersion: text("consent_version").notNull().default('1.0'),
+  granted: boolean("granted").notNull().default(false),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  legalBasis: text("legal_basis"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_consent_user").on(table.userId),
+  index("idx_consent_type").on(table.consentType),
+]);
+
+export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit({ id: true, createdAt: true });
+export type InsertConsentRecord = z.infer<typeof insertConsentRecordSchema>;
+export type ConsentRecord = typeof consentRecords.$inferSelect;
+
+// ====== DSGVO ART. 30 - VERARBEITUNGSTÄTIGKEITEN ======
+export const processingActivities = pgTable("processing_activities", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  name: text("name").notNull(),
+  purpose: text("purpose").notNull(),
+  legalBasis: text("legal_basis").notNull(),
+  dataCategories: text("data_categories").array().notNull(),
+  dataSubjects: text("data_subjects").array().notNull(),
+  recipients: text("recipients").array(),
+  thirdCountryTransfer: boolean("third_country_transfer").default(false),
+  transferSafeguards: text("transfer_safeguards"),
+  retentionPeriod: text("retention_period").notNull(),
+  technicalMeasures: text("technical_measures").array(),
+  organizationalMeasures: text("organizational_measures").array(),
+  responsiblePerson: text("responsible_person"),
+  dpiaConducted: boolean("dpia_conducted").default(false),
+  dpiaDate: date("dpia_date"),
+  isActive: boolean("is_active").default(true),
+  lastReviewDate: date("last_review_date"),
+  nextReviewDate: date("next_review_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertProcessingActivitySchema = createInsertSchema(processingActivities).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProcessingActivity = z.infer<typeof insertProcessingActivitySchema>;
+export type ProcessingActivity = typeof processingActivities.$inferSelect;
+
+// ====== LÖSCHFRISTEN / DATA RETENTION POLICIES ======
+export const dataRetentionPolicies = pgTable("data_retention_policies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  dataCategory: text("data_category").notNull(),
+  retentionDays: integer("retention_days").notNull(),
+  legalBasis: text("legal_basis").notNull(),
+  autoDelete: boolean("auto_delete").default(false),
+  notifyBeforeDays: integer("notify_before_days").default(30),
+  lastExecutedAt: timestamp("last_executed_at", { withTimezone: true }),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDataRetentionPolicySchema = createInsertSchema(dataRetentionPolicies).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDataRetentionPolicy = z.infer<typeof insertDataRetentionPolicySchema>;
+export type DataRetentionPolicy = typeof dataRetentionPolicies.$inferSelect;
+
+// ====== SECURITY SESSIONS (Enhanced Tracking) ======
+export const securitySessions = pgTable("security_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull(),
+  sessionId: text("session_id").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  deviceType: text("device_type"),
+  browser: text("browser"),
+  os: text("os"),
+  location: text("location"),
+  isActive: boolean("is_active").default(true),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_security_sessions_user").on(table.userId),
+  index("idx_security_sessions_active").on(table.isActive),
+]);
+
+export const insertSecuritySessionSchema = createInsertSchema(securitySessions).omit({ id: true, createdAt: true });
+export type InsertSecuritySession = z.infer<typeof insertSecuritySessionSchema>;
+export type SecuritySession = typeof securitySessions.$inferSelect;
+
+// ====== SUPPORT TICKETS ======
+export const supportTickets = pgTable("support_tickets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  unitId: uuid("unit_id").references(() => units.id),
+  propertyId: uuid("property_id").references(() => properties.id),
+  createdById: uuid("created_by_id").references(() => profiles.id),
+  assignedToId: uuid("assigned_to_id").references(() => profiles.id),
+  ticketNumber: text("ticket_number").notNull(),
+  category: text("category").notNull(),
+  priority: text("priority").notNull().default('normal'),
+  status: text("status").notNull().default('offen'),
+  subject: text("subject").notNull(),
+  description: text("description").notNull(),
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  dueDate: date("due_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_tickets_org").on(table.organizationId),
+  index("idx_tickets_status").on(table.status),
+  index("idx_tickets_tenant").on(table.tenantId),
+]);
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+
+// ====== TICKET COMMENTS ======
+export const ticketComments = pgTable("ticket_comments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ticketId: uuid("ticket_id").references(() => supportTickets.id).notNull(),
+  authorId: uuid("author_id").references(() => profiles.id),
+  content: text("content").notNull(),
+  isInternal: boolean("is_internal").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertTicketCommentSchema = createInsertSchema(ticketComments).omit({ id: true, createdAt: true });
+export type InsertTicketComment = z.infer<typeof insertTicketCommentSchema>;
+export type TicketComment = typeof ticketComments.$inferSelect;
+
+// ====== GUIDED WORKFLOWS ======
+export const guidedWorkflows = pgTable("guided_workflows", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  userId: uuid("user_id").references(() => profiles.id),
+  workflowType: text("workflow_type").notNull(),
+  currentStep: integer("current_step").notNull().default(1),
+  totalSteps: integer("total_steps").notNull(),
+  stepData: jsonb("step_data").default('{}'),
+  status: text("status").notNull().default('in_progress'),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_workflows_org").on(table.organizationId),
+  index("idx_workflows_user").on(table.userId),
+]);
