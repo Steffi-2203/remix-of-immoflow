@@ -44,7 +44,11 @@ export async function setupVite(app: Express, server: Server) {
 
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      res.status(200).set({
+        "Content-Type": "text/html",
+        "Cache-Control": "private, no-store, must-revalidate",
+        "Pragma": "no-cache",
+      }).end(template);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -61,9 +65,17 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    maxAge: '1y',
+    immutable: true,
+    index: false,
+  }));
 
   app.use("/{*splat}", (_req, res) => {
+    res.set({
+      'Cache-Control': 'private, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+    });
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
