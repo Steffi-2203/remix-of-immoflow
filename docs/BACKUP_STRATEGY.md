@@ -490,6 +490,42 @@ Alle Backup-Aktionen werden über `server/lib/backupAudit.ts` revisionssicher pr
 
 ---
 
+## 9. Operational Responsibilities
+
+### Verantwortlichkeiten
+
+| Ebene | Team | Aufgaben |
+|---|---|---|
+| 1st Response | SRE / Infra Team | Backup-Monitoring, Alert-Handling, Restore-Ausführung, Infrastruktur |
+| 2nd Response | App Team | Datenintegrität, Ledger-Reconciliation, Smoke-Tests, Audit-Compliance |
+
+### Runbooks
+
+Alle operativen Runbooks befinden sich im Infra-Repo:
+
+```
+ops/runbooks/backup/
+├── backup-failure.md          # Backup fehlgeschlagen
+├── wal-lag-exceeded.md        # WAL-Lag > RPO
+├── full-restore.md            # Katastrophenfall Full Restore
+├── pitr-restore.md            # Point-in-Time Recovery
+├── single-table-restore.md    # Einzelne Tabelle wiederherstellen
+├── restore-test-failure.md    # Staging Restore-Test fehlgeschlagen
+└── worm-lock-verification.md  # GoBD WORM-Status prüfen
+```
+
+### Change Control
+
+| Änderung | Prozess |
+|---|---|
+| pgBackRest Config | PR + Review (SRE) + Approval (Lead) |
+| Cron/Timer Änderungen | PR + Review (SRE) + Approval (Lead) |
+| Retention-Policy | PR + Review (SRE + Compliance) + Approval |
+| IAM Rollen/Policies | PR + Review (Security) + Approval |
+| Restore in Produktion | Incident Ticket + 2-Person-Approval |
+
+---
+
 ## 9. Lovable Cloud (Aktuelle Umgebung)
 
 In der Lovable Cloud Umgebung ist die Backup-Infrastruktur **vollständig verwaltet**:
