@@ -186,12 +186,21 @@ npx vitest -c vitest.server.config.ts tests/unit --run
 # Integration Tests (echte DB)
 NODE_ENV=test npx vitest -c vitest.server.config.ts tests/integration --run
 
-# E2E Tests (Full Stack)
+# E2E Tests — API (Full Stack, Vitest)
 NODE_ENV=test npx vitest -c vitest.server.config.ts tests/e2e --run
 
-# Einzelnes Szenario
+# E2E Tests — UI (Playwright, Chromium)
+npx playwright test tests/e2e --project=chromium
+
+# Einzelnes Szenario (Vitest)
 NODE_ENV=test npx vitest -c vitest.server.config.ts tests/integration/payment-allocation-e2e.test.ts --run
+
+# Einzelnes Szenario (Playwright)
+npx playwright test tests/e2e/payment-flow.spec.ts --project=chromium
 
 # Mit Coverage
 NODE_ENV=test npx vitest -c vitest.server.config.ts --coverage --run
+
+# Playwright Debug Mode
+npx playwright test tests/e2e --project=chromium --headed --debug
 ```
