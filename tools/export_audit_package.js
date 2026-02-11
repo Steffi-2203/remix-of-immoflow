@@ -13,6 +13,7 @@ const argv = yargs(hideBin(process.argv))
   .option('out', { type: 'string', default: 'audit_exports' })
   .option('storage', { type: 'string', choices: ['s3','lovable','local'], default: 's3' })
   .option('s3-bucket', { type: 'string' })
+  .option('worm', { type: 'boolean', default: false, describe: 'Enable WORM/Object Lock for GoBD compliance' })
   .argv;
 
 const RUN_ID = argv['run-id'];
@@ -32,20 +33,53 @@ async function createZipAndSha(filesDir, zipPath) {
   return { zipPath, sha };
 }
 
-async function uploadToS3(zipPath, bucket, keyPrefix) {
-  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+async function uploadToS3(zipPath, bucket, keyPrefix, enableWorm = false) {
+  const { S3Client, PutObjectCommand, PutObjectRetentionCommand } = await import('@aws-sdk/client-s3');
   const region = process.env.AWS_REGION || 'eu-central-1';
   const s3 = new S3Client({ region });
   const key = `${keyPrefix}/${path.basename(zipPath)}`;
-  const body = fs.createReadStream(zipPath);
-  await s3.send(new PutObjectCommand({
+  const body = fs.readFileSync(zipPath);
+  const sha = crypto.createHash('sha256').update(body).digest('base64');
+
+  // Upload with SSE-KMS encryption (TLS enforced by SDK default)
+  const putResult = await s3.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
     Body: body,
     ServerSideEncryption: 'aws:kms',
-    // Optionally: SSEKMSKeyId: process.env.KMS_KEY_ID
+    SSEKMSKeyId: process.env.KMS_KEY_ID || undefined,
+    ChecksumSHA256: sha,
+    ContentType: 'application/zip',
+    Metadata: {
+      'retention-standard': enableWorm ? 'gobd' : 'bao',
+      'export-date': new Date().toISOString(),
+      'run-id': keyPrefix,
+    },
   }));
-  return { bucket, key };
+
+  const versionId = putResult.VersionId;
+
+  // Apply WORM lock for GoBD/BAO compliance
+  if (enableWorm) {
+    const retainUntil = new Date();
+    const retentionYears = parseInt(process.env.WORM_RETENTION_YEARS || '10', 10);
+    retainUntil.setFullYear(retainUntil.getFullYear() + retentionYears);
+    const mode = process.env.WORM_MODE || 'COMPLIANCE'; // GOVERNANCE or COMPLIANCE
+
+    await s3.send(new PutObjectRetentionCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(versionId ? { VersionId: versionId } : {}),
+      Retention: {
+        Mode: mode,
+        RetainUntilDate: retainUntil,
+      },
+    }));
+
+    console.log(`WORM lock applied: mode=${mode}, retainUntil=${retainUntil.toISOString()}`);
+  }
+
+  return { bucket, key, versionId, checksumSHA256: sha };
 }
 
 async function uploadToLovable(zipPath, apiUrl, token, runId) {
@@ -88,8 +122,12 @@ async function main() {
     const bucket = argv['s3-bucket'] || process.env.S3_BUCKET;
     if (!bucket) throw new Error('S3 bucket not provided (arg --s3-bucket or env S3_BUCKET)');
     const keyPrefix = RUN_ID;
-    const res = await uploadToS3(zipPath, bucket, keyPrefix);
+    const enableWorm = process.env.WORM_ENABLED === 'true' || argv.worm === true;
+    const res = await uploadToS3(zipPath, bucket, keyPrefix, enableWorm);
     console.log('Uploaded to S3:', res);
+    if (enableWorm) {
+      console.log('✅ WORM/Object Lock: Steuerrelevante Daten sind unveränderlich gesichert');
+    }
   } else if (argv.storage === 'lovable') {
     const apiUrl = process.env.LOVABLE_API_URL;
     const token = process.env.LOVABLE_API_TOKEN;

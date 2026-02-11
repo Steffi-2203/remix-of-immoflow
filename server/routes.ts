@@ -5493,6 +5493,53 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // Backup/Archive audit event history
+  app.get("/api/compliance/backup-events", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const { getBackupEvents } = await import("./lib/backupAudit");
+      const limit = Math.min(parseInt(req.query.limit || "50", 10), 200);
+      const since = req.query.since || undefined;
+      const events = await getBackupEvents({ limit, since });
+      res.json({ events });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch backup events" });
+    }
+  });
+
+  // WORM compliance status
+  app.get("/api/compliance/worm-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+
+      const { getWormComplianceStatus } = await import("./lib/backupAudit");
+      const status = await getWormComplianceStatus();
+
+      const { archiveService } = await import("./billing/archiveService");
+      const archiveStatus = await archiveService.getArchiveStatus(profile.organizationId);
+
+      res.json({
+        worm: status,
+        archive: archiveStatus,
+        encryption: {
+          atRest: "AES-256 (SSE-KMS)",
+          inTransit: "TLS 1.2+",
+          walArchive: "Managed by infrastructure (PITR)",
+        },
+        compliance: {
+          bao: { years: 7, standard: "BAO §132", description: "Aufbewahrungspflicht Buchhaltungsunterlagen" },
+          gobd: { years: 10, standard: "GoBD", description: "Steuerrelevante Unterlagen" },
+          wormEnabled: status.wormLocked > 0,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch WORM compliance status" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
