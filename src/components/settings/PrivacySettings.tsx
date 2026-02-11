@@ -2,46 +2,15 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Download, Trash2, Shield, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trash2, Shield, AlertTriangle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { GdprExportCard } from './GdprExportCard';
 
 export function PrivacySettings() {
   const { user, signOut } = useAuth();
-  const [isExporting, setIsExporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const handleExportData = async () => {
-    if (!user) return;
-    
-    setIsExporting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('export-user-data', {
-        body: { userId: user.id },
-      });
-
-      if (error) throw error;
-
-      // Create and download JSON file
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `meine-daten-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success('Ihre Daten wurden erfolgreich exportiert.');
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('Fehler beim Exportieren der Daten. Bitte versuchen Sie es später erneut.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   const handleDeleteAccount = async () => {
     if (!user) return;
@@ -66,37 +35,8 @@ export function PrivacySettings() {
 
   return (
     <div className="space-y-6">
-      {/* Data Export - GDPR Art. 20 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Download className="h-5 w-5" />
-            Datenexport (DSGVO Art. 20)
-          </CardTitle>
-          <CardDescription>
-            Laden Sie eine Kopie Ihrer personenbezogenen Daten herunter
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Gemäß DSGVO Artikel 20 haben Sie das Recht, Ihre personenbezogenen Daten in einem
-            strukturierten, gängigen und maschinenlesbaren Format zu erhalten.
-          </p>
-          <Button onClick={handleExportData} disabled={isExporting}>
-            {isExporting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Exportiere...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Meine Daten exportieren
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* GDPR Data Export */}
+      <GdprExportCard />
 
       {/* Account Deletion - GDPR Art. 17 */}
       <Card className="border-destructive/50">

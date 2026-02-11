@@ -910,6 +910,89 @@ export type Database = {
           },
         ]
       }
+      gdpr_export_requests: {
+        Row: {
+          created_at: string
+          delivered_at: string | null
+          delivery_method: string
+          download_url_expires_at: string | null
+          downloaded_at: string | null
+          error_message: string | null
+          file_path: string | null
+          file_size_bytes: number | null
+          format_version: string
+          id: string
+          legal_basis: string | null
+          manifest: Json | null
+          manifest_hash: string | null
+          manifest_signature: string | null
+          organization_id: string | null
+          prepared_at: string | null
+          requested_at: string
+          retention_until: string
+          scope: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivered_at?: string | null
+          delivery_method?: string
+          download_url_expires_at?: string | null
+          downloaded_at?: string | null
+          error_message?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          format_version?: string
+          id?: string
+          legal_basis?: string | null
+          manifest?: Json | null
+          manifest_hash?: string | null
+          manifest_signature?: string | null
+          organization_id?: string | null
+          prepared_at?: string | null
+          requested_at?: string
+          retention_until?: string
+          scope?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delivered_at?: string | null
+          delivery_method?: string
+          download_url_expires_at?: string | null
+          downloaded_at?: string | null
+          error_message?: string | null
+          file_path?: string | null
+          file_size_bytes?: number | null
+          format_version?: string
+          id?: string
+          legal_basis?: string | null
+          manifest?: Json | null
+          manifest_hash?: string | null
+          manifest_signature?: string | null
+          organization_id?: string | null
+          prepared_at?: string | null
+          requested_at?: string
+          retention_until?: string
+          scope?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gdpr_export_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       heating_cost_readings: {
         Row: {
           consumption: number
