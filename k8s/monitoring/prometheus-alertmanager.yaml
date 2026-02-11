@@ -185,6 +185,125 @@ data:
             annotations:
               summary: "No successful billing run in 24h"
 
+      - name: immoflowme.security
+        rules:
+          # CSRF spike
+          - alert: CsrfFailureSpike
+            expr: sum(rate(csrf_failures_total[5m])) * 60 > 5
+            for: 5m
+            labels:
+              severity: warning
+              team: security
+            annotations:
+              summary: "CSRF failures spike ({{ $value }}/min)"
+
+          # IDOR/ownership violations
+          - alert: IdorAttemptSpike
+            expr: sum(rate(idor_attempts_total[5m])) * 60 > 3
+            for: 5m
+            labels:
+              severity: critical
+              team: security
+            annotations:
+              summary: "Ownership violation attempts detected ({{ $value }}/min)"
+              description: "Possible IDOR attack — check idor_attempts_total by table"
+
+          # Auth failure spike
+          - alert: AuthFailureSpike
+            expr: sum(rate(auth_failures_total[5m])) * 60 > 20
+            for: 5m
+            labels:
+              severity: warning
+              team: security
+            annotations:
+              summary: "Authentication failures elevated ({{ $value }}/min)"
+
+          # Rate limiting spike
+          - alert: RateLimitSpike
+            expr: sum(rate(rate_limit_hits_total[5m])) * 60 > 50
+            for: 5m
+            labels:
+              severity: warning
+              team: security
+            annotations:
+              summary: "Rate limiter triggered heavily ({{ $value }}/min)"
+
+          # Security event anomaly (3x baseline)
+          - alert: SecurityEventAnomaly
+            expr: |
+              sum(rate(security_events_total[5m])) > 3 * sum(rate(security_events_total[5m] offset 1h))
+            for: 10m
+            labels:
+              severity: critical
+              team: security
+            annotations:
+              summary: "Security events 3x above 1h-ago baseline"
+
+      - name: immoflowme.backup
+        rules:
+          # Backup missing
+          - alert: BackupMissing
+            expr: time() - backup_last_success_timestamp > 86400
+            for: 1h
+            labels:
+              severity: critical
+              team: ops
+            annotations:
+              summary: "No successful backup in 24h"
+              runbook: "https://docs.internal/runbooks/backup-missing"
+
+          # WAL archive lag
+          - alert: WalArchiveLag
+            expr: wal_archive_lag_seconds > 300
+            for: 10m
+            labels:
+              severity: warning
+              team: ops
+            annotations:
+              summary: "WAL archive lag > 5min ({{ $value }}s)"
+
+          # Backup failure
+          - alert: BackupFailed
+            expr: increase(backup_failure_total[1h]) > 0
+            for: 0m
+            labels:
+              severity: critical
+              team: ops
+            annotations:
+              summary: "Backup failure detected"
+
+      - name: immoflowme.database
+        rules:
+          # Connection pool exhaustion
+          - alert: DbConnectionsExhausted
+            expr: db_connections_waiting > 10
+            for: 5m
+            labels:
+              severity: critical
+              team: backend
+            annotations:
+              summary: "DB connection pool saturated ({{ $value }} waiting)"
+
+          # Replication lag
+          - alert: DbReplicationLag
+            expr: db_replication_lag_seconds > 30
+            for: 5m
+            labels:
+              severity: warning
+              team: ops
+            annotations:
+              summary: "DB replication lag {{ $value }}s"
+
+          # Slow query rate
+          - alert: SlowQueryRate
+            expr: sum(rate(db_query_slow_total[5m])) * 60 > 10
+            for: 5m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: "Slow queries (>1s) rate elevated: {{ $value }}/min"
+
 ---
 # ── Alertmanager Config ──
 apiVersion: v1
