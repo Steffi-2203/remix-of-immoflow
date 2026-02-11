@@ -122,10 +122,7 @@ WantedBy=timers.target
 sudo systemctl stop postgresql
 
 # Restore bis zu einem bestimmten Zeitpunkt
-pgbackrest --stanza=prod --type=time \
-  --target="2026-02-11 14:30:00+01" \
-  --target-action=promote \
-  restore
+pgbackrest --stanza=prod restore --type=time "--target=2026-02-11 15:30:00"
 
 # Starte PostgreSQL
 sudo systemctl start postgresql
