@@ -274,28 +274,70 @@ aws s3api put-bucket-lifecycle-configuration \
 
 ## 7. Monitoring & Alerting
 
-### Prometheus Metriken
+### 7.1 Prometheus Metriken
 
 ```yaml
 # prometheus/rules/backup.yml
 groups:
+  - name: backup_metrics
+    rules:
+      # Backup success/failure
+      - record: pgbackrest_backup_last_full_age_seconds
+        expr: time() - pgbackrest_backup_last_full_timestamp
+
+      - record: pgbackrest_backup_last_diff_age_seconds
+        expr: time() - pgbackrest_backup_last_diff_timestamp
+
+      # WAL-Lag
+      - record: wal_archive_lag_seconds
+        expr: pgbackrest_wal_archive_lag_seconds
+
+      # Storage usage
+      - record: backup_storage_used_bytes
+        expr: pgbackrest_backup_size_bytes
+
   - name: backup_alerts
     rules:
-      - alert: BackupMissing
-        expr: time() - pgbackrest_backup_last_full_timestamp > 172800  # 48h
-        for: 1h
+      # --- CRITICAL: Backup Failure → Pager/Slack ---
+      - alert: BackupFailure
+        expr: time() - pgbackrest_backup_last_full_timestamp > 86400  # 24h (täglich erwartet)
+        for: 30m
         labels:
           severity: critical
+          channel: pager
         annotations:
-          summary: "Kein Full Backup in den letzten 48 Stunden"
+          summary: "Backup fehlgeschlagen — kein Full Backup in den letzten 24h"
+          runbook: "docs/BACKUP_STRATEGY.md#41-point-in-time-recovery-pitr"
 
-      - alert: WALArchiveLag
-        expr: pgbackrest_wal_archive_lag_seconds > 3600
+      # --- WARNING: WAL-Lag > RPO ---
+      - alert: WALLagExceedsRPO
+        expr: wal_archive_lag_seconds > 3600  # RPO = 1h
         for: 15m
         labels:
           severity: warning
+          channel: slack
         annotations:
-          summary: "WAL-Archive-Lag über 1 Stunde"
+          summary: "WAL-Archive-Lag ({{ $value }}s) überschreitet RPO von 1h"
+
+      # --- CRITICAL: Restore Test Failure → Pager ---
+      - alert: RestoreTestFailure
+        expr: pgbackrest_restore_test_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          channel: pager
+        annotations:
+          summary: "Automatisierter Restore-Test fehlgeschlagen"
+
+      # --- WARNING: Storage Usage ---
+      - alert: BackupStorageHigh
+        expr: backup_storage_used_bytes > 100e9  # > 100 GB
+        for: 1h
+        labels:
+          severity: warning
+          channel: slack
+        annotations:
+          summary: "Backup-Storage über 100 GB ({{ $value | humanize1024 }})"
 
       - alert: BackupSizeDrop
         expr: pgbackrest_backup_size_bytes < pgbackrest_backup_size_bytes offset 7d * 0.5
@@ -306,13 +348,49 @@ groups:
           summary: "Backup-Größe um >50% gesunken — möglicher Datenverlust"
 ```
 
-### Grafana Dashboard
+### 7.2 Alerting-Kanäle
+
+| Alert | Severity | Kanal | Aktion |
+|---|---|---|---|
+| Backup Failure (kein Full in 24h) | 🔴 Critical | PagerDuty + Slack | Sofortige Eskalation |
+| WAL-Lag > RPO (1h) | 🟡 Warning | Slack | Ursache prüfen, ggf. manuelles WAL-Push |
+| Restore Test Failure | 🔴 Critical | PagerDuty | DR-Runbook ausführen |
+| Storage > 100 GB | 🟡 Warning | Slack | Retention/Lifecycle prüfen |
+| Backup-Größe -50% | 🟡 Warning | Slack | Datenintegrität prüfen |
+
+### 7.3 Tests
+
+#### Wöchentliche Restore-Probe (Staging, automatisiert)
+
+```bash
+# /etc/cron.d/restore-test-staging
+# Jeden Montag 05:00 UTC
+0 5 * * 1  postgres  bash tools/dr_restore_test.sh "$STAGING_DATABASE_URL" >> /var/log/restore-test.log 2>&1
+```
+
+#### Monatliche DR-Übung (vollständiger Smoke-Test)
+
+```bash
+# /etc/cron.d/dr-exercise-monthly
+# 1. Samstag im Monat, 06:00 UTC
+0 6 1-7 * 6  postgres  bash tools/dr_full_exercise.sh >> /var/log/dr-exercise.log 2>&1
+```
+
+**Monatliche DR-Übung umfasst:**
+1. Full Restore auf isolierter Staging-Instanz
+2. API Health Check (`/health`, `/api/metrics`)
+3. Payment Reconciliation (Ledger-Summen)
+4. Audit-Log-Integrität (Hash-Chain verifizieren)
+5. Ergebnis-Report an Ops-Team (E-Mail/Slack)
+
+### 7.4 Grafana Dashboard
 
 Empfohlene Panels:
 - Backup-Größe (Full/Diff/WAL) über Zeit
 - Letzte Backup-Zeitpunkte
-- WAL-Archive-Lag
-- Restore-Testdauer (aus `tools/dr_restore_test.sh`)
+- WAL-Archive-Lag (`wal_archive_lag_seconds`)
+- Restore-Testdauer & Ergebnis
+- Storage-Nutzung & Trend
 - Retention-Lock-Status (aus `/api/compliance/worm-status`)
 
 ---
