@@ -1,0 +1,21 @@
+{
+  "name": "ImmoflowMe - Hausverwaltung",
+  "short_name": "ImmoflowMe",
+  "description": "Professionelle Hausverwaltungssoftware für Österreich - MRG/WEG-konform",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "orientation": "any",
+  "scope": "/",
+  "lang": "de-AT",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
