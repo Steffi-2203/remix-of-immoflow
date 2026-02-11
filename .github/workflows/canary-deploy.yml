@@ -7,6 +7,11 @@ on:
         description: 'Image digest to deploy (sha256:...)'
         required: true
         type: string
+      traffic_percent:
+        description: 'Percentage of traffic to route to canary (1-100)'
+        required: false
+        default: '5'
+        type: string
       health_check_url:
         description: 'Health check URL (defaults to CANARY_DEPLOY_URL secret)'
         required: false
@@ -15,6 +20,16 @@ on:
         description: 'Minutes to poll health before declaring success'
         required: false
         default: '5'
+        type: string
+      error_rate_threshold:
+        description: 'Max error rate % before auto-rollback'
+        required: false
+        default: '5'
+        type: string
+      latency_p99_threshold_ms:
+        description: 'Max p99 latency (ms) before auto-rollback'
+        required: false
+        default: '2000'
         type: string
 
 concurrency:
