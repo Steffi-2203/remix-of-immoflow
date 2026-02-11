@@ -1,117 +1,67 @@
 
 
-# CI/CD Pipeline Hardening Plan
+## CSP Caching, Static Asset Hardening, and Proxy Safety
 
-## Uebersicht
+### Problem
+HTML responses containing per-request nonces can be cached (by browsers, CDNs, or reverse proxies), causing stale nonces to be reused -- which breaks script execution or weakens CSP. Static assets currently lack SRI attributes and aggressive caching headers. No protection exists against proxies stripping the CSP header.
 
-Erweiterung der bestehenden CI/CD Pipeline (`.github/workflows/ci.yml`) um Container-Image-Management, Signaturen, ein Promotion-Modell (dev -> staging -> canary -> production), erweiterte Security-Scans und automatisches Rollback.
+### Changes
 
----
+#### 1. No-cache headers for HTML responses (`server/middleware/csp.ts`)
+Add `Cache-Control: private, no-store` and `Pragma: no-cache` directly inside `cspNonceMiddleware`, so every HTML response carrying a nonce is never cached.
 
-## Aenderungen
+#### 2. Static asset caching headers (`server/vite.ts`)
+In the `serveStatic` function, configure `express.static` with `maxAge: '1y'` and `immutable: true` for the Vite-built `dist/public` directory (Vite already fingerprints filenames with content hashes). The HTML fallback route will explicitly set `Cache-Control: private, no-store`.
 
-### 1. Neuer Workflow: `build-and-sign.yml`
+#### 3. SRI helper utility (`server/lib/sri.ts`)
+Create a small utility that reads manifest files produced by Vite's build (`dist/public/.vite/manifest.json`) and computes SHA-384 hashes for JS/CSS bundles. Export a function `getSriAttributes(assetPath)` returning `integrity` and `crossorigin` attributes. This can be used when rendering `<script>` or `<link>` tags server-side.
 
-Erstellt ein einziges immutable Container-Image pro Commit und signiert es.
-
-- **Docker Build** mit `docker/build-push-action` und Digest-Pinning
-- **Image Signing** via `sigstore/cosign-installer` -- signiert den Image-Digest
-- **SBOM-Generierung** via `anchore/sbom-action` (SPDX/CycloneDX)
-- **Trivy Scan** auf dem gebauten Image (`aquasecurity/trivy-action`)
-- Outputs: `image_digest`, `image_tag`, `sbom_path`
-- Artefakte: SBOM und Trivy-Report werden als GitHub Artifacts hochgeladen (90 Tage Retention)
-
-### 2. Neuer Workflow: `promote.yml`
-
-Promotion-Modell: Artifact-basiert, kein Rebuild.
-
-- **Trigger**: `workflow_dispatch` mit Inputs `source_env` (dev/staging/canary) und `target_env` (staging/canary/production)
-- **Cosign Verify** -- verifiziert die Signatur des Image-Digests vor Promotion
-- **DB Migration Dry-Run** gegen Staging-Snapshot (bestehende `schema_compat_check.sh` wird wiederverwendet)
-- **Integration Smoke Tests** -- fuehrt bestehende Billing Parity und Normalisation-Tests gegen die Zielumgebung aus
-- **Re-Tag** -- taggt das verifizierte Image fuer die Zielumgebung (kein Rebuild)
-- **Contract Tests** -- optional, fuehrt API-Contract-Tests aus falls vorhanden
-- Gate: Promotion schlaegt fehl wenn Signaturverifikation, Migration Dry-Run oder Smoke Tests scheitern
-
-### 3. Neuer Workflow: `canary-deploy.yml`
-
-Canary-Deployment mit automatischem Rollback.
-
-- **Trigger**: Erfolgreiche Promotion zu `canary`
-- **Deploy** -- deployt das signierte Image auf die Canary-Umgebung
-- **Health Check Loop** -- pollt `/api/health` fuer 5 Minuten (konfigurierbar)
-- **Automatic Rollback** -- bei Health-Check-Fehler wird automatisch das vorherige Image (gespeichert als Output) deployed
-- **Notification** -- GitHub Summary und optional Webhook-Benachrichtigung bei Rollback
-
-### 4. Erweiterung bestehender `ci.yml`
-
-Minimale Aenderungen am bestehenden Workflow:
-
-- Neuer Step in `billing-parity` Job: **Trivy Filesystem Scan** (`aquasecurity/trivy-action` mit `fs` Modus auf dem Repository)
-- Neuer Step in `billing-parity` Job: **SBOM Generation** fuer Dependency-Tracking
-- Neuer Step in `billing-parity` Job: **npm audit** mit `--audit-level=critical` als harter Gate (statt nur Report)
-- Bestehender `security_audit.sh` bleibt unveraendert
-
-### 5. Neues Tool: `tools/verify-image.sh`
-
-Shell-Script zur Verifizierung eines Container-Images vor Deployment:
-
-- Cosign Signature Verification
-- Digest-Vergleich gegen Build-Manifest
-- Trivy Quick-Scan (Critical/High only)
-- Exit 1 bei Fehler
-
-### 6. Dokumentation: `docs/CICD_PIPELINE.md`
-
-Dokumentiert das gesamte Pipeline-Modell:
-
-- Architektur-Diagramm (ASCII): Build -> Sign -> Scan -> Promote -> Deploy
-- Promotion-Regeln (wer darf von wo nach wo promoten)
-- Rollback-Strategie und SLAs
-- Secrets-Requirements (COSIGN_KEY, REGISTRY_URL, etc.)
-- Runbook fuer manuelles Rollback
+#### 4. Proxy-safe CSP guard (`server/middleware/csp.ts`)
+After helmet sets the CSP header, add a response listener (`res.on('finish', ...)`) that logs a warning + increments a Prometheus counter if the `Content-Security-Policy` header is missing at send time -- indicating a downstream proxy stripped it.
 
 ---
 
-## Technische Details
+### Technical Details
 
-### Benoetigte GitHub Secrets
+**File: `server/middleware/csp.ts`**
+- Inside `cspNonceMiddleware`, before calling `helmet.contentSecurityPolicy(...)`, set:
+  ```
+  res.setHeader('Cache-Control', 'private, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  ```
+- After the `helmet(...)(...)(req, res, next)` call, register a `res.on('finish')` listener that checks `res.getHeader('content-security-policy')`. If missing, log a warning via `cspLog.error(...)` and increment a new `csp_header_stripped_total` counter.
 
-| Secret | Zweck |
+**File: `server/vite.ts`**
+- In `serveStatic`, change the `express.static` call to:
+  ```typescript
+  app.use(express.static(distPath, {
+    maxAge: '1y',
+    immutable: true,
+    index: false, // don't serve index.html from static
+  }));
+  ```
+- In the HTML fallback `/{*splat}` handler, add:
+  ```typescript
+  res.set({
+    'Cache-Control': 'private, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+  });
+  ```
+- In `setupVite` (dev mode), also add `Cache-Control: private, no-store` on the HTML catch-all response.
+
+**New file: `server/lib/sri.ts`**
+- Reads `dist/public/.vite/manifest.json` at startup (cached in memory).
+- For each entry, computes `sha384-<base64>` using `crypto.createHash('sha384')`.
+- Exports `getSriMap(): Record<string, { integrity: string; crossorigin: string }>` for use in HTML template injection.
+- Gracefully returns empty map if manifest doesn't exist (dev mode).
+
+**File: `server/lib/prometheus.ts`**
+- Register `csp_header_stripped_total` counter to track proxy interference.
+
+### Files to modify
+| File | Action |
 |---|---|
-| `COSIGN_PRIVATE_KEY` | Image-Signierung |
-| `COSIGN_PASSWORD` | Passphrase fuer Cosign Key |
-| `REGISTRY_URL` | Container Registry (z.B. ghcr.io) |
-| `REGISTRY_USERNAME` | Registry Login |
-| `REGISTRY_PASSWORD` | Registry Token |
-| `STAGING_DATABASE_URL` | Migration Dry-Run |
-| `CANARY_DEPLOY_URL` | Canary Health-Check Endpoint |
-| `ROLLBACK_WEBHOOK` | Optional: Slack/Teams Notification |
-
-### Neues Dockerfile
-
-Ein minimales Multi-Stage Dockerfile wird erstellt:
-
-- Stage 1: `node:20-alpine` -- Build (npm ci, build)
-- Stage 2: `node:20-alpine` -- Runtime (nur production deps + dist)
-- Digest-pinned Base Images
-- Non-root User
-- Health-Check CMD
-
-### Dateien die erstellt werden
-
-| Datei | Zweck |
-|---|---|
-| `.github/workflows/build-and-sign.yml` | Immutable Build + Sign + Scan |
-| `.github/workflows/promote.yml` | Promotion zwischen Environments |
-| `.github/workflows/canary-deploy.yml` | Canary mit Auto-Rollback |
-| `Dockerfile` | Multi-Stage Container Build |
-| `tools/verify-image.sh` | Image-Verifikation vor Deploy |
-| `docs/CICD_PIPELINE.md` | Pipeline-Dokumentation |
-
-### Dateien die geaendert werden
-
-| Datei | Aenderung |
-|---|---|
-| `.github/workflows/ci.yml` | +3 Steps: Trivy FS scan, SBOM, npm audit gate |
-
+| `server/middleware/csp.ts` | Add no-cache headers + proxy-strip detection |
+| `server/vite.ts` | Aggressive static caching + no-cache for HTML fallback |
+| `server/lib/sri.ts` | New -- SRI hash computation from Vite manifest |
+| `server/lib/prometheus.ts` | Add `csp_header_stripped_total` counter |
