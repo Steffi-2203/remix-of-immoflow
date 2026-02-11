@@ -27,7 +27,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Data Integrity**: Soft-delete functionality and Zod validation for all API endpoints.
 - **MRG Compliance**: Supports MRG-compliant distribution keys, rent history tracking, Austrian VAT rates, Wasserkosten tracking, settlement deadline warnings, Offene Posten management, Leerstand handling, and bank account year-end carry-over.
 - **Professional Accountant Features**: SEPA export (`pain.008.001.02`, `pain.001.001.03`), MRG §21 compliant settlement PDFs, automatic advance adjustment, owner plausibility reports, automated dunning with ABGB §1333 interest calculation, VPI automation for rent adjustment, MieWeG-Indexierungsrechner, various reporting functionalities, BMD NTCS CSV and DATEV ASCII export, FinanzOnline integration (USt-Voranmeldung XML), and metadata-based document management.
-- **Unit Testing Infrastructure**: Comprehensive test suite for critical business logic.
+- **Unit Testing Infrastructure**: Comprehensive test suite (225 tests across 19 files) covering business logic, E2E billing cycles, data integrity, GoBD audit trails, and multi-tenant isolation.
 - **OCR Functionality**: Integrates GPT-5.2 Vision for tenant data import, PDF processing, and invoice data extraction.
 - **Subscription Management**: Supports user and organization-based subscriptions with Stripe integration.
 - **Role-Based Access Control**: Five distinct roles (admin, property_manager, finance, viewer, tester) with specific permissions, including a "tester" mode for data masking.
