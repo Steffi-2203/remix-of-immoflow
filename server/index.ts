@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
+import { cspNonceMiddleware, cspReportEndpoint } from "./middleware/csp";
 import rateLimit from "express-rate-limit";
 import { requestLoggerMiddleware } from "./middleware/requestLogger";
 import { registerRoutes } from "./routes";
@@ -26,24 +27,23 @@ app.set("trust proxy", 1);
 
 // Security: Helmet for HTTP headers
 app.use(helmet({
-  contentSecurityPolicy: isProduction ? {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://*.supabase.co", "https://api.stripe.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-    },
-  } : false, // Disabled for development (Vite injects scripts)
+  // CSP is handled by our nonce-based middleware (server/middleware/csp.ts)
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
 }));
+
+// CSP with per-request nonce + strict-dynamic (production only)
+if (isProduction) {
+  app.use(cspNonceMiddleware);
+}
+
+// CSP violation report endpoint (always active for monitoring)
+app.post('/api/csp-report',
+  express.json({ type: ['application/csp-report', 'application/json'] }),
+  cspReportEndpoint
+);
 
 // Security: Rate limiting - 100 requests per 15 minutes per IP
 const apiLimiter = rateLimit({

@@ -186,6 +186,7 @@ registry.register('rate_limit_hits_total', 'Rate limiter rejections (429)', 'cou
 registry.register('input_sanitization_strips_total', 'Input sanitization HTML/control char strips', 'counter');
 registry.register('retention_freeze_blocks_total', 'Deletion blocked by retention freeze (BAO/GoBD)', 'counter');
 registry.register('security_events_total', 'Security events logged', 'counter', ['event_type']);
+registry.register('csp_violations_total', 'CSP violation reports received', 'counter', ['directive', 'blocked_uri']);
 
 // ════════════════════════════════════════════
 // Backup / DR Metrics
