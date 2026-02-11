@@ -87,59 +87,267 @@ data:
             regex: default;kubernetes;https
 
   # ── Alert Rules ──
+  # Principles:
+  #   - Alert on symptoms, not causes
+  #   - Multi-signal where possible (error + latency + traffic)
+  #   - Severity: P0 (page), P1 (pager+slack), P2 (slack), P3 (ticket)
+  #   - Every alert includes runbook, owner, suggested remediation
   alerts.yml: |
     groups:
-      - name: immoflowme.slos
+      # ════════════════════════════════════════
+      # P0 — PAGE ON-CALL (immediate response)
+      # ════════════════════════════════════════
+      - name: immoflowme.p0
+        interval: 15s
+        rules:
+          # Multi-signal: high errors AND high latency
+          - alert: ServiceDegraded
+            expr: |
+              (
+                sum(rate(http_requests_total{status=~"5.."}[2m])) /
+                sum(rate(http_requests_total[2m])) > 0.05
+              ) and (
+                histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[2m])) > 2
+              )
+            for: 2m
+            labels:
+              severity: P0
+              team: backend
+              page: "true"
+            annotations:
+              summary: "Service degraded: >5% errors AND p95 >2s"
+              description: "Error rate: {{ $value | humanizePercentage }}. Multi-signal alert triggered."
+              runbook: "https://docs.internal/runbooks/service-degraded"
+              owner: "backend-oncall"
+              remediation: "1. Check recent deployments (rollback if <15min old) 2. Check DB connections 3. Check downstream dependencies"
+
+          # High error rate alone (still P0 at 5%)
+          - alert: CriticalErrorRate
+            expr: |
+              sum(rate(http_requests_total{status=~"5.."}[2m])) /
+              sum(rate(http_requests_total[2m])) > 0.05
+            for: 2m
+            labels:
+              severity: P0
+              team: backend
+              page: "true"
+            annotations:
+              summary: "Error rate exceeds 5% ({{ $value | humanizePercentage }})"
+              runbook: "https://docs.internal/runbooks/high-error-rate"
+              owner: "backend-oncall"
+              remediation: "1. Identify failing routes via Grafana 2. Check application logs 3. Rollback if deploy-related"
+
+          # DB connection pool near exhaustion
+          - alert: DbConnectionsCritical
+            expr: |
+              db_connections_active / (db_connections_active + db_connections_idle + 1) > 0.90
+              or db_connections_waiting > 10
+            for: 2m
+            labels:
+              severity: P0
+              team: backend
+              page: "true"
+            annotations:
+              summary: "DB connection pool >90% saturated ({{ $value }} waiting)"
+              runbook: "https://docs.internal/runbooks/db-connections-exhausted"
+              owner: "backend-oncall"
+              remediation: "1. Kill long-running queries 2. Check for connection leaks 3. Scale pool size if needed"
+
+          # WAL archive lag exceeds RPO
+          - alert: WalArchiveLagCritical
+            expr: wal_archive_lag_seconds > 300
+            for: 5m
+            labels:
+              severity: P0
+              team: ops
+              page: "true"
+            annotations:
+              summary: "WAL archive lag {{ $value }}s exceeds RPO (5min)"
+              runbook: "https://docs.internal/runbooks/wal-archive-lag"
+              owner: "dba-oncall"
+              remediation: "1. Check archive_command failures 2. Verify storage space 3. Check network to archive target"
+
+          # Pod crash-looping
+          - alert: PodCrashLooping
+            expr: |
+              rate(kube_pod_container_status_restarts_total{namespace="default", container="app"}[15m]) > 0
+            for: 5m
+            labels:
+              severity: P0
+              team: ops
+              page: "true"
+            annotations:
+              summary: "Pod {{ $labels.pod }} crash-looping"
+              runbook: "https://docs.internal/runbooks/pod-crash-loop"
+              owner: "platform-oncall"
+              remediation: "1. kubectl logs {{ $labels.pod }} --previous 2. Check OOM kills 3. Rollback deployment"
+
+          # Billing run exceeds SLO
+          - alert: BillingRunSlow
+            expr: |
+              histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h])) > 1800
+            for: 10m
+            labels:
+              severity: P0
+              team: billing
+              page: "true"
+            annotations:
+              summary: "Billing run exceeds 30min SLO"
+              runbook: "https://docs.internal/runbooks/billing-run-slow"
+              owner: "billing-oncall"
+              remediation: "1. Check batch sizes 2. Look for lock contention 3. Check DB performance"
+
+      # ════════════════════════════════════════
+      # P1 — PAGER + SLACK (respond within 15min)
+      # ════════════════════════════════════════
+      - name: immoflowme.p1
         interval: 30s
         rules:
-          # SLO: Error rate < 1%
+          # SLO: Error rate 1-5%
           - alert: HighErrorRate
             expr: |
               sum(rate(http_requests_total{status=~"5.."}[5m])) /
               sum(rate(http_requests_total[5m])) > 0.01
             for: 5m
             labels:
-              severity: critical
+              severity: P1
               team: backend
             annotations:
-              summary: "Error rate exceeds 1% SLO"
-              description: "{{ $value | humanizePercentage }} of requests are failing (5xx)"
+              summary: "Error rate {{ $value | humanizePercentage }} exceeds 1% SLO"
               runbook: "https://docs.internal/runbooks/high-error-rate"
+              owner: "backend-oncall"
+              remediation: "1. Check error distribution by route 2. Review recent changes 3. Investigate dependency health"
 
-          # SLO: p99 latency < 2s
-          - alert: HighLatency
+          # SLO: p99 latency
+          - alert: HighLatencyP99
             expr: |
               histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 2
             for: 5m
             labels:
-              severity: warning
+              severity: P1
               team: backend
             annotations:
-              summary: "p99 latency exceeds 2s SLO"
-              description: "p99 latency is {{ $value | humanizeDuration }}"
+              summary: "p99 latency {{ $value | humanizeDuration }} exceeds 2s SLO"
+              runbook: "https://docs.internal/runbooks/high-latency"
+              owner: "backend-oncall"
+              remediation: "1. Check slow query rate 2. Profile hot paths 3. Check cache hit rates"
 
-          # SLO: Billing run < 30 min
-          - alert: BillingRunSlow
-            expr: |
-              histogram_quantile(0.99, rate(billing_run_duration_seconds_bucket[1h])) > 1800
-            for: 10m
+          # Backup missing for 24h
+          - alert: BackupMissing
+            expr: time() - backup_last_success_timestamp > 86400
+            for: 1h
             labels:
-              severity: critical
-              team: billing
+              severity: P1
+              team: ops
             annotations:
-              summary: "Billing run exceeds 30min SLO"
+              summary: "No successful backup in 24h"
+              runbook: "https://docs.internal/runbooks/backup-missing"
+              owner: "dba-oncall"
+              remediation: "1. Check backup job logs 2. Verify storage access 3. Run manual backup"
 
-      - name: immoflowme.availability
-        rules:
-          # Pod availability
-          - alert: PodCrashLooping
+          # Backup failure
+          - alert: BackupFailed
+            expr: increase(backup_failure_total[1h]) > 0
+            for: 0m
+            labels:
+              severity: P1
+              team: ops
+            annotations:
+              summary: "Backup failure detected"
+              runbook: "https://docs.internal/runbooks/backup-failed"
+              owner: "dba-oncall"
+              remediation: "1. Check backup_failure logs 2. Verify target storage health 3. Retry manually"
+
+          # CSRF spike (10x baseline)
+          - alert: CsrfFailureSpike
             expr: |
-              rate(kube_pod_container_status_restarts_total{namespace="default", container="app"}[15m]) > 0
+              sum(rate(csrf_failures_total[5m])) > 10 * sum(rate(csrf_failures_total[5m] offset 1h))
+              and sum(rate(csrf_failures_total[5m])) * 60 > 5
             for: 5m
             labels:
-              severity: critical
+              severity: P1
+              team: security
             annotations:
-              summary: "Pod {{ $labels.pod }} is crash-looping"
+              summary: "CSRF failures 10x above baseline ({{ $value }}/min)"
+              runbook: "https://docs.internal/runbooks/csrf-spike"
+              owner: "security-oncall"
+              remediation: "1. Check source IPs 2. Verify token rotation 3. Check for bot traffic"
+
+          # IDOR/ownership violation spike
+          - alert: IdorAttemptSpike
+            expr: sum(rate(idor_attempts_total[5m])) * 60 > 3
+            for: 5m
+            labels:
+              severity: P1
+              team: security
+            annotations:
+              summary: "Ownership violations {{ $value }}/min — possible IDOR attack"
+              description: "Check idor_attempts_total by table label for targeted resources"
+              runbook: "https://docs.internal/runbooks/idor-attack"
+              owner: "security-oncall"
+              remediation: "1. Identify source user/IP 2. Check affected tables 3. Consider temporary IP block"
+
+          # Security event anomaly (3x baseline)
+          - alert: SecurityEventAnomaly
+            expr: |
+              sum(rate(security_events_total[5m])) > 3 * sum(rate(security_events_total[5m] offset 1h))
+              and sum(rate(security_events_total[5m])) * 60 > 10
+            for: 10m
+            labels:
+              severity: P1
+              team: security
+            annotations:
+              summary: "Security events 3x above 1h baseline"
+              runbook: "https://docs.internal/runbooks/security-anomaly"
+              owner: "security-oncall"
+              remediation: "1. Correlate event types 2. Check for coordinated attack 3. Review access logs"
+
+          # DB replication lag
+          - alert: DbReplicationLag
+            expr: db_replication_lag_seconds > 30
+            for: 5m
+            labels:
+              severity: P1
+              team: ops
+            annotations:
+              summary: "DB replication lag {{ $value }}s"
+              runbook: "https://docs.internal/runbooks/replication-lag"
+              owner: "dba-oncall"
+              remediation: "1. Check replica IO/SQL threads 2. Check write load 3. Verify network"
+
+          # No billing runs in expected window
+          - alert: BillingRunMissing
+            expr: time() - billing_last_successful_run_timestamp > 86400
+            for: 1h
+            labels:
+              severity: P1
+              team: billing
+            annotations:
+              summary: "No successful billing run in 24h"
+              runbook: "https://docs.internal/runbooks/billing-run-missing"
+              owner: "billing-oncall"
+              remediation: "1. Check job queue 2. Verify cron schedule 3. Check for stuck locks"
+
+      # ════════════════════════════════════════
+      # P2 — SLACK (respond within 1h)
+      # ════════════════════════════════════════
+      - name: immoflowme.p2
+        interval: 60s
+        rules:
+          # Payment allocation failures
+          - alert: PaymentAllocationFailures
+            expr: |
+              sum(rate(payments_failed_total[10m])) /
+              (sum(rate(payment_allocations_total[10m])) + 1) > 0.01
+            for: 10m
+            labels:
+              severity: P2
+              team: billing
+            annotations:
+              summary: "Payment allocation failure rate >1%"
+              runbook: "https://docs.internal/runbooks/payment-failures"
+              owner: "billing-team"
+              remediation: "1. Check failed payment reasons 2. Verify tenant balances 3. Review allocation logic"
 
           # Memory pressure
           - alert: HighMemoryUsage
@@ -148,161 +356,138 @@ data:
               container_spec_memory_limit_bytes{namespace="default", container="app"} > 0.85
             for: 5m
             labels:
-              severity: warning
+              severity: P2
+              team: ops
             annotations:
-              summary: "Memory usage > 85% of limit"
+              summary: "Memory usage >85% of limit"
+              runbook: "https://docs.internal/runbooks/high-memory"
+              owner: "platform-team"
+              remediation: "1. Check for memory leaks 2. Review heap dumps 3. Consider increasing limits"
 
           # Job queue backlog
           - alert: JobQueueBacklog
             expr: job_queue_pending_total > 100
             for: 10m
             labels:
-              severity: warning
+              severity: P2
               team: backend
             annotations:
-              summary: "Job queue backlog exceeds 100"
+              summary: "Job queue backlog >100 ({{ $value }} pending)"
+              runbook: "https://docs.internal/runbooks/job-queue-backlog"
+              owner: "backend-team"
+              remediation: "1. Check worker count 2. Look for stuck jobs 3. Scale workers"
 
-      - name: immoflowme.billing
-        rules:
-          # Billing conflicts spike
+          # Auth failure spike
+          - alert: AuthFailureElevated
+            expr: sum(rate(auth_failures_total[5m])) * 60 > 20
+            for: 5m
+            labels:
+              severity: P2
+              team: security
+            annotations:
+              summary: "Auth failures elevated ({{ $value }}/min)"
+              runbook: "https://docs.internal/runbooks/auth-failures"
+              owner: "security-team"
+              remediation: "1. Check source IPs 2. Verify credential rotation 3. Consider rate limiting"
+
+          # Rate limiting spike
+          - alert: RateLimitHeavy
+            expr: sum(rate(rate_limit_hits_total[5m])) * 60 > 50
+            for: 5m
+            labels:
+              severity: P2
+              team: security
+            annotations:
+              summary: "Rate limiter heavily triggered ({{ $value }}/min)"
+              runbook: "https://docs.internal/runbooks/rate-limit-spike"
+              owner: "security-team"
+              remediation: "1. Identify abusing clients 2. Consider IP-based blocking 3. Review limits"
+
+          # Billing conflict spike
           - alert: BillingConflictSpike
             expr: rate(billing_conflicts_total[5m]) > 0.1
             for: 5m
             labels:
-              severity: warning
+              severity: P2
               team: billing
             annotations:
               summary: "Billing conflict rate elevated"
+              runbook: "https://docs.internal/runbooks/billing-conflicts"
+              owner: "billing-team"
+              remediation: "1. Check for concurrent billing runs 2. Review upsert logic 3. Check lock contention"
 
-          # No billing runs in expected window
-          - alert: BillingRunMissing
-            expr: |
-              time() - billing_last_successful_run_timestamp > 86400
-            for: 1h
-            labels:
-              severity: warning
-              team: billing
-            annotations:
-              summary: "No successful billing run in 24h"
-
-      - name: immoflowme.security
-        rules:
-          # CSRF spike
-          - alert: CsrfFailureSpike
-            expr: sum(rate(csrf_failures_total[5m])) * 60 > 5
-            for: 5m
-            labels:
-              severity: warning
-              team: security
-            annotations:
-              summary: "CSRF failures spike ({{ $value }}/min)"
-
-          # IDOR/ownership violations
-          - alert: IdorAttemptSpike
-            expr: sum(rate(idor_attempts_total[5m])) * 60 > 3
-            for: 5m
-            labels:
-              severity: critical
-              team: security
-            annotations:
-              summary: "Ownership violation attempts detected ({{ $value }}/min)"
-              description: "Possible IDOR attack — check idor_attempts_total by table"
-
-          # Auth failure spike
-          - alert: AuthFailureSpike
-            expr: sum(rate(auth_failures_total[5m])) * 60 > 20
-            for: 5m
-            labels:
-              severity: warning
-              team: security
-            annotations:
-              summary: "Authentication failures elevated ({{ $value }}/min)"
-
-          # Rate limiting spike
-          - alert: RateLimitSpike
-            expr: sum(rate(rate_limit_hits_total[5m])) * 60 > 50
-            for: 5m
-            labels:
-              severity: warning
-              team: security
-            annotations:
-              summary: "Rate limiter triggered heavily ({{ $value }}/min)"
-
-          # Security event anomaly (3x baseline)
-          - alert: SecurityEventAnomaly
-            expr: |
-              sum(rate(security_events_total[5m])) > 3 * sum(rate(security_events_total[5m] offset 1h))
-            for: 10m
-            labels:
-              severity: critical
-              team: security
-            annotations:
-              summary: "Security events 3x above 1h-ago baseline"
-
-      - name: immoflowme.backup
-        rules:
-          # Backup missing
-          - alert: BackupMissing
-            expr: time() - backup_last_success_timestamp > 86400
-            for: 1h
-            labels:
-              severity: critical
-              team: ops
-            annotations:
-              summary: "No successful backup in 24h"
-              runbook: "https://docs.internal/runbooks/backup-missing"
-
-          # WAL archive lag
-          - alert: WalArchiveLag
-            expr: wal_archive_lag_seconds > 300
-            for: 10m
-            labels:
-              severity: warning
-              team: ops
-            annotations:
-              summary: "WAL archive lag > 5min ({{ $value }}s)"
-
-          # Backup failure
-          - alert: BackupFailed
-            expr: increase(backup_failure_total[1h]) > 0
-            for: 0m
-            labels:
-              severity: critical
-              team: ops
-            annotations:
-              summary: "Backup failure detected"
-
-      - name: immoflowme.database
-        rules:
-          # Connection pool exhaustion
-          - alert: DbConnectionsExhausted
-            expr: db_connections_waiting > 10
-            for: 5m
-            labels:
-              severity: critical
-              team: backend
-            annotations:
-              summary: "DB connection pool saturated ({{ $value }} waiting)"
-
-          # Replication lag
-          - alert: DbReplicationLag
-            expr: db_replication_lag_seconds > 30
-            for: 5m
-            labels:
-              severity: warning
-              team: ops
-            annotations:
-              summary: "DB replication lag {{ $value }}s"
-
-          # Slow query rate
+          # Slow query rate elevated
           - alert: SlowQueryRate
             expr: sum(rate(db_query_slow_total[5m])) * 60 > 10
             for: 5m
             labels:
-              severity: warning
+              severity: P2
               team: backend
             annotations:
-              summary: "Slow queries (>1s) rate elevated: {{ $value }}/min"
+              summary: "Slow queries (>1s) rate: {{ $value }}/min"
+              runbook: "https://docs.internal/runbooks/slow-queries"
+              owner: "backend-team"
+              remediation: "1. Check pg_stat_statements 2. Look for missing indexes 3. Review query plans"
+
+      # ════════════════════════════════════════
+      # P3 — TICKET (respond within 24h)
+      # ════════════════════════════════════════
+      - name: immoflowme.p3
+        interval: 300s
+        rules:
+          # Low disk space
+          - alert: LowDiskSpace
+            expr: |
+              node_filesystem_avail_bytes{mountpoint="/"} /
+              node_filesystem_size_bytes{mountpoint="/"} < 0.10
+            for: 15m
+            labels:
+              severity: P3
+              team: ops
+            annotations:
+              summary: "Disk space <10% on {{ $labels.instance }}"
+              runbook: "https://docs.internal/runbooks/low-disk"
+              owner: "platform-team"
+              remediation: "1. Identify large files/logs 2. Run log rotation 3. Expand volume"
+
+          # WAL archive minor lag
+          - alert: WalArchiveLagMinor
+            expr: wal_archive_lag_seconds > 60
+            for: 15m
+            labels:
+              severity: P3
+              team: ops
+            annotations:
+              summary: "WAL archive lag {{ $value }}s (minor)"
+              runbook: "https://docs.internal/runbooks/wal-archive-lag"
+              owner: "dba-team"
+              remediation: "1. Monitor trend 2. Check archive throughput"
+
+          # Settlement warnings elevated
+          - alert: SettlementWarnings
+            expr: sum(rate(settlement_warnings_total[1h])) * 60 > 5
+            for: 30m
+            labels:
+              severity: P3
+              team: billing
+            annotations:
+              summary: "Settlement warnings elevated"
+              runbook: "https://docs.internal/runbooks/settlement-warnings"
+              owner: "billing-team"
+              remediation: "1. Review warning types 2. Check data quality 3. Validate distribution keys"
+
+          # Event loop lag (Node.js performance)
+          - alert: EventLoopLag
+            expr: nodejs_eventloop_lag_seconds > 0.5
+            for: 10m
+            labels:
+              severity: P3
+              team: backend
+            annotations:
+              summary: "Node.js event loop lag {{ $value }}s"
+              runbook: "https://docs.internal/runbooks/eventloop-lag"
+              owner: "backend-team"
+              remediation: "1. Profile CPU-heavy handlers 2. Move work to job queue 3. Check for sync I/O"
 
 ---
 # ── Alertmanager Config ──
@@ -316,42 +501,137 @@ data:
     global:
       resolve_timeout: 5m
 
+    # ── Routing Tree ──
+    # P0 → page on-call (PagerDuty) + Slack #incidents
+    # P1 → pager + Slack #alerts
+    # P2 → Slack channel by team
+    # P3 → ticket system webhook
     route:
-      group_by: ['alertname', 'team']
-      group_wait: 30s
-      group_interval: 5m
+      group_by: ['alertname', 'team', 'severity']
+      group_wait: 15s
+      group_interval: 1m
       repeat_interval: 4h
-      receiver: default
+      receiver: default-webhook
       routes:
+        # P0: Page immediately
         - match:
-            severity: critical
-          receiver: pagerduty-critical
+            severity: P0
+          receiver: pagerduty-p0
+          group_wait: 0s
+          group_interval: 1m
+          repeat_interval: 15m
           continue: true
         - match:
-            team: billing
-          receiver: billing-team
+            severity: P0
+          receiver: slack-incidents
+
+        # P1: Pager + Slack
         - match:
-            severity: warning
+            severity: P1
+          receiver: pagerduty-p1
+          continue: true
+        - match:
+            severity: P1
+            team: security
+          receiver: slack-security
+        - match:
+            severity: P1
+            team: billing
+          receiver: slack-billing
+        - match:
+            severity: P1
+          receiver: slack-alerts
+
+        # P2: Slack by team
+        - match:
+            severity: P2
+            team: billing
+          receiver: slack-billing
+        - match:
+            severity: P2
+            team: security
+          receiver: slack-security
+        - match:
+            severity: P2
           receiver: slack-warnings
 
+        # P3: Ticket system
+        - match:
+            severity: P3
+          receiver: ticket-system
+
     receivers:
-      - name: default
+      - name: default-webhook
         webhook_configs:
           - url: 'http://immoflowme.default.svc/api/alerts/webhook'
             send_resolved: true
 
-      - name: pagerduty-critical
+      - name: pagerduty-p0
         pagerduty_configs:
           - routing_key: '<PAGERDUTY_ROUTING_KEY>'
             severity: critical
             description: '{{ .CommonAnnotations.summary }}'
+            details:
+              runbook: '{{ .CommonAnnotations.runbook }}'
+              owner: '{{ .CommonAnnotations.owner }}'
+              remediation: '{{ .CommonAnnotations.remediation }}'
+              firing: '{{ .Alerts.Firing | len }}'
 
-      - name: billing-team
+      - name: pagerduty-p1
+        pagerduty_configs:
+          - routing_key: '<PAGERDUTY_ROUTING_KEY>'
+            severity: error
+            description: '{{ .CommonAnnotations.summary }}'
+            details:
+              runbook: '{{ .CommonAnnotations.runbook }}'
+              owner: '{{ .CommonAnnotations.owner }}'
+              remediation: '{{ .CommonAnnotations.remediation }}'
+
+      - name: slack-incidents
+        slack_configs:
+          - api_url: '<SLACK_WEBHOOK_URL>'
+            channel: '#incidents'
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+            title: '🚨 P0: {{ .CommonAnnotations.summary }}'
+            text: |
+              *Owner:* {{ .CommonAnnotations.owner }}
+              *Runbook:* {{ .CommonAnnotations.runbook }}
+              *Remediation:* {{ .CommonAnnotations.remediation }}
+              *Alerts:* {{ .Alerts.Firing | len }} firing
+            send_resolved: true
+
+      - name: slack-alerts
+        slack_configs:
+          - api_url: '<SLACK_WEBHOOK_URL>'
+            channel: '#alerts'
+            color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+            title: '⚠️ P1: {{ .CommonAnnotations.summary }}'
+            text: |
+              *Owner:* {{ .CommonAnnotations.owner }}
+              *Runbook:* {{ .CommonAnnotations.runbook }}
+            send_resolved: true
+
+      - name: slack-billing
         slack_configs:
           - api_url: '<SLACK_WEBHOOK_URL>'
             channel: '#billing-alerts'
             title: '{{ .CommonAnnotations.summary }}'
-            text: '{{ .CommonAnnotations.description }}'
+            text: |
+              *Owner:* {{ .CommonAnnotations.owner }}
+              *Runbook:* {{ .CommonAnnotations.runbook }}
+              *Description:* {{ .CommonAnnotations.description }}
+            send_resolved: true
+
+      - name: slack-security
+        slack_configs:
+          - api_url: '<SLACK_WEBHOOK_URL>'
+            channel: '#security-alerts'
+            color: 'danger'
+            title: '🔒 {{ .CommonAnnotations.summary }}'
+            text: |
+              *Owner:* {{ .CommonAnnotations.owner }}
+              *Runbook:* {{ .CommonAnnotations.runbook }}
+              *Remediation:* {{ .CommonAnnotations.remediation }}
             send_resolved: true
 
       - name: slack-warnings
@@ -360,12 +640,31 @@ data:
             channel: '#ops-warnings'
             send_resolved: true
 
+      - name: ticket-system
+        webhook_configs:
+          - url: 'http://immoflowme.default.svc/api/alerts/ticket'
+            send_resolved: false
+
+    # ── Inhibition Rules ──
+    # P0 suppresses P1/P2/P3 for same alertname
+    # P1 suppresses P2/P3
     inhibit_rules:
       - source_match:
-          severity: critical
-        target_match:
-          severity: warning
+          severity: P0
+        target_match_re:
+          severity: P1|P2|P3
         equal: ['alertname']
+      - source_match:
+          severity: P1
+        target_match_re:
+          severity: P2|P3
+        equal: ['alertname']
+      # ServiceDegraded (multi-signal) suppresses individual error/latency alerts
+      - source_matchers:
+          - alertname = ServiceDegraded
+        target_matchers:
+          - alertname =~ "CriticalErrorRate|HighErrorRate|HighLatencyP99"
+        equal: ['team']
 
 ---
 # ════════════════════════════════════════════

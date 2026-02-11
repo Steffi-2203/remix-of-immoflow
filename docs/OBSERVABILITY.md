@@ -136,22 +136,66 @@ app.use(sentryErrorHandler); // LAST error handler
 
 ---
 
-## Alert-Regeln
+## Alert-Regeln (P0–P3)
 
-| Alert | Schwelle | Severity | Team |
-|---|---|---|---|
-| HighErrorRate | > 1% 5xx (5min) | critical | backend |
-| HighLatency | p99 > 2s (5min) | warning | backend |
-| BillingRunSlow | p99 > 30min | critical | billing |
-| PodCrashLooping | restarts > 0 (15min) | critical | ops |
-| HighMemoryUsage | > 85% Limit | warning | ops |
-| JobQueueBacklog | > 100 pending (10min) | warning | backend |
-| BillingConflictSpike | rate > 0.1/s (5min) | warning | billing |
+Prinzipien: Alert auf Symptome, nicht Ursachen. Multi-Signal wo moeglich. Jeder Alert enthaelt Runbook, Owner und Remediation.
 
-**Routing**:
-- `critical` → PagerDuty + Slack
-- `billing` → #billing-alerts Slack Channel
-- `warning` → #ops-warnings Slack Channel
+### P0 — Page On-Call (sofortige Reaktion)
+
+| Alert | Schwelle | Team |
+|---|---|---|
+| ServiceDegraded | >5% Errors UND p95 >2s (2min) | backend |
+| CriticalErrorRate | >5% 5xx (2min) | backend |
+| DbConnectionsCritical | Pool >90% ODER >10 waiting | backend |
+| WalArchiveLagCritical | >5min Lag | ops |
+| PodCrashLooping | restarts >0 (15min) | ops |
+| BillingRunSlow | p99 >30min | billing |
+
+### P1 — Pager + Slack (Reaktion innerhalb 15min)
+
+| Alert | Schwelle | Team |
+|---|---|---|
+| HighErrorRate | >1% 5xx (5min) | backend |
+| HighLatencyP99 | p99 >2s (5min) | backend |
+| BackupMissing | Kein Backup in 24h | ops |
+| BackupFailed | Backup-Fehler | ops |
+| CsrfFailureSpike | 10x Baseline | security |
+| IdorAttemptSpike | >3/min (5min) | security |
+| SecurityEventAnomaly | 3x ueber Baseline | security |
+| DbReplicationLag | >30s (5min) | ops |
+| BillingRunMissing | Kein Run in 24h | billing |
+
+### P2 — Slack (Reaktion innerhalb 1h)
+
+| Alert | Schwelle | Team |
+|---|---|---|
+| PaymentAllocationFailures | >1% Fehlerrate (10min) | billing |
+| HighMemoryUsage | >85% Limit | ops |
+| JobQueueBacklog | >100 pending (10min) | backend |
+| AuthFailureElevated | >20/min | security |
+| RateLimitHeavy | >50/min | security |
+| BillingConflictSpike | rate >0.1/s | billing |
+| SlowQueryRate | >10/min | backend |
+
+### P3 — Ticket (Reaktion innerhalb 24h)
+
+| Alert | Schwelle | Team |
+|---|---|---|
+| LowDiskSpace | <10% frei | ops |
+| WalArchiveLagMinor | >60s | ops |
+| SettlementWarnings | >5/min | billing |
+| EventLoopLag | >0.5s | backend |
+
+### Routing & Eskalation
+
+| Severity | Kanal | Eskalation |
+|---|---|---|
+| P0 | PagerDuty (page) + #incidents | 0-5min Primary → 5-15min Secondary → 15+ Manager |
+| P1 | PagerDuty + #alerts / Team-Channel | 0-15min Primary → 15-30min Secondary |
+| P2 | Slack Team-Channel (#billing-alerts, #security-alerts, #ops-warnings) | — |
+| P3 | Ticket-System Webhook | — |
+
+**Inhibition**: P0 unterdrueckt P1/P2/P3 fuer denselben Alert. ServiceDegraded (Multi-Signal) unterdrueckt einzelne Error/Latency-Alerts.
 
 ---
 
