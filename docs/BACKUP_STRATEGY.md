@@ -9,9 +9,11 @@
 
 | Komponente | Methode | Frequenz | Aufbewahrung |
 |---|---|---|---|
-| Full Backup | pgBackRest `--type=full` | Wöchentlich (So 02:00) | 14 Tage |
-| Differential Backup | pgBackRest `--type=diff` | Täglich (02:00) | 7 Tage |
-| WAL-Archiving | Continuous via `archive_command` | Laufend | 30 Tage |
+| Full Backup | pgBackRest `--type=full` | Täglich (00:30) | 14 Tage |
+| Differential Backup | pgBackRest `--type=diff` | Stündlich | 7 Tage |
+| WAL Push | `archive_command` (wal-g) | Kontinuierlich (nach Commit) | 30 Tage |
+| Weekly Full + Check | pgBackRest `--type=full` + `check` | Sonntag (03:00) | 14 Tage |
+| Monthly Offsite Copy | pgBackRest `--repo=2` | 1. Tag (04:00) | 30 Tage |
 | PITR | WAL-basiert | Beliebiger Zeitpunkt | 30 Tage |
 | GoBD/BAO Export | `export_audit_package.js --worm` | Nach jedem Billing Run | 7/10 Jahre (WORM) |
 
@@ -75,17 +77,23 @@ pg1-user=postgres
 ```bash
 # /etc/cron.d/pgbackrest-backup
 
-# Full Backup: Sonntag 02:00 UTC
-0 2 * * 0  postgres  pgbackrest --stanza=prod --type=full backup 2>&1 | logger -t pgbackrest
+# Full Backup: Täglich 00:30 UTC
+30 0 * * *  postgres  /usr/bin/pgbackrest --stanza=prod --type=full backup >> /var/log/pgbackrest/backup.log 2>&1
 
-# Differential Backup: Mo-Sa 02:00 UTC
-0 2 * * 1-6  postgres  pgbackrest --stanza=prod --type=diff backup 2>&1 | logger -t pgbackrest
+# Differential Backup: Stündlich (außer 00:30)
+0 1-23 * * *  postgres  pgbackrest --stanza=prod --type=diff backup >> /var/log/pgbackrest/backup.log 2>&1
 
-# Stanza Check: Täglich 01:00 UTC
-0 1 * * *  postgres  pgbackrest --stanza=prod check 2>&1 | logger -t pgbackrest
+# WAL Push: Kontinuierlich via archive_command (sofort nach Commit)
+# → Konfiguriert in postgresql.conf: archive_command = 'envdir /etc/wal-g.d wal-g wal-push %p'
+
+# Weekly Full + Integrity Check: Sonntag 03:00 UTC
+0 3 * * 0  postgres  pgbackrest --stanza=prod --type=full backup && pgbackrest --stanza=prod check >> /var/log/pgbackrest/backup.log 2>&1
+
+# Monthly Offsite Copy: 1. Tag des Monats 04:00 UTC
+0 4 1 * *  postgres  pgbackrest --stanza=prod --type=full --repo=2 backup >> /var/log/pgbackrest/offsite.log 2>&1
 
 # WAL-Archive Cleanup: Wöchentlich
-0 4 * * 0  postgres  pgbackrest --stanza=prod expire 2>&1 | logger -t pgbackrest
+0 5 * * 0  postgres  pgbackrest --stanza=prod expire >> /var/log/pgbackrest/backup.log 2>&1
 ```
 
 ### systemd Timer (Alternative)
@@ -93,10 +101,10 @@ pg1-user=postgres
 ```ini
 # /etc/systemd/system/pgbackrest-full.timer
 [Unit]
-Description=pgBackRest Full Backup Weekly
+Description=pgBackRest Full Backup Daily
 
 [Timer]
-OnCalendar=Sun *-*-* 02:00:00
+OnCalendar=*-*-* 00:30:00
 Persistent=true
 
 [Install]
