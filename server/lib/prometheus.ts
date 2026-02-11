@@ -187,6 +187,7 @@ registry.register('input_sanitization_strips_total', 'Input sanitization HTML/co
 registry.register('retention_freeze_blocks_total', 'Deletion blocked by retention freeze (BAO/GoBD)', 'counter');
 registry.register('security_events_total', 'Security events logged', 'counter', ['event_type']);
 registry.register('csp_violations_total', 'CSP violation reports received', 'counter', ['directive', 'blocked_uri']);
+registry.register('csp_header_stripped_total', 'CSP header stripped by downstream proxy', 'counter');
 
 // ════════════════════════════════════════════
 // Backup / DR Metrics

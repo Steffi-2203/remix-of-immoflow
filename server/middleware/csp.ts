@@ -27,6 +27,18 @@ export function cspNonceMiddleware(req: Request, res: Response, next: NextFuncti
   const nonce = crypto.randomBytes(24).toString('base64');
   res.locals.cspNonce = nonce;
 
+  // Prevent caching of HTML responses containing per-request nonces
+  res.setHeader('Cache-Control', 'private, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+
+  // Detect if a downstream proxy strips the CSP header
+  res.on('finish', () => {
+    if (!res.getHeader('content-security-policy')) {
+      cspLog.error({ url: req.originalUrl }, 'CSP header was stripped by a downstream proxy');
+      registry.increment('csp_header_stripped_total');
+    }
+  });
+
   helmet.contentSecurityPolicy({
     useDefaults: false,
     directives: {
