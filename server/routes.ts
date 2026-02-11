@@ -5540,6 +5540,64 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
+  // MRG §27: Deposit interest calculation (refined with variable rates)
+  app.post("/api/compliance/deposit-interest", isAuthenticated, async (req: any, res) => {
+    try {
+      const { calculateDepositInterest, calculateDepositRefund } = await import("./services/depositInterestService");
+      const { depositType, amount, depositDate, endDate, ratePeriods, fixedRate, deductions } = req.body;
+
+      if (!depositType || !amount || !depositDate || !endDate) {
+        return res.status(400).json({ error: "Missing required fields: depositType, amount, depositDate, endDate" });
+      }
+
+      if (deductions && Array.isArray(deductions)) {
+        const result = calculateDepositRefund(
+          { depositType, amount, depositDate, endDate, ratePeriods, fixedRate },
+          deductions
+        );
+        return res.json(result);
+      }
+
+      const result = calculateDepositInterest({ depositType, amount, depositDate, endDate, ratePeriods, fixedRate });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to calculate deposit interest" });
+    }
+  });
+
+  // WEG §24: Assembly agenda validation
+  app.post("/api/compliance/validate-agenda", isAuthenticated, async (req: any, res) => {
+    try {
+      const { validateAssemblyAgenda } = await import("./services/assemblyAgendaService");
+      const { agendaItems, assemblyType, managementContractExpiring, majorMaintenancePlanned } = req.body;
+
+      if (!agendaItems || !Array.isArray(agendaItems)) {
+        return res.status(400).json({ error: "Missing required field: agendaItems (string[])" });
+      }
+
+      const result = validateAssemblyAgenda(agendaItems, assemblyType || "ordentlich", {
+        managementContractExpiring,
+        majorMaintenancePlanned,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to validate assembly agenda" });
+    }
+  });
+
+  // WEG §24: Get mandatory agenda item templates
+  app.get("/api/compliance/agenda-templates", isAuthenticated, async (_req: any, res) => {
+    try {
+      const { getMandatoryAgendaItems, getConditionalAgendaItems } = await import("./services/assemblyAgendaService");
+      res.json({
+        mandatory: getMandatoryAgendaItems(),
+        conditional: getConditionalAgendaItems(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch agenda templates" });
+    }
+  });
+
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
