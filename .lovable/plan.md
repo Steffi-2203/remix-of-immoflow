@@ -1,67 +1,85 @@
 
 
-## CSP Caching, Static Asset Hardening, and Proxy Safety
+## Complete CSP Implementation -- Remaining Items
 
-### Problem
-HTML responses containing per-request nonces can be cached (by browsers, CDNs, or reverse proxies), causing stale nonces to be reused -- which breaks script execution or weakens CSP. Static assets currently lack SRI attributes and aggressive caching headers. No protection exists against proxies stripping the CSP header.
+### Status Summary
 
-### Changes
+5 of 8 checklist items are fully done. Three need implementation:
 
-#### 1. No-cache headers for HTML responses (`server/middleware/csp.ts`)
-Add `Cache-Control: private, no-store` and `Pragma: no-cache` directly inside `cspNonceMiddleware`, so every HTML response carrying a nonce is never cached.
+### 1. Nonce Injection into Served HTML
 
-#### 2. Static asset caching headers (`server/vite.ts`)
-In the `serveStatic` function, configure `express.static` with `maxAge: '1y'` and `immutable: true` for the Vite-built `dist/public` directory (Vite already fingerprints filenames with content hashes). The HTML fallback route will explicitly set `Cache-Control: private, no-store`.
+**Problem**: `res.locals.cspNonce` is set but `index.html` is served as a static file (`res.sendFile` / `vite.transformIndexHtml`) without replacing script/style tags with the nonce.
 
-#### 3. SRI helper utility (`server/lib/sri.ts`)
-Create a small utility that reads manifest files produced by Vite's build (`dist/public/.vite/manifest.json`) and computes SHA-384 hashes for JS/CSS bundles. Export a function `getSriAttributes(assetPath)` returning `integrity` and `crossorigin` attributes. This can be used when rendering `<script>` or `<link>` tags server-side.
+**Solution** (`server/vite.ts`):
+- In `serveStatic` (production): read `index.html` into a string, replace `<script` with `<script nonce="..."` and `<link rel="stylesheet"` with the nonce attribute, then `res.send()` instead of `res.sendFile()`.
+- In `setupVite` (dev): after `vite.transformIndexHtml`, do the same string replacement before sending.
+- Use a shared helper function `injectNonce(html: string, nonce: string): string` for both paths.
 
-#### 4. Proxy-safe CSP guard (`server/middleware/csp.ts`)
-After helmet sets the CSP header, add a response listener (`res.on('finish', ...)`) that logs a warning + increments a Prometheus counter if the `Content-Security-Policy` header is missing at send time -- indicating a downstream proxy stripped it.
+### 2. Report-Only Rollout Phase
+
+**Problem**: CSP is enforced immediately. A `Content-Security-Policy-Report-Only` phase would catch violations without breaking the site.
+
+**Solution** (`server/middleware/csp.ts`):
+- Add an environment variable `CSP_REPORT_ONLY=true|false` (default `true` for initial rollout).
+- When report-only mode is active, use `helmet.contentSecurityPolicy` but set the header name to `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy`.
+- Once violations are reviewed and resolved, flip to `false` to enforce.
+
+### 3. Wire SRI into HTML Output
+
+**Problem**: `server/lib/sri.ts` builds an SRI map but nothing consumes it.
+
+**Solution** (`server/vite.ts`):
+- In production (`serveStatic`), after reading `index.html`, parse script/link tags referencing assets in the SRI map and add `integrity="sha384-..."` and `crossorigin="anonymous"` attributes.
+- Integrate this into the same `injectNonce` helper (or a separate `injectSri` step).
 
 ---
 
 ### Technical Details
 
+**New helper: `server/lib/htmlTransform.ts`**
+
+```text
+injectNonce(html, nonce)
+  - Regex replace: <script -> <script nonce="NONCE"
+  - Regex replace: <link rel="stylesheet" -> add nonce="NONCE"
+  - Regex replace: <style -> <style nonce="NONCE"
+
+injectSri(html, sriMap)
+  - For each <script src="/assets/xxx.js">, look up in sriMap
+  - Add integrity="sha384-..." crossorigin="anonymous"
+  - Same for <link href="/assets/xxx.css">
+```
+
+**File: `server/vite.ts`** (production path)
+- Replace `res.sendFile(...)` with:
+  ```text
+  let html = fs.readFileSync(indexPath, 'utf-8');
+  html = injectNonce(html, res.locals.cspNonce);
+  html = injectSri(html, getSriMap());
+  res.send(html);
+  ```
+- Dev path: after `vite.transformIndexHtml`, apply `injectNonce` only (SRI not needed in dev).
+
 **File: `server/middleware/csp.ts`**
-- Inside `cspNonceMiddleware`, before calling `helmet.contentSecurityPolicy(...)`, set:
+- Read `CSP_REPORT_ONLY` env var.
+- When true, after helmet sets the header, rename it:
+  ```text
+  const cspValue = res.getHeader('content-security-policy');
+  res.removeHeader('content-security-policy');
+  res.setHeader('content-security-policy-report-only', cspValue);
   ```
-  res.setHeader('Cache-Control', 'private, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  ```
-- After the `helmet(...)(...)(req, res, next)` call, register a `res.on('finish')` listener that checks `res.getHeader('content-security-policy')`. If missing, log a warning via `cspLog.error(...)` and increment a new `csp_header_stripped_total` counter.
 
-**File: `server/vite.ts`**
-- In `serveStatic`, change the `express.static` call to:
-  ```typescript
-  app.use(express.static(distPath, {
-    maxAge: '1y',
-    immutable: true,
-    index: false, // don't serve index.html from static
-  }));
-  ```
-- In the HTML fallback `/{*splat}` handler, add:
-  ```typescript
-  res.set({
-    'Cache-Control': 'private, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-  });
-  ```
-- In `setupVite` (dev mode), also add `Cache-Control: private, no-store` on the HTML catch-all response.
-
-**New file: `server/lib/sri.ts`**
-- Reads `dist/public/.vite/manifest.json` at startup (cached in memory).
-- For each entry, computes `sha384-<base64>` using `crypto.createHash('sha384')`.
-- Exports `getSriMap(): Record<string, { integrity: string; crossorigin: string }>` for use in HTML template injection.
-- Gracefully returns empty map if manifest doesn't exist (dev mode).
-
-**File: `server/lib/prometheus.ts`**
-- Register `csp_header_stripped_total` counter to track proxy interference.
+**File: `tests/unit/csp-nonce.test.ts`**
+- Add test for nonce appearing in HTML script/style tags from the actual serving path.
+- Add test for Report-Only header when env var is set.
+- Add test for SRI attributes on asset tags.
 
 ### Files to modify
+
 | File | Action |
 |---|---|
-| `server/middleware/csp.ts` | Add no-cache headers + proxy-strip detection |
-| `server/vite.ts` | Aggressive static caching + no-cache for HTML fallback |
-| `server/lib/sri.ts` | New -- SRI hash computation from Vite manifest |
-| `server/lib/prometheus.ts` | Add `csp_header_stripped_total` counter |
+| `server/lib/htmlTransform.ts` | New -- nonce + SRI injection helpers |
+| `server/vite.ts` | Use htmlTransform in both dev and prod HTML serving |
+| `server/middleware/csp.ts` | Add Report-Only mode via env var |
+| `tests/unit/csp-nonce.test.ts` | Add tests for nonce injection, Report-Only, and SRI |
+
