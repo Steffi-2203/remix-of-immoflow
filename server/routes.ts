@@ -508,10 +508,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/settlements/:id/finalize", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
     try {
+      const profile = await getProfileFromSession(req);
       await storage.updateSettlement(req.params.id, {
         status: 'abgeschlossen',
         finalizedAt: new Date(),
       });
+
+      try {
+        const { createFinancialAuditEntry } = await import("./services/auditHashService");
+        await createFinancialAuditEntry({
+          action: "settlement_finalized",
+          entityType: "settlement",
+          entityId: req.params.id,
+          organizationId: profile?.organizationId,
+          userId: profile?.userId,
+          data: { finalizedAt: new Date().toISOString() },
+        });
+      } catch {}
+
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to finalize settlement" });
@@ -754,6 +768,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       const payment = await storage.createPayment(validationResult.data);
+
+      try {
+        const { createFinancialAuditEntry } = await import("./services/auditHashService");
+        await createFinancialAuditEntry({
+          action: "payment_created",
+          entityType: "payment",
+          entityId: payment.id,
+          organizationId: profile?.organizationId,
+          userId: profile?.userId,
+          data: { tenantId: payment.tenantId, amount: payment.betrag, type: payment.paymentType },
+        });
+      } catch {}
       
       // Automatically allocate payment to open invoices and update their status
       try {
@@ -1793,6 +1819,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Access denied" });
       }
       const invoice = await storage.createInvoice(validationResult.data);
+
+      try {
+        const { createFinancialAuditEntry } = await import("./services/auditHashService");
+        await createFinancialAuditEntry({
+          action: "invoice_created",
+          entityType: "invoice",
+          entityId: invoice.id,
+          organizationId: profile?.organizationId,
+          userId: profile?.userId,
+          data: { tenantId: invoice.tenantId, amount: invoice.gesamtBetrag, period: invoice.abrechnungsZeitraum },
+        });
+      } catch {}
+
       res.json(invoice);
     } catch (error) {
       console.error("Create invoice error:", error);
