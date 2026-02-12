@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.send-vorschreibung]
 verify_jwt = false
+
+[functions.tenant-portal-data]
+verify_jwt = false
