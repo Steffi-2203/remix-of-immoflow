@@ -1412,13 +1412,16 @@ export const tenantPortalAccess = pgTable("tenant_portal_access", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
   email: text("email").notNull(),
+  passwordHash: text("password_hash"),
+  inviteToken: text("invite_token"),
+  inviteExpiresAt: timestamp("invite_expires_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const insertTenantPortalAccessSchema = createInsertSchema(tenantPortalAccess).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTenantPortalAccessSchema = createInsertSchema(tenantPortalAccess).omit({ id: true, passwordHash: true, inviteToken: true, inviteExpiresAt: true, createdAt: true, updatedAt: true });
 export type InsertTenantPortalAccess = z.infer<typeof insertTenantPortalAccessSchema>;
 export type TenantPortalAccess = typeof tenantPortalAccess.$inferSelect;
 
