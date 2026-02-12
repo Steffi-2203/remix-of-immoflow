@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -6,6 +6,7 @@ import { useProperties, useCreateProperty, useDeleteProperty } from "@/hooks/use
 import { useUnits, useCreateUnit } from "@/hooks/useUnits";
 import { useTenants } from "@/hooks/useTenants";
 import { useInvoices } from "@/hooks/useInvoices";
+import { MonthlyRevenueChart, PaymentRateChart } from '@/components/charts/FinanceChart';
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -121,9 +122,12 @@ function UnitsSection({ propertyId }: { propertyId: string }) {
   );
 }
 
+const MONTH_NAMES = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
 export default function SimpleDashboard() {
   const { data: organization, isLoading } = useOrganization();
   const { data: properties, isLoading: propertiesLoading } = useProperties();
+  const { data: invoices } = useInvoices();
   const createProperty = useCreateProperty();
   const deleteProperty = useDeleteProperty();
   const { isComplete, markComplete } = useOnboardingStatus();
@@ -134,6 +138,47 @@ export default function SimpleDashboard() {
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
 
   const propertiesList = properties || [];
+
+  const currentYear = new Date().getFullYear();
+
+  const revenueData = useMemo(() => {
+    if (!invoices) return [];
+    const monthMap = new Map<number, { income: number; expenses: number }>();
+    for (let m = 0; m < 12; m++) monthMap.set(m, { income: 0, expenses: 0 });
+    for (const inv of invoices) {
+      if (inv.year !== currentYear) continue;
+      const m = (inv.month || 1) - 1;
+      const entry = monthMap.get(m);
+      if (!entry) continue;
+      const total = Number(inv.gesamtbetrag || 0);
+      entry.income += total;
+      const costs = Number(inv.betriebskosten || 0) + Number(inv.heizungskosten || 0) + Number(inv.sonstigeKosten || 0);
+      entry.expenses += costs;
+    }
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([m, v]) => ({ month: MONTH_NAMES[m], income: v.income, expenses: v.expenses }));
+  }, [invoices, currentYear]);
+
+  const paymentRateData = useMemo(() => {
+    if (!invoices) return [];
+    const monthMap = new Map<number, { total: number; paid: number }>();
+    for (let m = 0; m < 12; m++) monthMap.set(m, { total: 0, paid: 0 });
+    for (const inv of invoices) {
+      if (inv.year !== currentYear) continue;
+      const m = (inv.month || 1) - 1;
+      const entry = monthMap.get(m);
+      if (!entry) continue;
+      entry.total++;
+      if (inv.status === 'bezahlt') entry.paid++;
+    }
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([m, v]) => ({
+        month: MONTH_NAMES[m],
+        rate: v.total > 0 ? Math.round((v.paid / v.total) * 1000) / 10 : 0,
+      }));
+  }, [invoices, currentYear]);
   const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   useEffect(() => {
@@ -235,6 +280,25 @@ export default function SimpleDashboard() {
 
         <div className="mt-6">
           <CalendarWidget />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Einnahmen vs. Ausgaben</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MonthlyRevenueChart data={revenueData} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Mieteingangsquote</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentRateChart data={paymentRateData} />
+            </CardContent>
+          </Card>
         </div>
 
         <Card className="mt-6">

@@ -1943,6 +1943,68 @@ router.patch("/api/tenant-portal-access/:id", async (req: Request, res: Response
   }
 });
 
+// ====== OWNER PORTAL ACCESS ======
+
+router.get("/api/owner-portal-access", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const data = await db
+      .select({ ownerPortalAccess: schema.ownerPortalAccess })
+      .from(schema.ownerPortalAccess)
+      .innerJoin(schema.owners, eq(schema.ownerPortalAccess.ownerId, schema.owners.id))
+      .where(eq(schema.owners.organizationId, ctx.orgId))
+      .orderBy(desc(schema.ownerPortalAccess.createdAt));
+    res.json(objectToSnakeCase(data.map(d => d.ownerPortalAccess)));
+  } catch (error) {
+    console.error("Error fetching owner portal access:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Eigentümerportal-Zugänge" });
+  }
+});
+
+router.post("/api/owner-portal-access", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const parsed = schema.insertOwnerPortalAccessSchema.parse(body);
+    const owner = await db
+      .select()
+      .from(schema.owners)
+      .where(and(eq(schema.owners.id, parsed.ownerId), eq(schema.owners.organizationId, ctx.orgId)))
+      .limit(1);
+    if (!owner.length) return res.status(404).json({ error: "Eigentümer nicht gefunden" });
+    const [created] = await db.insert(schema.ownerPortalAccess).values(parsed).returning();
+    res.json(objectToSnakeCase(created));
+  } catch (error) {
+    console.error("Error creating owner portal access:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen des Eigentümerportal-Zugangs" });
+  }
+});
+
+router.patch("/api/owner-portal-access/:id", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const body = objectToCamelCase(req.body);
+    const existing = await db
+      .select({ ownerPortalAccess: schema.ownerPortalAccess })
+      .from(schema.ownerPortalAccess)
+      .innerJoin(schema.owners, eq(schema.ownerPortalAccess.ownerId, schema.owners.id))
+      .where(and(eq(schema.ownerPortalAccess.id, req.params.id), eq(schema.owners.organizationId, ctx.orgId)))
+      .limit(1);
+    if (!existing.length) return res.status(404).json({ error: "Nicht gefunden" });
+    const [updated] = await db.update(schema.ownerPortalAccess).set({ isActive: body.isActive, updatedAt: new Date() }).where(eq(schema.ownerPortalAccess.id, req.params.id)).returning();
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating owner portal access:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren des Eigentümerportal-Zugangs" });
+  }
+});
+
 // ====== LEARNED MATCHES ======
 
 router.get("/api/learned-matches", async (req: Request, res: Response) => {

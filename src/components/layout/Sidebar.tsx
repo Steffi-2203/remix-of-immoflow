@@ -30,7 +30,9 @@ import {
   Ticket,
   Scale,
   Leaf,
-  AlertTriangle
+  AlertTriangle,
+  Wand2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -94,6 +96,17 @@ const navItems: NavItem[] = [
     tourId: 'nav-banking'
   },
   {
+    label: 'Auto-Zuordnung',
+    icon: Wand2,
+    href: '/auto-zuordnung'
+  },
+  {
+    label: 'Bank-Abgleich',
+    icon: RefreshCw,
+    href: '/bank-abgleich',
+    tourId: 'nav-bank-abgleich'
+  },
+  {
     label: 'Finanzbuchhaltung',
     icon: Calculator,
     href: '/finanzbuchhaltung',
@@ -133,6 +146,11 @@ const navItems: NavItem[] = [
     label: 'HV-Verträge',
     icon: FileSignature,
     href: '/hv-vertraege'
+  },
+  {
+    label: 'Vertragsgenerator',
+    icon: FileSignature,
+    href: '/mietvertrag-generator'
   },
   {
     label: 'Mieterportal',

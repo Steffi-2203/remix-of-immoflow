@@ -33,6 +33,8 @@ import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import SystemTest from "./pages/SystemTest";
 import Banking from "./pages/Banking";
+import BankReconciliation from "./pages/BankReconciliation";
+import AutoMatch from "./pages/AutoMatch";
 import Accounting from "./pages/Accounting";
 import MaintenanceHub from "./pages/MaintenanceHub";
 import MessagesPage from "./pages/Messages";
@@ -57,6 +59,10 @@ import EsgDashboard from "./pages/EsgDashboard";
 import DamageReports from "./pages/DamageReports";
 import TenantLogin from "./pages/TenantLogin";
 import TenantPortalStandalone from "./pages/TenantPortalStandalone";
+import OwnerLogin from "./pages/OwnerLogin";
+import OwnerPortalStandalone from "./pages/OwnerPortalStandalone";
+import OwnerPortal from "./pages/OwnerPortal";
+import LeaseContractGenerator from "./pages/LeaseContractGenerator";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +86,8 @@ const App = () => (
             <Route path="/agb" element={<AGB />} />
             <Route path="/mieter-login" element={<TenantLogin />} />
             <Route path="/mieter-portal" element={<TenantPortalStandalone />} />
+            <Route path="/eigentuemer-login" element={<OwnerLogin />} />
+            <Route path="/eigentuemer-portal" element={<OwnerPortalStandalone />} />
             
             {/* Protected routes - wrapped with DemoDataProvider */}
             <Route path="/dashboard" element={<ProtectedRoute><DemoDataProvider><SimpleDashboard /></DemoDataProvider></ProtectedRoute>} />
@@ -99,6 +107,8 @@ const App = () => (
             <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><RentalFinance /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/auto-zuordnung" element={<ProtectedRoute><DemoDataProvider><AutoMatch /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/bank-abgleich" element={<ProtectedRoute><DemoDataProvider><BankReconciliation /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/finanzbuchhaltung" element={<ProtectedRoute><DemoDataProvider><Accounting /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><CostsHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
@@ -114,12 +124,14 @@ const App = () => (
             <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/hv-vertraege" element={<ProtectedRoute><DemoDataProvider><ManagementContracts /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/eigentuemerportal" element={<ProtectedRoute><DemoDataProvider><OwnerPortal /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/dsgvo" element={<ProtectedRoute><DemoDataProvider><DsgvoCompliance /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/sicherheit" element={<ProtectedRoute><DemoDataProvider><SecurityDashboard /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/tickets" element={<ProtectedRoute><DemoDataProvider><SupportTickets /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/workflows" element={<ProtectedRoute><DemoDataProvider><GuidedWorkflows /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/esg" element={<ProtectedRoute><DemoDataProvider><EsgDashboard /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/schadensmeldungen" element={<ProtectedRoute><DemoDataProvider><DamageReports /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mietvertrag-generator" element={<ProtectedRoute><DemoDataProvider><LeaseContractGenerator /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}
