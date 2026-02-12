@@ -2041,6 +2041,78 @@ export type Database = {
           },
         ]
       }
+      management_fees: {
+        Row: {
+          basis_type: string
+          basis_value: number
+          calculated_fee: number
+          created_at: string
+          fee_type: string
+          id: string
+          notes: string | null
+          organization_id: string
+          property_id: string
+          total_area: number | null
+          total_with_vat: number
+          unit_count: number | null
+          updated_at: string
+          vat_amount: number
+          vat_rate: number
+          year: number
+        }
+        Insert: {
+          basis_type?: string
+          basis_value?: number
+          calculated_fee?: number
+          created_at?: string
+          fee_type?: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          property_id: string
+          total_area?: number | null
+          total_with_vat?: number
+          unit_count?: number | null
+          updated_at?: string
+          vat_amount?: number
+          vat_rate?: number
+          year: number
+        }
+        Update: {
+          basis_type?: string
+          basis_value?: number
+          calculated_fee?: number
+          created_at?: string
+          fee_type?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          property_id?: string
+          total_area?: number | null
+          total_with_vat?: number
+          unit_count?: number | null
+          updated_at?: string
+          vat_amount?: number
+          vat_rate?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "management_fees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "management_fees_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merge_tombstones: {
         Row: {
           canonical_before_snapshot: Json
@@ -2175,6 +2247,124 @@ export type Database = {
           },
           {
             foreignKeyName: "messages_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meter_readings: {
+        Row: {
+          consumption: number | null
+          created_at: string
+          id: string
+          meter_id: string
+          notes: string | null
+          organization_id: string
+          read_by: string | null
+          reading_date: string
+          reading_value: number
+          unit: string
+        }
+        Insert: {
+          consumption?: number | null
+          created_at?: string
+          id?: string
+          meter_id: string
+          notes?: string | null
+          organization_id: string
+          read_by?: string | null
+          reading_date: string
+          reading_value: number
+          unit?: string
+        }
+        Update: {
+          consumption?: number | null
+          created_at?: string
+          id?: string
+          meter_id?: string
+          notes?: string | null
+          organization_id?: string
+          read_by?: string | null
+          reading_date?: string
+          reading_value?: number
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meter_readings_meter_id_fkey"
+            columns: ["meter_id"]
+            isOneToOne: false
+            referencedRelation: "meters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meter_readings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meters: {
+        Row: {
+          created_at: string
+          id: string
+          installation_date: string | null
+          is_active: boolean
+          location_description: string | null
+          meter_number: string
+          meter_type: string
+          organization_id: string
+          property_id: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          installation_date?: string | null
+          is_active?: boolean
+          location_description?: string | null
+          meter_number: string
+          meter_type: string
+          organization_id: string
+          property_id: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          installation_date?: string | null
+          is_active?: boolean
+          location_description?: string | null
+          meter_number?: string
+          meter_type?: string
+          organization_id?: string
+          property_id?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meters_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meters_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meters_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
@@ -3936,6 +4126,66 @@ export type Database = {
             columns: ["maintenance_task_id"]
             isOneToOne: false
             referencedRelation: "maintenance_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_announcements: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          organization_id: string
+          property_id: string | null
+          title: string
+          updated_at: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          category?: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          property_id?: string | null
+          title: string
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          property_id?: string | null
+          title?: string
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_announcements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_announcements_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
         ]
