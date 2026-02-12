@@ -21,6 +21,10 @@ import { CalendarWidget } from "@/components/dashboard/CalendarWidget";
 import { PropertyKPIsWidget } from "@/components/dashboard/PropertyKPIsWidget";
 import { ManagementCockpit } from "@/components/dashboard/ManagementCockpit";
 import { KPICharts } from "@/components/dashboard/KPICharts";
+import { PredictiveAnalytics } from "@/components/dashboard/PredictiveAnalytics";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { QuickActionsBar } from "@/components/dashboard/QuickActionsBar";
+import { PortfolioHealthScore } from "@/components/dashboard/PortfolioHealthScore";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -183,7 +187,7 @@ export default function SimpleDashboard() {
         <OnboardingWizard onComplete={markComplete} onSkip={markComplete} />
       )}
 
-      <div className="max-w-4xl" data-tour="dashboard">
+      <div className="max-w-5xl" data-tour="dashboard">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h1 className="text-2xl font-bold">ImmoflowMe</h1>
           <div className="flex gap-2">
@@ -198,6 +202,9 @@ export default function SimpleDashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Quick Actions Bar */}
+        <QuickActionsBar />
 
         <Card className="mb-6">
           <CardHeader>
@@ -217,26 +224,36 @@ export default function SimpleDashboard() {
           </CardContent>
         </Card>
 
+        {/* Portfolio Health Score */}
+        <PortfolioHealthScore />
+
         {/* Management Cockpit - Executive Overview */}
         <ManagementCockpit />
+
+        {/* Predictive Analytics - AI-powered forecasts */}
+        <PredictiveAnalytics />
 
         {/* KPI Charts - Grafische Auswertungen */}
         <KPICharts />
 
-        <div className="mt-6">
-          <OffenePostenWidget />
+        {/* Activity Feed & Open Items side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div>
+            <OffenePostenWidget />
+            <div className="mt-6">
+              <BankAccountsWidget />
+            </div>
+          </div>
+          <div>
+            <ActivityFeed />
+            <div className="mt-6">
+              <UpcomingMaintenanceWidget />
+            </div>
+          </div>
         </div>
 
         <div className="mt-6">
           <DataQualityWidget />
-        </div>
-
-        <div className="mt-6">
-          <BankAccountsWidget />
-        </div>
-
-        <div className="mt-6">
-          <UpcomingMaintenanceWidget />
         </div>
 
         <div className="mt-6">
