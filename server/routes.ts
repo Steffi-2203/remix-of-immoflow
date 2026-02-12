@@ -28,7 +28,7 @@ import readonlyRoutes from "./routes/readonly";
 import featureRoutes from "./routes/featureRoutes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import crypto from "crypto";
-import { verifyPropertyOwnership, verifyUnitOwnership, verifyTenantOwnership, verifyInvoiceOwnership, verifyPaymentOwnership } from "./lib/ownershipCheck";
+import { verifyPropertyOwnership, verifyUnitOwnership, verifyTenantOwnership, verifyInvoiceOwnership, verifyPaymentOwnership, verifyTransactionOwnership, verifyCategoryOwnership } from "./lib/ownershipCheck";
 import multer from "multer";
 import OpenAI from "openai";
 import { 
@@ -983,6 +983,327 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete transaction" });
+    }
+  });
+
+  app.post("/api/transactions/auto-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const { transactionIds } = req.body;
+      const ids: string[] = Array.isArray(transactionIds) ? transactionIds : [transactionIds];
+
+      for (const txId of ids) {
+        const isOwned = await verifyTransactionOwnership(txId, orgId);
+        if (!isOwned) return res.status(403).json({ error: "Transaktion gehört nicht zur Organisation" });
+      }
+
+      const tenants = await storage.getTenantsByOrganization(orgId);
+      const units = await storage.getUnitsByOrganization(orgId);
+      const properties = await db.select().from(schema.properties)
+        .where(and(eq(schema.properties.organizationId, orgId), isNull(schema.properties.deletedAt)));
+      const categories = await storage.getAccountCategories(orgId);
+
+      const openInvoices = await db.select().from(schema.monthlyInvoices)
+        .where(and(
+          inArray(schema.monthlyInvoices.unitId, units.map(u => u.id)),
+          sql`${schema.monthlyInvoices.status} != 'bezahlt'`
+        ));
+
+      const results: any[] = [];
+
+      for (const txId of ids) {
+        const transaction = await storage.getTransaction(txId);
+        if (!transaction || transaction.isMatched) continue;
+
+        const suggestions: any = {};
+        const txAmount = Math.abs(Number(transaction.amount));
+        const txRef = (transaction.reference || '').toLowerCase();
+        const txBooking = (transaction.bookingText || '').toLowerCase();
+        const txPartnerName = (transaction.partnerName || '').toLowerCase();
+        const txPartnerIban = (transaction.partnerIban || '').replace(/\s/g, '').toUpperCase();
+
+        let matchedTenant: any = null;
+        let tenantConfidence = 0;
+        let tenantReason = '';
+
+        for (const tenant of tenants) {
+          const tenantIban = (tenant.iban || '').replace(/\s/g, '').toUpperCase();
+          const tenantName = `${tenant.firstName} ${tenant.lastName}`.toLowerCase();
+          const tenantLastName = tenant.lastName.toLowerCase();
+
+          if (txPartnerIban && tenantIban && txPartnerIban === tenantIban) {
+            if (95 > tenantConfidence) {
+              matchedTenant = tenant;
+              tenantConfidence = 95;
+              tenantReason = 'IBAN-Übereinstimmung';
+            }
+          }
+
+          if (tenantConfidence < 95) {
+            const searchText = `${txRef} ${txBooking} ${txPartnerName}`;
+            if (searchText.includes(tenantName) && tenantName.length > 3) {
+              if (70 > tenantConfidence) {
+                matchedTenant = tenant;
+                tenantConfidence = 70;
+                tenantReason = 'Name in Referenztext gefunden';
+              }
+            } else if (searchText.includes(tenantLastName) && tenantLastName.length > 3) {
+              if (60 > tenantConfidence) {
+                matchedTenant = tenant;
+                tenantConfidence = 60;
+                tenantReason = 'Nachname in Referenztext gefunden';
+              }
+            }
+          }
+        }
+
+        if (matchedTenant) {
+          suggestions.tenant = {
+            id: matchedTenant.id,
+            name: `${matchedTenant.firstName} ${matchedTenant.lastName}`,
+            confidence: tenantConfidence,
+            reason: tenantReason,
+          };
+
+          const unit = units.find(u => u.id === matchedTenant.unitId);
+          if (unit) {
+            suggestions.unit = {
+              id: unit.id,
+              topNummer: unit.topNummer,
+              confidence: Math.min(tenantConfidence, 90),
+              reason: 'Über Mieterzuordnung',
+            };
+
+            const property = properties.find(p => p.id === unit.propertyId);
+            if (property) {
+              suggestions.property = {
+                id: property.id,
+                name: property.name,
+                confidence: Math.min(tenantConfidence, 90),
+                reason: 'Über Einheitenzuordnung',
+              };
+            }
+          }
+        }
+
+        if (!suggestions.unit) {
+          const searchText = `${txRef} ${txBooking} ${txPartnerName}`;
+          for (const unit of units) {
+            if (unit.topNummer && searchText.includes(unit.topNummer.toLowerCase())) {
+              suggestions.unit = {
+                id: unit.id,
+                topNummer: unit.topNummer,
+                confidence: 50,
+                reason: 'Top-Nr. in Buchungstext gefunden',
+              };
+              const property = properties.find(p => p.id === unit.propertyId);
+              if (property) {
+                suggestions.property = {
+                  id: property.id,
+                  name: property.name,
+                  confidence: 50,
+                  reason: 'Über Einheitenzuordnung',
+                };
+              }
+              break;
+            }
+          }
+        }
+
+        if (!suggestions.property) {
+          const searchText = `${txRef} ${txBooking} ${txPartnerName}`;
+          for (const property of properties) {
+            if (property.name && searchText.includes(property.name.toLowerCase()) && property.name.length > 3) {
+              suggestions.property = {
+                id: property.id,
+                name: property.name,
+                confidence: 50,
+                reason: 'Liegenschaftsname in Buchungstext gefunden',
+              };
+              break;
+            }
+          }
+        }
+
+        if (matchedTenant) {
+          const tenantInvoices = openInvoices.filter(inv => inv.tenantId === matchedTenant.id);
+          for (const inv of tenantInvoices) {
+            const invAmount = Math.abs(Number(inv.gesamtbetrag));
+            if (Math.abs(txAmount - invAmount) < 0.01) {
+              suggestions.invoice = {
+                id: inv.id,
+                invoiceNumber: `${inv.year}/${String(inv.month).padStart(2, '0')}`,
+                confidence: 85,
+                reason: 'Betrag + Mieter stimmen überein',
+              };
+              break;
+            }
+          }
+          if (!suggestions.invoice) {
+            for (const inv of tenantInvoices) {
+              const invAmount = Math.abs(Number(inv.gesamtbetrag));
+              if (Math.abs(txAmount - invAmount) < 5) {
+                suggestions.invoice = {
+                  id: inv.id,
+                  invoiceNumber: `${inv.year}/${String(inv.month).padStart(2, '0')}`,
+                  confidence: 65,
+                  reason: 'Betrag ähnlich + Mieter stimmt überein',
+                };
+                break;
+              }
+            }
+          }
+        } else {
+          for (const inv of openInvoices) {
+            const invAmount = Math.abs(Number(inv.gesamtbetrag));
+            if (Math.abs(txAmount - invAmount) < 0.01 && txAmount > 0) {
+              const invTenant = tenants.find(t => t.id === inv.tenantId);
+              suggestions.invoice = {
+                id: inv.id,
+                invoiceNumber: `${inv.year}/${String(inv.month).padStart(2, '0')}`,
+                confidence: 80,
+                reason: 'Betragsübereinstimmung',
+              };
+              if (invTenant && !suggestions.tenant) {
+                suggestions.tenant = {
+                  id: invTenant.id,
+                  name: `${invTenant.firstName} ${invTenant.lastName}`,
+                  confidence: 75,
+                  reason: 'Über Rechnungszuordnung',
+                };
+                const unit = units.find(u => u.id === invTenant.unitId);
+                if (unit) {
+                  suggestions.unit = {
+                    id: unit.id,
+                    topNummer: unit.topNummer,
+                    confidence: 70,
+                    reason: 'Über Mieterzuordnung',
+                  };
+                  const property = properties.find(p => p.id === unit.propertyId);
+                  if (property) {
+                    suggestions.property = {
+                      id: property.id,
+                      name: property.name,
+                      confidence: 70,
+                      reason: 'Über Einheitenzuordnung',
+                    };
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        const bookingLower = txBooking + ' ' + txRef;
+        const categoryPatterns: { pattern: RegExp; categoryName: string }[] = [
+          { pattern: /miete|mieteinnahm|grundmiete/i, categoryName: 'Mieteinnahmen' },
+          { pattern: /betriebskosten|bk[- ]vorschuss/i, categoryName: 'Betriebskosten' },
+          { pattern: /heizung|heizkosten|hk[- ]vorschuss/i, categoryName: 'Heizkosten' },
+          { pattern: /kaution|sicherheit/i, categoryName: 'Kaution' },
+          { pattern: /versicherung|polizze/i, categoryName: 'Versicherung' },
+          { pattern: /reparatur|instandhaltung|sanierung/i, categoryName: 'Instandhaltung' },
+          { pattern: /strom|energie|gas/i, categoryName: 'Strom/Energie' },
+          { pattern: /wasser|abwasser|kanal/i, categoryName: 'Wasser/Abwasser' },
+          { pattern: /müll|abfall|entsorgung/i, categoryName: 'Müllabfuhr' },
+          { pattern: /steuer|grundsteuer|abgabe/i, categoryName: 'Grundsteuer' },
+          { pattern: /verwaltung|hausverwaltung/i, categoryName: 'Verwaltung' },
+          { pattern: /lift|aufzug/i, categoryName: 'Liftkosten' },
+          { pattern: /garten|grünfläche/i, categoryName: 'Gartenpflege' },
+          { pattern: /reinigung|hausbetreu/i, categoryName: 'Hausbetreuung' },
+        ];
+
+        for (const { pattern, categoryName } of categoryPatterns) {
+          if (pattern.test(bookingLower)) {
+            const matchingCat = categories.find(c => c.name.toLowerCase().includes(categoryName.toLowerCase()));
+            suggestions.category = {
+              id: matchingCat?.id || null,
+              name: categoryName,
+              confidence: matchingCat ? 60 : 50,
+              reason: 'Buchungstext-Muster',
+            };
+            break;
+          }
+        }
+
+        if (Object.keys(suggestions).length > 0) {
+          results.push({ transactionId: txId, suggestions });
+        } else {
+          results.push({ transactionId: txId, suggestions: {} });
+        }
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Auto-match error:", error);
+      res.status(500).json({ error: "Fehler bei der automatischen Zuordnung" });
+    }
+  });
+
+  app.post("/api/transactions/apply-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const { transactionId, tenantId, unitId, propertyId, categoryId, invoiceId } = req.body;
+      if (!transactionId) return res.status(400).json({ error: "Transaktions-ID erforderlich" });
+
+      const txOwned = await verifyTransactionOwnership(transactionId, orgId);
+      if (!txOwned) return res.status(403).json({ error: "Transaktion gehört nicht zur Organisation" });
+
+      if (tenantId) {
+        const tenantOwned = await verifyTenantOwnership(tenantId, orgId);
+        if (!tenantOwned) return res.status(403).json({ error: "Mieter gehört nicht zur Organisation" });
+      }
+      if (unitId) {
+        const unitOwned = await verifyUnitOwnership(unitId, orgId);
+        if (!unitOwned) return res.status(403).json({ error: "Einheit gehört nicht zur Organisation" });
+      }
+      if (invoiceId) {
+        const invoiceOwned = await verifyInvoiceOwnership(invoiceId, orgId);
+        if (!invoiceOwned) return res.status(403).json({ error: "Rechnung gehört nicht zur Organisation" });
+      }
+      if (categoryId) {
+        const catOwned = await verifyCategoryOwnership(categoryId, orgId);
+        if (!catOwned) return res.status(403).json({ error: "Kategorie gehört nicht zur Organisation" });
+      }
+
+      const transaction = await storage.getTransaction(transactionId);
+      if (!transaction) return res.status(404).json({ error: "Transaktion nicht gefunden" });
+
+      const updateData: any = { isMatched: true };
+      if (tenantId) updateData.matchedTenantId = tenantId;
+      if (unitId) updateData.matchedUnitId = unitId;
+      if (categoryId) updateData.categoryId = categoryId;
+
+      await db.update(schema.transactions)
+        .set(updateData)
+        .where(eq(schema.transactions.id, transactionId));
+
+      if (invoiceId && tenantId) {
+        try {
+          await storage.createPayment({
+            tenantId,
+            invoiceId,
+            betrag: String(Math.abs(Number(transaction.amount))),
+            buchungsDatum: transaction.transactionDate,
+            paymentType: 'ueberweisung',
+            verwendungszweck: transaction.reference || transaction.bookingText || 'Auto-Zuordnung',
+            transactionId,
+          });
+        } catch (payError) {
+          console.error("Payment creation error:", payError);
+        }
+      }
+
+      res.json({ success: true, transactionId });
+    } catch (error) {
+      console.error("Apply match error:", error);
+      res.status(500).json({ error: "Fehler beim Anwenden der Zuordnung" });
     }
   });
 
@@ -2851,6 +3172,276 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Bank account carry-over error:', error);
       res.status(500).json({ error: "Fehler beim Jahresübertrag" });
+    }
+  });
+
+  // ====== BANK RECONCILIATION (Bank-Abgleich) ======
+
+  app.post("/api/bank-reconciliation/match", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const { bankAccountId } = req.body;
+      if (!bankAccountId) return res.status(400).json({ error: "bankAccountId ist erforderlich" });
+
+      const account = await storage.getBankAccount(bankAccountId);
+      if (!account || account.organizationId !== orgId) {
+        return res.status(403).json({ error: "Zugriff verweigert" });
+      }
+
+      const allTransactions = await storage.getTransactionsByBankAccount(bankAccountId);
+      const unmatchedTransactions = allTransactions.filter(tx => !tx.isMatched && Number(tx.amount) > 0);
+
+      const allInvoices = await storage.getMonthlyInvoicesByOrganization(orgId);
+      const openInvoices = allInvoices.filter(inv => inv.status !== 'bezahlt' && inv.status !== 'storniert' as any);
+
+      const allTenants = await storage.getTenantsByOrganization(orgId);
+      const allUnits = await storage.getUnitsByOrganization(orgId);
+      const allProperties = await storage.getPropertiesByOrganization(orgId);
+
+      const tenantMap = new Map(allTenants.map(t => [t.id, t]));
+      const unitMap = new Map(allUnits.map(u => [u.id, u]));
+      const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+
+      const proposals: any[] = [];
+
+      for (const tx of unmatchedTransactions) {
+        const txAmount = Number(tx.amount);
+        const txIban = (tx.partnerIban || '').replace(/\s/g, '').toUpperCase();
+        const txRef = `${tx.reference || ''} ${tx.bookingText || ''}`.toLowerCase();
+        const matches: any[] = [];
+
+        for (const inv of openInvoices) {
+          const invAmount = Number(inv.gesamtbetrag);
+          const tenant = inv.tenantId ? tenantMap.get(inv.tenantId) : null;
+          const unit = inv.unitId ? unitMap.get(inv.unitId) : null;
+          const property = unit?.propertyId ? propertyMap.get(unit.propertyId) : null;
+          const tenantIban = (tenant?.iban || '').replace(/\s/g, '').toUpperCase();
+          const tenantName = tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unbekannt';
+          const invoiceNumber = `VS-${inv.year}-${String(inv.month).padStart(2, '0')}-${inv.id.substring(0, 8).toUpperCase()}`;
+
+          const amountMatch = Math.abs(txAmount - invAmount) < 0.01;
+          const ibanMatch = txIban.length > 10 && tenantIban.length > 10 && txIban === tenantIban;
+          const refMatch = txRef.includes(invoiceNumber.toLowerCase()) ||
+            txRef.includes(`${inv.year}/${String(inv.month).padStart(2, '0')}`) ||
+            txRef.includes(inv.id.substring(0, 8).toLowerCase());
+
+          let confidence = 0;
+          let matchReason = '';
+
+          if (ibanMatch && amountMatch) {
+            confidence = 98;
+            matchReason = 'IBAN + Betrag';
+          } else if (amountMatch && refMatch) {
+            confidence = 95;
+            matchReason = 'Betrag + Referenz';
+          } else if (amountMatch) {
+            confidence = 95;
+            matchReason = 'Exakter Betrag';
+          } else if (refMatch) {
+            confidence = 90;
+            matchReason = 'Referenz/Verwendungszweck';
+          }
+
+          if (confidence > 0) {
+            matches.push({
+              invoiceId: inv.id,
+              invoiceNumber,
+              tenantId: tenant?.id || null,
+              tenantName,
+              unitId: unit?.id || null,
+              unitTopNummer: unit?.topNummer || '',
+              propertyName: property?.name || '',
+              invoiceAmount: invAmount,
+              confidence,
+              matchReason,
+            });
+          }
+        }
+
+        if (matches.length === 0) {
+          const tenantInvoiceGroups = new Map<string, { total: number; invoices: any[] }>();
+          for (const inv of openInvoices) {
+            if (!inv.tenantId) continue;
+            const tenant = tenantMap.get(inv.tenantId);
+            const tenantIban = (tenant?.iban || '').replace(/\s/g, '').toUpperCase();
+            if (txIban.length > 10 && tenantIban.length > 10 && txIban === tenantIban) {
+              const group = tenantInvoiceGroups.get(inv.tenantId) || { total: 0, invoices: [] };
+              const invAmount = Number(inv.gesamtbetrag);
+              group.total += invAmount;
+              const unit = inv.unitId ? unitMap.get(inv.unitId) : null;
+              const property = unit?.propertyId ? propertyMap.get(unit.propertyId) : null;
+              const invoiceNumber = `VS-${inv.year}-${String(inv.month).padStart(2, '0')}-${inv.id.substring(0, 8).toUpperCase()}`;
+              group.invoices.push({
+                invoiceId: inv.id,
+                invoiceNumber,
+                tenantId: inv.tenantId,
+                tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unbekannt',
+                unitId: unit?.id || null,
+                unitTopNummer: unit?.topNummer || '',
+                propertyName: property?.name || '',
+                invoiceAmount: invAmount,
+                confidence: 75,
+                matchReason: 'Teilbetrag (mehrere Rechnungen)',
+              });
+              tenantInvoiceGroups.set(inv.tenantId, group);
+            }
+          }
+          for (const [, group] of tenantInvoiceGroups) {
+            if (Math.abs(txAmount - group.total) < 0.01 && group.invoices.length > 1) {
+              matches.push(...group.invoices);
+            }
+          }
+        }
+
+        if (matches.length > 0) {
+          matches.sort((a: any, b: any) => b.confidence - a.confidence);
+          proposals.push({
+            transactionId: tx.id,
+            transactionDate: tx.transactionDate,
+            amount: txAmount,
+            partnerName: tx.partnerName || '',
+            partnerIban: tx.partnerIban || '',
+            bookingText: tx.bookingText || '',
+            matches,
+          });
+        }
+      }
+
+      res.json(proposals);
+    } catch (error) {
+      console.error('Bank reconciliation match error:', error);
+      res.status(500).json({ error: "Fehler beim automatischen Abgleich" });
+    }
+  });
+
+  app.post("/api/bank-reconciliation/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const { actions } = req.body;
+      if (!Array.isArray(actions) || actions.length === 0) {
+        return res.status(400).json({ error: "Keine Aktionen angegeben" });
+      }
+
+      const results: any[] = [];
+      const errors: string[] = [];
+
+      for (const action of actions) {
+        try {
+          const { transactionId, invoiceId, tenantId, unitId, amount } = action;
+
+          const txOwned = await verifyTransactionOwnership(transactionId, orgId);
+          if (!txOwned) {
+            errors.push(`Transaktion ${transactionId}: gehört nicht zur Organisation`);
+            continue;
+          }
+          if (invoiceId) {
+            const invOwned = await verifyInvoiceOwnership(invoiceId, orgId);
+            if (!invOwned) {
+              errors.push(`Transaktion ${transactionId}: Rechnung gehört nicht zur Organisation`);
+              continue;
+            }
+          }
+          if (tenantId) {
+            const tenOwned = await verifyTenantOwnership(tenantId, orgId);
+            if (!tenOwned) {
+              errors.push(`Transaktion ${transactionId}: Mieter gehört nicht zur Organisation`);
+              continue;
+            }
+          }
+
+          const payment = await storage.createPayment({
+            tenantId,
+            invoiceId,
+            betrag: String(amount),
+            buchungsDatum: new Date().toISOString().split('T')[0],
+            paymentType: 'ueberweisung',
+            verwendungszweck: `Bank-Abgleich: Transaktion ${transactionId}`,
+            transactionId,
+          });
+
+          const invoice = await db.select().from(schema.monthlyInvoices)
+            .where(eq(schema.monthlyInvoices.id, invoiceId)).limit(1);
+          if (invoice[0]) {
+            const existingPayments = await storage.getPaymentsByInvoice(invoiceId);
+            const totalPaid = existingPayments.reduce((sum: number, p: any) => sum + Number(p.betrag), 0);
+            const invTotal = Number(invoice[0].gesamtbetrag);
+            const newStatus = totalPaid >= invTotal ? 'bezahlt' : 'teilbezahlt';
+            await db.update(schema.monthlyInvoices)
+              .set({ status: newStatus as any, updatedAt: new Date() })
+              .where(eq(schema.monthlyInvoices.id, invoiceId));
+          }
+
+          await db.update(schema.transactions)
+            .set({
+              isMatched: true,
+              matchedTenantId: tenantId,
+              matchedUnitId: unitId,
+            })
+            .where(eq(schema.transactions.id, transactionId));
+
+          try {
+            const { createFinancialAuditEntry } = await import("./services/auditHashService");
+            await createFinancialAuditEntry({
+              action: "bank_reconciliation_applied",
+              entityType: "payment",
+              entityId: payment.id,
+              organizationId: orgId,
+              userId: profile?.userId,
+              data: {
+                transactionId,
+                invoiceId,
+                tenantId,
+                unitId,
+                amount,
+                appliedAt: new Date().toISOString(),
+              },
+            });
+          } catch {}
+
+          results.push({ transactionId, invoiceId, paymentId: payment.id, status: 'success' });
+        } catch (err: any) {
+          errors.push(`Transaktion ${action.transactionId}: ${err.message}`);
+        }
+      }
+
+      res.json({ applied: results.length, errors: errors.length, results, errorDetails: errors });
+    } catch (error) {
+      console.error('Bank reconciliation apply error:', error);
+      res.status(500).json({ error: "Fehler beim Übernehmen der Zuordnungen" });
+    }
+  });
+
+  app.get("/api/bank-reconciliation/stats", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const orgId = profile?.organizationId;
+      if (!orgId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const allTransactions = await storage.getTransactionsByOrganization(orgId);
+      const totalCount = allTransactions.length;
+      const matchedCount = allTransactions.filter(tx => tx.isMatched).length;
+      const unmatchedIncome = allTransactions.filter(tx => !tx.isMatched && Number(tx.amount) > 0);
+      const unmatchedCount = unmatchedIncome.length;
+      const unmatchedAmount = unmatchedIncome.reduce((sum, tx) => sum + Number(tx.amount), 0);
+      const matchRate = totalCount > 0 ? Math.round((matchedCount / totalCount) * 100) : 0;
+
+      res.json({
+        totalTransactions: totalCount,
+        matchedTransactions: matchedCount,
+        unmatchedCount,
+        unmatchedAmount,
+        matchRate,
+        lastReconciliation: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Bank reconciliation stats error:', error);
+      res.status(500).json({ error: "Fehler beim Abrufen der Statistiken" });
     }
   });
 
@@ -5921,6 +6512,509 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
       res.status(status).json({
         error: error.message || "Fehler bei der Datenanonymisierung",
       });
+    }
+  });
+
+  // ====== LEASE CONTRACT GENERATOR (Mietvertragsgenerator) ======
+
+  interface ClauseSection {
+    id: string;
+    title: string;
+    content: string;
+    required: boolean;
+  }
+
+  const mrgClauses: ClauseSection[] = [
+    {
+      id: "mietgegenstand",
+      title: "§1 Mietgegenstand",
+      content: "Der Vermieter/die Vermieterin, {{vermieterName}}, vermietet dem Mieter/der Mieterin, {{mieterName}}, die Wohnung/das Geschäftslokal Top {{topNummer}} im Haus {{adresse}} mit einer Nutzfläche von ca. {{flaeche}} m². Der Mietgegenstand wird zu Wohnzwecken vermietet und darf nur zu diesem Zweck verwendet werden. Zum Mietgegenstand gehören auch die mitvermieteten Einrichtungsgegenstände und Zubehör gemäß Übergabeprotokoll.",
+      required: true,
+    },
+    {
+      id: "mietdauer",
+      title: "§2 Mietdauer",
+      content: "Das Mietverhältnis beginnt am {{mietbeginn}} und wird {{mietende}} abgeschlossen. Bei befristeten Mietverhältnissen gemäß § 29 Abs 1 Z 3 MRG beträgt die Mindestdauer drei Jahre. Eine vorzeitige Auflösung ist nur aus wichtigem Grund gemäß § 1118 ABGB oder § 30 MRG möglich.",
+      required: true,
+    },
+    {
+      id: "mietzins",
+      title: "§3 Mietzins und Betriebskosten",
+      content: "Der monatliche Hauptmietzins beträgt EUR {{miete}} (netto, zzgl. USt gemäß § 10 UStG). Zusätzlich sind monatlich Betriebskosten in Höhe von EUR {{betriebskosten}} als Akontierung zu entrichten. Die Betriebskosten werden gemäß §§ 21–24 MRG abgerechnet. Der Gesamtmietzins ist jeweils am 1. eines jeden Monats im Voraus auf das Konto des Vermieters zu überweisen. Bei verspäteter Zahlung fallen Verzugszinsen in gesetzlicher Höhe an.",
+      required: true,
+    },
+    {
+      id: "kaution",
+      title: "§4 Kaution",
+      content: "Der Mieter/die Mieterin hinterlegt bei Vertragsabschluss eine Kaution in Höhe von EUR {{kaution}} (entspricht drei Bruttomonatsmieten). Die Kaution dient zur Sicherstellung sämtlicher Ansprüche des Vermieters aus dem Mietverhältnis. Die Kaution ist auf einem Sparbuch oder einem Treuhandkonto zu veranlagen und wird nach ordnungsgemäßer Rückgabe des Mietgegenstandes samt aufgelaufener Zinsen zurückerstattet. Ein Abzug ist nur bei dokumentierten Schäden oder offenen Forderungen zulässig.",
+      required: false,
+    },
+    {
+      id: "wertbestaendigkeit",
+      title: "§5 Wertbeständigkeit (VPI-Anpassung)",
+      content: "Der Hauptmietzins unterliegt der Wertsicherung gemäß § 16 Abs 6 MRG und wird jährlich an den Verbraucherpreisindex (VPI) angepasst. Ausgangsbasis ist der zum Zeitpunkt des Vertragsabschlusses zuletzt veröffentlichte Indexwert. Eine Anpassung erfolgt, wenn sich der Index um mindestens 5% gegenüber der letzten Anpassung verändert hat. Die Anpassung wird dem Mieter mindestens 14 Tage vor Wirksamkeit schriftlich mitgeteilt.",
+      required: false,
+    },
+    {
+      id: "instandhaltung",
+      title: "§6 Instandhaltung und Reparaturen",
+      content: "Die Erhaltungspflicht des Vermieters richtet sich nach § 3 MRG und umfasst die allgemeinen Teile des Hauses, die Behebung ernster Schäden des Hauses sowie die Beseitigung einer vom Mietgegenstand ausgehenden erheblichen Gesundheitsgefährdung. Der Mieter hat die laufende Wartung und Instandhaltung des Mietgegenstands auf eigene Kosten durchzuführen (§ 8 MRG). Kleinreparaturen bis zu einem Betrag von EUR 150,00 je Einzelfall trägt der Mieter. Schäden sind dem Vermieter unverzüglich schriftlich anzuzeigen.",
+      required: false,
+    },
+    {
+      id: "kuendigung",
+      title: "§7 Kündigung",
+      content: "Die Kündigung des Mietverhältnisses durch den Vermieter ist nur aus den in § 30 Abs 2 MRG genannten wichtigen Gründen zulässig und bedarf der gerichtlichen Aufkündigung. Der Mieter kann das Mietverhältnis unter Einhaltung einer dreimonatigen Kündigungsfrist zum Monatsletzten kündigen. Bei befristeten Mietverhältnissen kann der Mieter nach Ablauf des ersten Vertragsjahres unter Einhaltung einer dreimonatigen Kündigungsfrist zum Monatsletzten kündigen (§ 29 Abs 2 MRG). Die Kündigung hat schriftlich zu erfolgen.",
+      required: false,
+    },
+    {
+      id: "untervermietung",
+      title: "§8 Untervermietung",
+      content: "Die gänzliche oder teilweise Untervermietung oder sonstige Weitergabe des Mietgegenstandes an Dritte bedarf der vorherigen schriftlichen Zustimmung des Vermieters. Eine Untervermietung kann gemäß § 30 Abs 2 Z 4 MRG einen Kündigungsgrund darstellen, wenn der Mieter den Mietgegenstand ganz oder teilweise zu einem unverhältnismäßig hohen Entgelt weitervermietet oder wenn der Mieter den Mietgegenstand nicht regelmäßig zur Befriedigung seines dringenden Wohnbedürfnisses verwendet.",
+      required: false,
+    },
+    {
+      id: "haustiere",
+      title: "§9 Haustiere",
+      content: "Die Haltung von Haustieren ist grundsätzlich gestattet, soweit dadurch keine unzumutbare Belästigung anderer Hausbewohner oder eine Beschädigung des Mietgegenstandes entsteht. Kleintiere (z.B. Fische, Hamster) dürfen ohne gesonderte Zustimmung gehalten werden. Für die Haltung von Hunden und Katzen ist die vorherige schriftliche Zustimmung des Vermieters erforderlich. Der Mieter haftet für alle durch die Tierhaltung verursachten Schäden.",
+      required: false,
+    },
+    {
+      id: "hausordnung",
+      title: "§10 Hausordnung",
+      content: "Der Mieter verpflichtet sich zur Einhaltung der jeweils gültigen Hausordnung. Die Nachtruhe ist von 22:00 Uhr bis 06:00 Uhr einzuhalten. Die gemeinschaftlich genutzten Räume und Flächen sind pfleglich zu behandeln. Wesentliche Änderungen der Hausordnung werden dem Mieter schriftlich mitgeteilt. Die Nichteinhaltung der Hausordnung kann gemäß § 30 Abs 2 Z 3 MRG einen Kündigungsgrund darstellen.",
+      required: false,
+    },
+    {
+      id: "rueckgabe",
+      title: "§11 Rückgabe des Mietgegenstands",
+      content: "Bei Beendigung des Mietverhältnisses ist der Mietgegenstand in ordnungsgemäßem Zustand unter Berücksichtigung der gewöhnlichen Abnutzung zurückzugeben. Ein Übergabeprotokoll wird gemeinsam erstellt. Einbauten und Veränderungen, die der Mieter vorgenommen hat, sind auf Verlangen des Vermieters zu entfernen, sofern nicht eine Vereinbarung über deren Verbleib getroffen wird (§ 10 MRG). Nicht entfernte Fahrnisse gehen entschädigungslos in das Eigentum des Vermieters über.",
+      required: false,
+    },
+    {
+      id: "schlussbestimmungen",
+      title: "§12 Schlussbestimmungen",
+      content: "Dieser Vertrag unterliegt österreichischem Recht, insbesondere dem Mietrechtsgesetz (MRG) und dem ABGB. Änderungen und Ergänzungen dieses Vertrages bedürfen der Schriftform. Sollten einzelne Bestimmungen dieses Vertrages unwirksam sein oder werden, so wird die Wirksamkeit der übrigen Bestimmungen dadurch nicht berührt. Für Streitigkeiten aus diesem Mietverhältnis ist das sachlich zuständige Gericht am Ort der Liegenschaft zuständig. Dieser Vertrag wird in zweifacher Ausfertigung errichtet, wobei jede Vertragspartei eine Ausfertigung erhält.",
+      required: true,
+    },
+  ];
+
+  const befristetClauses: ClauseSection[] = mrgClauses.map(c => {
+    if (c.id === "mietdauer") {
+      return {
+        ...c,
+        content: "Das Mietverhältnis beginnt am {{mietbeginn}} und ist bis zum {{mietende}} befristet (§ 29 Abs 1 Z 3 MRG). Die Mindestdauer beträgt drei Jahre. Das Mietverhältnis endet durch Zeitablauf, ohne dass es einer Kündigung bedarf. Eine vorzeitige Auflösung ist nur aus wichtigem Grund gemäß § 1118 ABGB oder § 30 MRG möglich. Der Mieter kann nach Ablauf des ersten Vertragsjahres unter Einhaltung einer dreimonatigen Kündigungsfrist zum Monatsletzten kündigen (§ 29 Abs 2 MRG).",
+      };
+    }
+    return c;
+  });
+
+  const wegClauses: ClauseSection[] = [
+    {
+      id: "mietgegenstand",
+      title: "§1 Nutzungsgegenstand",
+      content: "Die Wohnungseigentümergemeinschaft, vertreten durch {{vermieterName}}, überlässt dem Nutzer/der Nutzerin, {{mieterName}}, das Objekt Top {{topNummer}} im Haus {{adresse}} mit einer Nutzfläche von ca. {{flaeche}} m² zur Nutzung. Das Nutzungsrecht bezieht sich auf die im WEG-Parifizierungsplan ausgewiesene Einheit.",
+      required: true,
+    },
+    {
+      id: "mietdauer",
+      title: "§2 Nutzungsdauer",
+      content: "Das Nutzungsverhältnis beginnt am {{mietbeginn}} und wird {{mietende}} abgeschlossen. Es gelten die Bestimmungen des WEG 2002 und subsidiär das ABGB.",
+      required: true,
+    },
+    {
+      id: "mietzins",
+      title: "§3 Nutzungsentgelt und Betriebskosten",
+      content: "Das monatliche Nutzungsentgelt beträgt EUR {{miete}}. Zusätzlich sind monatlich Betriebskosten in Höhe von EUR {{betriebskosten}} als Akontierung zu entrichten. Die Betriebskosten werden nach den Anteilen gemäß Nutzwertfestlegung abgerechnet. Das Gesamtentgelt ist jeweils am 1. eines jeden Monats im Voraus zu überweisen.",
+      required: true,
+    },
+    {
+      id: "kaution",
+      title: "§4 Kaution",
+      content: "Der Nutzer/die Nutzerin hinterlegt bei Vertragsabschluss eine Kaution in Höhe von EUR {{kaution}}. Die Kaution wird nach ordnungsgemäßer Rückgabe des Nutzungsgegenstandes samt aufgelaufener Zinsen zurückerstattet.",
+      required: false,
+    },
+    {
+      id: "instandhaltung",
+      title: "§5 Instandhaltung",
+      content: "Die Erhaltung der allgemeinen Teile obliegt der Eigentümergemeinschaft gemäß WEG 2002. Der Nutzer hat den Nutzungsgegenstand pfleglich zu behandeln und Schäden unverzüglich der Hausverwaltung zu melden.",
+      required: false,
+    },
+    {
+      id: "kuendigung",
+      title: "§6 Kündigung",
+      content: "Das Nutzungsverhältnis kann von beiden Seiten unter Einhaltung einer dreimonatigen Kündigungsfrist zum Monatsletzten gekündigt werden. Die Kündigung hat schriftlich zu erfolgen.",
+      required: false,
+    },
+    {
+      id: "hausordnung",
+      title: "§7 Hausordnung",
+      content: "Der Nutzer verpflichtet sich zur Einhaltung der von der Eigentümergemeinschaft beschlossenen Hausordnung.",
+      required: false,
+    },
+    {
+      id: "schlussbestimmungen",
+      title: "§8 Schlussbestimmungen",
+      content: "Dieser Vertrag unterliegt österreichischem Recht. Änderungen bedürfen der Schriftform. Gerichtsstand ist der Ort der Liegenschaft. Dieser Vertrag wird in zweifacher Ausfertigung errichtet.",
+      required: true,
+    },
+  ];
+
+  const leaseTemplates = [
+    {
+      id: "mrg_standard",
+      name: "MRG-Standardmietvertrag",
+      description: "Vollständiger Mietvertrag nach MRG für unbefristete Mietverhältnisse",
+      clauses: mrgClauses,
+    },
+    {
+      id: "mrg_befristet",
+      name: "MRG-Befristeter Mietvertrag",
+      description: "Befristeter Mietvertrag (mind. 3 Jahre) gemäß § 29 MRG",
+      clauses: befristetClauses,
+    },
+    {
+      id: "weg_nutzungsvertrag",
+      name: "WEG-Nutzungsvertrag",
+      description: "Nutzungsvertrag für WEG-Objekte nach WEG 2002",
+      clauses: wegClauses,
+    },
+  ];
+
+  app.get("/api/lease-templates", isAuthenticated, async (_req, res) => {
+    res.json(leaseTemplates);
+  });
+
+  app.post("/api/lease-contracts/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const { templateId, tenantId, unitId, propertyId, leaseStart, leaseEnd, monthlyRent, operatingCosts, deposit, selectedClauses, customNotes } = req.body;
+
+      const template = leaseTemplates.find(t => t.id === templateId);
+      if (!template) return res.status(400).json({ error: "Vorlage nicht gefunden" });
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const [tenant, unit, property, org] = await Promise.all([
+        tenantId ? db.select().from(schema.tenants).where(eq(schema.tenants.id, tenantId)).then(r => r[0]) : null,
+        unitId ? db.select().from(schema.units).where(eq(schema.units.id, unitId)).then(r => r[0]) : null,
+        propertyId ? db.select().from(schema.properties).where(eq(schema.properties.id, propertyId)).then(r => r[0]) : null,
+        db.select().from(schema.organizations).where(eq(schema.organizations.id, profile.organizationId)).then(r => r[0]),
+      ]);
+
+      const mieterName = tenant ? `${tenant.firstName} ${tenant.lastName}` : "_______________";
+      const vermieterName = org?.name || "_______________";
+      const adresse = property ? `${property.address}, ${property.postalCode} ${property.city}` : "_______________";
+      const topNummer = unit?.topNummer || "___";
+      const flaeche = unit?.flaeche || "___";
+      const miete = monthlyRent != null ? Number(monthlyRent).toFixed(2) : "___";
+      const betriebskosten = operatingCosts != null ? Number(operatingCosts).toFixed(2) : "___";
+      const kautionVal = deposit != null ? Number(deposit).toFixed(2) : "___";
+
+      const formatDate = (d: string | null) => {
+        if (!d) return "auf unbestimmte Zeit";
+        const date = new Date(d);
+        return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+      };
+
+      const mietbeginn = formatDate(leaseStart);
+      const mietende = leaseEnd ? formatDate(leaseEnd) : "auf unbestimmte Zeit";
+
+      const replacePlaceholders = (text: string) =>
+        text
+          .replace(/\{\{mieterName\}\}/g, mieterName)
+          .replace(/\{\{vermieterName\}\}/g, vermieterName)
+          .replace(/\{\{adresse\}\}/g, adresse)
+          .replace(/\{\{topNummer\}\}/g, topNummer)
+          .replace(/\{\{flaeche\}\}/g, String(flaeche))
+          .replace(/\{\{miete\}\}/g, miete)
+          .replace(/\{\{betriebskosten\}\}/g, betriebskosten)
+          .replace(/\{\{kaution\}\}/g, kautionVal)
+          .replace(/\{\{mietbeginn\}\}/g, mietbeginn)
+          .replace(/\{\{mietende\}\}/g, mietende);
+
+      const activeClauses = template.clauses.filter(
+        c => c.required || (selectedClauses && selectedClauses.includes(c.id))
+      );
+
+      const filledClauses = activeClauses.map(c => ({
+        id: c.id,
+        title: c.title,
+        content: replacePlaceholders(c.content),
+        required: c.required,
+      }));
+
+      const contract = {
+        templateId,
+        templateName: template.name,
+        mieterName,
+        vermieterName,
+        adresse,
+        topNummer,
+        flaeche,
+        miete,
+        betriebskosten,
+        kaution: kautionVal,
+        mietbeginn,
+        mietende,
+        clauses: filledClauses,
+        customNotes: customNotes || "",
+        generatedAt: new Date().toISOString(),
+      };
+
+      res.json(contract);
+    } catch (error) {
+      console.error("Lease contract generate error:", error);
+      res.status(500).json({ error: "Fehler bei der Vertragserstellung" });
+    }
+  });
+
+  app.post("/api/lease-contracts/generate-pdf", isAuthenticated, async (req: any, res) => {
+    try {
+      const { templateId, tenantId, unitId, propertyId, leaseStart, leaseEnd, monthlyRent, operatingCosts, deposit, selectedClauses, customNotes } = req.body;
+
+      const template = leaseTemplates.find(t => t.id === templateId);
+      if (!template) return res.status(400).json({ error: "Vorlage nicht gefunden" });
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
+
+      const [tenant, unit, property, org] = await Promise.all([
+        tenantId ? db.select().from(schema.tenants).where(eq(schema.tenants.id, tenantId)).then(r => r[0]) : null,
+        unitId ? db.select().from(schema.units).where(eq(schema.units.id, unitId)).then(r => r[0]) : null,
+        propertyId ? db.select().from(schema.properties).where(eq(schema.properties.id, propertyId)).then(r => r[0]) : null,
+        db.select().from(schema.organizations).where(eq(schema.organizations.id, profile.organizationId)).then(r => r[0]),
+      ]);
+
+      const mieterName = tenant ? `${tenant.firstName} ${tenant.lastName}` : "_______________";
+      const vermieterName = org?.name || "_______________";
+      const adresse = property ? `${property.address}, ${property.postalCode} ${property.city}` : "_______________";
+      const topNummer = unit?.topNummer || "___";
+      const flaeche = unit?.flaeche || "___";
+      const miete = monthlyRent != null ? Number(monthlyRent).toFixed(2) : "___";
+      const betriebskosten = operatingCosts != null ? Number(operatingCosts).toFixed(2) : "___";
+      const kautionVal = deposit != null ? Number(deposit).toFixed(2) : "___";
+
+      const formatDate = (d: string | null) => {
+        if (!d) return "auf unbestimmte Zeit";
+        const date = new Date(d);
+        return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+      };
+
+      const mietbeginn = formatDate(leaseStart);
+      const mietende = leaseEnd ? formatDate(leaseEnd) : "auf unbestimmte Zeit";
+
+      const replacePlaceholders = (text: string) =>
+        text
+          .replace(/\{\{mieterName\}\}/g, mieterName)
+          .replace(/\{\{vermieterName\}\}/g, vermieterName)
+          .replace(/\{\{adresse\}\}/g, adresse)
+          .replace(/\{\{topNummer\}\}/g, topNummer)
+          .replace(/\{\{flaeche\}\}/g, String(flaeche))
+          .replace(/\{\{miete\}\}/g, miete)
+          .replace(/\{\{betriebskosten\}\}/g, betriebskosten)
+          .replace(/\{\{kaution\}\}/g, kautionVal)
+          .replace(/\{\{mietbeginn\}\}/g, mietbeginn)
+          .replace(/\{\{mietende\}\}/g, mietende);
+
+      const activeClauses = template.clauses.filter(
+        c => c.required || (selectedClauses && selectedClauses.includes(c.id))
+      );
+
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      const pageWidth = 210;
+      const marginLeft = 25;
+      const marginRight = 25;
+      const contentWidth = pageWidth - marginLeft - marginRight;
+      let y = 20;
+      let pageNum = 1;
+
+      const addFooter = () => {
+        const today = new Date();
+        const dateStr = `${String(today.getDate()).padStart(2, "0")}.${String(today.getMonth() + 1).padStart(2, "0")}.${today.getFullYear()}`;
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Erstellt am ${dateStr}`, marginLeft, 285);
+        doc.text(`Seite ${pageNum}`, pageWidth - marginRight, 285, { align: "right" });
+      };
+
+      const checkPageBreak = (neededHeight: number) => {
+        if (y + neededHeight > 270) {
+          addFooter();
+          doc.addPage();
+          pageNum++;
+          y = 20;
+        }
+      };
+
+      // Header
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(vermieterName, marginLeft, y);
+      y += 5;
+      if (org?.address) { doc.text(org.address, marginLeft, y); y += 5; }
+      if (org?.email) { doc.text(org.email, marginLeft, y); y += 5; }
+      y += 5;
+
+      // Horizontal line
+      doc.setLineWidth(0.5);
+      doc.line(marginLeft, y, pageWidth - marginRight, y);
+      y += 10;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      const title = templateId === "weg_nutzungsvertrag" ? "NUTZUNGSVERTRAG" : "MIETVERTRAG";
+      doc.text(title, pageWidth / 2, y, { align: "center" });
+      y += 5;
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(`(${template.name})`, pageWidth / 2, y, { align: "center" });
+      y += 10;
+
+      // Line
+      doc.setLineWidth(0.3);
+      doc.line(marginLeft, y, pageWidth - marginRight, y);
+      y += 10;
+
+      // Contract parties
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Zwischen", marginLeft, y);
+      y += 6;
+      doc.setFont("helvetica", "normal");
+      doc.text(`Vermieter/in: ${vermieterName}`, marginLeft + 5, y);
+      y += 6;
+      doc.text("und", marginLeft, y);
+      y += 6;
+      doc.text(`Mieter/in: ${mieterName}`, marginLeft + 5, y);
+      y += 6;
+      doc.text(`wird folgender ${title.toLowerCase()} geschlossen:`, marginLeft, y);
+      y += 12;
+
+      // Clauses
+      for (const clause of activeClauses) {
+        const filledContent = replacePlaceholders(clause.content);
+
+        checkPageBreak(20);
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(clause.title, marginLeft, y);
+        y += 7;
+
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "normal");
+        const lines = doc.splitTextToSize(filledContent, contentWidth);
+        for (const line of lines) {
+          checkPageBreak(5);
+          doc.text(line, marginLeft, y);
+          y += 4.5;
+        }
+        y += 6;
+      }
+
+      // Custom notes
+      if (customNotes) {
+        checkPageBreak(20);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Besondere Vereinbarungen", marginLeft, y);
+        y += 7;
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "normal");
+        const noteLines = doc.splitTextToSize(customNotes, contentWidth);
+        for (const line of noteLines) {
+          checkPageBreak(5);
+          doc.text(line, marginLeft, y);
+          y += 4.5;
+        }
+        y += 6;
+      }
+
+      // Signature section
+      checkPageBreak(50);
+      y += 10;
+      doc.setLineWidth(0.3);
+      doc.line(marginLeft, y, pageWidth - marginRight, y);
+      y += 10;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      const sigDate = `Wien, am ____________________`;
+      doc.text(sigDate, marginLeft, y);
+      y += 20;
+
+      // Signature lines
+      doc.line(marginLeft, y, marginLeft + 60, y);
+      doc.line(pageWidth - marginRight - 60, y, pageWidth - marginRight, y);
+      y += 5;
+      doc.setFontSize(9);
+      doc.text("Vermieter/in", marginLeft, y);
+      doc.text("Mieter/in", pageWidth - marginRight - 60, y);
+
+      addFooter();
+
+      const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+      if (propertyId) {
+        try {
+          const docName = `Mietvertrag_${topNummer}_${mietbeginn.replace(/\./g, "-")}`;
+          await db.insert(schema.propertyDocuments).values({
+            propertyId,
+            organizationId: profile.organizationId,
+            name: docName,
+            category: 'vertrag',
+            mimeType: 'application/pdf',
+            fileSize: pdfBuffer.length,
+            notes: `Mietvertrag für ${mieterName}, Top ${topNummer}, ab ${mietbeginn}`,
+          });
+        } catch (archiveErr) {
+          console.error("Lease contract archive error:", archiveErr);
+        }
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Mietvertrag_${topNummer}_${mietbeginn.replace(/\./g, "-")}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Lease contract PDF error:", error);
+      res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
+    }
+  });
+
+  app.get("/api/lease-contracts", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.json([]);
+
+      const contracts = await db
+        .select({
+          id: schema.propertyDocuments.id,
+          propertyId: schema.propertyDocuments.propertyId,
+          name: schema.propertyDocuments.name,
+          category: schema.propertyDocuments.category,
+          fileUrl: schema.propertyDocuments.fileUrl,
+          fileSize: schema.propertyDocuments.fileSize,
+          mimeType: schema.propertyDocuments.mimeType,
+          notes: schema.propertyDocuments.notes,
+          createdAt: schema.propertyDocuments.createdAt,
+          propertyAddress: schema.properties.address,
+          propertyCity: schema.properties.city,
+        })
+        .from(schema.propertyDocuments)
+        .innerJoin(schema.properties, eq(schema.propertyDocuments.propertyId, schema.properties.id))
+        .where(and(
+          eq(schema.propertyDocuments.organizationId, profile.organizationId),
+          eq(schema.propertyDocuments.category, 'vertrag')
+        ))
+        .orderBy(desc(schema.propertyDocuments.createdAt));
+
+      res.json(contracts);
+    } catch (error) {
+      res.status(500).json({ error: "Fehler beim Abrufen der Verträge" });
     }
   });
 

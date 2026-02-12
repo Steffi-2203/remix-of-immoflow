@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Leaf, Zap, Thermometer, Plus, Trash2, BarChart3, Award, AlertTriangle } from "lucide-react";
+import { EsgScoreChart } from '@/components/charts/FinanceChart';
 
 const ENERGY_CLASSES = ['A++', 'A+', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const ENERGY_TYPES = [
@@ -151,13 +152,7 @@ export default function EsgDashboard() {
               <Award className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-esg-score">{esgScore}/100</div>
-              <div className="w-full bg-muted rounded-full h-2 mt-2">
-                <div
-                  className={`h-2 rounded-full ${esgScore >= 70 ? 'bg-green-500' : esgScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${esgScore}%` }}
-                />
-              </div>
+              <EsgScoreChart score={esgScore} />
             </CardContent>
           </Card>
 

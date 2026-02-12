@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { MonthlyRevenueChart, CategoryPieChart } from '@/components/charts/FinanceChart';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -113,6 +114,29 @@ export default function Accounting() {
     if (!bankAccounts) return 0;
     return bankAccounts.reduce((sum: number, ba: any) => sum + Number(ba.balance || ba.current_balance || 0), 0);
   }, [bankAccounts]);
+
+  const monthNames = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
+  const monthlyData = useMemo(() => {
+    const monthMap = new Map<number, { income: number; expenses: number }>();
+    for (let m = 0; m < 12; m++) monthMap.set(m, { income: 0, expenses: 0 });
+    for (const t of filteredTransactions) {
+      const d = new Date(t.transactionDate || t.transaction_date || '');
+      const m = d.getMonth();
+      const entry = monthMap.get(m);
+      if (!entry) continue;
+      const amount = Number(t.amount);
+      if (amount >= 0) entry.income += amount;
+      else entry.expenses += Math.abs(amount);
+    }
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([m, v]) => ({ month: monthNames[m], income: v.income, expenses: v.expenses }));
+  }, [filteredTransactions]);
+
+  const expensePieData = useMemo(() => {
+    return summary.expenseCategories.map(c => ({ name: c.name, value: c.total }));
+  }, [summary.expenseCategories]);
 
   const recentTransactions = useMemo(() => {
     return filteredTransactions
@@ -257,6 +281,17 @@ export default function Accounting() {
                     </div>
                   </div>
                 </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader><CardTitle className="text-base">Monatsverlauf</CardTitle></CardHeader>
+                <CardContent><MonthlyRevenueChart data={monthlyData} /></CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">Ausgabenverteilung</CardTitle></CardHeader>
+                <CardContent><CategoryPieChart data={expensePieData} type="expense" /></CardContent>
               </Card>
             </div>
 

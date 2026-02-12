@@ -1425,6 +1425,24 @@ export const insertTenantPortalAccessSchema = createInsertSchema(tenantPortalAcc
 export type InsertTenantPortalAccess = z.infer<typeof insertTenantPortalAccessSchema>;
 export type TenantPortalAccess = typeof tenantPortalAccess.$inferSelect;
 
+// ====== EIGENTÜMERPORTAL-ZUGANG (OWNER PORTAL ACCESS) ======
+export const ownerPortalAccess = pgTable("owner_portal_access", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash"),
+  inviteToken: text("invite_token"),
+  inviteExpiresAt: timestamp("invite_expires_at", { withTimezone: true }),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertOwnerPortalAccessSchema = createInsertSchema(ownerPortalAccess).omit({ id: true, passwordHash: true, inviteToken: true, inviteExpiresAt: true, createdAt: true, updatedAt: true });
+export type InsertOwnerPortalAccess = z.infer<typeof insertOwnerPortalAccessSchema>;
+export type OwnerPortalAccess = typeof ownerPortalAccess.$inferSelect;
+
 export const jobQueue = pgTable("job_queue", {
   id: uuid("id").defaultRandom().primaryKey(),
   type: varchar("type", { length: 100 }).notNull(),

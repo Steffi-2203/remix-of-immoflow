@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
-import { tenants, units, properties, monthlyInvoices, payments } from "@shared/schema";
+import { eq, and, or } from "drizzle-orm";
+import { tenants, units, properties, monthlyInvoices, payments, transactions, bankAccounts, accountCategories } from "@shared/schema";
 
 export async function verifyPropertyOwnership(propertyId: string, organizationId: string): Promise<boolean> {
   const result = await db.select({ id: properties.id })
@@ -46,6 +46,22 @@ export async function verifyPaymentOwnership(paymentId: string, organizationId: 
     .innerJoin(units, eq(units.id, tenants.unitId))
     .innerJoin(properties, eq(properties.id, units.propertyId))
     .where(and(eq(payments.id, paymentId), eq(properties.organizationId, organizationId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+export async function verifyTransactionOwnership(transactionId: string, organizationId: string): Promise<boolean> {
+  const result = await db.select({ id: transactions.id })
+    .from(transactions)
+    .where(and(eq(transactions.id, transactionId), eq(transactions.organizationId, organizationId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+export async function verifyCategoryOwnership(categoryId: string, organizationId: string): Promise<boolean> {
+  const result = await db.select({ id: accountCategories.id })
+    .from(accountCategories)
+    .where(and(eq(accountCategories.id, categoryId), eq(accountCategories.organizationId, organizationId)))
     .limit(1);
   return result.length > 0;
 }

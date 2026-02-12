@@ -13,6 +13,8 @@ import { registerEsgRoutes } from "./routes/esgRoutes";
 import { registerDamageRoutes } from "./routes/damageRoutes";
 import { registerTenantPortalRoutes } from "./routes/tenantPortalRoutes";
 import { registerTenantAuthRoutes } from "./routes/tenantAuthRoutes";
+import { registerOwnerPortalRoutes } from "./routes/ownerPortalRoutes";
+import { registerOwnerAuthRoutes } from "./routes/ownerAuthRoutes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
@@ -299,6 +301,8 @@ async function initStripe() {
   registerDamageRoutes(app);
   registerTenantAuthRoutes(app);
   registerTenantPortalRoutes(app);
+  registerOwnerAuthRoutes(app);
+  registerOwnerPortalRoutes(app);
   const server = await registerRoutes(app);
 
   app.use(apiErrorHandler);
