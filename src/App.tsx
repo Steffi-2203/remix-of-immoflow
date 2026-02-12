@@ -54,6 +54,9 @@ import OwnerPortal from "./pages/OwnerPortal";
 import ReconciliationDashboard from "./pages/ReconciliationDashboard";
 import AdminPaymentsJobs from "./pages/AdminPaymentsJobs";
 import TenantLogin from "./pages/TenantLogin";
+import MeterManagement from "./pages/MeterManagement";
+import AnnouncementsPage from "./pages/AnnouncementsPage";
+import ManagementFeesPage from "./pages/ManagementFeesPage";
 
 const queryClient = new QueryClient();
 
@@ -112,8 +115,10 @@ const App = () => (
             <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/eigentuemerportal" element={<ProtectedRoute><DemoDataProvider><OwnerPortal /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/massenaktionen" element={<ProtectedRoute><DemoDataProvider><BatchOperations /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/zaehler" element={<ProtectedRoute><DemoDataProvider><MeterManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ankuendigungen" element={<ProtectedRoute><DemoDataProvider><AnnouncementsPage /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/honorar" element={<ProtectedRoute><DemoDataProvider><ManagementFeesPage /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
-            
             {/* Redirects for merged routes */}
             <Route path="/vorschreibungen" element={<Navigate to="/zahlungen?tab=invoices" replace />} />
             <Route path="/mahnwesen" element={<Navigate to="/zahlungen?tab=dunning" replace />} />
