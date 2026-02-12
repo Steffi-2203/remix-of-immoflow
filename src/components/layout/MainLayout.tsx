@@ -5,6 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/usePermissions';
 import { AlertTriangle } from 'lucide-react';
+import { AIAssistantWidget } from '@/components/ai/AIAssistantWidget';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -38,6 +39,7 @@ function MainLayoutContent({ children, title, subtitle }: MainLayoutProps) {
       >
         <Header title={title} subtitle={subtitle} />
         <main className="p-4 md:p-6">{children}</main>
+        <AIAssistantWidget />
       </div>
     </div>
   );
