@@ -17,5 +17,24 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard",
+      "description": "Zur Übersicht"
+    },
+    {
+      "name": "Schadensmeldung",
+      "url": "/schadensmeldungen",
+      "description": "Schaden melden"
+    },
+    {
+      "name": "Liegenschaften",
+      "url": "/liegenschaften",
+      "description": "Liegenschaften verwalten"
+    }
   ]
 }

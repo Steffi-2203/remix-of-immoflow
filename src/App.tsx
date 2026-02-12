@@ -53,6 +53,8 @@ import DsgvoCompliance from "./pages/DsgvoCompliance";
 import SecurityDashboard from "./pages/SecurityDashboard";
 import SupportTickets from "./pages/SupportTickets";
 import GuidedWorkflows from "./pages/GuidedWorkflows";
+import EsgDashboard from "./pages/EsgDashboard";
+import DamageReports from "./pages/DamageReports";
 
 const queryClient = new QueryClient();
 
@@ -112,6 +114,8 @@ const App = () => (
             <Route path="/sicherheit" element={<ProtectedRoute><DemoDataProvider><SecurityDashboard /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/tickets" element={<ProtectedRoute><DemoDataProvider><SupportTickets /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/workflows" element={<ProtectedRoute><DemoDataProvider><GuidedWorkflows /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/esg" element={<ProtectedRoute><DemoDataProvider><EsgDashboard /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/schadensmeldungen" element={<ProtectedRoute><DemoDataProvider><DamageReports /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}
