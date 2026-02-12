@@ -1608,6 +1608,89 @@ export const insertTicketCommentSchema = createInsertSchema(ticketComments).omit
 export type InsertTicketComment = z.infer<typeof insertTicketCommentSchema>;
 export type TicketComment = typeof ticketComments.$inferSelect;
 
+// ====== ESG / ENERGIEMONITORING ======
+export const energyCertificates = pgTable("energy_certificates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  certificateType: text("certificate_type").notNull(),
+  energyClass: text("energy_class"),
+  heatingDemand: numeric("heating_demand"),
+  primaryEnergyDemand: numeric("primary_energy_demand"),
+  co2Emissions: numeric("co2_emissions"),
+  validFrom: date("valid_from"),
+  validUntil: date("valid_until"),
+  issuer: text("issuer"),
+  certificateNumber: text("certificate_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_energy_certs_property").on(table.propertyId),
+  index("idx_energy_certs_org").on(table.organizationId),
+]);
+
+export const insertEnergyCertificateSchema = createInsertSchema(energyCertificates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEnergyCertificate = z.infer<typeof insertEnergyCertificateSchema>;
+export type EnergyCertificate = typeof energyCertificates.$inferSelect;
+
+export const energyConsumption = pgTable("energy_consumption", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id),
+  year: integer("year").notNull(),
+  month: integer("month"),
+  energyType: text("energy_type").notNull(),
+  consumption: numeric("consumption").notNull(),
+  unit: text("unit").notNull(),
+  costEur: numeric("cost_eur"),
+  co2Kg: numeric("co2_kg"),
+  source: text("source"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_energy_consumption_property").on(table.propertyId),
+  index("idx_energy_consumption_year").on(table.year),
+]);
+
+export const insertEnergyConsumptionSchema = createInsertSchema(energyConsumption).omit({ id: true, createdAt: true });
+export type InsertEnergyConsumption = z.infer<typeof insertEnergyConsumptionSchema>;
+export type EnergyConsumption = typeof energyConsumption.$inferSelect;
+
+// ====== SCHADENSMELDUNGEN (Mieter-Self-Service) ======
+export const damageReports = pgTable("damage_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id),
+  unitId: uuid("unit_id").references(() => units.id),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  reportedById: uuid("reported_by_id").references(() => profiles.id),
+  reportNumber: text("report_number").notNull(),
+  category: text("category").notNull(),
+  urgency: text("urgency").notNull().default('normal'),
+  status: text("status").notNull().default('gemeldet'),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  location: text("location"),
+  photoUrls: text("photo_urls").array(),
+  assignedToId: uuid("assigned_to_id").references(() => profiles.id),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolution: text("resolution"),
+  costEstimate: numeric("cost_estimate"),
+  actualCost: numeric("actual_cost"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_damage_reports_org").on(table.organizationId),
+  index("idx_damage_reports_property").on(table.propertyId),
+  index("idx_damage_reports_tenant").on(table.tenantId),
+  index("idx_damage_reports_status").on(table.status),
+]);
+
+export const insertDamageReportSchema = createInsertSchema(damageReports).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDamageReport = z.infer<typeof insertDamageReportSchema>;
+export type DamageReport = typeof damageReports.$inferSelect;
+
 // ====== GUIDED WORKFLOWS ======
 export const guidedWorkflows = pgTable("guided_workflows", {
   id: uuid("id").defaultRandom().primaryKey(),

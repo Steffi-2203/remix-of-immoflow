@@ -28,7 +28,9 @@ import {
   DoorOpen,
   Lock,
   Ticket,
-  Scale
+  Scale,
+  Leaf,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -146,6 +148,16 @@ const navItems: NavItem[] = [
     label: 'Assistenten',
     icon: HardHat,
     href: '/workflows'
+  },
+  {
+    label: 'ESG & Energie',
+    icon: Leaf,
+    href: '/esg'
+  },
+  {
+    label: 'Schadensmeldungen',
+    icon: AlertTriangle,
+    href: '/schadensmeldungen'
   },
   {
     label: 'Reports',

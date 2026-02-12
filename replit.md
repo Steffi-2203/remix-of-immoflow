@@ -42,7 +42,9 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **DSGVO Compliance**: Server-side consent management with versioned audit trail (Art. 7), Art. 30 processing activities registry, automated data retention policies with legal basis tracking (BAO §132, ABGB §1489, HeizKG), tenant data export (Art. 15/20), tenant data anonymization (Art. 17), cookie banner with granular consent controls, and compliance scoring dashboard.
 - **Support Ticketing**: In-app ticket system with auto-generated ticket numbers, category/priority management, comment threads, status tracking, and tenant/property/unit association.
 - **Guided Workflows**: Step-by-step wizard assistants for BK-Abrechnung (6 steps), Mahnlauf (5 steps), VPI-Mietanpassung (5 steps), and Mietereinzug (6 steps) with progress tracking.
-- **PWA Support**: Progressive Web App manifest for mobile installation, service worker for offline capability, and mobile-optimized viewport configuration.
+- **PWA Support**: Progressive Web App manifest for mobile installation, service worker for offline capability, push notification infrastructure, API response caching, and mobile-optimized viewport configuration with app shortcuts.
+- **ESG/Energiemonitoring**: Energy certificate management (HWB, fGEE, PEB, CO2), energy consumption tracking per property/unit, CO2 balance with year-over-year comparison, ESG scoring dashboard, and support for Austrian energy classes (A++ to G).
+- **Schadensmeldungen**: Damage reporting system with auto-generated report numbers (SM-YYYY-XXXX), category/urgency classification, status workflow (gemeldet/in_bearbeitung/behoben/abgelehnt), resolution documentation with cost tracking, and property/unit association.
 
 **System Design Choices:**
 - **Modular Structure**: Clear separation of `server/`, `shared/`, and `src/` directories.
