@@ -63,6 +63,11 @@ import OwnerLogin from "./pages/OwnerLogin";
 import OwnerPortalStandalone from "./pages/OwnerPortalStandalone";
 import OwnerPortal from "./pages/OwnerPortal";
 import LeaseContractGenerator from "./pages/LeaseContractGenerator";
+import KiAssistent from "./pages/KiAssistent";
+import AutomationSettings from "./pages/AutomationSettings";
+import InvoiceOcr from "./pages/InvoiceOcr";
+import KiInsights from "./pages/KiInsights";
+import KiKommunikation from "./pages/KiKommunikation";
 
 const queryClient = new QueryClient();
 
@@ -132,6 +137,11 @@ const App = () => (
             <Route path="/esg" element={<ProtectedRoute><DemoDataProvider><EsgDashboard /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/schadensmeldungen" element={<ProtectedRoute><DemoDataProvider><DamageReports /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mietvertrag-generator" element={<ProtectedRoute><DemoDataProvider><LeaseContractGenerator /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ki-assistent" element={<ProtectedRoute><DemoDataProvider><KiAssistent /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/automatisierung" element={<ProtectedRoute><DemoDataProvider><AutomationSettings /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ki-rechnungen" element={<ProtectedRoute><DemoDataProvider><InvoiceOcr /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ki-insights" element={<ProtectedRoute><DemoDataProvider><KiInsights /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ki-kommunikation" element={<ProtectedRoute><DemoDataProvider><KiKommunikation /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

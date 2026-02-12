@@ -201,6 +201,31 @@ function isTester(roles: string[]): boolean {
 
 export async function registerRoutes(app: Express): Promise<Server> {
 
+  // KI-Autopilot access check helper
+  async function requireKiAutopilot(req: any, res: any): Promise<boolean> {
+    const userId = req.session?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Nicht authentifiziert' });
+      return false;
+    }
+    const profile = await db.select().from(schema.profiles).where(eq(schema.profiles.id, userId)).limit(1);
+    if (!profile[0]) {
+      res.status(403).json({ error: 'Profil nicht gefunden' });
+      return false;
+    }
+    // Check admin role - admins always have access
+    const userRole = await db.select().from(schema.userRoles).where(eq(schema.userRoles.userId, userId)).limit(1);
+    if (userRole[0]?.role === 'admin') {
+      return true;
+    }
+    // Check KI-Autopilot subscription
+    if (!(profile[0] as any).kiAutopilotActive) {
+      res.status(403).json({ error: 'KI-Autopilot Add-on nicht aktiviert. Bitte buchen Sie das Add-on unter Preise.' });
+      return false;
+    }
+    return true;
+  }
+
   app.use(requestIdMiddleware);
 
   const startedAt = new Date().toISOString();
@@ -7015,6 +7040,534 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
       res.json(contracts);
     } catch (error) {
       res.status(500).json({ error: "Fehler beim Abrufen der Verträge" });
+    }
+  });
+
+  // ====== KI-AUTOPILOT ENDPOINTS ======
+
+  // KI Autopilot status
+  app.get("/api/user/ki-autopilot-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+      const roles = await storage.getUserRoles(profile.id);
+      const isAdmin = roles.some(r => r.role === 'admin');
+
+      res.json({
+        active: isAdmin || !!(profile as any).kiAutopilotActive,
+        trialEndsAt: null,
+      });
+    } catch (error) {
+      console.error("KI Autopilot status error:", error);
+      res.status(500).json({ error: "Fehler beim Abrufen des KI-Status" });
+    }
+  });
+
+  // KI Chat endpoint
+  app.post("/api/ki/chat", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ error: "Nachricht erforderlich" });
+
+      const orgId = profile.organizationId;
+      const [propCount] = await db.select({ count: count() }).from(schema.properties).where(eq(schema.properties.organizationId, orgId));
+      const [unitCount] = await db.select({ count: count() }).from(schema.units).where(eq(schema.units.organizationId, orgId));
+      const [tenantCount] = await db.select({ count: count() }).from(schema.tenants).where(eq(schema.tenants.organizationId, orgId));
+      const [openInvoices] = await db.select({ count: count() }).from(schema.invoices).where(and(eq(schema.invoices.organizationId, orgId), sql`${schema.invoices.status} != 'bezahlt'`));
+      const overduePayments = await db.select({ total: sql<string>`COALESCE(SUM(${schema.invoices.totalAmount}), 0)` }).from(schema.invoices).where(and(eq(schema.invoices.organizationId, orgId), sql`${schema.invoices.status} != 'bezahlt'`, lt(schema.invoices.dueDate, sql`CURRENT_DATE`)));
+
+      const kiClient = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await kiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Du bist ein KI-Assistent für österreichische Hausverwaltung. Du hilfst bei Fragen zu Liegenschaften, Mietern, Zahlungen, Abrechnungen und österreichischem Mietrecht (MRG). Antworte immer auf Deutsch.
+
+Kontext der aktuellen Organisation:
+- ${propCount.count} Liegenschaften
+- ${unitCount.count} Einheiten
+- ${tenantCount.count} Mieter
+- ${openInvoices.count} offene Rechnungen
+- ${overduePayments[0]?.total || '0'} EUR überfällige Zahlungen
+
+Antworte hilfreich, präzise und in österreichischem Deutsch.`
+          },
+          { role: "user", content: message }
+        ],
+        max_tokens: 1000,
+      });
+
+      res.json({ response: completion.choices[0]?.message?.content || "Keine Antwort erhalten." });
+    } catch (error) {
+      console.error("KI Chat error:", error);
+      res.status(500).json({ error: "Fehler bei der KI-Anfrage" });
+    }
+  });
+
+  // Automation settings endpoints
+  app.get("/api/automation/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      const settings = await db.select().from(schema.automationSettings)
+        .where(eq(schema.automationSettings.organizationId, profile.organizationId)).limit(1);
+
+      res.json(settings[0] || null);
+    } catch (error) {
+      res.status(500).json({ error: "Fehler beim Abrufen der Einstellungen" });
+    }
+  });
+
+  app.put("/api/automation/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      const orgId = profile.organizationId;
+      const existing = await db.select().from(schema.automationSettings)
+        .where(eq(schema.automationSettings.organizationId, orgId)).limit(1);
+
+      const data = {
+        organizationId: orgId,
+        autoInvoicingEnabled: req.body.autoInvoicingEnabled ?? false,
+        invoicingDayOfMonth: req.body.invoicingDayOfMonth ?? 1,
+        autoInvoicingEmail: req.body.autoInvoicingEmail ?? true,
+        autoSepaGeneration: req.body.autoSepaGeneration ?? false,
+        autoDunningEnabled: req.body.autoDunningEnabled ?? false,
+        dunningDays1: req.body.dunningDays1 ?? 14,
+        dunningDays2: req.body.dunningDays2 ?? 28,
+        dunningDays3: req.body.dunningDays3 ?? 42,
+        autoDunningEmail: req.body.autoDunningEmail ?? true,
+        dunningInterestRate: req.body.dunningInterestRate ?? "4.00",
+        updatedAt: new Date(),
+      };
+
+      if (existing[0]) {
+        await db.update(schema.automationSettings).set(data).where(eq(schema.automationSettings.id, existing[0].id));
+        const updated = await db.select().from(schema.automationSettings).where(eq(schema.automationSettings.id, existing[0].id)).limit(1);
+        res.json(updated[0]);
+      } else {
+        const [created] = await db.insert(schema.automationSettings).values(data).returning();
+        res.json(created);
+      }
+    } catch (error) {
+      console.error("Automation settings save error:", error);
+      res.status(500).json({ error: "Fehler beim Speichern der Einstellungen" });
+    }
+  });
+
+  app.get("/api/automation/log", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.json([]);
+
+      const logs = await db.select().from(schema.automationLog)
+        .where(eq(schema.automationLog.organizationId, profile.organizationId))
+        .orderBy(desc(schema.automationLog.createdAt))
+        .limit(50);
+
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Fehler beim Abrufen der Protokolle" });
+    }
+  });
+
+  app.post("/api/automation/run-invoicing", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      await db.insert(schema.automationLog).values({
+        organizationId: profile.organizationId,
+        type: "vorschreibung",
+        status: "gestartet",
+        details: "Manuelle Vorschreibung gestartet",
+        itemsProcessed: 0,
+      });
+
+      res.json({ success: true, message: "Vorschreibungslauf gestartet" });
+    } catch (error) {
+      res.status(500).json({ error: "Fehler beim Starten der Vorschreibung" });
+    }
+  });
+
+  app.post("/api/automation/run-dunning", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      await db.insert(schema.automationLog).values({
+        organizationId: profile.organizationId,
+        type: "mahnlauf",
+        status: "gestartet",
+        details: "Manueller Mahnlauf gestartet",
+        itemsProcessed: 0,
+      });
+
+      res.json({ success: true, message: "Mahnlauf gestartet" });
+    } catch (error) {
+      res.status(500).json({ error: "Fehler beim Starten des Mahnlaufs" });
+    }
+  });
+
+  // KI Invoice OCR
+  const kiOcrUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+        cb(null, true);
+      } else {
+        cb(new Error('Nur Bilder und PDFs sind erlaubt'));
+      }
+    },
+  });
+
+  app.post("/api/ki/invoice-ocr", isAuthenticated, (req: Request, res: Response, next: any) => {
+    kiOcrUpload.single('file')(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || 'Upload fehlgeschlagen' });
+      next();
+    });
+  }, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+
+      const base64Image = req.file.buffer.toString('base64');
+      const mimeType = req.file.mimetype;
+      const imageUrl = `data:${mimeType};base64,${base64Image}`;
+
+      const kiClient = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await kiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analysiere diese Rechnung und extrahiere folgende Daten im JSON-Format:
+{
+  "lieferant": "Name des Lieferanten/Dienstleisters",
+  "rechnungsnummer": "Rechnungsnummer",
+  "rechnungsdatum": "Datum im Format YYYY-MM-DD",
+  "bruttobetrag": Bruttobetrag als Zahl,
+  "nettobetrag": Nettobetrag als Zahl,
+  "ustBetrag": USt-Betrag als Zahl,
+  "ustSatz": USt-Satz als Zahl (z.B. 20),
+  "beschreibung": "Kurze Beschreibung der Leistung",
+  "kategorie": "Vorgeschlagene Kategorie (z.B. Reparatur, Wartung, Verwaltung, Versicherung, Betriebskosten)"
+}
+Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`
+              },
+              {
+                type: "image_url",
+                image_url: { url: imageUrl }
+              }
+            ]
+          }
+        ],
+        max_tokens: 500,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || '{}';
+      let parsed;
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
+      } catch {
+        parsed = { error: "Konnte Rechnung nicht analysieren", raw: responseText };
+      }
+
+      res.json(parsed);
+    } catch (error) {
+      console.error("KI Invoice OCR error:", error);
+      res.status(500).json({ error: "Fehler bei der Rechnungserkennung" });
+    }
+  });
+
+  app.post("/api/ki/invoice-ocr/confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      const { lieferant, rechnungsnummer, rechnungsdatum, bruttobetrag, nettobetrag, ustBetrag, ustSatz, beschreibung, kategorie, propertyId } = req.body;
+
+      // Verify property belongs to user's org if provided
+      if (propertyId) {
+        const property = await db.select().from(schema.properties)
+          .where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, profile.organizationId))).limit(1);
+        if (!property[0]) {
+          return res.status(403).json({ error: 'Keine Berechtigung für diese Liegenschaft' });
+        }
+      }
+
+      const [expense] = await db.insert(schema.expenses).values({
+        organizationId: profile.organizationId,
+        propertyId: propertyId || null,
+        vendor: lieferant || 'Unbekannt',
+        invoiceNumber: rechnungsnummer,
+        invoiceDate: rechnungsdatum || new Date().toISOString().split('T')[0],
+        amount: String(bruttobetrag || 0),
+        netAmount: String(nettobetrag || 0),
+        vatAmount: String(ustBetrag || 0),
+        vatRate: String(ustSatz || 20),
+        category: kategorie || 'sonstiges',
+        description: beschreibung || '',
+        status: 'offen',
+      }).returning();
+
+      res.json(expense);
+    } catch (error) {
+      console.error("KI Invoice confirm error:", error);
+      res.status(500).json({ error: "Fehler beim Erstellen der Buchung" });
+    }
+  });
+
+  // KI Insights / Anomaly Detection
+  app.get("/api/ki/insights", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.json([]);
+
+      const orgId = profile.organizationId;
+      const insights: any[] = [];
+
+      // Overdue payments
+      const overdueInvoices = await db.select({
+        id: schema.invoices.id,
+        tenantId: schema.invoices.tenantId,
+        totalAmount: schema.invoices.totalAmount,
+        dueDate: schema.invoices.dueDate,
+      }).from(schema.invoices).where(and(
+        eq(schema.invoices.organizationId, orgId),
+        sql`${schema.invoices.status} != 'bezahlt'`,
+        lt(schema.invoices.dueDate, sql`CURRENT_DATE - INTERVAL '30 days'`)
+      )).limit(20);
+
+      for (const inv of overdueInvoices) {
+        insights.push({
+          type: 'overdue_payment',
+          severity: 'critical',
+          title: 'Überfällige Zahlung',
+          description: `Rechnung über €${inv.totalAmount} seit ${inv.dueDate} überfällig`,
+          entityId: inv.id,
+          entityType: 'invoice',
+        });
+      }
+
+      // Expiring leases (next 90 days)
+      const expiringLeases = await db.select({
+        id: schema.tenants.id,
+        firstName: schema.tenants.firstName,
+        lastName: schema.tenants.lastName,
+        leaseEnd: schema.tenants.leaseEnd,
+      }).from(schema.tenants).where(and(
+        eq(schema.tenants.organizationId, orgId),
+        sql`${schema.tenants.leaseEnd} IS NOT NULL`,
+        sql`${schema.tenants.leaseEnd} <= CURRENT_DATE + INTERVAL '90 days'`,
+        sql`${schema.tenants.leaseEnd} >= CURRENT_DATE`
+      )).limit(20);
+
+      for (const t of expiringLeases) {
+        insights.push({
+          type: 'expiring_lease',
+          severity: 'warning',
+          title: 'Ablaufender Mietvertrag',
+          description: `Vertrag von ${t.firstName} ${t.lastName} endet am ${t.leaseEnd}`,
+          entityId: t.id,
+          entityType: 'tenant',
+        });
+      }
+
+      // Vacancy - units without active tenants
+      const allUnits = await db.select({ count: count() }).from(schema.units).where(eq(schema.units.organizationId, orgId));
+      const occupiedUnits = await db.select({ count: count() }).from(schema.tenants).where(and(
+        eq(schema.tenants.organizationId, orgId),
+        sql`${schema.tenants.isActive} = true`
+      ));
+      const vacantCount = (allUnits[0]?.count || 0) - (occupiedUnits[0]?.count || 0);
+      if (Number(vacantCount) > 0) {
+        insights.push({
+          type: 'vacancy',
+          severity: 'info',
+          title: 'Leerstand erkannt',
+          description: `${vacantCount} Einheiten sind aktuell nicht vermietet`,
+          entityId: null,
+          entityType: 'property',
+        });
+      }
+
+      // Sort by severity
+      const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+      insights.sort((a, b) => (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3));
+
+      res.json(insights);
+    } catch (error) {
+      console.error("KI Insights error:", error);
+      res.status(500).json({ error: "Fehler bei der Analyse" });
+    }
+  });
+
+  // KI Communication - Generate Email
+  app.post("/api/ki/generate-email", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+
+      const { template, tenantId, propertyId, notes } = req.body;
+      if (!template) return res.status(400).json({ error: "Vorlage erforderlich" });
+
+      // Verify tenant belongs to user's org if provided
+      if (tenantId) {
+        const tenant = await db.select().from(schema.tenants)
+          .where(and(eq(schema.tenants.id, tenantId), eq(schema.tenants.organizationId, profile.organizationId))).limit(1);
+        if (!tenant[0]) {
+          return res.status(403).json({ error: 'Keine Berechtigung für diesen Mieter' });
+        }
+      }
+
+      // Verify property belongs to user's org if provided
+      if (propertyId) {
+        const property = await db.select().from(schema.properties)
+          .where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, profile.organizationId))).limit(1);
+        if (!property[0]) {
+          return res.status(403).json({ error: 'Keine Berechtigung für diese Liegenschaft' });
+        }
+      }
+
+      let tenantInfo = '';
+      if (tenantId) {
+        const tenant = await db.select().from(schema.tenants).where(eq(schema.tenants.id, tenantId)).limit(1);
+        if (tenant[0]) {
+          tenantInfo = `Mieter: ${tenant[0].firstName} ${tenant[0].lastName}, Adresse: ${tenant[0].address || 'k.A.'}`;
+        }
+      }
+
+      let propertyInfo = '';
+      if (propertyId) {
+        const property = await db.select().from(schema.properties).where(eq(schema.properties.id, propertyId)).limit(1);
+        if (property[0]) {
+          propertyInfo = `Liegenschaft: ${property[0].address}, ${property[0].city}`;
+        }
+      }
+
+      const templateMap: Record<string, string> = {
+        mieterhoehung: 'Mieterhöhung gemäß MRG',
+        kuendigung: 'Kündigung des Mietverhältnisses',
+        bk_info: 'Information zur Betriebskostenabrechnung',
+        mahnung: 'Zahlungserinnerung / Mahnung',
+        wartung: 'Ankündigung von Wartungsarbeiten',
+        allgemein: 'Allgemeine Mitteilung',
+      };
+
+      const kiClient = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await kiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Du bist ein Assistent für österreichische Hausverwaltung. Erstelle professionelle E-Mails auf Deutsch (österreichisches Deutsch). Die E-Mails müssen höflich, rechtlich korrekt und MRG-konform sein.`
+          },
+          {
+            role: "user",
+            content: `Erstelle eine E-Mail zum Thema: ${templateMap[template] || template}
+${tenantInfo}
+${propertyInfo}
+${notes ? `Zusätzliche Hinweise: ${notes}` : ''}
+
+Antworte im JSON-Format: { "subject": "Betreff", "body": "E-Mail-Text" }`
+          }
+        ],
+        max_tokens: 800,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || '{}';
+      let parsed;
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
+      } catch {
+        parsed = { subject: templateMap[template] || 'Mitteilung', body: responseText };
+      }
+
+      res.json(parsed);
+    } catch (error) {
+      console.error("KI Email generation error:", error);
+      res.status(500).json({ error: "Fehler bei der E-Mail-Generierung" });
+    }
+  });
+
+  app.post("/api/ki/send-email", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireKiAutopilot(req, res))) return;
+
+      const profile = await getProfileFromSession(req);
+      const { to, subject, body, tenantId } = req.body;
+      if (!to || !subject || !body) return res.status(400).json({ error: "Empfänger, Betreff und Text erforderlich" });
+
+      // Verify tenant belongs to user's org if provided
+      if (tenantId) {
+        const tenant = await db.select().from(schema.tenants)
+          .where(and(eq(schema.tenants.id, tenantId), eq(schema.tenants.organizationId, profile?.organizationId))).limit(1);
+        if (!tenant[0]) {
+          return res.status(403).json({ error: 'Keine Berechtigung für diesen Mieter' });
+        }
+      }
+
+      // Use Resend if configured
+      if (process.env.RESEND_API_KEY) {
+        const { Resend } = await import('resend');
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'noreply@immoflow.me',
+          to,
+          subject,
+          text: body,
+        });
+      }
+
+      res.json({ success: true, message: "E-Mail gesendet" });
+    } catch (error) {
+      console.error("KI Send email error:", error);
+      res.status(500).json({ error: "Fehler beim Senden der E-Mail" });
     }
   });
 

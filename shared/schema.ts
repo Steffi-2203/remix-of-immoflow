@@ -77,6 +77,7 @@ export const profiles = pgTable("profiles", {
   paymentStatus: paymentStatusEnum("payment_status").default('active'),
   paymentFailedAt: timestamp("payment_failed_at", { withTimezone: true }),
   canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  kiAutopilotActive: boolean("ki_autopilot_active").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -1729,3 +1730,42 @@ export const guidedWorkflows = pgTable("guided_workflows", {
   index("idx_workflows_org").on(table.organizationId),
   index("idx_workflows_user").on(table.userId),
 ]);
+
+// ====== AUTOMATION SETTINGS (KI-Autopilot) ======
+export const automationSettings = pgTable("automation_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  autoInvoicingEnabled: boolean("auto_invoicing_enabled").default(false),
+  invoicingDayOfMonth: integer("invoicing_day_of_month").default(1),
+  autoInvoicingEmail: boolean("auto_invoicing_email").default(true),
+  autoSepaGeneration: boolean("auto_sepa_generation").default(false),
+  autoDunningEnabled: boolean("auto_dunning_enabled").default(false),
+  dunningDays1: integer("dunning_days_1").default(14),
+  dunningDays2: integer("dunning_days_2").default(28),
+  dunningDays3: integer("dunning_days_3").default(42),
+  autoDunningEmail: boolean("auto_dunning_email").default(true),
+  dunningInterestRate: text("dunning_interest_rate").default("4.00"),
+  lastInvoicingRun: timestamp("last_invoicing_run", { withTimezone: true }),
+  lastDunningRun: timestamp("last_dunning_run", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertAutomationSettingsSchema = createInsertSchema(automationSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAutomationSettings = z.infer<typeof insertAutomationSettingsSchema>;
+export type AutomationSettings = typeof automationSettings.$inferSelect;
+
+// ====== AUTOMATION LOG (KI-Autopilot) ======
+export const automationLog = pgTable("automation_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  type: text("type").notNull(),
+  status: text("status").notNull(),
+  details: text("details"),
+  itemsProcessed: integer("items_processed").default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertAutomationLogSchema = createInsertSchema(automationLog).omit({ id: true, createdAt: true });
+export type InsertAutomationLog = z.infer<typeof insertAutomationLogSchema>;
+export type AutomationLog = typeof automationLog.$inferSelect;
