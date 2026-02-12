@@ -11,6 +11,7 @@ import { registerSecurityRoutes, trackSession } from "./routes/securityRoutes";
 import { registerTicketRoutes } from "./routes/ticketRoutes";
 import { registerEsgRoutes } from "./routes/esgRoutes";
 import { registerDamageRoutes } from "./routes/damageRoutes";
+import { registerTenantPortalRoutes } from "./routes/tenantPortalRoutes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
@@ -295,6 +296,7 @@ async function initStripe() {
   registerTicketRoutes(app);
   registerEsgRoutes(app);
   registerDamageRoutes(app);
+  registerTenantPortalRoutes(app);
   const server = await registerRoutes(app);
 
   app.use(apiErrorHandler);
