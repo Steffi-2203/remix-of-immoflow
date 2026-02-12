@@ -1,29 +1,22 @@
-import { useState } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useTenants } from '@/hooks/useTenants';
-import { useTenantPortalAccess, useCreateTenantPortalAccess, useToggleTenantPortalAccess } from '@/hooks/useTenantPortalAccess';
-import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
   Home, Euro, FileText, CreditCard, AlertTriangle,
-  Download, CheckCircle, Clock, Users, Plus, Shield,
-  Calendar, MapPin, Ruler, Building2, Key, FolderOpen, Receipt,
-  Mail, Loader2
+  Download, CheckCircle, Clock, Shield, LogOut,
+  Calendar, MapPin, Ruler, Building2, Key, FolderOpen, Receipt
 } from 'lucide-react';
+import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 function formatCurrency(amount: number | string | null | undefined) {
   const num = typeof amount === 'string' ? parseFloat(amount) : (amount || 0);
@@ -63,12 +56,19 @@ const CATEGORY_LABELS: Record<string, string> = {
   sonstiges: 'Sonstiges',
 };
 
-function TenantSelfServiceView() {
+export default function TenantPortalStandalone() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [filterYear, setFilterYear] = useState<string>('alle');
   const [filterStatus, setFilterStatus] = useState<string>('alle');
 
+  const { data: session, isLoading: sessionLoading } = useQuery<any>({
+    queryKey: ['/api/tenant-auth/session'],
+  });
+
   const { data: dashboard, isLoading: dashLoading } = useQuery<any>({
     queryKey: ['/api/tenant-portal/dashboard'],
+    enabled: session?.authenticated === true,
   });
 
   const { data: invoices, isLoading: invLoading } = useQuery<any[]>({
@@ -81,46 +81,83 @@ function TenantSelfServiceView() {
       if (!res.ok) throw new Error('Fehler');
       return res.json();
     },
+    enabled: session?.authenticated === true,
   });
 
   const { data: allPayments, isLoading: payLoading } = useQuery<any[]>({
     queryKey: ['/api/tenant-portal/payments'],
+    enabled: session?.authenticated === true,
   });
 
   const { data: documents, isLoading: docLoading } = useQuery<any[]>({
     queryKey: ['/api/tenant-portal/documents'],
+    enabled: session?.authenticated === true,
   });
 
   const { data: leaseHistory } = useQuery<any[]>({
     queryKey: ['/api/tenant-portal/lease'],
+    enabled: session?.authenticated === true,
   });
 
-  if (dashLoading) {
+  useEffect(() => {
+    if (!sessionLoading && !session?.authenticated) {
+      navigate('/mieter-login', { replace: true });
+    }
+  }, [session, sessionLoading, navigate]);
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/tenant-auth/logout', { method: 'POST', credentials: 'include' });
+      navigate('/mieter-login', { replace: true });
+    } catch {
+      toast({ title: 'Fehler', description: 'Abmeldung fehlgeschlagen', variant: 'destructive' });
+    }
+  }
+
+  if (sessionLoading || dashLoading) {
     return (
-      <MainLayout title="Mein Portal" subtitle="Laden...">
-        <div className="space-y-6">
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
           <div className="grid gap-4 md:grid-cols-4">
             {[1,2,3,4].map(i => (
               <Card key={i}><CardContent className="pt-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
             ))}
           </div>
           <Skeleton className="h-64 w-full" />
-        </div>
-      </MainLayout>
+        </main>
+      </div>
     );
   }
 
+  if (!session?.authenticated) return null;
+
   if (!dashboard) {
     return (
-      <MainLayout title="Mieterportal" subtitle="Kein Zugang">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Shield className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium" data-testid="text-no-access">Kein Portal-Zugang</p>
-            <p className="text-sm text-muted-foreground">Sie haben keinen aktiven Mieterportal-Zugang. Bitte kontaktieren Sie Ihre Hausverwaltung.</p>
-          </CardContent>
-        </Card>
-      </MainLayout>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <Button variant="outline" onClick={handleLogout} data-testid="button-tenant-logout">
+              <LogOut className="h-4 w-4 mr-2" /> Abmelden
+            </Button>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-4 py-6">
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Shield className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-lg font-medium">Keine Daten verfügbar</p>
+              <p className="text-sm text-muted-foreground">Es konnten keine Mieterdaten geladen werden.</p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
     );
   }
 
@@ -130,11 +167,36 @@ function TenantSelfServiceView() {
   if (!availableYears.includes(currentYear)) availableYears.unshift(currentYear);
 
   return (
-    <MainLayout
-      title={`Willkommen, ${tenant.firstName}`}
-      subtitle={property ? `${property.name} – ${property.address}, ${property.plz} ${property.ort}` : ''}
-    >
-      <div className="space-y-6">
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <span className="text-sm text-muted-foreground hidden sm:inline">Mieterportal</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground hidden md:inline">
+              {tenant.firstName} {tenant.lastName}
+            </span>
+            <Button variant="outline" onClick={handleLogout} data-testid="button-tenant-logout">
+              <LogOut className="h-4 w-4 mr-2" /> Abmelden
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-welcome">
+            Willkommen, {tenant.firstName}
+          </h1>
+          {property && (
+            <p className="text-muted-foreground">
+              {property.name} – {property.address}, {property.plz} {property.ort}
+            </p>
+          )}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardContent className="pt-6">
@@ -489,10 +551,10 @@ function TenantSelfServiceView() {
                     <TableBody>
                       {documents.map((doc: any) => (
                         <TableRow key={doc.id} data-testid={`row-document-${doc.id}`}>
-                          <TableCell>
+                          <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">{doc.name}</span>
+                              {doc.name}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -504,9 +566,9 @@ function TenantSelfServiceView() {
                           </TableCell>
                           <TableCell>
                             {doc.fileUrl && (
-                              <Button size="sm" variant="outline" asChild data-testid={`button-download-${doc.id}`}>
+                              <Button variant="ghost" size="icon" asChild data-testid={`button-download-${doc.id}`}>
                                 <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                                  <Download className="h-3 w-3 mr-1" /> Download
+                                  <Download className="h-4 w-4" />
                                 </a>
                               </Button>
                             )}
@@ -521,7 +583,7 @@ function TenantSelfServiceView() {
           </TabsContent>
         </Tabs>
 
-        {leaseHistory && leaseHistory.length > 1 && (
+        {leaseHistory && leaseHistory.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -535,15 +597,17 @@ function TenantSelfServiceView() {
                     <TableHead>Beginn</TableHead>
                     <TableHead>Ende</TableHead>
                     <TableHead className="text-right">Grundmiete</TableHead>
+                    <TableHead className="text-right">BK-Vorschuss</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {leaseHistory.map((l: any) => (
-                    <TableRow key={l.id}>
+                    <TableRow key={l.id} data-testid={`row-lease-${l.id}`}>
                       <TableCell>{formatDate(l.startDate)}</TableCell>
                       <TableCell>{l.endDate ? formatDate(l.endDate) : 'Unbefristet'}</TableCell>
                       <TableCell className="text-right">{formatCurrency(l.grundmiete)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(l.betriebskostenVorschuss)}</TableCell>
                       <TableCell>
                         <Badge variant={l.status === 'aktiv' ? 'default' : 'outline'}>
                           {l.status === 'aktiv' ? 'Aktiv' : l.status === 'beendet' ? 'Beendet' : l.status}
@@ -556,201 +620,13 @@ function TenantSelfServiceView() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </MainLayout>
-  );
-}
+      </main>
 
-export default function TenantPortal() {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const { data: tenants } = useTenants();
-  const { data: portalAccess } = useTenantPortalAccess();
-  const createAccess = useCreateTenantPortalAccess();
-  const toggleAccess = useToggleTenantPortalAccess();
-
-  const [showGrantAccess, setShowGrantAccess] = useState(false);
-  const [selectedTenantId, setSelectedTenantId] = useState('');
-  const [accessEmail, setAccessEmail] = useState('');
-  const [sendingInvite, setSendingInvite] = useState<string | null>(null);
-
-  const handleSendInvite = async (accessId: string) => {
-    setSendingInvite(accessId);
-    try {
-      const res = await fetch('/api/tenant-portal/send-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tenantPortalAccessId: accessId }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast({ title: 'Einladung gesendet', description: 'Die Einladungs-E-Mail wurde erfolgreich versendet.' });
-      } else {
-        toast({ title: 'Fehler', description: data.error || 'Einladung konnte nicht gesendet werden', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Fehler', description: 'Verbindung zum Server fehlgeschlagen', variant: 'destructive' });
-    } finally {
-      setSendingInvite(null);
-    }
-  };
-
-  const { data: accessCheck } = useQuery<{ hasAccess: boolean }>({
-    queryKey: ['/api/tenant-portal/check-access'],
-  });
-
-  if (accessCheck?.hasAccess) {
-    return <TenantSelfServiceView />;
-  }
-
-  const handleGrantAccess = async () => {
-    if (!selectedTenantId || !accessEmail) return;
-    try {
-      await createAccess.mutateAsync({ tenant_id: selectedTenantId, email: accessEmail });
-      setShowGrantAccess(false);
-      setSelectedTenantId('');
-      setAccessEmail('');
-    } catch (error) {
-      toast({ title: 'Fehler', description: 'Zugang konnte nicht erstellt werden', variant: 'destructive' });
-    }
-  };
-
-  const activeTenants = tenants?.filter((t: any) => t.status === 'aktiv') || [];
-
-  return (
-    <MainLayout title="Mieterportal" subtitle="Self-Service Zugang für Mieter verwalten">
-      <div className="space-y-6">
-        <div className="flex flex-wrap justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Portal-Zugänge verwalten</h2>
-          </div>
-          <Button onClick={() => setShowGrantAccess(true)} data-testid="button-grant-access">
-            <Plus className="h-4 w-4 mr-2" /> Zugang einrichten
-          </Button>
+      <footer className="border-t bg-card mt-8">
+        <div className="max-w-6xl mx-auto px-4 py-4 text-center text-sm text-muted-foreground">
+          ImmoflowMe Mieterportal – Bereitgestellt von Ihrer Hausverwaltung
         </div>
-
-        {!portalAccess || portalAccess.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Users className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium">Keine Portal-Zugänge</p>
-              <p className="text-muted-foreground text-sm">Richten Sie Zugänge ein, damit Mieter ihre Daten einsehen können.</p>
-              <Button className="mt-4" onClick={() => setShowGrantAccess(true)} data-testid="button-first-access">
-                <Plus className="h-4 w-4 mr-2" /> Ersten Zugang einrichten
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mieter</TableHead>
-                    <TableHead>E-Mail</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Letzter Login</TableHead>
-                    <TableHead>Aktiv</TableHead>
-                    <TableHead>Aktion</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {portalAccess.map((access: any) => {
-                    const tenant = tenants?.find((t: any) => t.id === access.tenant_id);
-                    const hasPassword = access.password_hash != null;
-                    return (
-                      <TableRow key={access.id} data-testid={`row-access-${access.id}`}>
-                        <TableCell className="font-medium">
-                          {tenant ? `${tenant.first_name || tenant.firstName} ${tenant.last_name || tenant.lastName}` : 'Unbekannt'}
-                        </TableCell>
-                        <TableCell>{access.email}</TableCell>
-                        <TableCell>
-                          {hasPassword ? (
-                            <Badge>Registriert</Badge>
-                          ) : (
-                            <Badge variant="outline">Ausstehend</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {access.last_login_at
-                            ? format(new Date(access.last_login_at), 'dd.MM.yyyy HH:mm', { locale: de })
-                            : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={access.is_active}
-                            onCheckedChange={(checked) => toggleAccess.mutate({ id: access.id, is_active: checked })}
-                            data-testid={`switch-active-${access.id}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSendInvite(access.id)}
-                            disabled={sendingInvite === access.id || !access.is_active}
-                            data-testid={`button-send-invite-${access.id}`}
-                          >
-                            {sendingInvite === access.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                            ) : (
-                              <Mail className="h-4 w-4 mr-1" />
-                            )}
-                            Einladung senden
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <Dialog open={showGrantAccess} onOpenChange={setShowGrantAccess}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Portal-Zugang einrichten</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Mieter</Label>
-              <Select value={selectedTenantId} onValueChange={(v) => {
-                setSelectedTenantId(v);
-                const tenant = activeTenants.find((t: any) => t.id === v);
-                if (tenant?.email) setAccessEmail(tenant.email);
-              }}>
-                <SelectTrigger data-testid="select-tenant"><SelectValue placeholder="Mieter wählen..." /></SelectTrigger>
-                <SelectContent>
-                  {activeTenants.map((t: any) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.first_name || t.firstName} {t.last_name || t.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>E-Mail für Portal-Zugang</Label>
-              <Input
-                type="email"
-                value={accessEmail}
-                onChange={e => setAccessEmail(e.target.value)}
-                placeholder="mieter@example.com"
-                data-testid="input-access-email"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGrantAccess(false)} data-testid="button-cancel-access">Abbrechen</Button>
-            <Button onClick={handleGrantAccess} disabled={!selectedTenantId || !accessEmail} data-testid="button-create-access">Zugang erstellen</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </MainLayout>
+      </footer>
+    </div>
   );
 }

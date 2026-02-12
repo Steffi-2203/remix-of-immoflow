@@ -55,6 +55,8 @@ import SupportTickets from "./pages/SupportTickets";
 import GuidedWorkflows from "./pages/GuidedWorkflows";
 import EsgDashboard from "./pages/EsgDashboard";
 import DamageReports from "./pages/DamageReports";
+import TenantLogin from "./pages/TenantLogin";
+import TenantPortalStandalone from "./pages/TenantPortalStandalone";
 
 const queryClient = new QueryClient();
 
@@ -76,6 +78,8 @@ const App = () => (
             <Route path="/impressum" element={<Impressum />} />
             <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="/agb" element={<AGB />} />
+            <Route path="/mieter-login" element={<TenantLogin />} />
+            <Route path="/mieter-portal" element={<TenantPortalStandalone />} />
             
             {/* Protected routes - wrapped with DemoDataProvider */}
             <Route path="/dashboard" element={<ProtectedRoute><DemoDataProvider><SimpleDashboard /></DemoDataProvider></ProtectedRoute>} />
