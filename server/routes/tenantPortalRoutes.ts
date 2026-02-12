@@ -4,6 +4,36 @@ import { eq, and, desc, asc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 async function getTenantContext(req: Request, res: Response) {
+  const tenantPortalId = (req.session as any)?.tenantPortalId;
+  if (tenantPortalId) {
+    const access = await db
+      .select()
+      .from(schema.tenantPortalAccess)
+      .where(and(
+        eq(schema.tenantPortalAccess.id, tenantPortalId),
+        eq(schema.tenantPortalAccess.isActive, true)
+      ))
+      .limit(1);
+
+    if (access.length) {
+      const tenant = await db
+        .select()
+        .from(schema.tenants)
+        .where(eq(schema.tenants.id, access[0].tenantId))
+        .limit(1);
+
+      if (tenant.length) {
+        return {
+          userId: null,
+          tenantId: tenant[0].id,
+          tenant: tenant[0],
+          portalAccessId: access[0].id,
+          email: access[0].email,
+        };
+      }
+    }
+  }
+
   const userId = (req.session as any)?.userId;
   if (!userId) {
     res.status(401).json({ error: "Nicht authentifiziert" });
