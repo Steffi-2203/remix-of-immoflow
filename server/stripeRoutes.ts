@@ -20,6 +20,8 @@ const PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
   },
 };
 
+const KI_AUTOPILOT_PRICE_ID = process.env.STRIPE_PRICE_KI_AUTOPILOT || 'price_ki_autopilot_monthly';
+
 const USER_PRICE_IDS: Record<string, string> = {
   starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_1StPYOGMeISjSnLCRsy43IwZ',
   pro: process.env.STRIPE_USER_PRICE_PRO || 'price_1StPYOGMeISjSnLC67Qo1IYQ',
@@ -157,6 +159,49 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
+  app.post("/api/stripe/ki-autopilot-checkout", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await getProfileById(userId);
+      if (!profile) {
+        return res.status(400).json({ error: "Profil nicht gefunden" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+
+      let customerId = (profile as any).stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: profile.email,
+          metadata: { userId },
+        });
+        customerId = customer.id;
+        await db.update(schema.profiles)
+          .set({ stripeCustomerId: customer.id } as any)
+          .where(eq(schema.profiles.id, userId));
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        payment_method_types: ['card', 'sepa_debit'],
+        customer: customerId,
+        line_items: [{ price: KI_AUTOPILOT_PRICE_ID, quantity: 1 }],
+        metadata: {
+          userId,
+          type: 'ki_autopilot',
+        },
+        success_url: `${baseUrl}/checkout?plan=ki-autopilot&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/pricing`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("KI-Autopilot checkout error:", error.message);
+      res.status(500).json({ error: "Fehler beim Erstellen der Checkout-Sitzung" });
+    }
+  });
+
   app.post("/api/stripe/create-portal-session", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
@@ -239,7 +284,15 @@ export async function handleSubscriptionWebhook(event: any) {
   if (type === 'checkout.session.completed') {
     const session = data.object;
     
-    if (session.metadata?.type === 'user_subscription') {
+    if (session.metadata?.type === 'ki_autopilot') {
+      const userId = session.metadata?.userId;
+      if (userId) {
+        await db.update(schema.profiles)
+          .set({ kiAutopilotActive: true } as any)
+          .where(eq(schema.profiles.id, userId));
+        console.log(`KI-Autopilot activated for user ${userId}`);
+      }
+    } else if (session.metadata?.type === 'user_subscription') {
       const userId = session.metadata?.userId;
       const planId = session.metadata?.planId;
       const subscriptionId = session.subscription;

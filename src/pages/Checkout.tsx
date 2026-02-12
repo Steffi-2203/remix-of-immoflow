@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { Crown, Sparkles, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { Crown, Sparkles, ArrowLeft, Loader2, CheckCircle, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
+type PlanId = 'starter' | 'pro' | 'ki-autopilot';
+
 interface PlanDetails {
-  id: 'starter' | 'pro';
+  id: PlanId;
   name: string;
   price: string;
   priceDetail: string;
@@ -15,7 +17,7 @@ interface PlanDetails {
   icon: typeof Crown;
 }
 
-const planDetails: Record<'starter' | 'pro', PlanDetails> = {
+const planDetails: Record<PlanId, PlanDetails> = {
   starter: {
     id: 'starter',
     name: 'Starter',
@@ -47,6 +49,20 @@ const planDetails: Record<'starter' | 'pro', PlanDetails> = {
     ],
     icon: Crown,
   },
+  'ki-autopilot': {
+    id: 'ki-autopilot',
+    name: 'KI-Autopilot',
+    price: '€99',
+    priceDetail: 'pro Monat',
+    features: [
+      'KI-Assistent (Chat)',
+      'Auto-Vorschreibung & Mahnlauf',
+      'KI-Rechnungserkennung',
+      'Anomalieerkennung & Insights',
+      'KI-Kommunikationsassistent',
+    ],
+    icon: Bot,
+  },
 };
 
 export default function Checkout() {
@@ -57,7 +73,7 @@ export default function Checkout() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const planId = searchParams.get('plan') as 'starter' | 'pro' | null;
+  const planId = searchParams.get('plan') as PlanId | null;
   const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
@@ -139,7 +155,8 @@ export default function Checkout() {
     
     setIsLoading(true);
     try {
-      const response = await fetch('/api/stripe/checkout', {
+      const endpoint = plan.id === 'ki-autopilot' ? '/api/stripe/ki-autopilot-checkout' : '/api/stripe/checkout';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

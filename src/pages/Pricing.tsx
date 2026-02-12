@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, X, Crown, Sparkles, Zap } from 'lucide-react';
+import { Check, X, Crown, Sparkles, Zap, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -200,6 +200,44 @@ export default function Pricing() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        <div className="max-w-5xl mx-auto mt-16">
+          <h2 className="text-2xl font-bold mb-6 text-center">Add-on</h2>
+          <Card className="max-w-lg mx-auto border-primary/50" data-testid="card-ki-autopilot-addon">
+            <CardHeader className="text-center pb-2">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <Bot className="h-6 w-6 text-primary" />
+              </div>
+              <CardTitle className="text-xl">KI-Autopilot</CardTitle>
+              <div className="mt-2">
+                <span className="text-3xl font-bold">€99</span>
+                <span className="text-muted-foreground ml-1">pro Monat</span>
+              </div>
+              <CardDescription className="mt-2">
+                Zusatzmodul zu jedem bestehenden Plan
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <ul className="space-y-2 text-sm">
+                {['KI-Assistent (Chat)', 'Auto-Vorschreibung & Mahnlauf', 'KI-Rechnungserkennung', 'Anomalieerkennung & Insights', 'KI-Kommunikationsassistent'].map(f => (
+                  <li key={f} className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-600 shrink-0" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className="w-full"
+                onClick={() => navigate('/checkout?plan=ki-autopilot')}
+                data-testid="button-select-ki-autopilot"
+              >
+                Add-on buchen
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
 
         <div className="text-center mt-12">

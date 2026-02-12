@@ -29,6 +29,7 @@ interface SubscriptionLimits {
   canManageInvoiceApproval: boolean;
   canManageTeam: boolean;
   canManageDocuments: boolean;
+  canUseKiAutopilot: boolean;
   hasFullAccess: boolean;
 }
 
@@ -59,6 +60,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     canManageInvoiceApproval: false,
     canManageTeam: false,
     canManageDocuments: false,
+    canUseKiAutopilot: false,
     hasFullAccess: false,
   },
   inactive: {
@@ -86,6 +88,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     canManageInvoiceApproval: false,
     canManageTeam: false,
     canManageDocuments: false,
+    canUseKiAutopilot: false,
     hasFullAccess: false,
   },
   starter: {
@@ -113,6 +116,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     canManageInvoiceApproval: true,
     canManageTeam: true,
     canManageDocuments: true,
+    canUseKiAutopilot: false,
     hasFullAccess: false,
   },
   pro: {
@@ -140,6 +144,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     canManageInvoiceApproval: true,
     canManageTeam: true,
     canManageDocuments: true,
+    canUseKiAutopilot: false,
     hasFullAccess: true,
   },
   enterprise: {
@@ -167,6 +172,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
     canManageInvoiceApproval: true,
     canManageTeam: true,
     canManageDocuments: true,
+    canUseKiAutopilot: false,
     hasFullAccess: true,
   },
 };

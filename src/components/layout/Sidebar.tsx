@@ -32,7 +32,13 @@ import {
   Leaf,
   AlertTriangle,
   Wand2,
-  RefreshCw
+  RefreshCw,
+  Bot,
+  Zap,
+  ScanLine,
+  Brain,
+  MessageSquarePlus,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -41,6 +47,7 @@ import { useIsAdmin } from '@/hooks/useAdmin';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsTester } from '@/hooks/useUserRole';
 import { useSidebarBadges } from '@/hooks/useSidebarBadges';
+import { useKiAutopilot } from '@/hooks/useKiAutopilot';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 // NavItem interface moved below imports
@@ -178,6 +185,31 @@ const navItems: NavItem[] = [
     href: '/schadensmeldungen'
   },
   {
+    label: 'KI-Assistent',
+    icon: Bot,
+    href: '/ki-assistent',
+  },
+  {
+    label: 'Automatisierung',
+    icon: Zap,
+    href: '/automatisierung',
+  },
+  {
+    label: 'KI-Rechnungen',
+    icon: ScanLine,
+    href: '/ki-rechnungen',
+  },
+  {
+    label: 'KI-Insights',
+    icon: Brain,
+    href: '/ki-insights',
+  },
+  {
+    label: 'KI-Kommunikation',
+    icon: MessageSquarePlus,
+    href: '/ki-kommunikation',
+  },
+  {
     label: 'Reports',
     icon: TrendingUp,
     href: '/reports',
@@ -209,6 +241,9 @@ export function Sidebar() {
   const permissions = usePermissions();
   const { isTester } = useIsTester();
   const { data: badges } = useSidebarBadges();
+  const { isActive: kiActive } = useKiAutopilot();
+
+  const kiPaths = ['/ki-assistent', '/automatisierung', '/ki-rechnungen', '/ki-insights', '/ki-kommunikation'];
 
   // Map route paths to badge counts
   const badgeMap: Record<string, number> = {
@@ -303,29 +338,38 @@ export function Sidebar() {
 
           {/* Navigation - scrollable */}
           <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
-            {allNavItems.map(item => {
+            {allNavItems.map((item, idx) => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
+              const isFirstKi = kiPaths[0] === item.href;
               return (
-                <Link 
-                  key={item.href} 
-                  to={item.href}
-                  onClick={handleLinkClick}
-                  data-tour={item.tourId}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                    'text-white/80 hover:text-white hover:bg-white/10',
-                    isActive && 'bg-white/15 text-white'
+                <div key={item.href}>
+                  {isFirstKi && (
+                    <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                      <Sparkles className="h-3.5 w-3.5 text-white/50" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">KI-Autopilot</span>
+                      {!kiActive && <Lock className="h-3 w-3 text-white/40" />}
+                    </div>
                   )}
-                >
-                  <item.icon className="h-5 w-5 shrink-0" />
-                  <span className="flex-1">{item.label}</span>
-                  {(badgeMap[item.href] ?? 0) > 0 && (
-                    <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                      {badgeMap[item.href]}
-                    </span>
-                  )}
-                </Link>
+                  <Link 
+                    to={item.href}
+                    onClick={handleLinkClick}
+                    data-tour={item.tourId}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                      'text-white/80 hover:text-white hover:bg-white/10',
+                      isActive && 'bg-white/15 text-white'
+                    )}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    {(badgeMap[item.href] ?? 0) > 0 && (
+                      <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
+                        {badgeMap[item.href]}
+                      </span>
+                    )}
+                  </Link>
+                </div>
               );
             })}
             {isAdmin && (
@@ -393,30 +437,44 @@ export function Sidebar() {
         {allNavItems.map(item => {
           const isActive = location.pathname === item.href || 
             (item.href !== '/' && location.pathname.startsWith(item.href));
+          const isFirstKiDesktop = kiPaths[0] === item.href;
           return (
-            <Link 
-              key={item.href} 
-              to={item.href} 
-              title={collapsed ? item.label : undefined}
-              data-tour={item.tourId}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                'text-white/80 hover:text-white hover:bg-white/10',
-                isActive && 'bg-white/15 text-white'
+            <div key={item.href}>
+              {isFirstKiDesktop && !collapsed && (
+                <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                  <Sparkles className="h-3.5 w-3.5 text-white/50" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">KI-Autopilot</span>
+                  {!kiActive && <Lock className="h-3 w-3 text-white/40" />}
+                </div>
               )}
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1">{item.label}</span>
-                  {(badgeMap[item.href] ?? 0) > 0 && (
-                    <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                      {badgeMap[item.href]}
-                    </span>
-                  )}
-                </>
+              {isFirstKiDesktop && collapsed && (
+                <div className="flex justify-center pt-3 pb-1">
+                  <Sparkles className="h-3.5 w-3.5 text-white/50" />
+                </div>
               )}
-            </Link>
+              <Link 
+                to={item.href} 
+                title={collapsed ? item.label : undefined}
+                data-tour={item.tourId}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                  'text-white/80 hover:text-white hover:bg-white/10',
+                  isActive && 'bg-white/15 text-white'
+                )}
+              >
+                <item.icon className="h-5 w-5 shrink-0" />
+                {!collapsed && (
+                  <>
+                    <span className="flex-1">{item.label}</span>
+                    {(badgeMap[item.href] ?? 0) > 0 && (
+                      <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
+                        {badgeMap[item.href]}
+                      </span>
+                    )}
+                  </>
+                )}
+              </Link>
+            </div>
           );
         })}
         {isAdmin && (
