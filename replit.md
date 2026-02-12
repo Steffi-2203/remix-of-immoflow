@@ -45,6 +45,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **PWA Support**: Progressive Web App manifest for mobile installation, service worker for offline capability, push notification infrastructure, API response caching, and mobile-optimized viewport configuration with app shortcuts.
 - **ESG/Energiemonitoring**: Energy certificate management (HWB, fGEE, PEB, CO2), energy consumption tracking per property/unit, CO2 balance with year-over-year comparison, ESG scoring dashboard, and support for Austrian energy classes (A++ to G).
 - **Schadensmeldungen**: Damage reporting system with auto-generated report numbers (SM-YYYY-XXXX), category/urgency classification, status workflow (gemeldet/in_bearbeitung/behoben/abgelehnt), resolution documentation with cost tracking, and property/unit association.
+- **Mieter-Self-Service Portal**: Secure tenant portal with email-based access control, dashboard with lease/unit/property overview, open balance tracking, invoice history with year/status filtering, payment history, document access (tenant-specific), lease history, and admin view for managing portal access grants. All endpoints use strict tenant-isolation via `tenantPortalAccess` table lookup (no admin data leakage). Routes: `server/routes/tenantPortalRoutes.ts`, Frontend: `src/pages/TenantPortal.tsx`.
 
 **System Design Choices:**
 - **Modular Structure**: Clear separation of `server/`, `shared/`, and `src/` directories.
