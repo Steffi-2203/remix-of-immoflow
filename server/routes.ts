@@ -203,6 +203,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use(requestIdMiddleware);
 
+  const startedAt = new Date().toISOString();
+
   app.get("/api/health", async (_req, res) => {
     let dbStatus: "connected" | "disconnected" = "disconnected";
     let dbLatencyMs = -1;
@@ -215,11 +217,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const memUsage = process.memoryUsage();
     const status = dbStatus === "connected" ? "ok" : "degraded";
+    const cpuUsage = process.cpuUsage();
     const payload = {
       status,
       database: dbStatus,
       dbLatencyMs,
       uptime: Math.floor(process.uptime()),
+      startedAt,
       version: packageJson.version,
       timestamp: new Date().toISOString(),
       memory: {
@@ -227,7 +231,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
         rssMB: Math.round(memUsage.rss / 1024 / 1024),
       },
+      cpu: {
+        userMs: Math.round(cpuUsage.user / 1000),
+        systemMs: Math.round(cpuUsage.system / 1000),
+      },
       node: process.version,
+      env: process.env.NODE_ENV || "development",
     };
 
     res.status(status === "ok" ? 200 : 503).json(payload);
@@ -239,6 +248,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ ready: true });
     } catch {
       res.status(503).json({ ready: false, reason: "database not available" });
+    }
+  });
+
+  app.get("/api/startup", async (_req, res) => {
+    try {
+      await db.execute(sql`SELECT 1`);
+      res.json({ started: true, startedAt, uptime: Math.floor(process.uptime()) });
+    } catch {
+      res.status(503).json({ started: false, reason: "database not ready" });
     }
   });
 
