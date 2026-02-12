@@ -20,6 +20,7 @@ import {
   Home, Euro, AlertTriangle,
   CheckCircle, Users, Plus, Shield, Loader2
 } from 'lucide-react';
+import { TenantChatbot } from '@/components/tenant-portal/TenantChatbot';
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(amount);
@@ -294,6 +295,7 @@ function TenantSelfServiceView() {
           </TabsContent>
         </Tabs>
       </div>
+      <TenantChatbot />
     </MainLayout>
   );
 }
