@@ -1,85 +1,78 @@
 
 
-## Complete CSP Implementation -- Remaining Items
+# Sicherheitsplan: Mieterportal Datenisolierung
 
-### Status Summary
+## Problem
 
-5 of 8 checklist items are fully done. Three need implementation:
+Aktuell laedt das Mieterportal **alle** Mieter, Rechnungen und Zahlungen ueber globale Hooks (`useTenants()`, `useInvoices()`, `usePayments()`) und filtert erst im Browser nach dem eingeloggten Mieter. Ein technisch versierter Nutzer koennte ueber die Browser-Konsole oder den Netzwerk-Tab die Daten anderer Mieter einsehen (z.B. Miethoehe des Nachbarn).
 
-### 1. Nonce Injection into Served HTML
+## Loesung
 
-**Problem**: `res.locals.cspNonce` is set but `index.html` is served as a static file (`res.sendFile` / `vite.transformIndexHtml`) without replacing script/style tags with the nonce.
+Statt globaler Abfragen wird ein dedizierter **Backend-Endpunkt** (Edge Function) erstellt, der nur die Daten des eingeloggten Mieters zurueckgibt. So verlassen fremde Daten nie den Server.
 
-**Solution** (`server/vite.ts`):
-- In `serveStatic` (production): read `index.html` into a string, replace `<script` with `<script nonce="..."` and `<link rel="stylesheet"` with the nonce attribute, then `res.send()` instead of `res.sendFile()`.
-- In `setupVite` (dev): after `vite.transformIndexHtml`, do the same string replacement before sending.
-- Use a shared helper function `injectNonce(html: string, nonce: string): string` for both paths.
+## Umsetzungsschritte
 
-### 2. Report-Only Rollout Phase
+### 1. Edge Function: `tenant-portal-data`
 
-**Problem**: CSP is enforced immediately. A `Content-Security-Policy-Report-Only` phase would catch violations without breaking the site.
+Eine neue Backend-Funktion, die:
+- Den eingeloggten Benutzer per JWT validiert
+- In `tenant_portal_access` nachschlaegt, welcher Mieter dieser Benutzer ist
+- Nur die Daten **dieses einen Mieters** abfragt (Rechnungen, Zahlungen, Einheit, Objekt)
+- Ein einzelnes JSON-Objekt zurueckgibt
 
-**Solution** (`server/middleware/csp.ts`):
-- Add an environment variable `CSP_REPORT_ONLY=true|false` (default `true` for initial rollout).
-- When report-only mode is active, use `helmet.contentSecurityPolicy` but set the header name to `Content-Security-Policy-Report-Only` instead of `Content-Security-Policy`.
-- Once violations are reviewed and resolved, flip to `false` to enforce.
+### 2. Neuer Frontend-Hook: `useTenantPortalData`
 
-### 3. Wire SRI into HTML Output
+Ein neuer Hook, der:
+- Die Edge Function aufruft statt einzelner Tabellen-Hooks
+- Genau ein Datenobjekt mit den eigenen Mieterdaten liefert
+- Keine globalen Daten mehr abfragt
 
-**Problem**: `server/lib/sri.ts` builds an SRI map but nothing consumes it.
+### 3. Refactoring: `TenantPortal.tsx`
 
-**Solution** (`server/vite.ts`):
-- In production (`serveStatic`), after reading `index.html`, parse script/link tags referencing assets in the SRI map and add `integrity="sha384-..."` and `crossorigin="anonymous"` attributes.
-- Integrate this into the same `injectNonce` helper (or a separate `injectSri` step).
+Die Mieter-Ansicht (Self-Service-View) wird umgebaut:
+- Entfernen der globalen Hooks (`useTenants`, `useInvoices`, `usePayments`)
+- Stattdessen nur `useTenantPortalData()` verwenden
+- Die Admin-Ansicht (Zugangsverwaltung) bleibt unveraendert
+
+### 4. RLS-Haertung auf `tenant_portal_access`
+
+Sicherstellen, dass:
+- Mieter nur ihren eigenen Datensatz in `tenant_portal_access` sehen koennen (bereits vorhanden)
+- Die UPDATE-Policy eingeschraenkt wird, sodass nur `last_login_at` und `user_id` aktualisiert werden duerfen
 
 ---
 
-### Technical Details
+## Technische Details
 
-**New helper: `server/lib/htmlTransform.ts`**
+### Edge Function `tenant-portal-data`
 
 ```text
-injectNonce(html, nonce)
-  - Regex replace: <script -> <script nonce="NONCE"
-  - Regex replace: <link rel="stylesheet" -> add nonce="NONCE"
-  - Regex replace: <style -> <style nonce="NONCE"
-
-injectSri(html, sriMap)
-  - For each <script src="/assets/xxx.js">, look up in sriMap
-  - Add integrity="sha384-..." crossorigin="anonymous"
-  - Same for <link href="/assets/xxx.css">
+Eingabe: JWT Token (automatisch)
+Ablauf:
+  1. auth.getUser() -> user_id
+  2. SELECT tenant_id FROM tenant_portal_access WHERE user_id = ? AND is_active = true
+  3. SELECT * FROM tenants WHERE id = tenant_id
+  4. SELECT * FROM units WHERE id = tenant.unit_id
+  5. SELECT * FROM properties WHERE id = unit.property_id
+  6. SELECT * FROM monthly_invoices WHERE tenant_id = ? ORDER BY year DESC, month DESC LIMIT 24
+  7. SELECT * FROM payments WHERE tenant_id = ? ORDER BY eingangs_datum DESC LIMIT 24
+Ausgabe: { tenant, unit, property, invoices, payments, balance }
 ```
 
-**File: `server/vite.ts`** (production path)
-- Replace `res.sendFile(...)` with:
-  ```text
-  let html = fs.readFileSync(indexPath, 'utf-8');
-  html = injectNonce(html, res.locals.cspNonce);
-  html = injectSri(html, getSriMap());
-  res.send(html);
-  ```
-- Dev path: after `vite.transformIndexHtml`, apply `injectNonce` only (SRI not needed in dev).
+Alle Abfragen nutzen den **Service Role Key** serverseitig -- der Client hat keinen direkten Tabellenzugriff.
 
-**File: `server/middleware/csp.ts`**
-- Read `CSP_REPORT_ONLY` env var.
-- When true, after helmet sets the header, rename it:
-  ```text
-  const cspValue = res.getHeader('content-security-policy');
-  res.removeHeader('content-security-policy');
-  res.setHeader('content-security-policy-report-only', cspValue);
-  ```
+### Dateien die erstellt/geaendert werden
 
-**File: `tests/unit/csp-nonce.test.ts`**
-- Add test for nonce appearing in HTML script/style tags from the actual serving path.
-- Add test for Report-Only header when env var is set.
-- Add test for SRI attributes on asset tags.
+| Datei | Aktion |
+|-------|--------|
+| `supabase/functions/tenant-portal-data/index.ts` | Neu erstellen |
+| `supabase/config.toml` | Function registrieren |
+| `src/hooks/useTenantPortalData.ts` | Neu erstellen |
+| `src/pages/TenantPortal.tsx` | Mieter-View refactoren |
 
-### Files to modify
+### Was sich fuer den Nutzer aendert
 
-| File | Action |
-|---|---|
-| `server/lib/htmlTransform.ts` | New -- nonce + SRI injection helpers |
-| `server/vite.ts` | Use htmlTransform in both dev and prod HTML serving |
-| `server/middleware/csp.ts` | Add Report-Only mode via env var |
-| `tests/unit/csp-nonce.test.ts` | Add tests for nonce injection, Report-Only, and SRI |
+- Optisch: Nichts -- die Mieter-Ansicht sieht identisch aus
+- Sicherheit: Mieter sehen ausschliesslich ihre eigenen Daten
+- Performance: Schneller, da weniger Daten geladen werden
 
