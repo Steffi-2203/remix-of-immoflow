@@ -1,0 +1,127 @@
+name: Intensive Test Suite
+
+on:
+  push:
+    branches: [main, develop, 'test/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgres://test:testpass@localhost:5433/immoflow_test
+  SESSION_SECRET: ci-test-session-secret-minimum-32-chars
+
+jobs:
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --config vitest.config.server.ts tests/unit
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: typecheck
+    if: github.event_name == 'pull_request'
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: immoflow_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx drizzle-kit push --force
+        env:
+          DATABASE_URL: postgres://test:testpass@localhost:5433/immoflow_test
+      - run: psql $DATABASE_URL -f scripts/seed-test-data.sql
+        env:
+          DATABASE_URL: postgres://test:testpass@localhost:5433/immoflow_test
+      - run: npx vitest run --config vitest.config.server.ts tests/integration
+
+  test-e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: test-unit
+    if: github.event_name == 'pull_request'
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: immoflow_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx drizzle-kit push --force
+        env:
+          DATABASE_URL: postgres://test:testpass@localhost:5433/immoflow_test
+      - run: psql $DATABASE_URL -f scripts/seed-test-data.sql
+        env:
+          DATABASE_URL: postgres://test:testpass@localhost:5433/immoflow_test
+      - run: npm start &
+      - run: sleep 5
+      - run: npx playwright test --project=chromium
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+  test-load:
+    name: Load Tests (k6)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/load/k6-api-smoke.js
+        env:
+          BASE_URL: http://localhost:5000
