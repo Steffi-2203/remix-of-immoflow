@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,68 +10,79 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CookieConsent } from "@/components/CookieConsent";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
 import { ActiveOrganizationProvider } from "@/contexts/ActiveOrganizationContext";
+import { Loader2 } from "lucide-react";
+
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
-import ResetPassword from "./pages/ResetPassword";
-import Register from "./pages/Register";
 import SimpleDashboard from "./pages/SimpleDashboard";
 import PropertyList from "./pages/PropertyList";
 import PropertyDetail from "./pages/PropertyDetail";
 import PropertyForm from "./pages/PropertyForm";
-import UnitList from "./pages/UnitList";
-import UnitDetail from "./pages/UnitDetail";
-import UnitForm from "./pages/UnitForm";
-import TenantForm from "./pages/TenantForm";
-import TenantList from "./pages/TenantList";
-import RentalFinance from "./pages/RentalFinance";
-import CostsHub from "./pages/CostsHub";
-import AdminAuditLogs from "./pages/AdminAuditLogs";
-import Reports from "./pages/Reports";
-import OperatingCostSettlement from "./pages/OperatingCostSettlement";
-import Documents from "./pages/Documents";
-import Settings from "./pages/Settings";
-import Admin from "./pages/Admin";
-import AdminUsers from "./pages/AdminUsers";
-import SystemTest from "./pages/SystemTest";
-import Banking from "./pages/Banking";
-import BankReconciliation from "./pages/BankReconciliation";
-import AutoMatch from "./pages/AutoMatch";
-import Accounting from "./pages/Accounting";
-import MaintenanceHub from "./pages/MaintenanceHub";
-import MessagesPage from "./pages/Messages";
-import TeamManagement from "./pages/TeamManagement";
-import Budgets from "./pages/Budgets";
-import TenantDetail from "./pages/TenantDetail";
-import TenantPortal from "./pages/TenantPortal";
-import WegManagement from "./pages/WegManagement";
-import WegVorschreibungen from "./pages/WegVorschreibungen";
-import InsuranceManagement from "./pages/InsuranceManagement";
-import DeadlineCalendar from "./pages/DeadlineCalendar";
-import SerialLetters from "./pages/SerialLetters";
-import ManagementContracts from "./pages/ManagementContracts";
 import NotFound from "./pages/NotFound";
-import Impressum from "./pages/Impressum";
-import Datenschutz from "./pages/Datenschutz";
-import AGB from "./pages/AGB";
-import DsgvoCompliance from "./pages/DsgvoCompliance";
-import SecurityDashboard from "./pages/SecurityDashboard";
-import SupportTickets from "./pages/SupportTickets";
-import GuidedWorkflows from "./pages/GuidedWorkflows";
-import EsgDashboard from "./pages/EsgDashboard";
-import DamageReports from "./pages/DamageReports";
-import TenantLogin from "./pages/TenantLogin";
-import TenantPortalStandalone from "./pages/TenantPortalStandalone";
-import OwnerLogin from "./pages/OwnerLogin";
-import OwnerPortalStandalone from "./pages/OwnerPortalStandalone";
-import OwnerPortal from "./pages/OwnerPortal";
-import LeaseContractGenerator from "./pages/LeaseContractGenerator";
-import KiAssistent from "./pages/KiAssistent";
-import AutomationSettings from "./pages/AutomationSettings";
-import InvoiceOcr from "./pages/InvoiceOcr";
-import KiInsights from "./pages/KiInsights";
-import KiKommunikation from "./pages/KiKommunikation";
+
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Register = lazy(() => import("./pages/Register"));
+const UnitList = lazy(() => import("./pages/UnitList"));
+const UnitDetail = lazy(() => import("./pages/UnitDetail"));
+const UnitForm = lazy(() => import("./pages/UnitForm"));
+const TenantForm = lazy(() => import("./pages/TenantForm"));
+const TenantList = lazy(() => import("./pages/TenantList"));
+const TenantDetail = lazy(() => import("./pages/TenantDetail"));
+const RentalFinance = lazy(() => import("./pages/RentalFinance"));
+const CostsHub = lazy(() => import("./pages/CostsHub"));
+const AdminAuditLogs = lazy(() => import("./pages/AdminAuditLogs"));
+const Reports = lazy(() => import("./pages/Reports"));
+const OperatingCostSettlement = lazy(() => import("./pages/OperatingCostSettlement"));
+const Documents = lazy(() => import("./pages/Documents"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const SystemTest = lazy(() => import("./pages/SystemTest"));
+const Banking = lazy(() => import("./pages/Banking"));
+const BankReconciliation = lazy(() => import("./pages/BankReconciliation"));
+const AutoMatch = lazy(() => import("./pages/AutoMatch"));
+const Accounting = lazy(() => import("./pages/Accounting"));
+const MaintenanceHub = lazy(() => import("./pages/MaintenanceHub"));
+const MessagesPage = lazy(() => import("./pages/Messages"));
+const TeamManagement = lazy(() => import("./pages/TeamManagement"));
+const Budgets = lazy(() => import("./pages/Budgets"));
+const TenantPortal = lazy(() => import("./pages/TenantPortal"));
+const WegManagement = lazy(() => import("./pages/WegManagement"));
+const WegVorschreibungen = lazy(() => import("./pages/WegVorschreibungen"));
+const InsuranceManagement = lazy(() => import("./pages/InsuranceManagement"));
+const DeadlineCalendar = lazy(() => import("./pages/DeadlineCalendar"));
+const SerialLetters = lazy(() => import("./pages/SerialLetters"));
+const ManagementContracts = lazy(() => import("./pages/ManagementContracts"));
+const Impressum = lazy(() => import("./pages/Impressum"));
+const Datenschutz = lazy(() => import("./pages/Datenschutz"));
+const AGB = lazy(() => import("./pages/AGB"));
+const DsgvoCompliance = lazy(() => import("./pages/DsgvoCompliance"));
+const SecurityDashboard = lazy(() => import("./pages/SecurityDashboard"));
+const SupportTickets = lazy(() => import("./pages/SupportTickets"));
+const GuidedWorkflows = lazy(() => import("./pages/GuidedWorkflows"));
+const EsgDashboard = lazy(() => import("./pages/EsgDashboard"));
+const DamageReports = lazy(() => import("./pages/DamageReports"));
+const TenantLogin = lazy(() => import("./pages/TenantLogin"));
+const TenantPortalStandalone = lazy(() => import("./pages/TenantPortalStandalone"));
+const OwnerLogin = lazy(() => import("./pages/OwnerLogin"));
+const OwnerPortalStandalone = lazy(() => import("./pages/OwnerPortalStandalone"));
+const OwnerPortal = lazy(() => import("./pages/OwnerPortal"));
+const LeaseContractGenerator = lazy(() => import("./pages/LeaseContractGenerator"));
+const KiAssistent = lazy(() => import("./pages/KiAssistent"));
+const AutomationSettings = lazy(() => import("./pages/AutomationSettings"));
+const InvoiceOcr = lazy(() => import("./pages/InvoiceOcr"));
+const KiInsights = lazy(() => import("./pages/KiInsights"));
+const KiKommunikation = lazy(() => import("./pages/KiKommunikation"));
 
 const queryClient = new QueryClient();
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-screen" data-testid="page-loader">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 const App = () => (
   <ErrorBoundary>
@@ -80,6 +92,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<Landing />} />
@@ -160,6 +173,7 @@ const App = () => (
             
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           <CookieConsent />
         </BrowserRouter>
       </TooltipProvider>
