@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import type { UseAuthReturn, SignInResult, SignUpResult, SignOutResult } from '@/types/auth';
+import { BackendNotConfiguredError } from '@/types/auth';
 
-export const useAuth = () => {
+export const useAuth = (): UseAuthReturn => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(!supabase ? false : true);
@@ -15,7 +17,7 @@ export const useAuth = () => {
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -32,8 +34,8 @@ export const useAuth = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) return { data: null, error: new Error('Backend nicht konfiguriert') as any };
+  const signIn = useCallback(async (email: string, password: string): Promise<SignInResult> => {
+    if (!supabase) return { data: null, error: new BackendNotConfiguredError() as unknown as AuthError };
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -41,8 +43,8 @@ export const useAuth = () => {
     return { data, error };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string, inviteToken?: string) => {
-    if (!supabase) return { data: null, error: new Error('Backend nicht konfiguriert') as any };
+  const signUp = useCallback(async (email: string, password: string, fullName?: string, companyName?: string, inviteToken?: string): Promise<SignUpResult> => {
+    if (!supabase) return { data: null, error: new BackendNotConfiguredError() as unknown as AuthError };
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -60,7 +62,7 @@ export const useAuth = () => {
     return { data, error };
   }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (): Promise<SignOutResult> => {
     if (!supabase) return { error: null };
     const { error } = await supabase.auth.signOut();
     return { error };
