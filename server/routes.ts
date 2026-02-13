@@ -6,10 +6,10 @@ import readonlyRoutes from "./routes/readonly";
 // Domain routers
 import { registerCoreRoutes } from "./routes/core";
 import { registerOrganizationRoutes } from "./routes/organizations";
-import { registerPropertyRoutes } from "./routes/properties";
+import { registerPropertyRoutes } from "./routes/properties/index";
 import { registerUnitRoutes } from "./routes/units";
 import { registerTenantRoutes } from "./routes/tenants";
-import { registerFinanceRoutes } from "./routes/finance";
+import { registerFinanceRoutes } from "./routes/finance/index";
 import { registerBankingRoutes } from "./routes/banking";
 import { registerSettlementRoutes } from "./routes/settlements";
 import { registerComplianceRoutes } from "./routes/compliance";
