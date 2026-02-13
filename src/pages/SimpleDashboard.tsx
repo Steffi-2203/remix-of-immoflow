@@ -25,6 +25,7 @@ import { PredictiveAnalytics } from "@/components/dashboard/PredictiveAnalytics"
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { QuickActionsBar } from "@/components/dashboard/QuickActionsBar";
 import { PortfolioHealthScore } from "@/components/dashboard/PortfolioHealthScore";
+import { LazyWidget } from "@/components/dashboard/LazyWidget";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
@@ -231,36 +232,54 @@ export default function SimpleDashboard() {
         <PortfolioHealthScore />
 
         {/* Management Cockpit - Executive Overview */}
-        <ManagementCockpit />
+        <LazyWidget height="h-64">
+          <ManagementCockpit />
+        </LazyWidget>
 
         {/* Predictive Analytics - AI-powered forecasts */}
-        <PredictiveAnalytics />
+        <LazyWidget height="h-64">
+          <PredictiveAnalytics />
+        </LazyWidget>
 
         {/* KPI Charts - Grafische Auswertungen */}
-        <KPICharts />
+        <LazyWidget height="h-80">
+          <KPICharts />
+        </LazyWidget>
 
         {/* Activity Feed & Open Items side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div>
-            <OffenePostenWidget />
+            <LazyWidget height="h-48">
+              <OffenePostenWidget />
+            </LazyWidget>
             <div className="mt-6">
-              <BankAccountsWidget />
+              <LazyWidget height="h-48">
+                <BankAccountsWidget />
+              </LazyWidget>
             </div>
           </div>
           <div>
-            <ActivityFeed />
+            <LazyWidget height="h-48">
+              <ActivityFeed />
+            </LazyWidget>
             <div className="mt-6">
-              <UpcomingMaintenanceWidget />
+              <LazyWidget height="h-48">
+                <UpcomingMaintenanceWidget />
+              </LazyWidget>
             </div>
           </div>
         </div>
 
         <div className="mt-6">
-          <DataQualityWidget />
+          <LazyWidget height="h-32">
+            <DataQualityWidget />
+          </LazyWidget>
         </div>
 
         <div className="mt-6">
-          <CalendarWidget />
+          <LazyWidget height="h-64">
+            <CalendarWidget />
+          </LazyWidget>
         </div>
 
         <Card className="mt-6">

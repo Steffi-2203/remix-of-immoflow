@@ -5190,6 +5190,69 @@ export type Database = {
           },
         ]
       }
+      weg_circulation_resolutions: {
+        Row: {
+          created_at: string
+          deadline: string
+          description: string | null
+          id: string
+          organization_id: string | null
+          property_id: string
+          status: string
+          title: string
+          total_owners: number
+          updated_at: string
+          votes_abstain: number
+          votes_no: number
+          votes_yes: number
+        }
+        Insert: {
+          created_at?: string
+          deadline: string
+          description?: string | null
+          id?: string
+          organization_id?: string | null
+          property_id: string
+          status?: string
+          title: string
+          total_owners?: number
+          updated_at?: string
+          votes_abstain?: number
+          votes_no?: number
+          votes_yes?: number
+        }
+        Update: {
+          created_at?: string
+          deadline?: string
+          description?: string | null
+          id?: string
+          organization_id?: string | null
+          property_id?: string
+          status?: string
+          title?: string
+          total_owners?: number
+          updated_at?: string
+          votes_abstain?: number
+          votes_no?: number
+          votes_yes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weg_circulation_resolutions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weg_circulation_resolutions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weg_owner_invoices: {
         Row: {
           amount_gross: number

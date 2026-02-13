@@ -631,8 +631,79 @@ export default function TenantForm() {
                 <CreditCard className="h-5 w-5" />
                 SEPA-Lastschrift
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Geben Sie die IBAN ein – das SEPA-Mandat wird automatisch aktiviert.
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="iban"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        IBAN
+                        <InfoTooltip text="iban" />
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="AT12 3456 7890 1234 5678"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            // Auto-enable SEPA when IBAN is entered
+                            if (e.target.value.trim().length >= 15) {
+                              form.setValue('sepa_mandat', true);
+                              // Auto-generate mandate reference if empty
+                              if (!form.getValues('mandat_reference')) {
+                                const ref = `SEPA-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+                                form.setValue('mandat_reference', ref);
+                              }
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="bic"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        BIC
+                        <InfoTooltip text="bic" />
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="BAWAATWW" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="mandat_reference"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        Mandatsreferenz
+                        <InfoTooltip text="mandat_reference" />
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="wird automatisch generiert" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="sepa_mandat"
@@ -652,60 +723,6 @@ export default function TenantForm() {
                 )}
               />
 
-              {watchSepaMandat && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-                  <FormField
-                    control={form.control}
-                    name="iban"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center">
-                          IBAN
-                          <InfoTooltip text="iban" />
-                        </FormLabel>
-                        <FormControl>
-                          <Input placeholder="AT12 3456 7890 1234 5678" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="bic"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center">
-                          BIC
-                          <InfoTooltip text="bic" />
-                        </FormLabel>
-                        <FormControl>
-                          <Input placeholder="BAWAATWW" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="mandat_reference"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center">
-                          Mandatsreferenz
-                          <InfoTooltip text="mandat_reference" />
-                        </FormLabel>
-                        <FormControl>
-                          <Input placeholder="MANDAT-001" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
             </CardContent>
           </Card>
 

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Input } from '@/components/ui/input';
+import { PaginationControls } from '@/components/ui/PaginationControls';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,13 +66,14 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { TenantPaymentDetailDialog } from '@/components/payments/TenantPaymentDetailDialog';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
+import { PaymentDocumentButton } from '@/components/payments/PaymentDocumentButton';
 
 export default function PaymentList() {
   const now = new Date();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<number>(2025); // Default to 2025 for simulation data
-  const [selectedMonth, setSelectedMonth] = useState<number>(1); // Default to January 2025
+  const [selectedYear, setSelectedYear] = useState<number>(2025);
+  const [selectedMonth, setSelectedMonth] = useState<number>(1);
   const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
@@ -80,6 +82,8 @@ export default function PaymentList() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedDetailTenant, setSelectedDetailTenant] = useState<any>(null);
   const [selectedDetailUnit, setSelectedDetailUnit] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const PAGE_SIZE = 50;
   
   const { data: tenants } = useTenants();
   const { data: units } = useUnits();
@@ -659,10 +663,13 @@ export default function PaymentList() {
                       <TableHead>Referenz</TableHead>
                       <TableHead className="text-right">Betrag</TableHead>
                       <TableHead>Zahlungsart</TableHead>
+                      <TableHead className="w-10">Beleg</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPayments.map((payment) => {
+                    {filteredPayments
+                      .slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+                      .map((payment) => {
                       const tenant = tenants?.find(t => t.id === payment.tenantId);
                       const unit = tenant ? units?.find(u => u.id === tenant.unitId) : null;
 
@@ -690,12 +697,25 @@ export default function PaymentList() {
                                payment.zahlungsart === 'bar' ? 'Bar' : 'Sonstige'}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <PaymentDocumentButton
+                              paymentId={payment.id}
+                              existingDocUrl={(payment as any).belegUrl || null}
+                            />
+                          </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
               )}
+              <PaginationControls
+                page={currentPage}
+                totalPages={Math.ceil(filteredPayments.length / PAGE_SIZE)}
+                totalCount={filteredPayments.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setCurrentPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>

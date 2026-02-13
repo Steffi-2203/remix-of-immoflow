@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Users, PiggyBank, Vote, Loader2, Calendar, FileSpreadsheet, ArrowRightLeft, Building2 } from 'lucide-react';
+import { Plus, Users, PiggyBank, Vote, Loader2, Calendar, FileSpreadsheet, ArrowRightLeft, Building2, MailCheck } from 'lucide-react';
+import { CirculationResolution } from '@/components/weg/CirculationResolution';
 import { useWegAssemblies, useCreateWegAssembly, useUpdateWegAssembly, useWegVotes, useCreateWegVote, useReserveFund, useCreateReserveFundEntry } from '@/hooks/useWeg';
 import { useWegBusinessPlans, statusLabels as planStatusLabels } from '@/hooks/useWegBusinessPlan';
 import { useOwnershipTransfers, transferStatusLabels, legalReasonLabels } from '@/hooks/useOwnershipTransfer';
@@ -141,6 +142,7 @@ export default function WegManagement() {
             <TabsTrigger value="businessplan"><FileSpreadsheet className="h-4 w-4 mr-1" /> Wirtschaftsplan</TabsTrigger>
             <TabsTrigger value="reserve"><PiggyBank className="h-4 w-4 mr-1" /> Rücklage</TabsTrigger>
             <TabsTrigger value="transfers"><ArrowRightLeft className="h-4 w-4 mr-1" /> Eigentümerwechsel</TabsTrigger>
+            <TabsTrigger value="circulation"><MailCheck className="h-4 w-4 mr-1" /> Umlaufbeschlüsse</TabsTrigger>
           </TabsList>
 
           {/* Owners Tab */}
@@ -359,6 +361,17 @@ export default function WegManagement() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+          </TabsContent>
+          {/* Circulation Resolutions Tab */}
+          <TabsContent value="circulation" className="space-y-4">
+            {selectedPropertyId ? (
+              <CirculationResolution propertyId={selectedPropertyId} organizationId={organization?.id || null} />
+            ) : (
+              <Card><CardContent className="py-12 text-center text-muted-foreground">
+                <MailCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Bitte wählen Sie eine Liegenschaft, um Umlaufbeschlüsse zu verwalten.</p>
+              </CardContent></Card>
             )}
           </TabsContent>
         </Tabs>
