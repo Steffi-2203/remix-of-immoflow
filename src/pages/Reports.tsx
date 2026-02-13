@@ -64,6 +64,7 @@ import {
   type TransactionData,
   type CategoryData,
 } from '@/utils/reportPdfExport';
+import { PropertyOperationsReport } from '@/components/reports/PropertyOperationsReport';
 import { useBankAccounts } from '@/hooks/useBankAccounts';
 import { useMrgAllocationYearly } from '@/hooks/useMrgAllocationYearly';
 import { DataConsistencyAlert } from '@/components/banking/DataConsistencyAlert';
@@ -196,6 +197,13 @@ const reports = [
     description: 'Mietverträge die bald auslaufen',
     icon: Calendar,
     color: 'bg-orange-500/10 text-orange-600',
+  },
+  {
+    id: 'betriebsrendite',
+    title: 'Betriebs- & Renditereport',
+    description: 'Mietverteilung, Ausgaben & Rendite pro Liegenschaft',
+    icon: Building2,
+    color: 'bg-emerald-600/10 text-emerald-700',
   },
 ];
 
@@ -2056,8 +2064,8 @@ export default function Reports() {
                     PDF Export
                   </Button>
                 )}
-                {/* Inline-Berichte (Detailbericht, Mietvorschreibungen) */}
-                {['detailbericht', 'mietvorschreibung'].includes(report.id) && (
+                {/* Inline-Berichte */}
+                {['detailbericht', 'mietvorschreibung', 'betriebsrendite'].includes(report.id) && (
                   <Button size="sm" onClick={() => setSelectedReportId(report.id)}>
                     <FileText className="h-4 w-4 mr-2" />
                     Anzeigen
@@ -3208,6 +3216,21 @@ export default function Reports() {
           })()}
         </CardContent>
       </Card>
+
+      {/* Betriebs- & Renditereport */}
+      {selectedReportId === 'betriebsrendite' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Betriebs- & Renditereport</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PropertyOperationsReport
+              selectedYear={selectedYear}
+              initialPropertyId={selectedPropertyId !== 'all' ? selectedPropertyId : undefined}
+            />
+          </CardContent>
+        </Card>
+      )}
     </MainLayout>
   );
 }
