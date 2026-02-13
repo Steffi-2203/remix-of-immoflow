@@ -60,177 +60,92 @@ interface NavItem {
   tourId?: string;
 }
 
-const navItems: NavItem[] = [
+interface NavGroup {
+  label: string;
+  icon?: React.ElementType;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
   {
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-    href: '/dashboard',
-    tourId: 'nav-dashboard'
+    label: '',
+    items: [
+      { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard', tourId: 'nav-dashboard' },
+      { label: 'Liegenschaften', icon: Building, href: '/liegenschaften', tourId: 'nav-properties' },
+      { label: 'Einheiten', icon: Layers, href: '/einheiten', tourId: 'nav-units' },
+    ],
   },
   {
-    label: 'Liegenschaften',
-    icon: Building,
-    href: '/liegenschaften',
-    tourId: 'nav-properties'
-  },
-  {
-    label: 'Einheiten',
-    icon: Layers,
-    href: '/einheiten',
-    tourId: 'nav-units'
-  },
-  {
-    label: 'Mieter',
+    label: 'Mietverwaltung',
     icon: Users,
-    href: '/mieter',
-    tourId: 'nav-tenants'
-  },
-  {
-    label: 'Mieteinnahmen',
-    icon: Wallet,
-    href: '/zahlungen'
-  },
-  {
-    label: 'Kosten & Belege',
-    icon: Receipt,
-    href: '/kosten',
-    tourId: 'nav-expenses'
-  },
-  {
-    label: 'Banking',
-    icon: BookOpen,
-    href: '/buchhaltung',
-    tourId: 'nav-banking'
-  },
-  {
-    label: 'Auto-Zuordnung',
-    icon: Wand2,
-    href: '/auto-zuordnung'
-  },
-  {
-    label: 'Bank-Abgleich',
-    icon: RefreshCw,
-    href: '/bank-abgleich',
-    tourId: 'nav-bank-abgleich'
-  },
-  {
-    label: 'Finanzbuchhaltung',
-    icon: Calculator,
-    href: '/finanzbuchhaltung',
-    tourId: 'nav-accounting'
-  },
-  {
-    label: 'BK-Abrechnung',
-    icon: Calculator,
-    href: '/abrechnung'
-  },
-  {
-    label: 'Dokumente',
-    icon: FileStack,
-    href: '/dokumente'
+    items: [
+      { label: 'Mieter', icon: Users, href: '/mieter', tourId: 'nav-tenants' },
+      { label: 'Mieteinnahmen', icon: Wallet, href: '/zahlungen' },
+      { label: 'BK-Abrechnung', icon: Calculator, href: '/abrechnung' },
+      { label: 'Vertragsgenerator', icon: FileSignature, href: '/mietvertrag-generator' },
+      { label: 'Mieterportal', icon: DoorOpen, href: '/mieterportal' },
+      { label: 'Schadensmeldungen', icon: AlertTriangle, href: '/schadensmeldungen' },
+    ],
   },
   {
     label: 'WEG-Verwaltung',
     icon: Home,
-    href: '/weg'
+    items: [
+      { label: 'WEG-Verwaltung', icon: Home, href: '/weg' },
+      { label: 'Budgetplanung', icon: PiggyBank, href: '/budgets' },
+    ],
   },
   {
-    label: 'Versicherungen',
-    icon: ShieldCheck,
-    href: '/versicherungen'
+    label: 'Finanzen',
+    icon: BookOpen,
+    items: [
+      { label: 'Kosten & Belege', icon: Receipt, href: '/kosten', tourId: 'nav-expenses' },
+      { label: 'Banking', icon: BookOpen, href: '/buchhaltung', tourId: 'nav-banking' },
+      { label: 'Auto-Zuordnung', icon: Wand2, href: '/auto-zuordnung' },
+      { label: 'Bank-Abgleich', icon: RefreshCw, href: '/bank-abgleich', tourId: 'nav-bank-abgleich' },
+      { label: 'Finanzbuchhaltung', icon: Calculator, href: '/finanzbuchhaltung', tourId: 'nav-accounting' },
+      { label: 'Reports', icon: TrendingUp, href: '/reports', tourId: 'nav-reports' },
+    ],
   },
   {
-    label: 'Fristen & Termine',
-    icon: CalendarClock,
-    href: '/fristen'
+    label: 'Dokumente & Kommunikation',
+    icon: FileStack,
+    items: [
+      { label: 'Dokumente', icon: FileStack, href: '/dokumente' },
+      { label: 'Serienbriefe', icon: MailPlus, href: '/serienbriefe' },
+      { label: 'Tickets', icon: Ticket, href: '/tickets' },
+    ],
   },
   {
-    label: 'Serienbriefe',
-    icon: MailPlus,
-    href: '/serienbriefe'
-  },
-  {
-    label: 'HV-Verträge',
-    icon: FileSignature,
-    href: '/hv-vertraege'
-  },
-  {
-    label: 'Vertragsgenerator',
-    icon: FileSignature,
-    href: '/mietvertrag-generator'
-  },
-  {
-    label: 'Mieterportal',
-    icon: DoorOpen,
-    href: '/mieterportal'
-  },
-  {
-    label: 'Tickets',
-    icon: Ticket,
-    href: '/tickets'
-  },
-  {
-    label: 'Assistenten',
-    icon: HardHat,
-    href: '/workflows'
-  },
-  {
-    label: 'ESG & Energie',
-    icon: Leaf,
-    href: '/esg'
-  },
-  {
-    label: 'Schadensmeldungen',
-    icon: AlertTriangle,
-    href: '/schadensmeldungen'
-  },
-  {
-    label: 'KI-Assistent',
-    icon: Bot,
-    href: '/ki-assistent',
-  },
-  {
-    label: 'Automatisierung',
-    icon: Zap,
-    href: '/automatisierung',
-  },
-  {
-    label: 'KI-Rechnungen',
-    icon: ScanLine,
-    href: '/ki-rechnungen',
-  },
-  {
-    label: 'KI-Insights',
-    icon: Brain,
-    href: '/ki-insights',
-  },
-  {
-    label: 'KI-Kommunikation',
-    icon: MessageSquarePlus,
-    href: '/ki-kommunikation',
-  },
-  {
-    label: 'Reports',
-    icon: TrendingUp,
-    href: '/reports',
-    tourId: 'nav-reports'
-  },
-  {
-    label: 'DSGVO',
-    icon: Scale,
-    href: '/dsgvo'
-  },
-  {
-    label: 'Sicherheit',
-    icon: Lock,
-    href: '/sicherheit'
-  },
-  {
-    label: 'Einstellungen',
+    label: 'Verwaltung',
     icon: Cog,
-    href: '/einstellungen',
-    tourId: 'nav-settings'
-  }
+    items: [
+      { label: 'Versicherungen', icon: ShieldCheck, href: '/versicherungen' },
+      { label: 'Fristen & Termine', icon: CalendarClock, href: '/fristen' },
+      { label: 'HV-Verträge', icon: FileSignature, href: '/hv-vertraege' },
+      { label: 'ESG & Energie', icon: Leaf, href: '/esg' },
+      { label: 'Assistenten', icon: HardHat, href: '/workflows' },
+    ],
+  },
+  {
+    label: 'KI-Autopilot',
+    icon: Sparkles,
+    items: [
+      { label: 'KI-Assistent', icon: Bot, href: '/ki-assistent' },
+      { label: 'Automatisierung', icon: Zap, href: '/automatisierung' },
+      { label: 'KI-Rechnungen', icon: ScanLine, href: '/ki-rechnungen' },
+      { label: 'KI-Insights', icon: Brain, href: '/ki-insights' },
+      { label: 'KI-Kommunikation', icon: MessageSquarePlus, href: '/ki-kommunikation' },
+    ],
+  },
+  {
+    label: '',
+    items: [
+      { label: 'DSGVO', icon: Scale, href: '/dsgvo' },
+      { label: 'Sicherheit', icon: Lock, href: '/sicherheit' },
+      { label: 'Einstellungen', icon: Cog, href: '/einstellungen', tourId: 'nav-settings' },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -245,7 +160,6 @@ export function Sidebar() {
 
   const kiPaths = ['/ki-assistent', '/automatisierung', '/ki-rechnungen', '/ki-insights', '/ki-kommunikation'];
 
-  // Map route paths to badge counts
   const badgeMap: Record<string, number> = {
     '/zahlungen': badges?.dunning ?? 0,
     '/wartungen': badges?.maintenance ?? 0,
@@ -253,21 +167,14 @@ export function Sidebar() {
     '/kosten': badges?.invoiceApproval ?? 0,
   };
 
-  // For testers, hide pages that don't have demo data
-  const testerHiddenPaths = ['/team']; // Only hide team management (no real users in demo)
+  const testerHiddenPaths = ['/team'];
 
-  // Role-based navigation items
   const roleBasedItems: NavItem[] = [
     ...(permissions.canManageMaintenance || permissions.isAdmin ? [{
-      label: 'Wartungen & Aufträge',
+      label: 'Wartungen & Auftr\u00e4ge',
       icon: Wrench,
       href: '/wartungen',
       tourId: 'nav-maintenance'
-    }] : []),
-    ...(permissions.canEditFinances || permissions.isAdmin ? [{
-      label: 'Budgetplanung',
-      icon: PiggyBank,
-      href: '/budgets',
     }] : []),
     ...(permissions.canSendMessages || permissions.isAdmin ? [{
       label: 'Nachrichten',
@@ -283,12 +190,19 @@ export function Sidebar() {
     }] : []),
   ];
 
-  // Combine base nav items with role-based items (insert before Einstellungen)
-  const allNavItems = [
-    ...navItems.slice(0, -1), // All items except Einstellungen
-    ...roleBasedItems,
-    navItems[navItems.length - 1] // Einstellungen at the end
-  ].filter(item => !isTester || !testerHiddenPaths.includes(item.href));
+  const allGroups = navGroups.map(group => {
+    if (group.label === 'Verwaltung') {
+      return { ...group, items: [...group.items, ...roleBasedItems] };
+    }
+    return group;
+  }).map(group => ({
+    ...group,
+    items: group.items.filter(item => {
+      if (isTester && testerHiddenPaths.includes(item.href)) return false;
+      if (kiPaths.includes(item.href) && !kiActive && group.label !== 'KI-Autopilot') return false;
+      return true;
+    }),
+  })).filter(group => group.items.length > 0);
 
   const handleLinkClick = () => {
     // Close sidebar on mobile after clicking a link
@@ -337,52 +251,54 @@ export function Sidebar() {
           </div>
 
           {/* Navigation - scrollable */}
-          <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
-            {allNavItems.map((item, idx) => {
-              const isActive = location.pathname === item.href || 
-                (item.href !== '/' && location.pathname.startsWith(item.href));
-              const isFirstKi = kiPaths[0] === item.href;
-              return (
-                <div key={item.href}>
-                  {isFirstKi && (
-                    <div className="flex items-center gap-2 px-3 pt-4 pb-1">
-                      <Sparkles className="h-3.5 w-3.5 text-white/50" />
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">KI-Autopilot</span>
-                      {!kiActive && <Lock className="h-3 w-3 text-white/40" />}
-                    </div>
-                  )}
-                  <Link 
-                    to={item.href}
-                    onClick={handleLinkClick}
-                    data-tour={item.tourId}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                      'text-white/80 hover:text-white hover:bg-white/10',
-                      isActive && 'bg-white/15 text-white'
-                    )}
-                  >
-                    <item.icon className="h-5 w-5 shrink-0" />
-                    <span className="flex-1">{item.label}</span>
-                    {(badgeMap[item.href] ?? 0) > 0 && (
-                      <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                        {badgeMap[item.href]}
-                      </span>
-                    )}
-                  </Link>
-                </div>
-              );
-            })}
+          <nav className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-2 mt-2">
+            {allGroups.map((group, gi) => (
+              <div key={group.label || `g${gi}`}>
+                {group.label && (
+                  <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                    {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">{group.label}</span>
+                    {group.label === 'KI-Autopilot' && !kiActive && <Lock className="h-3 w-3 text-white/40" />}
+                  </div>
+                )}
+                {group.items.map(item => {
+                  const isActive = location.pathname === item.href || 
+                    (item.href !== '/' && location.pathname.startsWith(item.href));
+                  return (
+                    <Link 
+                      key={item.href}
+                      to={item.href}
+                      onClick={handleLinkClick}
+                      data-tour={item.tourId}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                        'text-white/80 hover:text-white hover:bg-white/10',
+                        isActive && 'bg-white/15 text-white'
+                      )}
+                    >
+                      <item.icon className="h-4.5 w-4.5 shrink-0" />
+                      <span className="flex-1">{item.label}</span>
+                      {(badgeMap[item.href] ?? 0) > 0 && (
+                        <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
+                          {badgeMap[item.href]}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
             {isAdmin && (
               <Link 
                 to="/admin"
                 onClick={handleLinkClick}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                   'text-white/80 hover:text-white hover:bg-white/10',
                   location.pathname.startsWith('/admin') && 'bg-white/15 text-white'
                 )}
               >
-                <Shield className="h-5 w-5 shrink-0" />
+                <Shield className="h-4.5 w-4.5 shrink-0" />
                 <span className="flex-1">Administration</span>
               </Link>
             )}
@@ -433,61 +349,63 @@ export function Sidebar() {
       </div>
 
       {/* Navigation - scrollable */}
-      <nav className="flex-1 overflow-y-auto flex flex-col gap-1 p-2 mt-2">
-        {allNavItems.map(item => {
-          const isActive = location.pathname === item.href || 
-            (item.href !== '/' && location.pathname.startsWith(item.href));
-          const isFirstKiDesktop = kiPaths[0] === item.href;
-          return (
-            <div key={item.href}>
-              {isFirstKiDesktop && !collapsed && (
-                <div className="flex items-center gap-2 px-3 pt-4 pb-1">
-                  <Sparkles className="h-3.5 w-3.5 text-white/50" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">KI-Autopilot</span>
-                  {!kiActive && <Lock className="h-3 w-3 text-white/40" />}
-                </div>
-              )}
-              {isFirstKiDesktop && collapsed && (
-                <div className="flex justify-center pt-3 pb-1">
-                  <Sparkles className="h-3.5 w-3.5 text-white/50" />
-                </div>
-              )}
-              <Link 
-                to={item.href} 
-                title={collapsed ? item.label : undefined}
-                data-tour={item.tourId}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                  'text-white/80 hover:text-white hover:bg-white/10',
-                  isActive && 'bg-white/15 text-white'
-                )}
-              >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!collapsed && (
-                  <>
-                    <span className="flex-1">{item.label}</span>
-                    {(badgeMap[item.href] ?? 0) > 0 && (
-                      <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
-                        {badgeMap[item.href]}
-                      </span>
-                    )}
-                  </>
-                )}
-              </Link>
-            </div>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-2 mt-2">
+        {allGroups.map((group, gi) => (
+          <div key={group.label || `g${gi}`}>
+            {group.label && !collapsed && (
+              <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">{group.label}</span>
+                {group.label === 'KI-Autopilot' && !kiActive && <Lock className="h-3 w-3 text-white/40" />}
+              </div>
+            )}
+            {group.label && collapsed && (
+              <div className="flex justify-center pt-3 pb-1">
+                {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
+              </div>
+            )}
+            {group.items.map(item => {
+              const isActive = location.pathname === item.href || 
+                (item.href !== '/' && location.pathname.startsWith(item.href));
+              return (
+                <Link 
+                  key={item.href}
+                  to={item.href} 
+                  title={collapsed ? item.label : undefined}
+                  data-tour={item.tourId}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                    'text-white/80 hover:text-white hover:bg-white/10',
+                    isActive && 'bg-white/15 text-white'
+                  )}
+                >
+                  <item.icon className="h-4.5 w-4.5 shrink-0" />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1">{item.label}</span>
+                      {(badgeMap[item.href] ?? 0) > 0 && (
+                        <span className="rounded-full bg-sidebar-primary px-2 py-0.5 text-xs text-sidebar-primary-foreground">
+                          {badgeMap[item.href]}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
         {isAdmin && (
           <Link 
             to="/admin"
             title={collapsed ? 'Administration' : undefined}
             className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
               'text-white/80 hover:text-white hover:bg-white/10',
               location.pathname.startsWith('/admin') && 'bg-white/15 text-white'
             )}
           >
-            <Shield className="h-5 w-5 shrink-0" />
+            <Shield className="h-4.5 w-4.5 shrink-0" />
             {!collapsed && <span className="flex-1">Administration</span>}
           </Link>
         )}
