@@ -36,6 +36,7 @@ const OwnerPortal = lazy(() => import("@/pages/OwnerPortal"));
 const MeterManagement = lazy(() => import("@/pages/MeterManagement"));
 const AnnouncementsPage = lazy(() => import("@/pages/AnnouncementsPage"));
 const ManagementFeesPage = lazy(() => import("@/pages/ManagementFeesPage"));
+const Payroll = lazy(() => import("@/pages/Payroll"));
 
 /** Wraps a page component with ProtectedRoute + DemoDataProvider */
 function Protected({ children }: { children: React.ReactNode }) {
@@ -79,6 +80,7 @@ export const protectedRoutes = (
     <Route path="/abrechnung" element={<Protected><OperatingCostSettlement /></Protected>} />
     <Route path="/budgets" element={<Protected><Budgets /></Protected>} />
     <Route path="/honorar" element={<Protected><ManagementFeesPage /></Protected>} />
+    <Route path="/lohnverrechnung" element={<Protected><Payroll /></Protected>} />
 
     {/* Documents & Communication */}
     <Route path="/dokumente" element={<Protected><Documents /></Protected>} />

@@ -828,6 +828,54 @@ export type Database = {
           },
         ]
       }
+      elda_submissions: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          meldungsart: Database["public"]["Enums"]["elda_meldungsart"]
+          organization_id: string
+          status: Database["public"]["Enums"]["elda_status"]
+          xml_content: string | null
+          zeitraum: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          meldungsart: Database["public"]["Enums"]["elda_meldungsart"]
+          organization_id: string
+          status?: Database["public"]["Enums"]["elda_status"]
+          xml_content?: string | null
+          zeitraum?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          meldungsart?: Database["public"]["Enums"]["elda_meldungsart"]
+          organization_id?: string
+          status?: Database["public"]["Enums"]["elda_status"]
+          xml_content?: string | null
+          zeitraum?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "elda_submissions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "property_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "elda_submissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           beleg_nummer: string | null
@@ -3037,6 +3085,84 @@ export type Database = {
           },
         ]
       }
+      payroll_entries: {
+        Row: {
+          auszahlungsdatum: string | null
+          bruttolohn: number
+          created_at: string
+          db_beitrag: number
+          dz_beitrag: number
+          employee_id: string
+          gesamtkosten_dg: number
+          id: string
+          kommunalsteuer: number
+          lohnsteuer: number
+          month: number
+          mvk_beitrag: number
+          nettolohn: number
+          organization_id: string
+          status: Database["public"]["Enums"]["payroll_status"]
+          sv_dg: number
+          sv_dn: number
+          year: number
+        }
+        Insert: {
+          auszahlungsdatum?: string | null
+          bruttolohn?: number
+          created_at?: string
+          db_beitrag?: number
+          dz_beitrag?: number
+          employee_id: string
+          gesamtkosten_dg?: number
+          id?: string
+          kommunalsteuer?: number
+          lohnsteuer?: number
+          month: number
+          mvk_beitrag?: number
+          nettolohn?: number
+          organization_id: string
+          status?: Database["public"]["Enums"]["payroll_status"]
+          sv_dg?: number
+          sv_dn?: number
+          year: number
+        }
+        Update: {
+          auszahlungsdatum?: string | null
+          bruttolohn?: number
+          created_at?: string
+          db_beitrag?: number
+          dz_beitrag?: number
+          employee_id?: string
+          gesamtkosten_dg?: number
+          id?: string
+          kommunalsteuer?: number
+          lohnsteuer?: number
+          month?: number
+          mvk_beitrag?: number
+          nettolohn?: number
+          organization_id?: string
+          status?: Database["public"]["Enums"]["payroll_status"]
+          sv_dg?: number
+          sv_dn?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_entries_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "property_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           action: string
@@ -3301,6 +3427,87 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "property_documents_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_employees: {
+        Row: {
+          adresse: string | null
+          austrittsdatum: string | null
+          beschaeftigungsart: Database["public"]["Enums"]["employment_type"]
+          bruttolohn_monatlich: number
+          created_at: string
+          eintrittsdatum: string
+          geburtsdatum: string | null
+          id: string
+          kollektivvertrag_stufe: string | null
+          nachname: string
+          organization_id: string
+          ort: string | null
+          plz: string | null
+          property_id: string | null
+          status: Database["public"]["Enums"]["employee_status"]
+          svnr: string | null
+          updated_at: string
+          vorname: string
+          wochenstunden: number | null
+        }
+        Insert: {
+          adresse?: string | null
+          austrittsdatum?: string | null
+          beschaeftigungsart?: Database["public"]["Enums"]["employment_type"]
+          bruttolohn_monatlich?: number
+          created_at?: string
+          eintrittsdatum: string
+          geburtsdatum?: string | null
+          id?: string
+          kollektivvertrag_stufe?: string | null
+          nachname: string
+          organization_id: string
+          ort?: string | null
+          plz?: string | null
+          property_id?: string | null
+          status?: Database["public"]["Enums"]["employee_status"]
+          svnr?: string | null
+          updated_at?: string
+          vorname: string
+          wochenstunden?: number | null
+        }
+        Update: {
+          adresse?: string | null
+          austrittsdatum?: string | null
+          beschaeftigungsart?: Database["public"]["Enums"]["employment_type"]
+          bruttolohn_monatlich?: number
+          created_at?: string
+          eintrittsdatum?: string
+          geburtsdatum?: string | null
+          id?: string
+          kollektivvertrag_stufe?: string | null
+          nachname?: string
+          organization_id?: string
+          ort?: string | null
+          plz?: string | null
+          property_id?: string | null
+          status?: Database["public"]["Enums"]["employee_status"]
+          svnr?: string | null
+          updated_at?: string
+          vorname?: string
+          wochenstunden?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_employees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "property_employees_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
@@ -5993,6 +6200,14 @@ export type Database = {
         | "completed"
         | "failed"
         | "cancelled"
+      elda_meldungsart:
+        | "anmeldung"
+        | "abmeldung"
+        | "aenderung"
+        | "beitragsgrundlage"
+      elda_status: "erstellt" | "uebermittelt" | "bestaetigt" | "fehler"
+      employee_status: "aktiv" | "karenz" | "ausgeschieden"
+      employment_type: "geringfuegig" | "teilzeit" | "vollzeit"
       expense_category:
         | "betriebskosten_umlagefaehig"
         | "instandhaltung"
@@ -6043,6 +6258,7 @@ export type Database = {
         | "nicht_umlagefaehig"
       mrg_scope: "vollanwendung" | "teilanwendung" | "ausgenommen"
       payment_type: "sepa" | "ueberweisung" | "bar" | "sonstiges"
+      payroll_status: "entwurf" | "freigegeben" | "ausbezahlt"
       sepa_collection_status:
         | "pending"
         | "exported"
@@ -6204,6 +6420,15 @@ export const Constants = {
         "failed",
         "cancelled",
       ],
+      elda_meldungsart: [
+        "anmeldung",
+        "abmeldung",
+        "aenderung",
+        "beitragsgrundlage",
+      ],
+      elda_status: ["erstellt", "uebermittelt", "bestaetigt", "fehler"],
+      employee_status: ["aktiv", "karenz", "ausgeschieden"],
+      employment_type: ["geringfuegig", "teilzeit", "vollzeit"],
       expense_category: [
         "betriebskosten_umlagefaehig",
         "instandhaltung",
@@ -6257,6 +6482,7 @@ export const Constants = {
       ],
       mrg_scope: ["vollanwendung", "teilanwendung", "ausgenommen"],
       payment_type: ["sepa", "ueberweisung", "bar", "sonstiges"],
+      payroll_status: ["entwurf", "freigegeben", "ausbezahlt"],
       sepa_collection_status: [
         "pending",
         "exported",

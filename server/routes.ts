@@ -17,6 +17,7 @@ import { registerExportRoutes } from "./routes/exports";
 import { registerJobRoutes } from "./routes/jobs";
 import { registerNotificationRoutes } from "./routes/notifications";
 import { registerOcrRoutes } from "./routes/ocr";
+import { registerPayrollRoutes } from "./routes/payroll";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Readonly API
@@ -36,6 +37,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerJobRoutes(app);
   registerNotificationRoutes(app);
   registerOcrRoutes(app);
+  registerPayrollRoutes(app);
 
   // External integrations
   registerStripeRoutes(app);
