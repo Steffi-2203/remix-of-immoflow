@@ -160,6 +160,8 @@ export default function WegVorschreibungen() {
   const totalRl = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.ruecklage) || 0), 0);
   const totalIh = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.instandhaltung) || 0), 0);
   const totalVh = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.verwaltungshonorar) || 0), 0);
+  const totalHz = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.heizung) || 0), 0);
+  const totalUst = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.ust) || 0), 0);
 
   const currentRuns: string[] = [...new Set(vorschreibungen.map((v: any) => v.run_id as string).filter(Boolean))];
 
@@ -240,29 +242,41 @@ export default function WegVorschreibungen() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <Card>
                 <CardContent className="py-3 px-4">
-                  <p className="text-xs text-muted-foreground">Betriebskosten</p>
+                  <p className="text-xs text-muted-foreground">Betriebskosten (10%)</p>
                   <p className="text-lg font-semibold" data-testid="text-weg-vs-total-bk">{fmtEur(totalBk)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="py-3 px-4">
-                  <p className="text-xs text-muted-foreground">Rücklage</p>
+                  <p className="text-xs text-muted-foreground">Heizung (20%)</p>
+                  <p className="text-lg font-semibold" data-testid="text-weg-vs-total-hz">{fmtEur(totalHz)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-3 px-4">
+                  <p className="text-xs text-muted-foreground">Rücklage (0%)</p>
                   <p className="text-lg font-semibold" data-testid="text-weg-vs-total-rl">{fmtEur(totalRl)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="py-3 px-4">
-                  <p className="text-xs text-muted-foreground">Instandhaltung</p>
+                  <p className="text-xs text-muted-foreground">Instandhaltung (20%)</p>
                   <p className="text-lg font-semibold" data-testid="text-weg-vs-total-ih">{fmtEur(totalIh)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="py-3 px-4">
-                  <p className="text-xs text-muted-foreground">Verwaltung</p>
+                  <p className="text-xs text-muted-foreground">Verwaltung (20%)</p>
                   <p className="text-lg font-semibold" data-testid="text-weg-vs-total-vh">{fmtEur(totalVh)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-3 px-4">
+                  <p className="text-xs text-muted-foreground">USt gesamt</p>
+                  <p className="text-lg font-semibold" data-testid="text-weg-vs-total-ust">{fmtEur(totalUst)}</p>
                 </CardContent>
               </Card>
               <Card>
@@ -298,6 +312,7 @@ export default function WegVorschreibungen() {
                       <TableHead>Eigentümer</TableHead>
                       <TableHead>MEA</TableHead>
                       <TableHead className="text-right">BK</TableHead>
+                      <TableHead className="text-right">Heizung</TableHead>
                       <TableHead className="text-right">Rücklage</TableHead>
                       <TableHead className="text-right">Instandh.</TableHead>
                       <TableHead className="text-right">Verwaltung</TableHead>
@@ -314,6 +329,7 @@ export default function WegVorschreibungen() {
                         <TableCell>{getOwnerName(v.owner_id)}</TableCell>
                         <TableCell>{parseFloat(v.mea_share || 0).toFixed(2)}%</TableCell>
                         <TableCell className="text-right">{fmtEur(v.betriebskosten)}</TableCell>
+                        <TableCell className="text-right">{fmtEur(v.heizung)}</TableCell>
                         <TableCell className="text-right">{fmtEur(v.ruecklage)}</TableCell>
                         <TableCell className="text-right">{fmtEur(v.instandhaltung)}</TableCell>
                         <TableCell className="text-right">{fmtEur(v.verwaltungshonorar)}</TableCell>
@@ -352,7 +368,7 @@ export default function WegVorschreibungen() {
             <DialogTitle>WEG-Vorschreibungen generieren</DialogTitle>
             <DialogDescription>
               Erstellt monatliche Vorschreibungen für alle Eigentümer basierend auf dem Wirtschaftsplan und den MEA-Anteilen.
-              Positionen: Betriebskosten, Rücklage, Instandhaltung, Verwaltungshonorar (keine Miete).
+              Positionen: Betriebskosten (10% USt), Heizung (20% USt), Rücklage (0% USt), Instandhaltung (20% USt), Verwaltungshonorar (20% USt).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

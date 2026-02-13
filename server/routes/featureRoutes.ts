@@ -2553,7 +2553,7 @@ router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Respo
       return res.status(400).json({ error: "Keine Eigentümer-Zuordnungen gefunden. Bitte zuerst Eigentümer zu Einheiten zuordnen." });
     }
 
-    let totalBk = 0, totalRuecklage = 0, totalInstandhaltung = 0, totalVerwaltung = 0;
+    let totalBk = 0, totalRuecklage = 0, totalInstandhaltung = 0, totalVerwaltung = 0, totalHeizung = 0;
     for (const line of budgetLines) {
       const amount = Number(line.amount) || 0;
       const cat = (line.category || '').toLowerCase();
@@ -2563,12 +2563,14 @@ router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Respo
         totalInstandhaltung += amount;
       } else if (cat.includes('verwaltung') || cat.includes('honorar') || cat.includes('management')) {
         totalVerwaltung += amount;
+      } else if (cat.includes('heizung') || cat.includes('heizkosten') || cat.includes('wärme') || cat.includes('fernwärme') || cat.includes('heating')) {
+        totalHeizung += amount;
       } else {
         totalBk += amount;
       }
     }
 
-    if (totalBk === 0 && totalRuecklage === 0 && totalInstandhaltung === 0 && totalVerwaltung === 0) {
+    if (totalBk === 0 && totalRuecklage === 0 && totalInstandhaltung === 0 && totalVerwaltung === 0 && totalHeizung === 0) {
       const planTotal = Number(budgetPlan.totalAmount) || 0;
       const planReserve = Number(budgetPlan.reserveContribution) || 0;
       const planMgmt = Number(budgetPlan.managementFee) || 0;
@@ -2581,6 +2583,7 @@ router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Respo
     const monthlyRuecklage = totalRuecklage / 12;
     const monthlyInstandhaltung = totalInstandhaltung / 12;
     const monthlyVerwaltung = totalVerwaltung / 12;
+    const monthlyHeizung = totalHeizung / 12;
 
     const totalMea = unitOwners.reduce((s, uo) => s + (Number(uo.meaShare) || 0), 0);
     if (totalMea <= 0) {
@@ -2598,13 +2601,15 @@ router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Respo
       const ruecklage = Math.round(monthlyRuecklage * share * 100) / 100;
       const instandhaltung = Math.round(monthlyInstandhaltung * share * 100) / 100;
       const verwaltung = Math.round(monthlyVerwaltung * share * 100) / 100;
+      const heizung = Math.round(monthlyHeizung * share * 100) / 100;
 
       const ustBk = Math.round(bk * 0.10 * 100) / 100;
       const ustRuecklage = 0;
       const ustInstandhaltung = Math.round(instandhaltung * 0.20 * 100) / 100;
       const ustVerwaltung = Math.round(verwaltung * 0.20 * 100) / 100;
-      const ust = ustBk + ustRuecklage + ustInstandhaltung + ustVerwaltung;
-      const gesamtbetrag = bk + ruecklage + instandhaltung + verwaltung + ust;
+      const ustHeizung = Math.round(heizung * 0.20 * 100) / 100;
+      const ust = ustBk + ustRuecklage + ustInstandhaltung + ustVerwaltung + ustHeizung;
+      const gesamtbetrag = bk + ruecklage + instandhaltung + verwaltung + heizung + ust;
 
       vorschreibungen.push({
         organizationId: ctx.orgId,
@@ -2619,6 +2624,7 @@ router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Respo
         ruecklage: String(ruecklage),
         instandhaltung: String(instandhaltung),
         verwaltungshonorar: String(verwaltung),
+        heizung: String(heizung),
         ust: String(ust),
         gesamtbetrag: String(gesamtbetrag),
         status: 'offen' as const,
