@@ -66,7 +66,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Modular Structure**: Clear separation of `server/`, `shared/`, and `src/` directories.
 - **Drizzle ORM**: Type-safe database interactions and schema management.
 - **Dedicated Tables**: `leases` for contract history, `payment_allocations` for flexible payment mapping, `financial_audit_log` for GoBD compliance.
-- **Feature Routes Architecture**: New modules use `server/routes/featureRoutes.ts` with consistent naming conventions and organization-scoped access control.
+- **Feature Routes Architecture**: Modular route structure split by domain: `server/routes/wegRoutes.ts` (WEG management), `server/routes/financeRoutes.ts` (SEPA, VPI, payouts, property-owners), `server/routes/adminRoutes.ts` (insurance, deadlines, portals, compliance, audit). Shared helpers in `server/routes/helpers.ts`. `server/routes/featureRoutes.ts` acts as thin aggregator. Consistent naming conventions and organization-scoped access control.
 
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service.
