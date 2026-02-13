@@ -227,8 +227,9 @@ async function initStripe() {
     return runRetentionCron();
   });
 
-  // Start job queue worker
-  jobQueueService.start(5000);
+  // Start job queue worker (hybrid LISTEN/NOTIFY + safety polling)
+  // Set JOB_QUEUE_MODE=polling to revert to pure 5s polling
+  jobQueueService.start();
 
   setupAuth(app);
   const server = await registerRoutes(app);

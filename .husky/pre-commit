@@ -48,6 +48,32 @@ else
   fi
 fi
 
+# ── TypeScript type-check on staged .ts/.tsx files ──
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+if [ -n "$STAGED_TS" ]; then
+  echo "🔍 Running TypeScript check..."
+  if npx tsc --noEmit --skipLibCheck 2>/dev/null; then
+    echo "✅ TypeScript check passed"
+  else
+    echo ""
+    echo "⚠️  TypeScript errors detected. Fix them before committing."
+    echo "Run 'npx tsc --noEmit' to see all errors."
+    exit 1
+  fi
+fi
+
+# ── ESLint on staged .ts/.tsx files ──
+if [ -n "$STAGED_TS" ]; then
+  echo "🔍 Running ESLint..."
+  if echo "$STAGED_TS" | xargs npx eslint --max-warnings=0 2>/dev/null; then
+    echo "✅ ESLint check passed"
+  else
+    echo ""
+    echo "⚠️  ESLint errors detected. Fix them before committing."
+    exit 1
+  fi
+fi
+
 # ── generate-summary (if available) ──
 if [ -f tools/generate-summary.js ]; then
   node tools/generate-summary.js 2>/dev/null || true
