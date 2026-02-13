@@ -6,10 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, FileCheck, Ban } from 'lucide-react';
-import { useInvoices, useUpdateInvoiceStatus } from '@/hooks/useInvoices';
-import { useTenants } from '@/hooks/useTenants';
+import { useInvoices, useUpdateInvoiceStatus, type Invoice } from '@/hooks/useInvoices';
+import { useTenants, type Tenant } from '@/hooks/useTenants';
 import { useProperties } from '@/hooks/useProperties';
-import { useUnits } from '@/hooks/useUnits';
+import { useUnits, type Unit } from '@/hooks/useUnits';
 import { toast } from 'sonner';
 
 interface BatchInvoiceActionsDialogProps {
@@ -50,15 +50,15 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
   const { data: units = [] } = useUnits();
   const updateStatus = useUpdateInvoiceStatus();
 
-  const getTenant = (id: string) => tenants.find((t: any) => t.id === id);
-  const getUnit = (id: string) => units.find((u: any) => u.id === id);
+  const getTenant = (id: string) => tenants.find((t) => t.id === id);
+  const getUnit = (id: string) => units.find((u) => u.id === id);
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv: any) => {
+    return invoices.filter((inv) => {
       if (filterStatus !== 'all' && inv.status !== filterStatus) return false;
       if (filterPropertyId !== 'all') {
         const tenant = getTenant(inv.tenant_id);
-        const unit = tenant ? getUnit((tenant as any).unit_id) : null;
+        const unit = tenant ? getUnit(tenant.unit_id) : null;
         if (unit?.property_id !== filterPropertyId) return false;
       }
       return true;
@@ -69,7 +69,7 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
     if (selectedIds.size === filteredInvoices.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredInvoices.map((i: any) => i.id)));
+      setSelectedIds(new Set(filteredInvoices.map((i) => i.id)));
     }
   };
 
@@ -144,7 +144,7 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Liegenschaften</SelectItem>
-                {properties.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                {properties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -187,7 +187,7 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredInvoices.slice(0, 100).map((inv: any) => {
+                  filteredInvoices.slice(0, 100).map((inv) => {
                     const tenant = getTenant(inv.tenant_id);
                     return (
                       <TableRow key={inv.id}>
@@ -196,7 +196,7 @@ export function BatchInvoiceActionsDialog({ open, onOpenChange }: BatchInvoiceAc
                         </TableCell>
                         <TableCell>{inv.month}/{inv.year}</TableCell>
                         <TableCell className="font-medium">
-                          {tenant ? `${(tenant as any).first_name} ${(tenant as any).last_name}` : '—'}
+                          {tenant ? `${tenant.first_name} ${tenant.last_name}` : '—'}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           € {Number(inv.gesamtbetrag).toFixed(2)}
