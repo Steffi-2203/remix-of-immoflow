@@ -231,6 +231,9 @@ export default function PropertyDetail() {
         <Link to="/liegenschaften" className="hover:text-foreground transition-colors">Liegenschaften</Link>
         <span>/</span>
         <span className="text-foreground font-medium">{property.name}</span>
+        <Badge variant="outline" className="ml-2" data-testid="badge-management-type">
+          {(property.management_type || property.managementType) === 'weg' ? 'WEG' : 'Mietverwaltung'}
+        </Badge>
       </nav>
 
       {/* Back Button & Actions */}

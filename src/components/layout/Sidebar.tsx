@@ -39,6 +39,7 @@ import {
   Brain,
   MessageSquarePlus,
   Sparkles,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -92,6 +93,7 @@ const navGroups: NavGroup[] = [
     icon: Home,
     items: [
       { label: 'WEG-Verwaltung', icon: Home, href: '/weg' },
+      { label: 'WEG-Vorschreibungen', icon: ClipboardList, href: '/weg-vorschreibungen' },
       { label: 'Budgetplanung', icon: PiggyBank, href: '/budgets' },
     ],
   },

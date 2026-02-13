@@ -2480,4 +2480,216 @@ router.get("/api/audit-chain/verify", async (req: Request, res: Response) => {
   }
 });
 
+// ====== WEG-VORSCHREIBUNGEN (OWNER INVOICING) ======
+
+router.get("/api/weg/vorschreibungen", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+    const { propertyId, year, month } = req.query;
+    let conditions: any[] = [eq(schema.wegVorschreibungen.organizationId, ctx.orgId)];
+    if (propertyId) conditions.push(eq(schema.wegVorschreibungen.propertyId, propertyId as string));
+    if (year) conditions.push(eq(schema.wegVorschreibungen.year, parseInt(year as string)));
+    if (month) conditions.push(eq(schema.wegVorschreibungen.month, parseInt(month as string)));
+    const where = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const data = await db.select().from(schema.wegVorschreibungen).where(where).orderBy(desc(schema.wegVorschreibungen.year), desc(schema.wegVorschreibungen.month));
+    res.json(objectToSnakeCase(data));
+  } catch (error) {
+    console.error("Error fetching WEG-Vorschreibungen:", error);
+    res.status(500).json({ error: "Fehler beim Laden der WEG-Vorschreibungen" });
+  }
+});
+
+router.post("/api/weg/vorschreibungen/generate", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const body = objectToCamelCase(req.body);
+    const { propertyId, year, month } = body;
+    if (!propertyId || !year || !month) {
+      return res.status(400).json({ error: "propertyId, year und month sind erforderlich" });
+    }
+
+    const prop = await db.select().from(schema.properties).where(and(
+      eq(schema.properties.id, propertyId),
+      eq(schema.properties.organizationId, ctx.orgId)
+    )).limit(1);
+    if (!prop.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const existing = await db.select().from(schema.wegVorschreibungen).where(and(
+      eq(schema.wegVorschreibungen.propertyId, propertyId),
+      eq(schema.wegVorschreibungen.year, year),
+      eq(schema.wegVorschreibungen.month, month)
+    ));
+    if (existing.length > 0) {
+      return res.status(409).json({ error: `Vorschreibungen für ${month}/${year} existieren bereits (${existing.length} Stück)` });
+    }
+
+    const budgetPlans = await db.select().from(schema.wegBudgetPlans).where(and(
+      eq(schema.wegBudgetPlans.propertyId, propertyId),
+      eq(schema.wegBudgetPlans.year, year),
+      eq(schema.wegBudgetPlans.organizationId, ctx.orgId)
+    )).limit(1);
+
+    if (!budgetPlans.length) {
+      return res.status(404).json({ error: `Kein Wirtschaftsplan für ${year} gefunden. Bitte zuerst einen Wirtschaftsplan erstellen.` });
+    }
+    const budgetPlan = budgetPlans[0];
+
+    const budgetLines = await db.select().from(schema.wegBudgetLines).where(
+      eq(schema.wegBudgetLines.budgetPlanId, budgetPlan.id)
+    );
+
+    const unitOwners = await db.select().from(schema.wegUnitOwners).where(and(
+      eq(schema.wegUnitOwners.propertyId, propertyId),
+      eq(schema.wegUnitOwners.organizationId, ctx.orgId)
+    ));
+
+    if (!unitOwners.length) {
+      return res.status(400).json({ error: "Keine Eigentümer-Zuordnungen gefunden. Bitte zuerst Eigentümer zu Einheiten zuordnen." });
+    }
+
+    let totalBk = 0, totalRuecklage = 0, totalInstandhaltung = 0, totalVerwaltung = 0;
+    for (const line of budgetLines) {
+      const amount = Number(line.amount) || 0;
+      const cat = (line.category || '').toLowerCase();
+      if (cat.includes('rücklage') || cat.includes('ruecklage') || cat === 'reserve') {
+        totalRuecklage += amount;
+      } else if (cat.includes('instandhaltung') || cat.includes('reparatur') || cat.includes('sanierung')) {
+        totalInstandhaltung += amount;
+      } else if (cat.includes('verwaltung') || cat.includes('honorar') || cat.includes('management')) {
+        totalVerwaltung += amount;
+      } else {
+        totalBk += amount;
+      }
+    }
+
+    if (totalBk === 0 && totalRuecklage === 0 && totalInstandhaltung === 0 && totalVerwaltung === 0) {
+      const planTotal = Number(budgetPlan.totalAmount) || 0;
+      const planReserve = Number(budgetPlan.reserveContribution) || 0;
+      const planMgmt = Number(budgetPlan.managementFee) || 0;
+      totalBk = planTotal - planReserve - planMgmt;
+      totalRuecklage = planReserve;
+      totalVerwaltung = planMgmt;
+    }
+
+    const monthlyBk = totalBk / 12;
+    const monthlyRuecklage = totalRuecklage / 12;
+    const monthlyInstandhaltung = totalInstandhaltung / 12;
+    const monthlyVerwaltung = totalVerwaltung / 12;
+
+    const totalMea = unitOwners.reduce((s, uo) => s + (Number(uo.meaShare) || 0), 0);
+    if (totalMea <= 0) {
+      return res.status(400).json({ error: "MEA-Summe ist 0. Bitte MEA-Anteile der Eigentümer prüfen." });
+    }
+
+    const dueDay = budgetPlan.dueDay || 5;
+    const faelligAm = `${year}-${String(month).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
+    const runId = crypto.randomUUID();
+
+    const vorschreibungen: any[] = [];
+    for (const uo of unitOwners) {
+      const share = (Number(uo.meaShare) || 0) / totalMea;
+      const bk = Math.round(monthlyBk * share * 100) / 100;
+      const ruecklage = Math.round(monthlyRuecklage * share * 100) / 100;
+      const instandhaltung = Math.round(monthlyInstandhaltung * share * 100) / 100;
+      const verwaltung = Math.round(monthlyVerwaltung * share * 100) / 100;
+
+      const ustBk = Math.round(bk * 0.10 * 100) / 100;
+      const ustRuecklage = 0;
+      const ustInstandhaltung = Math.round(instandhaltung * 0.20 * 100) / 100;
+      const ustVerwaltung = Math.round(verwaltung * 0.20 * 100) / 100;
+      const ust = ustBk + ustRuecklage + ustInstandhaltung + ustVerwaltung;
+      const gesamtbetrag = bk + ruecklage + instandhaltung + verwaltung + ust;
+
+      vorschreibungen.push({
+        organizationId: ctx.orgId,
+        propertyId,
+        unitId: uo.unitId,
+        ownerId: uo.ownerId,
+        budgetPlanId: budgetPlan.id,
+        year,
+        month,
+        meaShare: String(uo.meaShare),
+        betriebskosten: String(bk),
+        ruecklage: String(ruecklage),
+        instandhaltung: String(instandhaltung),
+        verwaltungshonorar: String(verwaltung),
+        ust: String(ust),
+        gesamtbetrag: String(gesamtbetrag),
+        status: 'offen' as const,
+        faelligAm,
+        runId,
+      });
+    }
+
+    const created = await db.insert(schema.wegVorschreibungen).values(vorschreibungen).returning();
+
+    console.log(`[WEG-VORSCHREIBUNG] Erstellt: ${created.length} Vorschreibungen für Liegenschaft ${propertyId}, ${month}/${year}`);
+
+    res.json({
+      message: `${created.length} WEG-Vorschreibungen für ${month}/${year} erstellt`,
+      count: created.length,
+      runId,
+      vorschreibungen: objectToSnakeCase(created),
+    });
+  } catch (error: any) {
+    console.error("Error generating WEG-Vorschreibungen:", error);
+    res.status(500).json({ error: error.message || "Fehler beim Generieren der WEG-Vorschreibungen" });
+  }
+});
+
+router.patch("/api/weg/vorschreibungen/:id/status", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const { status } = req.body;
+    if (!['offen', 'bezahlt', 'teilbezahlt', 'ueberfaellig'].includes(status)) {
+      return res.status(400).json({ error: "Ungültiger Status" });
+    }
+
+    const [updated] = await db.update(schema.wegVorschreibungen)
+      .set({ status, updatedAt: new Date() })
+      .where(and(
+        eq(schema.wegVorschreibungen.id, req.params.id),
+        eq(schema.wegVorschreibungen.organizationId, ctx.orgId)
+      ))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Vorschreibung nicht gefunden" });
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating WEG-Vorschreibung status:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren" });
+  }
+});
+
+router.delete("/api/weg/vorschreibungen/run/:runId", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const deleted = await db.delete(schema.wegVorschreibungen)
+      .where(and(
+        eq(schema.wegVorschreibungen.runId, req.params.runId),
+        eq(schema.wegVorschreibungen.organizationId, ctx.orgId)
+      ))
+      .returning();
+
+    res.json({ message: `${deleted.length} Vorschreibungen gelöscht`, count: deleted.length });
+  } catch (error) {
+    console.error("Error deleting WEG-Vorschreibungen:", error);
+    res.status(500).json({ error: "Fehler beim Löschen" });
+  }
+});
+
 export default router;

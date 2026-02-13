@@ -11,6 +11,7 @@ export const userSessions = pgTable("user_sessions", {
   expire: timestamp("expire", { precision: 6, withTimezone: false }).notNull(),
 });
 
+export const managementTypeEnum = pgEnum('management_type', ['mietverwaltung', 'weg']);
 export const appRoleEnum = pgEnum('app_role', ['admin', 'property_manager', 'finance', 'viewer', 'tester']);
 export const expenseCategoryEnum = pgEnum('expense_category', ['betriebskosten_umlagefaehig', 'instandhaltung']);
 export const expenseTypeEnum = pgEnum('expense_type', [
@@ -135,6 +136,7 @@ export const loginAttempts = pgTable("login_attempts", {
 export const properties = pgTable("properties", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
+  managementType: managementTypeEnum("management_type").notNull().default('mietverwaltung'),
   name: text("name").notNull(),
   address: text("address").notNull(),
   city: text("city").notNull(),
@@ -1126,6 +1128,39 @@ export const wegBudgetLines = pgTable("weg_budget_lines", {
 export const insertWegBudgetLineSchema = createInsertSchema(wegBudgetLines).omit({ id: true, createdAt: true });
 export type InsertWegBudgetLine = z.infer<typeof insertWegBudgetLineSchema>;
 export type WegBudgetLine = typeof wegBudgetLines.$inferSelect;
+
+// ====== WEG-VORSCHREIBUNGEN (OWNER INVOICING) ======
+export const wegVorschreibungen = pgTable("weg_vorschreibungen", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  budgetPlanId: uuid("budget_plan_id").references(() => wegBudgetPlans.id),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(),
+  meaShare: numeric("mea_share", { precision: 10, scale: 4 }).notNull(),
+  betriebskosten: numeric("betriebskosten", { precision: 12, scale: 2 }).default('0'),
+  ruecklage: numeric("ruecklage", { precision: 12, scale: 2 }).default('0'),
+  instandhaltung: numeric("instandhaltung", { precision: 12, scale: 2 }).default('0'),
+  verwaltungshonorar: numeric("verwaltungshonorar", { precision: 12, scale: 2 }).default('0'),
+  ust: numeric("ust", { precision: 12, scale: 2 }).default('0'),
+  gesamtbetrag: numeric("gesamtbetrag", { precision: 12, scale: 2 }).default('0'),
+  status: invoiceStatusEnum("status").default('offen'),
+  faelligAm: date("faellig_am"),
+  pdfUrl: text("pdf_url"),
+  runId: uuid("run_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_weg_vorschreibungen_property").on(table.propertyId, table.year, table.month),
+  index("idx_weg_vorschreibungen_owner").on(table.ownerId),
+  index("idx_weg_vorschreibungen_run").on(table.runId),
+]);
+
+export const insertWegVorschreibungSchema = createInsertSchema(wegVorschreibungen).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegVorschreibung = z.infer<typeof insertWegVorschreibungSchema>;
+export type WegVorschreibung = typeof wegVorschreibungen.$inferSelect;
 
 // ====== WEG SONDERUMLAGEN (SPECIAL ASSESSMENTS) ======
 export const wegSpecialAssessments = pgTable("weg_special_assessments", {
