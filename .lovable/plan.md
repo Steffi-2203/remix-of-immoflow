@@ -1,204 +1,161 @@
 
-# Intensiv-Test-Infrastruktur fur ImmoflowMe
-
-## Status: routes.ts ist bereits modularisiert (43 Zeilen)
-
-Die Modularisierung ist abgeschlossen -- `server/routes.ts` ist ein schlanker 43-Zeilen-Orchestrator mit 11 Domain-Routern. Der Fokus liegt nun auf dem Aufbau der umfassenden Test-Infrastruktur.
+# Tiefenprüfung: ImmoflowMe
+## Bewertung durch GF + IT-Leitung einer grossen Hausverwaltung
 
 ---
 
-## Phase 1: Test-Infrastruktur und Scripts
+## 1. Fachliche Abdeckung (Geschaeftsfuehrung)
 
-### 1.1 Package.json -- Neue Test-Scripts
-Neue npm-Scripts hinzufugen:
+### Was die Software kann
 
-```text
-"test:unit"        -> vitest run tests/unit
-"test:integration" -> vitest run tests/integration
-"test:e2e"         -> playwright test
-"test:typecheck"   -> tsc --noEmit
-"test:all"         -> test:typecheck && test:unit && test:integration
-```
+| Bereich | Status | Bewertung |
+|---------|--------|-----------|
+| Objekt-/Einheiten-/Mieterverwaltung | Vollstaendig | Hierarchie Property - Unit - Tenant korrekt abgebildet |
+| Vorschreibung (monatliche Rechnungen) | Vollstaendig | BK/HK/Miete mit korrekten USt-Saetzen (10%/20%) |
+| BK-Abrechnung (§21 MRG) | Vollstaendig | 6 Verteilungsschluessel, Pro-Rata bei Mieterwechsel, Wasserkosten separat |
+| SEPA-Export (Lastschrift + Ueberweisung) | Vollstaendig | pain.008.001.02 und pain.001.001.03 konform |
+| Mahnwesen (3-stufig, §1333 ABGB) | Vollstaendig | Automatische Zinsberechnung, E-Mail-Versand |
+| VPI-Wertsicherung | Vollstaendig | Schwellenwert 5%, automatische Anpassung |
+| MieWeG-Indexierungsrechner | Vollstaendig | Haelfteregelung, 2026/2027-Caps korrekt |
+| WEG §31 Ruecklage | Vollstaendig | Min. 0,90 EUR/qm/Monat, Compliance-Check |
+| WEG §24 Eigentuemerversammlung | Vorhanden | Einladungsfristen |
+| MRG §27b Kautionsrueckgabe | Vorhanden | 14-Tage-Deadline-Monitoring |
+| FinanzOnline USt-VA (U30) | Vorhanden | XML-Generation mit Kennzahlen |
+| BMD NTCS / DATEV Export | Vorhanden | Buchhaltungs-Schnittstellen |
+| Leerstandsverwaltung | Vorhanden | Vacancy-Vorschreibung (BK+HK, Miete=0) |
+| Doppelte Buchhaltung | Vorhanden | Einheitskontenrahmen Klassen 0-9 |
+| OCR Dokumentenerfassung | Vorhanden | GPT-5.2 Vision fuer Mietvertraege/Rechnungen |
+| Mieterportal | Vorhanden | Eigener Login fuer Mieter |
+| Eigentuemer-Reporting | Vorhanden | Gesamtabrechnung PDF |
 
-### 1.2 Docker-Compose fur lokale Test-DB
-Datei: `docker-compose.test.yml`
-- PostgreSQL 15 Container mit Port 5433
-- Test-Datenbank `immoflow_test`
-- Volume fur Persistenz
+### Fehlende / Schwache Bereiche (fuer grosse HV relevant)
 
-### 1.3 Test-Environment-Konfiguration
-Datei: `tests/env.test.ts`
-- Zentrale Env-Defaults fur Tests (NODE_ENV=test, WORKER_ENABLED=false, etc.)
-- Mock-Keys fur Sentry, OpenAI, Stripe
-
----
-
-## Phase 2: Seed-Daten (SQL)
-
-### 2.1 SQL Seed-Script
-Datei: `scripts/seed-test-data.sql`
-
-Daten:
-- 3 Organisationen (Hausverwaltung Mustermann, WEG Testgasse, Immo GmbH)
-- 10 Properties verteilt auf die 3 Orgs
-- 3 Test-Accounts mit festen Passwortern:
-  - `admin@test.immoflow.me` (Admin, Passwort: `TestAdmin123!`)
-  - `manager@test.immoflow.me` (Manager, Passwort: `TestManager123!`)
-  - `mieter@test.immoflow.me` (Tenant/Tester, Passwort: `TestMieter123!`)
-- 50 Mietvertrage (Tenants mit Units)
-- 200 Buchungen (Invoices + Payments uber 12 Monate)
-- Expenses pro Property und Monat
-
-### 2.2 Erweiterung von `tests/seeds/generateTestData.ts`
-- SQL-Export-Funktion hinzufugen die INSERT-Statements generiert
-- Deterministische UUIDs fur Reproduzierbarkeit
+1. **Keine CAMT.053 / MT940 Bankimport-Schnittstelle** erkennbar - fuer eine grosse HV mit tausenden Zahlungen pro Monat ist automatischer Bankabgleich essenziell
+2. **Kein Dokumenten-Management-System (DMS)** mit Versionierung - die `documentManagementService.ts` existiert, aber die Tiefe ist unklar
+3. **Kein Eigentuemer-Umlagekreis** bei WEG (§34/38/39 nur in Memory erwaehnt, Code-Implementierung nicht vollstaendig sichtbar)
+4. **Keine Heizkostenverordnung (HeizKG)** - 70/30-Split in Memory erwaehnt, aber kein dedizierter Service
+5. **Keine Anbindung an Grundbuch oder GIS** fuer Liegenschaftsdaten
+6. **Keine Multi-Mandanten-Trennung auf DB-Ebene** - Isolation nur ueber organizationId-Filter (fuer grosse HVs mit sensiblen Daten ein Risiko)
 
 ---
 
-## Phase 3: Unit-Tests (Router Smoke Tests)
+## 2. Technische Architektur (IT-Leitung)
 
-### 3.1 Health/Core Router
-Datei: `tests/unit/routes/core.test.ts`
-- GET /api/health liefert 200 + timestamp
-- GET /api/metrics liefert uptime
+### Staerken
 
-### 3.2 Auth Router Smoke Tests
-Datei: `tests/unit/routes/auth.test.ts`
-- POST /api/auth/login mit leeren Feldern -> 400
-- POST /api/auth/login mit falschen Credentials -> 401
-- POST /api/auth/register ohne Invite -> 403
-- GET /api/auth/user ohne Session -> 401
-- POST /api/auth/logout -> 200
+**Sicherheitsarchitektur (Note: Sehr Gut)**
+- Invite-Only-Registrierung (kein oeffentlicher Sign-up)
+- bcrypt mit 12 Salt-Rounds fuer Passwoerter
+- RBAC mit 7 Rollen (admin, property_manager, finance, viewer, tester, auditor, ops)
+- Org-Ownership-Pruefung traversiert 16 Tabellen (tenant - unit - property - org)
+- Ownership-Violations werden geloggt (`logOwnershipViolation`)
+- Period-Lock verhindert Aenderungen in gesperrten Buchungsperioden
+- Retention-Guard erzwingt BAO (7J) / GoBD (10J) Aufbewahrungsfristen
+- CSP mit Nonce + strict-dynamic + Proxy-Stripping-Detection
+- CSRF-Schutz vorhanden
+- Rate-Limiting pro Organisation
 
-### 3.3 Domain Router Smoke Tests
-Dateien pro Router (je 2-4 Tests):
-- `tests/unit/routes/properties.test.ts` -- Unauth-Zugriff, Liste laden
-- `tests/unit/routes/units.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/tenants.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/finance.test.ts` -- Unauth-Zugriff, Payment-Validierung
-- `tests/unit/routes/banking.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/settlements.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/compliance.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/exports.test.ts` -- Unauth-Zugriff
-- `tests/unit/routes/jobs.test.ts` -- Unauth-Zugriff
+**Audit-Trail (Note: Sehr Gut)**
+- SHA-256 Hash-Chain auf `audit_logs`
+- Immutability-Trigger (kein UPDATE/DELETE moeglich)
+- Jede Zahlungsallokation wird atomisch geloggt
+- CloudTrail-Style Artifact Access Logging
+- Dual Audit: sowohl `audit_logs` als auch `audit_events` Tabelle
 
-Jeder Test nutzt `supertest` mit der Express-App und pruft:
-1. 401 ohne Auth-Session
-2. Korrekte HTTP-Methode/Pfad erreichbar
+**Finanzlogik (Note: Gut)**
+- FIFO-Zahlungsallokation mit Optimistic Locking (5 Retries)
+- `roundMoney()` und `reconcileRounding()` fuer Cent-Genauigkeit
+- Deterministische Rundungsverteilung (sortiert nach Betrag/LineType/UnitId)
+- DB-Transaktionen fuer alle finanzkritischen Operationen
+- Asynchrone Ledger-Synchronisation via Job-Queue
 
----
+**Test-Infrastruktur (Note: Gut)**
+- 50+ Unit-Tests fuer kritische Geschaeftslogik
+- Integration-Tests gegen echte DB
+- E2E-Tests mit Playwright
+- k6 Load-Tests
+- Spezialtests: SEPA-XSD-Validierung, Settlement-Rundung, Race-Conditions
 
-## Phase 4: Integration-Tests (DB-basiert)
+### Schwaechen und Risiken
 
-### 4.1 JobQueue Integration
-Datei: `tests/integration/jobqueue.test.ts`
-- Enqueue Job -> Status pending
-- processNext() -> Status completed
-- Retry bei Fehler -> Status retrying mit Backoff
-- FOR UPDATE SKIP LOCKED bei parallelem Zugriff
-- Max-Retries -> Status failed
+**Architektur-Bedenken (Mittel-Hoch)**
 
-### 4.2 Auth-Flow Integration
-Datei: `tests/integration/auth-flow.test.ts`
-- Register mit Invite-Token -> Profile + Role erstellt
-- Login -> Session gesetzt
-- Password Reset Token Lifecycle
+1. **Dual-Backend-Problem**: Die Software nutzt GLEICHZEITIG:
+   - Express.js Backend (server/) mit Session-Auth
+   - Supabase/Lovable Cloud mit eigenem Auth
+   - Frontend hat `useUserRole.ts` das direkt Supabase aufruft, waehrend Backend Session-basiert ist
+   - Dies ist ein **architektonischer Widerspruch** der zu Inkonsistenzen fuehren kann
 
----
+2. **Hardcoded Admin-Email** in `server/auth.ts`:
+   ```
+   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
+   ```
+   Das ist ein Single-Point-of-Failure und sollte in einer Umgebungsvariable stehen
 
-## Phase 5: E2E-Tests (Playwright)
+3. **SEPA Mandats-Datum hardcoded**: 
+   ```
+   <DtOfSgntr>2020-01-01</DtOfSgntr>
+   ```
+   In Produktion muss das tatsaechliche Mandats-Unterschriftsdatum pro Mieter verwendet werden
 
-### 5.1 Playwright-Konfiguration aktualisieren
-- baseURL auf localhost:5000 (Express-Server)
-- Test-Accounts aus Env-Variablen
+4. **Kein Connection-Pooling sichtbar** - bei einer grossen HV mit vielen gleichzeitigen Nutzern kritisch
 
-### 5.2 Kritische Flows
-Bestehende `tests/basic-flow.spec.ts` ist bereits gut. Erganzungen:
+5. **1000-Row Supabase-Limit** - bei grossen Portfolios (1000+ Einheiten) werden Abfragen abgeschnitten
 
-Datei: `tests/e2e/property-crud.spec.ts`
-- Login als Manager -> Property erstellen -> Einheit anlegen -> Mieter zuweisen
+**Skalierbarkeit (Mittel)**
 
-Datei: `tests/e2e/billing-flow.spec.ts`
-- Vorschreibung generieren -> Zahlung erfassen -> Status "bezahlt"
+6. **Billing-Run ist synchron-transaktional**: Bei 500+ Mietern wird die Vorschreibungsgenerierung sehr langsam (Single Transaction, kein Batching ueber Properties hinweg)
 
----
+7. **Settlement-Berechnung N+1 Queries**: `calculateTenantSettlement` macht pro Mieter mehrere DB-Abfragen fuer Distribution-Keys - bei 200 Mietern sind das 600+ Queries
 
-## Phase 6: Security-Tests
+8. **Kein Redis/Cache-Layer** fuer haeufig abgefragte Daten (Properties, Units, Distribution Keys)
 
-### 6.1 RLS/Isolations-Tests
-Datei: `tests/unit/security/rls-isolation.test.ts`
-- Org A darf keine Daten von Org B sehen
-- Tester-Rolle bekommt maskierte Daten
+**Betriebliche Risiken (Hoch)**
 
-### 6.2 API-Security-Tests
-Datei: `tests/unit/security/api-security.test.ts`
-- SQL-Injection Payloads gegen Search-Endpoints
-- CSRF-Token Validierung
-- Rate-Limiting verifizieren
-- Leaked-Password-Check aktiv
+9. **Kein Health-Endpoint sichtbar** fuer Monitoring (nur in Test-Script referenziert)
+
+10. **Session-Store**: `express-session` ohne explizit konfigurierten Store laeuft im Memory - bei Neustart gehen alle Sessions verloren
+
+11. **Keine Backup-Strategie** im Code erkennbar (abhaengig von Plattform)
 
 ---
 
-## Phase 7: Load-Test (k6)
+## 3. Compliance-Bewertung
 
-### 7.1 k6 Script
-Datei: `tests/load/k6-api-smoke.js`
-- 100 VUs, 2 Minuten
-- GET /api/properties, /api/payments, /api/tenants
-- Checks: Status 200, Latenz < 1s
-
-### 7.2 Erweiterung bestehender Load-Test
-Der existierende `tests/load/load-test-1000.ts` bleibt unverandert -- erganzend kommt der k6-basierte HTTP-Load-Test dazu.
-
----
-
-## Phase 8: CI-Konfiguration und Reporting
-
-### 8.1 GitHub Actions Workflow
-Datei: `.github/workflows/test-intensive.yml`
-
-```text
-Jobs:
-  typecheck   -> tsc --noEmit (every push)
-  test-unit   -> vitest run tests/unit (every push)
-  test-integ  -> vitest run tests/integration (PRs, mit DB-Service)
-  test-e2e    -> playwright test (PRs, optional)
-  test-load   -> k6 run (workflow_dispatch / nightly)
-```
-
-### 8.2 Test-Report-Template
-Datei: `docs/TEST_REPORT_TEMPLATE.md`
-- Test-Summary (pass/fail)
-- Top 10 Failures mit Stack-Traces
-- Performance-Graphen Platzhalter
-- Security Findings mit PoC
-- Bug-Report-Template mit Severity/Zuweisung
+| Anforderung | Status | Anmerkung |
+|-------------|--------|-----------|
+| DSGVO Art. 15 (Auskunft) | Vorhanden | GDPR-Export mit HMAC-SHA256-Signierung |
+| DSGVO Art. 17 (Loeschung) | Teilweise | Retention-Guard blockiert korrekt, Anonymisierung erwaehnt aber Code unklar |
+| BAO §132 (7J Aufbewahrung) | Vorhanden | retentionGuard.ts implementiert |
+| GoBD (10J Aufbewahrung) | Vorhanden | Fuer Settlements/Expenses |
+| MRG §21 (BK-Abrechnung) | Vorhanden | Deadline-Warnungen, Verteilungsschluessel |
+| §1333 ABGB (Verzugszinsen) | Vorhanden | 4% p.a., korrekt berechnet |
+| WEG-Novelle 2022/2024 | Teilweise | §31 ja, §34/38/39 unklar |
 
 ---
 
-## Zusammenfassung der neuen Dateien
+## 4. Gesamtbewertung
 
-| Datei | Zweck |
-|---|---|
-| `docker-compose.test.yml` | Lokale Test-DB |
-| `scripts/seed-test-data.sql` | 3 Mandanten, 10 Properties, 50 Mieter, 200 Buchungen |
-| `tests/env.test.ts` | Test-Environment-Defaults |
-| `tests/unit/routes/*.test.ts` (10 Dateien) | Router Smoke Tests |
-| `tests/integration/jobqueue.test.ts` | JobQueue Lifecycle |
-| `tests/integration/auth-flow.test.ts` | Auth Flow Integration |
-| `tests/e2e/property-crud.spec.ts` | Property CRUD E2E |
-| `tests/e2e/billing-flow.spec.ts` | Billing E2E |
-| `tests/unit/security/*.test.ts` (2 Dateien) | RLS + API Security |
-| `tests/load/k6-api-smoke.js` | k6 HTTP Load Test |
-| `.github/workflows/test-intensive.yml` | CI Pipeline |
-| `docs/TEST_REPORT_TEMPLATE.md` | Report-Template |
+### Fuer welche HV-Groesse geeignet?
 
-**Gesamt: ~20 neue Dateien, ~50+ neue Tests**
+| Groesse | Eignung | Begruendung |
+|---------|---------|-------------|
+| Klein (bis 200 Einheiten) | Gut geeignet | Alle Kernfunktionen vorhanden |
+| Mittel (200-1000 Einheiten) | Bedingt geeignet | Performance-Optimierungen noetig, Bankimport fehlt |
+| Gross (1000+ Einheiten) | Noch nicht geeignet | Skalierung, Multi-Mandant-Isolation, Bankanbindung fehlen |
 
-## Akzeptanzkriterien-Mapping
+### Top-5 Massnahmen vor Produktiveinsatz
 
-- tsc --noEmit sauber: via test:typecheck Script
-- Critical bugs = 0: Security-Tests decken Auth-Bypass, Data-Leak, RLS ab
-- p95 API Latenz < 1s: k6 Script pruft das
-- E2E kritische Flows grun: Playwright deckt Login, CRUD, Billing ab
-- Jeder Router mindestens 1 Test: 10 Router-Smoke-Test-Dateien
+1. **Bankimport (CAMT.053/MT940)** implementieren - ohne automatischen Zahlungsabgleich ist die Software fuer professionelle HVs nicht einsetzbar
+2. **Dual-Auth bereinigen** - entweder Express-Session ODER Supabase-Auth, nicht beides
+3. **SEPA Mandatsdatum** aus Mieterstammdaten lesen statt hardcoded
+4. **Admin-Email** in Umgebungsvariable verschieben
+5. **Performance-Optimierung** der Settlement-Berechnung (Batch-Queries statt N+1)
+
+### Fazit
+
+Die Software hat eine **beeindruckend vollstaendige oesterreichische Fachlogik** (MRG, WEG, ABGB, FinanzOnline) und eine **ueberdurchschnittlich gute Sicherheitsarchitektur** (Audit-Trail, RBAC, Retention-Guards, CSP). Die Test-Abdeckung ist fuer ein Projekt dieser Art sehr gut.
+
+Fuer eine **kleine bis mittlere Hausverwaltung** (bis ca. 500 Einheiten) ist die Software nach Behebung der Top-5-Punkte produktiv einsetzbar. Fuer eine **grosse HV** (1000+ Einheiten) fehlen noch Skalierungs-Features und eine professionelle Bankanbindung.
+
+Die groesste technische Schwachstelle ist das **Dual-Backend-Problem** (Express + Supabase parallel), das architektonisch bereinigt werden sollte bevor man in Produktion geht.
