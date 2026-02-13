@@ -16,21 +16,20 @@ interface CookiePreferences {
 }
 
 export function CookieConsent() {
-  const [showBanner, setShowBanner] = useState(false);
+  const [showBanner, setShowBanner] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem(COOKIE_CONSENT_KEY);
+    } catch {
+      return true;
+    }
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [preferences, setPreferences] = useState<CookiePreferences>({
-    necessary: true, // Always required
+    necessary: true,
     analytics: false,
     marketing: false,
     consentDate: '',
   });
-
-  useEffect(() => {
-    const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!stored) {
-      setShowBanner(true);
-    }
-  }, []);
 
   const savePreferences = (prefs: CookiePreferences) => {
     const prefsWithDate = {
