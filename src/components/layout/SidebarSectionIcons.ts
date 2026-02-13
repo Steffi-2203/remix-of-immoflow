@@ -1,4 +1,4 @@
-import { Scale, Home, Database, Settings } from 'lucide-react';
+import { Scale, Home, Database, Settings, Banknote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export const sectionIcons: Record<string, LucideIcon> = {
@@ -6,4 +6,5 @@ export const sectionIcons: Record<string, LucideIcon> = {
   MRG: Scale,
   Stammdaten: Database,
   System: Settings,
+  Lohnverrechnung: Banknote,
 };

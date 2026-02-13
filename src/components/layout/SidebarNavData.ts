@@ -19,6 +19,7 @@ import {
   Building2,
   ScrollText,
   AlertTriangle,
+  Banknote,
 } from 'lucide-react';
 import type { AppRole } from '@/hooks/useUserRole';
 
@@ -81,6 +82,13 @@ export const navSections: NavSection[] = [
       { label: 'Organisation', icon: Building2, href: '/einstellungen' },
       { label: 'Einstellungen', icon: Cog, href: '/einstellungen' },
       { label: 'Audit-Log', icon: ScrollText, href: '/reports' },
+    ],
+  },
+  {
+    label: 'Lohnverrechnung',
+    allowedRoles: ['admin', 'finance'],
+    items: [
+      { label: 'Hausbetreuer & Löhne', icon: Banknote, href: '/lohnverrechnung' },
     ],
   },
 ];
