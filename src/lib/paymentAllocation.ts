@@ -1,6 +1,11 @@
 /**
  * Zahlungsaufteilung nach österreichischem Hausverwaltungsstandard
  * Reihenfolge: 1. Betriebskosten → 2. Heizung → 3. Miete
+ *
+ * @deprecated ACHTUNG: Diese Datei enthält nur noch Client-seitige Preview-Logik.
+ * Die autoritative Berechnung erfolgt über POST /api/billing/payment-allocation
+ * und POST /api/billing/mrg-allocation im Backend (server/billing/mrgAllocationService.ts).
+ * Client-seitige Aufrufe dienen ausschließlich der Vorschau/Validierung.
  */
 
 export interface InvoiceAmounts {

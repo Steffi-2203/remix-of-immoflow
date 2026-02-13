@@ -2939,6 +2939,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+  // ===== BK Calculation Endpoints (server-authoritative) =====
+  
+  app.post("/api/billing/mrg-allocation", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const { propertyId, year, month } = req.body;
+      if (!year || !month) return res.status(400).json({ error: "year and month required" });
+      
+      const { mrgAllocationService } = await import("./billing/mrgAllocationService");
+      const result = await mrgAllocationService.calculateMonthly({
+        organizationId: profile.organizationId,
+        propertyId: propertyId === 'all' ? undefined : propertyId,
+        year: Number(year),
+        month: Number(month),
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error('MRG allocation error:', error);
+      res.status(500).json({ error: "Failed to calculate MRG allocation" });
+    }
+  });
+
+  app.post("/api/billing/mrg-allocation-yearly", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
+      
+      const { propertyId, year, monthCount } = req.body;
+      if (!year) return res.status(400).json({ error: "year required" });
+      
+      const { mrgAllocationService } = await import("./billing/mrgAllocationService");
+      const result = await mrgAllocationService.calculateYearly({
+        organizationId: profile.organizationId,
+        propertyId: propertyId === 'all' ? undefined : propertyId,
+        year: Number(year),
+        monthCount: monthCount ? Number(monthCount) : 12,
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error('MRG allocation yearly error:', error);
+      res.status(500).json({ error: "Failed to calculate yearly MRG allocation" });
+    }
+  });
+
+  app.post("/api/billing/payment-allocation", isAuthenticated, async (req: any, res) => {
+    try {
+      const { zahlungsbetrag, grundmiete, betriebskosten, heizungskosten, mitUst } = req.body;
+      if (zahlungsbetrag == null || grundmiete == null || betriebskosten == null || heizungskosten == null) {
+        return res.status(400).json({ error: "zahlungsbetrag, grundmiete, betriebskosten, heizungskosten required" });
+      }
+      
+      const { allocatePaymentServer } = await import("./billing/mrgAllocationService");
+      const result = allocatePaymentServer({
+        zahlungsbetrag: Number(zahlungsbetrag),
+        grundmiete: Number(grundmiete),
+        betriebskosten: Number(betriebskosten),
+        heizungskosten: Number(heizungskosten),
+        mitUst: mitUst !== false,
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Payment allocation error:', error);
+      res.status(500).json({ error: "Failed to calculate payment allocation" });
+    }
+  });
+
   app.get("/api/maintenance/reminders", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await getProfileFromSession(req);
