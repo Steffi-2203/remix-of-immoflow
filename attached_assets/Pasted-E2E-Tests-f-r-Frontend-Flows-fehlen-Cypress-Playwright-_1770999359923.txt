@@ -1,0 +1,115 @@
+E2E‑Tests für Frontend‑Flows fehlen (Cypress/Playwright)
+Kontext:  
+Es existieren keine E2E‑Tests für kritische Frontend‑Flows (z. B. Login, Property‑CRUD, BK‑Abrechnung). Unit‑Tests sind wichtig, E2E‑Tests sichern End‑to‑End‑Funktionalität.
+
+Ziel:  
+Ein E2E‑Test‑Setup (Cypress oder Playwright) einführen und mindestens 3 kritische Flows automatisiert abdecken.
+
+Aufgaben:
+
+Entscheide für ein Framework (Cypress oder Playwright) und füge Basis‑Konfiguration in package.json und CI hinzu.
+
+Implementiere E2E‑Tests für: Login/Logout, Erstellen einer Property, Durchführen einer BK‑Berechnung (UI‑Flow).
+
+Integriere E2E‑Job in CI als optionalen Job für PRs und als regulären Job für main (oder workflow_dispatch für heavy runs).
+
+Dokumentiere Testdaten‑Setup (Seed/Fixtures) und Cleanup.
+
+Akzeptanzkriterien:
+
+E2E‑Tests laufen lokal und in CI (Headless) erfolgreich.
+
+CI bricht PRs bei fehlschlagenden Smoke‑E2E (konfigurierbar).
+
+Test‑Fixtures und Anleitungen sind im Repo dokumentiert.
+
+Dateien/Orte prüfen:  
+package.json, .github/workflows/*, tests/e2e/*, seed scripts.
+
+4) Replit‑Hosting: Produktions‑Eignung evaluieren (Deployment, SLAs, Neon‑DB)
+Kontext:  
+Aktuell läuft Hosting auf Replit. Für Produktivbetrieb müssen Deployment‑Strategie, SLAs, Datenhaltung (Neon‑DB) und Betriebsprozesse geprüft werden.
+
+Ziel:  
+Risiken und Anforderungen für den Produktivbetrieb dokumentieren und eine Entscheidungsempfehlung mit Migrations‑/Betriebsplan liefern.
+
+Aufgaben:
+
+Erstelle eine Checkliste: Hochverfügbarkeit, Backups, Wartungsfenster, Auto‑Scaling, Monitoring, Incident Response, SLAs.
+
+Prüfe Neon‑DB (oder verwendete DB) auf Backup‑/Restore‑Optionen, RPO/RTO, Multi‑AZ, Verbindungs‑Limits.
+
+Vergleiche Replit‑Hosting mit Alternativen (Vercel, Netlify, AWS ECS/Fargate, DigitalOcean App Platform) hinsichtlich Kosten, SLAs, Betriebsaufwand.
+
+Erstelle Migrationsplan (falls Wechsel empfohlen): Datenexport, DNS‑Cutover, Rollback‑Plan.
+
+Dokumentiere empfohlene Monitoring/Alerting (CPU, Memory, Error Rate, DB‑Connections).
+
+Akzeptanzkriterien:
+
+Entscheidungsempfehlung (Keep Replit / Migrate) mit klaren Kriterien und Kostenabschätzung.
+
+Migrationsplan oder Betriebs‑Hardening‑Plan vorhanden.
+
+Liste der offenen Risiken und Maßnahmen.
+
+Dateien/Orte prüfen:  
+Deployment‑Docs, Replit‑Settings, DB‑Konfiguration (Neon), infra docs.
+
+5) Kein dokumentiertes API‑Rate‑Limiting (nur Login‑Lockout vorhanden)
+Kontext:  
+Rate‑Limiting ist nur für Login‑Lockout dokumentiert; API‑weit fehlen dokumentierte Limits und Schutz gegen Abuse.
+
+Ziel:  
+API‑Level Rate‑Limiting definieren, implementieren und dokumentieren (IP‑basierte Limits, Authenticated user limits, Burst protection).
+
+Aufgaben:
+
+Definiere Rate‑Limit‑Policy (z. B. 100 req/min per IP, 1000 req/min per API‑Key, stricter für sensitive endpoints).
+
+Implementiere Middleware (z. B. express-rate-limit oder API‑Gateway) und setze Headers (Retry‑After, X-RateLimit-*).
+
+Dokumentiere Limits in API‑Docs und in README für Integratoren.
+
+Schreibe Tests, die Rate‑Limit‑Verhalten validieren.
+
+Akzeptanzkriterien:
+
+Rate‑Limit Middleware aktiv für alle öffentlichen API‑Routen.
+
+Dokumentation der Limits im Repo.
+
+Tests validieren Block/Retry Verhalten.
+
+Dateien/Orte prüfen:  
+server/middleware/rateLimit.ts, server/index.ts, API‑Docs.
+
+6) OCR hängt an OpenAI (GPT‑5.2 Vision) — externe Abhängigkeit für Kernfunktion
+Kontext:  
+Die OCR/Visions‑Funktionalität nutzt GPT‑5.2 Vision (OpenAI) als externe Abhängigkeit. Das ist ein Single‑Point‑of‑Failure und hat Datenschutz/Kosten‑Risiken.
+
+Ziel:  
+Risiken bewerten und Fallback‑Strategie entwerfen (lokale OCR, alternative Anbieter, Queue + retry, Kosten‑Monitoring).
+
+Aufgaben:
+
+Dokumentiere aktuelle Integration (Endpunkte, Kostenmodell, Rate‑Limits, Datenfluss, PII‑Handling).
+
+Evaluieren von Alternativen: Tesseract (self‑hosted), AWS Textract, Google Vision, Azure OCR; vergleiche Genauigkeit, Kosten, Datenschutz.
+
+Implementiere Fallback‑Plan: Queue Requests, Retry, Circuit Breaker; optionaler lokaler OCR‑Fallback für kritische Fälle.
+
+Schreibe Tests für Failover (Simuliere OpenAI‑Ausfall → Fallback aktiviert).
+
+Ergänze Monitoring/Alerting für OCR‑Kosten und Fehler‑Rate.
+
+Akzeptanzkriterien:
+
+Dokumentation der Integration und Risiken vorhanden.
+
+Fallback‑Mechanismus implementiert und getestet.
+
+Kosten‑Alerting für OCR‑Ausgaben aktiv.
+
+Dateien/Orte prüfen:  
+src/features/ocr/*, infra docs, billing/usage reports.
