@@ -487,9 +487,18 @@ export default function OperatingCostSettlement() {
 
       {!selectedPropertyId ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Home className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">Wählen Sie eine Liegenschaft aus</p>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <Home className="h-16 w-16 text-muted-foreground/40 mb-6" />
+            <h3 className="text-lg font-semibold mb-2">Liegenschaft auswählen</h3>
+            <p className="text-muted-foreground max-w-md mb-4">
+              Wählen Sie oben eine Liegenschaft aus, um die Betriebskostenabrechnung zu starten. 
+              Die Kosten werden automatisch nach MEA, m² oder Personenanzahl auf die Einheiten verteilt.
+            </p>
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><Calculator className="h-3 w-3" /> BK nach Schlüsseln</span>
+              <span className="flex items-center gap-1"><Flame className="h-3 w-3" /> HK 70/30 Split</span>
+              <span className="flex items-center gap-1"><FileText className="h-3 w-3" /> PDF-Export</span>
+            </div>
           </CardContent>
         </Card>
       ) : isLoading ? (
