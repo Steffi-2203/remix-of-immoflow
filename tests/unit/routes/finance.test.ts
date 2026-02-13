@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { registerFinanceRoutes } from '../../../server/routes/finance';
+import { registerFinanceRoutes } from '../../../server/routes/finance/index';
 
 vi.mock('../../../server/db', () => ({
   db: { execute: vi.fn().mockResolvedValue({ rows: [] }) },

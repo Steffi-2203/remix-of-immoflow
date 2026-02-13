@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { registerPropertyRoutes } from '../../../server/routes/properties';
+import { registerPropertyRoutes } from '../../../server/routes/properties/index';
 
 vi.mock('../../../server/db', () => ({
   db: { execute: vi.fn().mockResolvedValue({ rows: [] }), select: vi.fn().mockReturnThis(), from: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue([]) },

@@ -12,8 +12,9 @@ import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
+import { useUserRole } from '@/hooks/useUserRole';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
-import { navSections, type NavSection } from './SidebarNavData';
+import { getFilteredNavSections, type NavSection } from './SidebarNavData';
 import { sectionIcons } from './SidebarSectionIcons';
 
 export function Sidebar() {
@@ -21,6 +22,8 @@ export function Sidebar() {
   const isMobile = useIsMobile();
   const { isOpen, collapsed, closeSidebar, toggleCollapsed } = useSidebarContext();
   const { data: isAdmin } = useIsAdmin();
+  const { data: userRole } = useUserRole();
+  const filteredSections = getFilteredNavSections(userRole);
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
   const handleLinkClick = () => {
@@ -33,11 +36,11 @@ export function Sidebar() {
     setActiveSection(activeSection === label ? null : label);
   };
 
-  const activeSectionData = navSections.find((s) => s.label === activeSection);
+  const activeSectionData = filteredSections.find((s) => s.label === activeSection);
 
   // Determine if a section contains the current route
   const getSectionForPath = (path: string) =>
-    navSections.find((s) => s.items.some((i) => path.startsWith(i.href)));
+    filteredSections.find((s) => s.items.some((i) => path.startsWith(i.href)));
 
   const currentSection = getSectionForPath(location.pathname);
 
@@ -62,7 +65,7 @@ export function Sidebar() {
       </Link>
 
       {/* Section buttons */}
-      {navSections.map((section) => {
+      {filteredSections.map((section) => {
         const isActive = activeSection === section.label;
         const containsCurrent = currentSection?.label === section.label;
         return (
