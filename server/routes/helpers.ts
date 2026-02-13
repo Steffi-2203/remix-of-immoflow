@@ -4,6 +4,33 @@ import { eq } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { storage } from "../storage";
 
+export function snakeToCamel(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(snakeToCamel);
+  if (typeof obj !== 'object') return obj;
+  
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = snakeToCamel(value);
+  }
+  return result;
+}
+
+export function parsePagination(req: Request) {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 100));
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
+export function paginateArray<T>(items: T[], page: number, limit: number) {
+  const total = items.length;
+  const offset = (page - 1) * limit;
+  const data = items.slice(offset, offset + limit);
+  return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+}
+
 export function camelToSnake(str: string): string {
   return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }
