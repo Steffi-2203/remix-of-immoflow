@@ -6,6 +6,7 @@ import * as schema from "@shared/schema";
 import { isAuthenticated, snakeToCamel, getProfileFromSession, getUserRoles, isTester, maskPersonalData } from "./helpers";
 import { assertOwnership } from "../middleware/assertOrgOwnership";
 import { paymentService } from "../billing/paymentService";
+import { bankImportService } from "../services/bankImportService";
 
 export function registerBankingRoutes(app: Express) {
   app.get("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
@@ -226,5 +227,48 @@ export function registerBankingRoutes(app: Express) {
       }
       res.json({ allocated, total: payments.length, message: `${allocated} Zahlungen wurden Rechnungen zugeordnet` });
     } catch (error) { console.error('Sync payments to invoices error:', error); res.status(500).json({ error: "Zuordnung fehlgeschlagen" }); }
+  });
+
+  // ── CAMT Bank Import ────────────────────────────────────────────────────
+  app.post("/api/bank/import-camt", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation" });
+
+      const { xmlContent, bankAccountId } = req.body;
+      if (!xmlContent || typeof xmlContent !== 'string') {
+        return res.status(400).json({ error: "xmlContent (string) ist erforderlich" });
+      }
+
+      const result = await bankImportService.importCamtFile(
+        xmlContent,
+        profile.organizationId,
+        bankAccountId
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('CAMT import error:', error);
+      res.status(500).json({ error: error.message || "CAMT-Import fehlgeschlagen" });
+    }
+  });
+
+  // ── Learn Match Pattern ─────────────────────────────────────────────────
+  app.post("/api/bank/learn-match", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation" });
+
+      const { pattern, tenantId, unitId } = req.body;
+      if (!pattern || !tenantId || !unitId) {
+        return res.status(400).json({ error: "pattern, tenantId und unitId sind erforderlich" });
+      }
+
+      await bankImportService.learnMatch(profile.organizationId, pattern, tenantId, unitId);
+      res.json({ success: true, message: "Match-Pattern gespeichert" });
+    } catch (error: any) {
+      console.error('Learn match error:', error);
+      res.status(500).json({ error: error.message || "Pattern-Speicherung fehlgeschlagen" });
+    }
   });
 }

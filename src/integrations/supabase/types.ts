@@ -4668,9 +4668,11 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
+          end_to_end_id: string | null
           id: string
           is_split: boolean | null
           match_confidence: number | null
+          match_method: string | null
           matched_at: string | null
           matched_by: string | null
           notes: string | null
@@ -4695,9 +4697,11 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          end_to_end_id?: string | null
           id?: string
           is_split?: boolean | null
           match_confidence?: number | null
+          match_method?: string | null
           matched_at?: string | null
           matched_by?: string | null
           notes?: string | null
@@ -4722,9 +4726,11 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          end_to_end_id?: string | null
           id?: string
           is_split?: boolean | null
           match_confidence?: number | null
+          match_method?: string | null
           matched_at?: string | null
           matched_by?: string | null
           notes?: string | null
