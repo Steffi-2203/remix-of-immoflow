@@ -182,6 +182,19 @@ app.post(
   }
 );
 
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+app.get("/ready", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.status(200).json({ ready: true });
+  } catch {
+    res.status(503).json({ ready: false, error: "db" });
+  }
+});
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
