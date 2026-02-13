@@ -38,7 +38,8 @@ import {
   insertTransactionSchema,
   insertExpenseSchema,
   insertMonthlyInvoiceSchema,
-  insertTenantSchema
+  insertTenantSchema,
+  insertOwnerSchema
 } from "@shared/schema";
 
 // Convert snake_case keys to camelCase for database compatibility
@@ -4510,6 +4511,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to send maintenance reminders" });
+    }
+  });
+
+  // ===== Owner CRUD Routes =====
+  app.get("/api/owners", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+
+      const owners = await db.select().from(schema.owners)
+        .where(eq(schema.owners.organizationId, profile.organizationId))
+        .orderBy(asc(schema.owners.lastName), asc(schema.owners.firstName));
+
+      res.json(owners);
+    } catch (error) {
+      console.error("Error fetching owners:", error);
+      res.status(500).json({ error: "Failed to fetch owners" });
+    }
+  });
+
+  app.post("/api/owners", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+
+      const normalizedBody = snakeToCamel(req.body);
+      const validationResult = insertOwnerSchema.safeParse(normalizedBody);
+
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: "Validation failed", 
+          details: validationResult.error.flatten() 
+        });
+      }
+
+      const ownerData = {
+        ...validationResult.data,
+        organizationId: profile.organizationId,
+      };
+
+      const [owner] = await db.insert(schema.owners)
+        .values(ownerData)
+        .returning();
+
+      res.status(201).json(owner);
+    } catch (error) {
+      console.error("Error creating owner:", error);
+      res.status(500).json({ error: "Failed to create owner" });
+    }
+  });
+
+  app.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+
+      const { id } = req.params;
+
+      const [existingOwner] = await db.select().from(schema.owners)
+        .where(eq(schema.owners.id, id))
+        .limit(1);
+
+      if (!existingOwner) {
+        return res.status(404).json({ error: "Owner not found" });
+      }
+
+      if (existingOwner.organizationId !== profile.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const normalizedBody = snakeToCamel(req.body);
+      
+      const allowedFields = [
+        'firstName', 'lastName', 'companyName', 'email', 'phone', 'mobilePhone',
+        'address', 'city', 'postalCode', 'country', 'iban', 'bic', 'bankName',
+        'taxNumber', 'notes'
+      ];
+
+      const updateData: any = {};
+      for (const field of allowedFields) {
+        if (field in normalizedBody) {
+          updateData[field] = normalizedBody[field];
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const [updatedOwner] = await db.update(schema.owners)
+        .set({
+          ...updateData,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.owners.id, id))
+        .returning();
+
+      res.json(updatedOwner);
+    } catch (error) {
+      console.error("Error updating owner:", error);
+      res.status(500).json({ error: "Failed to update owner" });
+    }
+  });
+
+  app.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ error: "No organization" });
+      }
+
+      const { id } = req.params;
+
+      const [existingOwner] = await db.select().from(schema.owners)
+        .where(eq(schema.owners.id, id))
+        .limit(1);
+
+      if (!existingOwner) {
+        return res.status(404).json({ error: "Owner not found" });
+      }
+
+      if (existingOwner.organizationId !== profile.organizationId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const [referencedCount] = await db.select({ count: count() }).from(schema.wegUnitOwners)
+        .where(eq(schema.wegUnitOwners.ownerId, id));
+
+      if (referencedCount && referencedCount.count > 0) {
+        return res.status(409).json({ 
+          error: "Owner cannot be deleted", 
+          message: "This owner is referenced by WEG unit owners. Please remove those references first." 
+        });
+      }
+
+      await db.delete(schema.owners)
+        .where(eq(schema.owners.id, id));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting owner:", error);
+      res.status(500).json({ error: "Failed to delete owner" });
     }
   });
 
