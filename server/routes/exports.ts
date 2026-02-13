@@ -1,8 +1,14 @@
 import type { Express } from "express";
+import { db } from "../db";
+import { storage } from "../storage";
 import { isAuthenticated, getProfileFromSession } from "./helpers";
 import { ownerReportingService } from "../services/ownerReportingService";
 import { bmdDatevExportService } from "../services/bmdDatevExportService";
 import { finanzOnlineService } from "../services/finanzOnlineService";
+import {
+  tenants, units, properties, monthlyInvoices, payments, expenses, organizations,
+} from "@shared/schema";
+import { eq, inArray } from "drizzle-orm";
 
 export function registerExportRoutes(app: Express) {
   // Owner reports
@@ -83,5 +89,72 @@ export function registerExportRoutes(app: Express) {
     const { year } = req.query;
     const periods = finanzOnlineService.getAvailablePeriods(parseInt(year as string) || new Date().getFullYear());
     res.json({ periods });
+  });
+
+  // ====== USER DATA EXPORT (GDPR) ======
+  app.get("/api/functions/export-user-data", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const profile = await storage.getProfileByEmail(user.email);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: 'No organization found' });
+      }
+
+      let organization = null;
+      [organization] = await db.select()
+        .from(organizations)
+        .where(eq(organizations.id, profile.organizationId));
+
+      const propertiesData = await db.select().from(properties)
+        .where(eq(properties.organizationId, profile.organizationId));
+
+      const propertyIds = propertiesData.map(p => p.id);
+
+      const unitsData = propertyIds.length > 0
+        ? await db.select().from(units).where(inArray(units.propertyId, propertyIds))
+        : [];
+
+      const unitIds = unitsData.map(u => u.id);
+
+      const tenantsData = unitIds.length > 0
+        ? await db.select().from(tenants).where(inArray(tenants.unitId, unitIds))
+        : [];
+
+      const tenantIds = tenantsData.map(t => t.id);
+
+      const paymentsData = tenantIds.length > 0
+        ? await db.select().from(payments).where(inArray(payments.tenantId, tenantIds))
+        : [];
+
+      const expensesData = propertyIds.length > 0
+        ? await db.select().from(expenses).where(inArray(expenses.propertyId, propertyIds))
+        : [];
+
+      const invoicesData = tenantIds.length > 0
+        ? await db.select().from(monthlyInvoices).where(inArray(monthlyInvoices.tenantId, tenantIds))
+        : [];
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        user: { id: user.id, email: user.email },
+        profile: profile ? { fullName: profile.fullName, email: profile.email, createdAt: profile.createdAt } : null,
+        organization,
+        statistics: {
+          propertiesCount: propertiesData.length, unitsCount: unitsData.length,
+          tenantsCount: tenantsData.length, paymentsCount: paymentsData.length,
+          expensesCount: expensesData.length, invoicesCount: invoicesData.length,
+        },
+        data: { properties: propertiesData, units: unitsData, tenants: tenantsData, payments: paymentsData, expenses: expensesData, invoices: invoicesData },
+      };
+
+      res.json(exportData);
+    } catch (error) {
+      console.error('Export error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   });
 }

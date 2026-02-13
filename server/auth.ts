@@ -5,17 +5,11 @@ import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { sendEmail } from "./lib/resend";
+import { recordFailedAttempt, clearFailedAttempts } from "./middleware/ipBlacklist";
 
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "stephania.pfeffer@outlook.de";
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
-
-declare module "express-session" {
-  interface SessionData {
-    userId: string;
-    email: string;
-  }
-}
 
 export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
@@ -206,14 +200,28 @@ export function setupAuth(app: Express) {
       const profile = await getProfileByEmail(email.toLowerCase());
       
       if (!profile || !profile.passwordHash) {
+        const clientIp = req.headers["x-forwarded-for"]
+          ? String(req.headers["x-forwarded-for"]).split(",")[0].trim()
+          : req.ip || req.socket.remoteAddress || "unknown";
+        recordFailedAttempt(clientIp);
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
       }
 
       const isValid = await bcrypt.compare(password, profile.passwordHash);
       
       if (!isValid) {
+        const clientIp = req.headers["x-forwarded-for"]
+          ? String(req.headers["x-forwarded-for"]).split(",")[0].trim()
+          : req.ip || req.socket.remoteAddress || "unknown";
+        recordFailedAttempt(clientIp);
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
       }
+
+      // Clear failed attempts on success
+      const clientIp = req.headers["x-forwarded-for"]
+        ? String(req.headers["x-forwarded-for"]).split(",")[0].trim()
+        : req.ip || req.socket.remoteAddress || "unknown";
+      clearFailedAttempts(clientIp);
 
       req.session.userId = profile.id;
       req.session.email = profile.email;

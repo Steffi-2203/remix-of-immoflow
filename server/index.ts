@@ -3,6 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import { cspNonceMiddleware, cspReportEndpoint } from "./middleware/csp";
+import { ipBlacklistMiddleware } from "./middleware/ipBlacklist";
 import rateLimit from "express-rate-limit";
 import { requestLoggerMiddleware } from "./middleware/requestLogger";
 import { registerRoutes } from "./routes";
@@ -45,14 +46,17 @@ app.post('/api/csp-report',
   cspReportEndpoint
 );
 
+// Security: WAF / IP Blacklisting (before rate limiter)
+app.use(ipBlacklistMiddleware);
+
 // Security: Rate limiting - 100 requests per 15 minutes per IP
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => !req.path.startsWith('/api'), // Only limit API routes
+  skip: (req) => !req.path.startsWith('/api'),
 });
 app.use(apiLimiter);
 

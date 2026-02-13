@@ -3,6 +3,8 @@ import { storage } from "../storage";
 import { isAuthenticated, snakeToCamel, getProfileFromSession } from "./helpers";
 import { assertOwnership } from "../middleware/assertOrgOwnership";
 import { settlementPdfService } from "../billing/settlementPdfService";
+import { sendEmail } from "../lib/resend";
+import { formatCurrency } from "../lib/invoiceUtils";
 
 export function registerSettlementRoutes(app: Express) {
   app.get("/api/settlements", isAuthenticated, async (req: any, res) => {
@@ -157,5 +159,61 @@ export function registerSettlementRoutes(app: Express) {
       const result = allocatePaymentServer({ zahlungsbetrag: Number(zahlungsbetrag), grundmiete: Number(grundmiete), betriebskosten: Number(betriebskosten), heizungskosten: Number(heizungskosten), mitUst: mitUst !== false });
       res.json(result);
     } catch (error) { console.error('Payment allocation error:', error); res.status(500).json({ error: "Failed to calculate payment allocation" }); }
+  });
+
+  // ====== SETTLEMENT EMAIL ======
+  app.post("/api/functions/send-settlement-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const {
+        settlementItemId, propertyName, propertyAddress, unitTopNummer,
+        tenantName, tenantEmail, year, bkAnteil, hkAnteil,
+        bkVorschuss, hkVorschuss, bkSaldo, hkSaldo, gesamtSaldo,
+        isLeerstandBK, isLeerstandHK,
+      } = req.body;
+
+      if (!tenantEmail) {
+        return res.json({ success: false, message: "No email provided" });
+      }
+
+      const saldoText = gesamtSaldo > 0
+        ? `eine <strong style="color: #dc2626;">Nachzahlung von ${formatCurrency(gesamtSaldo)}</strong>`
+        : gesamtSaldo < 0
+          ? `ein <strong style="color: #16a34a;">Guthaben von ${formatCurrency(Math.abs(gesamtSaldo))}</strong>`
+          : "einen ausgeglichenen Saldo";
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>Betriebskostenabrechnung ${year}</title></head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0;">Betriebskostenabrechnung ${year}</h1>
+          </div>
+          <div style="background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none;">
+            <p>Sehr geehrte/r ${tenantName},</p>
+            <p>anbei erhalten Sie die Betriebskostenabrechnung für das Jahr ${year}:</p>
+            <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e5e7eb;">
+              <p><strong>Liegenschaft:</strong> ${propertyName}</p>
+              <p><strong>Adresse:</strong> ${propertyAddress}</p>
+              <p><strong>Einheit:</strong> Top ${unitTopNummer}</p>
+            </div>
+            <p>Aus der Abrechnung ergibt sich für Sie ${saldoText}.</p>
+            <p>Mit freundlichen Grüßen<br>Ihre Hausverwaltung</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const emailResponse = await sendEmail({
+        to: tenantEmail,
+        subject: `Betriebskostenabrechnung ${year} - ${propertyName} - Top ${unitTopNummer}`,
+        html: htmlContent,
+      });
+
+      res.json({ success: true, emailId: (emailResponse as any).data?.id });
+    } catch (error) {
+      console.error("Error in send-settlement-email:", error);
+      res.status(500).json({ error: "Ein Fehler ist aufgetreten." });
+    }
   });
 }

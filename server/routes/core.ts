@@ -55,4 +55,18 @@ export function registerCoreRoutes(app: Express) {
       res.status(500).json({ error: "Failed to fetch metrics" });
     }
   });
+
+  // ====== DELETE ACCOUNT ======
+  app.delete("/api/functions/delete-account", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      res.json({ success: true, message: "Account deletion requested. Please contact support." });
+    } catch (error) {
+      console.error("Error in delete-account:", error);
+      res.status(500).json({ error: "Ein Fehler ist aufgetreten." });
+    }
+  });
 }
