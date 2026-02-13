@@ -85,18 +85,20 @@ export class BankImportService {
           
           if (!exists) {
             await db.insert(transactions).values({
+              organizationId,
               bankAccountId: targetBankAccountId,
               transactionDate: entry.bookingDate,
               amount: String(entry.amount),
-              description: entry.remittanceInfo || entry.counterpartyName,
-              counterpartyName: entry.counterpartyName,
-              counterpartyIban: entry.counterpartyIban,
+              bookingText: entry.remittanceInfo || entry.counterpartyName,
+              partnerName: entry.counterpartyName,
+              partnerIban: entry.counterpartyIban,
               reference: entry.reference || entry.endToEndId,
-              tenantId: match.tenantId,
-              unitId: match.unitId,
-              status: 'matched',
+              matchedTenantId: match.tenantId,
+              matchedUnitId: match.unitId,
+              isMatched: true,
               matchConfidence: String(Math.round(match.confidence * 100)),
               matchMethod: match.matchMethod,
+              endToEndId: entry.endToEndId,
             });
             created++;
           } else {

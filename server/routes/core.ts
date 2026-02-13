@@ -4,8 +4,28 @@ import { sql } from "drizzle-orm";
 import { isAuthenticated } from "./helpers";
 
 export function registerCoreRoutes(app: Express) {
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.get("/api/health", async (_req, res) => {
+    const start = Date.now();
+    try {
+      await db.execute(sql`SELECT 1`);
+      const dbLatencyMs = Date.now() - start;
+      res.json({
+        status: "ok",
+        database: "connected",
+        dbLatencyMs,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const dbLatencyMs = Date.now() - start;
+      res.status(503).json({
+        status: "degraded",
+        database: "unreachable",
+        dbLatencyMs,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      });
+    }
   });
 
   app.get("/api/metrics", async (_req, res) => {

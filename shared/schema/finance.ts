@@ -69,6 +69,9 @@ export const transactions = pgTable("transactions", {
   isMatched: boolean("is_matched").default(false),
   matchedTenantId: uuid("matched_tenant_id").references(() => tenants.id),
   matchedUnitId: uuid("matched_unit_id").references(() => units.id),
+  matchConfidence: varchar("match_confidence", { length: 10 }),
+  matchMethod: varchar("match_method", { length: 20 }),
+  endToEndId: text("end_to_end_id"),
   rawData: jsonb("raw_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
