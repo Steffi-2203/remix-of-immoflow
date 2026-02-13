@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { 
@@ -11,6 +12,7 @@ import {
   Calculator, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
   BookOpen, 
   Receipt,
   Users,
@@ -19,20 +21,12 @@ import {
   Wrench,
   MessageSquare,
   HardHat,
-  PiggyBank,
   Home,
   ShieldCheck,
   CalendarClock,
-  MailPlus,
-  FileSignature,
   DoorOpen,
   Lock,
-  Ticket,
-  Scale,
-  Leaf,
   AlertTriangle,
-  Wand2,
-  RefreshCw,
   Bot,
   Zap,
   ScanLine,
@@ -51,8 +45,6 @@ import { useSidebarBadges } from '@/hooks/useSidebarBadges';
 import { useKiAutopilot } from '@/hooks/useKiAutopilot';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
-// NavItem interface moved below imports
-
 interface NavItem {
   label: string;
   icon: React.ElementType;
@@ -65,6 +57,7 @@ interface NavGroup {
   label: string;
   icon?: React.ElementType;
   items: NavItem[];
+  collapsible?: boolean;
 }
 
 const navGroups: NavGroup[] = [
@@ -79,72 +72,49 @@ const navGroups: NavGroup[] = [
   {
     label: 'Mietverwaltung',
     icon: Users,
+    collapsible: true,
     items: [
       { label: 'Mieter', icon: Users, href: '/mieter', tourId: 'nav-tenants' },
       { label: 'Mieteinnahmen', icon: Wallet, href: '/zahlungen' },
       { label: 'BK-Abrechnung', icon: Calculator, href: '/abrechnung' },
-      { label: 'Vertragsgenerator', icon: FileSignature, href: '/mietvertrag-generator' },
       { label: 'Mieterportal', icon: DoorOpen, href: '/mieterportal' },
-      { label: 'Schadensmeldungen', icon: AlertTriangle, href: '/schadensmeldungen' },
     ],
   },
   {
     label: 'WEG-Verwaltung',
     icon: Home,
+    collapsible: true,
     items: [
       { label: 'WEG-Verwaltung', icon: Home, href: '/weg' },
       { label: 'WEG-Vorschreibungen', icon: ClipboardList, href: '/weg-vorschreibungen' },
-      { label: 'Budgetplanung', icon: PiggyBank, href: '/budgets' },
+      { label: 'Eigentümerportal', icon: DoorOpen, href: '/eigentuemerportal' },
     ],
   },
   {
     label: 'Finanzen',
     icon: BookOpen,
+    collapsible: true,
     items: [
       { label: 'Kosten & Belege', icon: Receipt, href: '/kosten', tourId: 'nav-expenses' },
       { label: 'Banking', icon: BookOpen, href: '/buchhaltung', tourId: 'nav-banking' },
-      { label: 'Auto-Zuordnung', icon: Wand2, href: '/auto-zuordnung' },
-      { label: 'Bank-Abgleich', icon: RefreshCw, href: '/bank-abgleich', tourId: 'nav-bank-abgleich' },
-      { label: 'Finanzbuchhaltung', icon: Calculator, href: '/finanzbuchhaltung', tourId: 'nav-accounting' },
       { label: 'Reports', icon: TrendingUp, href: '/reports', tourId: 'nav-reports' },
-    ],
-  },
-  {
-    label: 'Dokumente & Kommunikation',
-    icon: FileStack,
-    items: [
-      { label: 'Dokumente', icon: FileStack, href: '/dokumente' },
-      { label: 'Serienbriefe', icon: MailPlus, href: '/serienbriefe' },
-      { label: 'Tickets', icon: Ticket, href: '/tickets' },
     ],
   },
   {
     label: 'Verwaltung',
     icon: Cog,
+    collapsible: true,
     items: [
+      { label: 'Dokumente', icon: FileStack, href: '/dokumente' },
       { label: 'Versicherungen', icon: ShieldCheck, href: '/versicherungen' },
       { label: 'Fristen & Termine', icon: CalendarClock, href: '/fristen' },
-      { label: 'HV-Verträge', icon: FileSignature, href: '/hv-vertraege' },
-      { label: 'ESG & Energie', icon: Leaf, href: '/esg' },
+      { label: 'Schadensmeldungen', icon: AlertTriangle, href: '/schadensmeldungen' },
       { label: 'Assistenten', icon: HardHat, href: '/workflows' },
-    ],
-  },
-  {
-    label: 'KI-Autopilot',
-    icon: Sparkles,
-    items: [
-      { label: 'KI-Assistent', icon: Bot, href: '/ki-assistent' },
-      { label: 'Automatisierung', icon: Zap, href: '/automatisierung' },
-      { label: 'KI-Rechnungen', icon: ScanLine, href: '/ki-rechnungen' },
-      { label: 'KI-Insights', icon: Brain, href: '/ki-insights' },
-      { label: 'KI-Kommunikation', icon: MessageSquarePlus, href: '/ki-kommunikation' },
     ],
   },
   {
     label: '',
     items: [
-      { label: 'DSGVO', icon: Scale, href: '/dsgvo' },
-      { label: 'Sicherheit', icon: Lock, href: '/sicherheit' },
       { label: 'Einstellungen', icon: Cog, href: '/einstellungen', tourId: 'nav-settings' },
     ],
   },
@@ -160,6 +130,20 @@ export function Sidebar() {
   const { data: badges } = useSidebarBadges();
   const { isActive: kiActive } = useKiAutopilot();
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
+
   const kiPaths = ['/ki-assistent', '/automatisierung', '/ki-rechnungen', '/ki-insights', '/ki-kommunikation'];
 
   const badgeMap: Record<string, number> = {
@@ -173,7 +157,7 @@ export function Sidebar() {
 
   const roleBasedItems: NavItem[] = [
     ...(permissions.canManageMaintenance || permissions.isAdmin ? [{
-      label: 'Wartungen & Auftr\u00e4ge',
+      label: 'Wartungen & Aufträge',
       icon: Wrench,
       href: '/wartungen',
       tourId: 'nav-maintenance'
@@ -201,23 +185,42 @@ export function Sidebar() {
     ...group,
     items: group.items.filter(item => {
       if (isTester && testerHiddenPaths.includes(item.href)) return false;
-      if (kiPaths.includes(item.href) && !kiActive && group.label !== 'KI-Autopilot') return false;
+      if (kiPaths.includes(item.href) && !kiActive) return false;
       return true;
     }),
   })).filter(group => group.items.length > 0);
 
+  if (kiActive) {
+    const kiGroup: NavGroup = {
+      label: 'KI-Autopilot',
+      icon: Sparkles,
+      collapsible: true,
+      items: [
+        { label: 'KI-Assistent', icon: Bot, href: '/ki-assistent' },
+        { label: 'Automatisierung', icon: Zap, href: '/automatisierung' },
+        { label: 'KI-Rechnungen', icon: ScanLine, href: '/ki-rechnungen' },
+        { label: 'KI-Insights', icon: Brain, href: '/ki-insights' },
+        { label: 'KI-Kommunikation', icon: MessageSquarePlus, href: '/ki-kommunikation' },
+      ],
+    };
+    allGroups.splice(allGroups.length - 1, 0, kiGroup);
+  }
+
   const handleLinkClick = () => {
-    // Close sidebar on mobile after clicking a link
     if (isMobile) {
       closeSidebar();
     }
   };
 
-  // Mobile: overlay sidebar
+  const isGroupExpanded = (group: NavGroup) => {
+    if (!group.collapsible) return true;
+    if (!collapsedGroups.has(group.label)) return true;
+    return group.items.some(item => location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href)));
+  };
+
   if (isMobile) {
     return (
       <>
-        {/* Backdrop */}
         {isOpen && (
           <div 
             className="fixed inset-0 bg-black/50 z-40 transition-opacity"
@@ -225,7 +228,6 @@ export function Sidebar() {
           />
         )}
         
-        {/* Sidebar */}
         <aside 
           data-tour="sidebar"
           className={cn(
@@ -233,7 +235,6 @@ export function Sidebar() {
             isOpen ? 'translate-x-0' : '-translate-x-full'
           )}
         >
-          {/* Header with close button */}
           <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
             <div className="flex items-center gap-3">
               <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
@@ -252,18 +253,28 @@ export function Sidebar() {
             </Button>
           </div>
 
-          {/* Navigation - scrollable */}
           <nav className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-2 mt-2">
             {allGroups.map((group, gi) => (
               <div key={group.label || `g${gi}`}>
                 {group.label && (
-                  <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+                  <div 
+                    className={cn(
+                      "flex items-center gap-2 px-3 pt-4 pb-1",
+                      group.collapsible && "cursor-pointer select-none"
+                    )}
+                    onClick={group.collapsible ? () => toggleGroup(group.label) : undefined}
+                  >
                     {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">{group.label}</span>
-                    {group.label === 'KI-Autopilot' && !kiActive && <Lock className="h-3 w-3 text-white/40" />}
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50 flex-1">{group.label}</span>
+                    {group.collapsible && (
+                      <ChevronDown className={cn(
+                        "h-3 w-3 text-white/40 transition-transform",
+                        collapsedGroups.has(group.label) && "-rotate-90"
+                      )} />
+                    )}
                   </div>
                 )}
-                {group.items.map(item => {
+                {isGroupExpanded(group) && group.items.map(item => {
                   const isActive = location.pathname === item.href || 
                     (item.href !== '/' && location.pathname.startsWith(item.href));
                   return (
@@ -306,7 +317,6 @@ export function Sidebar() {
             )}
           </nav>
 
-          {/* Footer - fixed at bottom */}
           <div className="shrink-0 p-4 border-t border-sidebar-border">
             <div className="rounded-lg bg-sidebar-accent p-3">
               <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
@@ -317,7 +327,6 @@ export function Sidebar() {
     );
   }
 
-  // Desktop: regular sidebar
   return (
     <aside 
       data-tour="sidebar"
@@ -326,7 +335,6 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Logo */}
       <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3">
@@ -350,15 +358,25 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {/* Navigation - scrollable */}
       <nav className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-2 mt-2">
         {allGroups.map((group, gi) => (
           <div key={group.label || `g${gi}`}>
             {group.label && !collapsed && (
-              <div className="flex items-center gap-2 px-3 pt-4 pb-1">
+              <div 
+                className={cn(
+                  "flex items-center gap-2 px-3 pt-4 pb-1",
+                  group.collapsible && "cursor-pointer select-none"
+                )}
+                onClick={group.collapsible ? () => toggleGroup(group.label) : undefined}
+              >
                 {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">{group.label}</span>
-                {group.label === 'KI-Autopilot' && !kiActive && <Lock className="h-3 w-3 text-white/40" />}
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50 flex-1">{group.label}</span>
+                {group.collapsible && (
+                  <ChevronDown className={cn(
+                    "h-3 w-3 text-white/40 transition-transform",
+                    collapsedGroups.has(group.label) && "-rotate-90"
+                  )} />
+                )}
               </div>
             )}
             {group.label && collapsed && (
@@ -366,7 +384,7 @@ export function Sidebar() {
                 {group.icon && <group.icon className="h-3.5 w-3.5 text-white/50" />}
               </div>
             )}
-            {group.items.map(item => {
+            {isGroupExpanded(group) && group.items.map(item => {
               const isActive = location.pathname === item.href || 
                 (item.href !== '/' && location.pathname.startsWith(item.href));
               return (
@@ -413,7 +431,6 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Footer - fixed at bottom */}
       {!collapsed && (
         <div className="shrink-0 p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent p-3">

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { hasCookieConsent } from '@/components/CookieConsent';
 
 export interface TourStep {
   id: string;
@@ -23,6 +24,11 @@ interface FeatureTourProps {
 }
 
 export function FeatureTour({ steps, isOpen, onClose, onComplete }: FeatureTourProps) {
+  // Don't show tour if cookie consent hasn't been given
+  if (!hasCookieConsent()) {
+    return null;
+  }
+
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });

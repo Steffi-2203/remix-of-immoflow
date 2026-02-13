@@ -40,6 +40,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Edit2 } from 'lucide-react';
+import { GuidedEmptyState } from '@/components/GuidedEmptyState';
 
 function fmt(amount: number) {
   return `\u20AC ${amount.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -967,8 +968,14 @@ function OwnersTab({ propertyId, orgId, properties = [] }: { propertyId: string;
   const statusLabels: Record<string, string> = {
     entwurf: 'Entwurf', grundbuch_eingetragen: 'Grundbuch eingetragen', abgeschlossen: 'Abgeschlossen',
   };
-
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Eigentuemer zuordnen"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um Eigentuemer den Einheiten zuzuordnen."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Eigentuemer den Einheiten zuordnen", "MEA-Anteile eintragen"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-6">
@@ -1516,7 +1523,14 @@ function AssembliesTab({ propertyId, orgId, properties }: { propertyId: string; 
     durchgefuehrt: 'Protokolliert',
   };
 
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Eigentuemerversammlungen"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um Versammlungen zu planen und zu verwalten."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Versammlung anlegen", "Tagesordnungspunkte hinzufuegen"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-4">
@@ -1777,7 +1791,14 @@ function VotesTab({ propertyId }: { propertyId: string }) {
     setVMeaYes('0'); setVMeaNo('0'); setVMeaAbstain('0');
   };
 
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Abstimmungen verwalten"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um Abstimmungen zu Versammlungen einzusehen."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Versammlung auswaehlen", "Abstimmungsergebnisse einsehen"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-4">
@@ -1987,7 +2008,14 @@ function BudgetTab({ propertyId, orgId, properties = [] }: { propertyId: string;
   const statusStepLabels = ['Entwurf', 'Beschlossen', 'Aktiv'];
   const statusStepIcons = [CircleDot, Gavel, Zap];
 
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Wirtschaftsplan erstellen"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um den jaehrlichen Wirtschaftsplan zu erstellen und zu verwalten."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Kostenplanung fuer das Wirtschaftsjahr erstellen", "Vorschreibungen auf Basis des Plans generieren"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-4">
@@ -2400,7 +2428,14 @@ function ReserveTab({ propertyId, orgId, properties }: { propertyId: string; org
     setRAmount(''); setRDesc('');
   };
 
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Ruecklage verwalten"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um die Ruecklage (§31 WEG) einzusehen und zu verwalten."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Ruecklagebuchungen pruefen", "Mindest-Ruecklage (0,90 EUR/m2) kontrollieren"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-4">
@@ -2553,7 +2588,14 @@ function MaintenanceTab({ propertyId, orgId }: { propertyId: string; orgId: stri
     setMEstCost(''); setMFinancing('ruecklage'); setMContractorName(''); setMContractorContact('');
   };
 
-  if (!propertyId) return <EmptyState icon={Building2} text="Bitte w\u00E4hlen Sie eine Liegenschaft." />;
+  if (!propertyId) return <GuidedEmptyState
+    icon={Building2}
+    title="Erhaltungsmassnahmen"
+    description="Waehlen Sie oben eine WEG-Liegenschaft aus, um Erhaltungs- und Instandhaltungsmassnahmen zu dokumentieren."
+    steps={["WEG-Liegenschaft oben auswaehlen", "Massnahmen erfassen", "Kosten und Fortschritt dokumentieren"]}
+    actionLabel="Liegenschaften anzeigen"
+    actionHref="/liegenschaften"
+  />;
 
   return (
     <div className="space-y-4">
