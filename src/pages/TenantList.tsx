@@ -185,8 +185,13 @@ export default function TenantList() {
           <p className="text-sm text-muted-foreground">Aktive Verträge</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-2xl font-bold text-primary">{sepaCount}</p>
+          <p className="text-2xl font-bold text-primary">{sepaCount}<span className="text-sm font-normal text-muted-foreground">/{activeCount}</span></p>
           <p className="text-sm text-muted-foreground">SEPA-Mandate</p>
+          {sepaCount < activeCount && (
+            <p className="text-xs text-warning mt-1">
+              {activeCount - sepaCount} Mieter ohne Mandat
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-2xl font-bold text-foreground">
