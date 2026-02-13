@@ -1144,6 +1144,7 @@ export const wegVorschreibungen = pgTable("weg_vorschreibungen", {
   ruecklage: numeric("ruecklage", { precision: 12, scale: 2 }).default('0'),
   instandhaltung: numeric("instandhaltung", { precision: 12, scale: 2 }).default('0'),
   verwaltungshonorar: numeric("verwaltungshonorar", { precision: 12, scale: 2 }).default('0'),
+  heizung: numeric("heizung", { precision: 12, scale: 2 }).default('0'),
   ust: numeric("ust", { precision: 12, scale: 2 }).default('0'),
   gesamtbetrag: numeric("gesamtbetrag", { precision: 12, scale: 2 }).default('0'),
   status: invoiceStatusEnum("status").default('offen'),
