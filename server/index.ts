@@ -28,6 +28,9 @@ import { inputSanitizer } from "./middleware/sanitize";
 import { logger, createRequestLogger } from "./lib/logger";
 import { apiErrorHandler } from "./lib/apiErrors";
 import { ensureIndexes } from "./lib/ensureIndexes";
+import promClient from "prom-client";
+
+promClient.collectDefaultMetrics();
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -193,6 +196,11 @@ app.get("/ready", async (_req, res) => {
   } catch {
     res.status(503).json({ ready: false, error: "db" });
   }
+});
+
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", promClient.register.contentType);
+  res.end(await promClient.register.metrics());
 });
 
 app.use(express.json({ limit: "10mb" }));
