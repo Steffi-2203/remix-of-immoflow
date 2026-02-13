@@ -12,6 +12,8 @@ interface SepaPayment {
   amount: number;
   reference: string;
   endToEndId: string;
+  mandateId: string;
+  mandateDate: string;
 }
 
 interface SepaTransfer {
@@ -80,6 +82,8 @@ export class SepaExportService {
         amount: Number(d.invoice.gesamtbetrag) || 0,
         reference: `Miete ${d.invoice.month}/${d.invoice.year} - ${d.property.name} ${d.unit.topNummer}`,
         endToEndId: this.generateEndToEndId(d.tenant.id, d.invoice.month, d.invoice.year),
+        mandateId: (d.tenant as any).sepaMandatReferenz || `SEPA-${d.tenant.id.substring(0, 16)}`,
+        mandateDate: (d.tenant as any).sepaMandatDatum || format(new Date(d.tenant.createdAt || Date.now()), 'yyyy-MM-dd'),
       }));
 
     if (payments.length === 0) {
@@ -151,8 +155,8 @@ ${payments.map(p => `      <DrctDbtTxInf>
         <InstdAmt Ccy="EUR">${this.formatAmount(p.amount)}</InstdAmt>
         <DrctDbtTx>
           <MndtRltdInf>
-            <MndtId>MNDT-${p.tenantId.substr(0, 16)}</MndtId>
-            <DtOfSgntr>2020-01-01</DtOfSgntr>
+            <MndtId>${this.escapeXml(p.mandateId)}</MndtId>
+            <DtOfSgntr>${p.mandateDate}</DtOfSgntr>
           </MndtRltdInf>
         </DrctDbtTx>
         <DbtrAgt>
