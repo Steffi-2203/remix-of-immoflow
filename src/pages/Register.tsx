@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { Loader2, UserPlus, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { checkPasswordLeak } from '@/utils/checkPasswordLeak';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function Register() {
@@ -23,6 +24,7 @@ export default function Register() {
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [leakedWarning, setLeakedWarning] = useState('');
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -61,8 +63,19 @@ export default function Register() {
     }
 
     setIsSubmitting(true);
+    setLeakedWarning('');
     
     try {
+      // Check password against HIBP
+      const leakResult = await checkPasswordLeak(password);
+      if (leakResult.leaked) {
+        setLeakedWarning(
+          `Dieses Passwort wurde in ${leakResult.count.toLocaleString('de-AT')} Datenlecks gefunden. Bitte wählen Sie ein sicheres Passwort.`
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       await signUp(email, password, fullName || undefined);
       
       toast({
@@ -178,6 +191,12 @@ export default function Register() {
                   autoComplete="new-password"
                 />
               </div>
+              {leakedWarning && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" data-testid="leaked-password-warning">
+                  <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
+                  <span>{leakedWarning}</span>
+                </div>
+              )}
               <Button 
                 type="submit"
                 className="w-full" 

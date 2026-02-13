@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.tenant-chat]
 verify_jwt = false
+
+[functions.check-password-leak]
+verify_jwt = false
