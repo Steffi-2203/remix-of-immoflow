@@ -13,7 +13,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
-import { navSections } from './SidebarNavData';
+import { navSections, type NavSection } from './SidebarNavData';
+import { sectionIcons } from './SidebarSectionIcons';
 
 export function Sidebar() {
   const location = useLocation();
@@ -65,20 +66,26 @@ export function Sidebar() {
         const isActive = activeSection === section.label;
         const containsCurrent = currentSection?.label === section.label;
         return (
-          <button
-            key={section.label}
-            onClick={() => toggleSection(section.label)}
-            title={section.label}
-            className={cn(
-              'w-12 h-12 flex items-center justify-center rounded-lg text-xs font-medium transition-colors',
-              'hover:bg-white/10',
-              (isActive || containsCurrent)
-                ? 'bg-white/15 text-white'
-                : 'text-white/50'
-            )}
-          >
-            {section.label}
-          </button>
+            (() => {
+              const SectionIcon = sectionIcons[section.label];
+              return (
+                <button
+                  key={section.label}
+                  onClick={() => toggleSection(section.label)}
+                  title={section.label}
+                  className={cn(
+                    'flex flex-col items-center gap-1 rounded-lg px-2 py-3 text-xs font-medium transition-all',
+                    'hover:bg-white/10',
+                    (isActive || containsCurrent)
+                      ? 'bg-white/15 text-white'
+                      : 'text-white/50 hover:text-white'
+                  )}
+                >
+                  {SectionIcon && <SectionIcon className="h-5 w-5" />}
+                  {showLabels && <span>{section.label}</span>}
+                </button>
+              );
+            })()
         );
       })}
 

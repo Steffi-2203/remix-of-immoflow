@@ -28,6 +28,7 @@ import { PortfolioHealthScore } from "@/components/dashboard/PortfolioHealthScor
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { FeatureTour } from "@/components/tour/FeatureTour";
+import { useCookieConsent } from "@/components/CookieConsent";
 import { useFeatureTour } from "@/hooks/useFeatureTour";
 import {
   AlertDialog,
@@ -134,6 +135,8 @@ export default function SimpleDashboard() {
   const deleteProperty = useDeleteProperty();
   const { isComplete, markComplete } = useOnboardingStatus();
   const { isOpen, steps, startTour, closeTour, completeTour, autoStartTour, hasCompletedTour } = useFeatureTour();
+  const cookiePreferences = useCookieConsent();
+  const hasCookieConsent = !!cookiePreferences;
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: '', address: '', city: '', postal_code: '' });
@@ -143,10 +146,10 @@ export default function SimpleDashboard() {
   const showOnboarding = !isComplete && propertiesList.length === 0 && !propertiesLoading;
 
   useEffect(() => {
-    if (!isLoading && organization && !showOnboarding) {
+    if (!isLoading && organization && !showOnboarding && hasCookieConsent) {
       autoStartTour();
     }
-  }, [isLoading, organization, showOnboarding, autoStartTour]);
+  }, [isLoading, organization, showOnboarding, autoStartTour, hasCookieConsent]);
 
   if (isLoading) {
     return (
