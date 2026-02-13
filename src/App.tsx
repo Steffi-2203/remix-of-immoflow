@@ -43,6 +43,7 @@ import Budgets from "./pages/Budgets";
 import TenantDetail from "./pages/TenantDetail";
 import TenantPortal from "./pages/TenantPortal";
 import WegManagement from "./pages/WegManagement";
+import WegVorschreibungen from "./pages/WegVorschreibungen";
 import InsuranceManagement from "./pages/InsuranceManagement";
 import DeadlineCalendar from "./pages/DeadlineCalendar";
 import SerialLetters from "./pages/SerialLetters";
@@ -124,6 +125,7 @@ const App = () => (
             <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><DemoDataProvider><TeamManagement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/weg" element={<ProtectedRoute><DemoDataProvider><WegManagement /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/weg-vorschreibungen" element={<ProtectedRoute><DemoDataProvider><WegVorschreibungen /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/versicherungen" element={<ProtectedRoute><DemoDataProvider><InsuranceManagement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/fristen" element={<ProtectedRoute><DemoDataProvider><DeadlineCalendar /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />

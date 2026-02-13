@@ -5,17 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, Save, Loader2, AlertTriangle, Building2, Users, Home } from 'lucide-react';
 import { useProperty, useCreateProperty, useUpdateProperty } from '@/hooks/useProperties';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
-// Validation schema
 const propertySchema = z.object({
   name: z.string().min(1, 'Bezeichnung ist erforderlich').max(100, 'Max. 100 Zeichen'),
   address: z.string().min(1, 'Adresse ist erforderlich').max(200, 'Max. 200 Zeichen'),
   city: z.string().min(1, 'Stadt ist erforderlich').max(100, 'Max. 100 Zeichen'),
   postal_code: z.string().min(1, 'PLZ ist erforderlich').max(20, 'Max. 20 Zeichen'),
+  management_type: z.enum(['mietverwaltung', 'weg'], { required_error: 'Verwaltungsart ist erforderlich' }),
 });
 
 export default function PropertyForm() {
@@ -33,13 +35,10 @@ export default function PropertyForm() {
     address: '',
     city: '',
     postal_code: '',
-    country: 'Österreich',
+    management_type: '' as '' | 'mietverwaltung' | 'weg',
     building_year: '',
     total_qm: '',
-    total_mea: '1000',
-    bk_anteil_wohnung: '10',
-    bk_anteil_geschaeft: '20',
-    bk_anteil_garage: '20',
+    notes: '',
   });
 
   useEffect(() => {
@@ -48,19 +47,16 @@ export default function PropertyForm() {
         name: existingProperty.name || '',
         address: existingProperty.address || '',
         city: existingProperty.city || '',
-        postal_code: existingProperty.postal_code || '',
-        country: existingProperty.country || 'Österreich',
-        building_year: existingProperty.building_year?.toString() || '',
-        total_qm: existingProperty.total_qm?.toString() || '',
-        total_mea: existingProperty.total_mea?.toString() || '1000',
-        bk_anteil_wohnung: existingProperty.bk_anteil_wohnung?.toString() || '10',
-        bk_anteil_geschaeft: existingProperty.bk_anteil_geschaeft?.toString() || '20',
-        bk_anteil_garage: existingProperty.bk_anteil_garage?.toString() || '20',
+        postal_code: existingProperty.postal_code || existingProperty.postalCode || '',
+        management_type: existingProperty.management_type || existingProperty.managementType || 'mietverwaltung',
+        building_year: (existingProperty.building_year || existingProperty.constructionYear || '').toString(),
+        total_qm: (existingProperty.total_qm || existingProperty.totalArea || '').toString(),
+        notes: existingProperty.notes || '',
       });
     }
   }, [existingProperty]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setValidationError(null);
@@ -70,25 +66,26 @@ export default function PropertyForm() {
     e.preventDefault();
     setValidationError(null);
     
-    // Validate form data
+    if (!formData.management_type) {
+      setValidationError('Bitte wählen Sie die Verwaltungsart (Mietverwaltung oder WEG).');
+      return;
+    }
+    
     const result = propertySchema.safeParse(formData);
     if (!result.success) {
       setValidationError(result.error.errors[0].message);
       return;
     }
     
-    const propertyData = {
+    const propertyData: any = {
       name: formData.name.trim(),
       address: formData.address.trim(),
       city: formData.city.trim(),
       postal_code: formData.postal_code.trim(),
-      country: formData.country.trim(),
+      management_type: formData.management_type,
       building_year: formData.building_year ? parseInt(formData.building_year) : null,
       total_qm: parseFloat(formData.total_qm) || 0,
-      total_mea: parseFloat(formData.total_mea) || 1000,
-      bk_anteil_wohnung: parseFloat(formData.bk_anteil_wohnung) || 10,
-      bk_anteil_geschaeft: parseFloat(formData.bk_anteil_geschaeft) || 20,
-      bk_anteil_garage: parseFloat(formData.bk_anteil_garage) || 20,
+      notes: formData.notes.trim() || null,
     };
 
     try {
@@ -104,7 +101,6 @@ export default function PropertyForm() {
         }
       }
     } catch (error) {
-      // Error handling is done in the hooks
     }
   };
 
@@ -136,7 +132,6 @@ export default function PropertyForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Validation Error */}
         {validationError && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -144,7 +139,55 @@ export default function PropertyForm() {
           </Alert>
         )}
 
-        {/* Grunddaten */}
+        <div className="rounded-xl border-2 border-primary/30 bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Verwaltungsart *
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Wählen Sie, ob es sich um eine Mietverwaltung oder eine WEG-Verwaltung handelt. Diese Auswahl bestimmt die verfügbaren Funktionen.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card
+              className={`cursor-pointer transition-all ${formData.management_type === 'mietverwaltung' ? 'ring-2 ring-primary bg-primary/5' : 'hover-elevate'}`}
+              onClick={() => { setFormData(prev => ({ ...prev, management_type: 'mietverwaltung' })); setValidationError(null); }}
+              data-testid="card-select-mietverwaltung"
+            >
+              <CardContent className="p-4 flex items-start gap-4">
+                <div className={`rounded-lg p-2 ${formData.management_type === 'mietverwaltung' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                  <Home className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="font-semibold">Mietverwaltung</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Verwaltung von Mietobjekten mit Mietverträgen, Vorschreibungen (Miete, BK, Heizung), Mahnwesen und MRG-Compliance.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card
+              className={`cursor-pointer transition-all ${formData.management_type === 'weg' ? 'ring-2 ring-primary bg-primary/5' : 'hover-elevate'}`}
+              onClick={() => { setFormData(prev => ({ ...prev, management_type: 'weg' })); setValidationError(null); }}
+              data-testid="card-select-weg"
+            >
+              <CardContent className="p-4 flex items-start gap-4">
+                <div className={`rounded-lg p-2 ${formData.management_type === 'weg' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                  <Users className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="font-semibold">WEG-Verwaltung</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Wohnungseigentumsverwaltung mit Eigentümer-Vorschreibungen (BK, Rücklage, Instandhaltung), MEA-Verteilung und Wirtschaftsplan.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {!formData.management_type && (
+            <p className="text-sm text-destructive mt-2">Bitte wählen Sie eine Verwaltungsart.</p>
+          )}
+        </div>
+
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold text-foreground mb-4">Grunddaten</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -157,6 +200,7 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="z.B. Mozartstraße 15"
                 required
+                data-testid="input-property-name"
               />
             </div>
             <div className="space-y-2">
@@ -168,6 +212,7 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="Straße und Hausnummer"
                 required
+                data-testid="input-property-address"
               />
             </div>
             <div className="space-y-2">
@@ -179,6 +224,7 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="z.B. 1040"
                 required
+                data-testid="input-property-postalCode"
               />
             </div>
             <div className="space-y-2">
@@ -190,15 +236,7 @@ export default function PropertyForm() {
                 onChange={handleChange}
                 placeholder="z.B. Wien"
                 required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="country">Land</Label>
-              <Input
-                id="country"
-                name="country"
-                value={formData.country}
-                onChange={handleChange}
+                data-testid="input-property-city"
               />
             </div>
             <div className="space-y-2">
@@ -210,15 +248,9 @@ export default function PropertyForm() {
                 value={formData.building_year}
                 onChange={handleChange}
                 placeholder="z.B. 1965"
+                data-testid="input-property-buildingYear"
               />
             </div>
-          </div>
-        </div>
-
-        {/* Flächen und Anteile */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Flächen und Anteile</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="total_qm">Gesamtfläche (m²)</Label>
               <Input
@@ -229,69 +261,38 @@ export default function PropertyForm() {
                 value={formData.total_qm}
                 onChange={handleChange}
                 placeholder="z.B. 985.50"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="total_mea">Gesamt MEA (‰)</Label>
-              <Input
-                id="total_mea"
-                name="total_mea"
-                type="number"
-                step="0.01"
-                value={formData.total_mea}
-                onChange={handleChange}
-                placeholder="1000"
+                data-testid="input-property-totalQm"
               />
             </div>
           </div>
         </div>
 
-        {/* Betriebskosten-Anteile */}
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Betriebskosten-Anteile (%)</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="bk_anteil_wohnung">Wohnung</Label>
-              <Input
-                id="bk_anteil_wohnung"
-                name="bk_anteil_wohnung"
-                type="number"
-                step="0.01"
-                value={formData.bk_anteil_wohnung}
-                onChange={handleChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bk_anteil_geschaeft">Geschäft</Label>
-              <Input
-                id="bk_anteil_geschaeft"
-                name="bk_anteil_geschaeft"
-                type="number"
-                step="0.01"
-                value={formData.bk_anteil_geschaeft}
-                onChange={handleChange}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bk_anteil_garage">Garage</Label>
-              <Input
-                id="bk_anteil_garage"
-                name="bk_anteil_garage"
-                type="number"
-                step="0.01"
-                value={formData.bk_anteil_garage}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
+          <h3 className="font-semibold text-foreground mb-4">Notizen</h3>
+          <Textarea
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            placeholder="Optionale Bemerkungen zur Liegenschaft..."
+            rows={3}
+            data-testid="input-property-notes"
+          />
         </div>
 
-        {/* Submit */}
+        {formData.management_type === 'weg' && (
+          <Alert>
+            <Users className="h-4 w-4" />
+            <AlertDescription>
+              Nach dem Anlegen können Sie unter <strong>WEG-Verwaltung</strong> Eigentümer zuordnen, MEA-Anteile festlegen und den Wirtschaftsplan erstellen. Die WEG-Vorschreibungen (BK, Rücklage, Instandhaltung, Verwaltungshonorar) werden daraus automatisch berechnet.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate('/liegenschaften')}>
+          <Button type="button" variant="outline" onClick={() => navigate('/liegenschaften')} data-testid="button-cancel-property">
             Abbrechen
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !formData.management_type} data-testid="button-save-property">
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
