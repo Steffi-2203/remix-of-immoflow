@@ -41,6 +41,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { usePaymentSync } from '@/hooks/usePaymentSync';
 import { NewAdvanceDialog } from '@/components/settlements/NewAdvanceDialog';
+import { GuidedEmptyState } from '@/components/GuidedEmptyState';
 
 // Distribution key mapping for expense types (without heating - handled separately)
 const expenseDistributionKeys: Record<string, 'mea' | 'qm' | 'personen'> = {
@@ -486,12 +487,21 @@ export default function OperatingCostSettlement() {
       </Card>
 
       {!selectedPropertyId ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Home className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">Wählen Sie eine Liegenschaft aus</p>
-          </CardContent>
-        </Card>
+        <GuidedEmptyState 
+          icon={Home}
+          title="BK-Abrechnung erstellen"
+          description="Waehlen Sie oben eine Liegenschaft aus, um die Betriebskostenabrechnung zu starten. Die Abrechnung wird automatisch fuer alle Mieter der Liegenschaft erstellt."
+          steps={[
+            "Liegenschaft oben auswaehlen",
+            "Abrechnungszeitraum pruefen",
+            "Kosten und Verteilerschluessel kontrollieren",
+            "Abrechnung generieren und versenden"
+          ]}
+          actionLabel="Assistent starten"
+          actionHref="/workflows"
+          secondaryActionLabel="Liegenschaften verwalten"
+          secondaryActionHref="/liegenschaften"
+        />
       ) : isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />

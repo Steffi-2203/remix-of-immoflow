@@ -35,8 +35,30 @@ async function persistConsentToServer(consentType: string, granted: boolean) {
   }
 }
 
+function getInitialShowState(): boolean {
+  try {
+    const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
+    if (!stored) return true;
+    const parsed = JSON.parse(stored);
+    return parsed.consentVersion !== CONSENT_VERSION;
+  } catch {
+    return true;
+  }
+}
+
+export function hasCookieConsent(): boolean {
+  try {
+    const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
+    if (!stored) return false;
+    const parsed = JSON.parse(stored);
+    return parsed.consentVersion === CONSENT_VERSION;
+  } catch {
+    return false;
+  }
+}
+
 export function CookieConsent() {
-  const [showBanner, setShowBanner] = useState(false);
+  const [showBanner, setShowBanner] = useState(getInitialShowState);
   const [showSettings, setShowSettings] = useState(false);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true,
@@ -45,22 +67,6 @@ export function CookieConsent() {
     consentDate: '',
     consentVersion: CONSENT_VERSION,
   });
-
-  useEffect(() => {
-    const stored = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!stored) {
-      setShowBanner(true);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(stored);
-      if (parsed.consentVersion !== CONSENT_VERSION) {
-        setShowBanner(true);
-      }
-    } catch {
-      setShowBanner(true);
-    }
-  }, []);
 
   const savePreferences = (prefs: CookiePreferences) => {
     const prefsWithDate = {
@@ -104,7 +110,7 @@ export function CookieConsent() {
   if (!showBanner) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4" data-testid="cookie-consent-banner">
+    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-end sm:items-center justify-center p-4" data-testid="cookie-consent-banner">
       <Card className="w-full max-w-lg animate-in slide-in-from-bottom-4">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2">

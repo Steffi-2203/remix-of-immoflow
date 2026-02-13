@@ -14,6 +14,13 @@ ImmoflowMe employs a modern full-stack architecture with a Node.js (Express.js) 
 **UI/UX Decisions:**
 The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive user interface. Subscription management and feature gating are implemented with dedicated UI components.
 
+**UX Improvements (Feb 2026 - Expert Review):**
+- **Sidebar**: Consolidated from 38 to ~22 items with collapsible groups (ChevronDown). KI-Autopilot only visible when active. Removed items still accessible as routes.
+- **Empty States**: Reusable `GuidedEmptyState` component (`src/components/GuidedEmptyState.tsx`) with title, steps, and action buttons. Applied to BK-Abrechnung and 6 WEG tabs.
+- **Cookie Banner**: Synchronous localStorage init (no useEffect race), z-[9999], FeatureTour waits for consent via `hasCookieConsent()`.
+- **Header**: Removed non-functional global search bar. Pages retain their own functional search inputs.
+- **Performance**: Bundle 916KB (from 3.3MB), React.lazy for 55+ pages, vendor splitting, single Google Font (Inter).
+
 **Technical Implementations:**
 - **Backend**: Express.js, TypeScript.
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui.
