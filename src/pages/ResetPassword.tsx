@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Loader2, Lock, CheckCircle, ArrowLeft, Mail, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Lock, CheckCircle, ArrowLeft, Mail, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { checkPasswordLeak } from '@/utils/checkPasswordLeak';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function ResetPassword() {
@@ -21,6 +22,7 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [passwordReset, setPasswordReset] = useState(false);
+  const [leakedWarning, setLeakedWarning] = useState('');
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,8 +98,18 @@ export default function ResetPassword() {
     }
 
     setIsLoading(true);
+    setLeakedWarning('');
 
     try {
+      // Check password against HIBP before resetting
+      const leakResult = await checkPasswordLeak(password);
+      if (leakResult.leaked) {
+        setLeakedWarning(
+          `Dieses Passwort wurde in ${leakResult.count.toLocaleString('de-AT')} Datenlecks gefunden. Bitte wählen Sie ein sicheres Passwort.`
+        );
+        setIsLoading(false);
+        return;
+      }
       const response = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,6 +224,12 @@ export default function ResetPassword() {
                   autoComplete="new-password"
                 />
               </div>
+              {leakedWarning && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" data-testid="leaked-password-warning">
+                  <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
+                  <span>{leakedWarning}</span>
+                </div>
+              )}
               <Button 
                 type="submit"
                 className="w-full" 
