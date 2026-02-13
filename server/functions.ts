@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { sendEmail } from "./lib/resend";
 import OpenAI from "openai";
 import { invoiceService } from "./services/invoiceService";
+import { ocrCircuitBreaker, CircuitOpenError } from "./services/circuitBreaker";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -663,7 +664,7 @@ export function registerFunctionRoutes(app: Express) {
         return res.status(400).json({ error: "Datei ist zu groß (max. 10MB)" });
       }
 
-      const response = await openai.chat.completions.create({
+      const response = await ocrCircuitBreaker.execute(() => openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           {
@@ -717,14 +718,12 @@ Expense Types: strom, gas, wasser, heizung, muellabfuhr, hausreinigung, hausbetr
           },
         ],
         max_tokens: 2000,
-      });
+      }));
 
       const content = response.choices[0]?.message?.content || "";
       
-      // Parse JSON from response
       let data;
       try {
-        // Try to extract JSON from the response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           data = JSON.parse(jsonMatch[0]);
@@ -738,6 +737,13 @@ Expense Types: strom, gas, wasser, heizung, muellabfuhr, hausreinigung, hausbetr
 
       res.json({ data });
     } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        return res.status(503).json({
+          error: error.message,
+          retryAfter: error.retryAfterSec,
+          circuitState: ocrCircuitBreaker.getStats(),
+        });
+      }
       console.error("Error in ocr-invoice:", error);
       res.status(500).json({ error: "OCR-Analyse fehlgeschlagen" });
     }
@@ -752,7 +758,7 @@ Expense Types: strom, gas, wasser, heizung, muellabfuhr, hausreinigung, hausbetr
         return res.status(400).json({ error: "OCR-Text erforderlich" });
       }
 
-      const response = await openai.chat.completions.create({
+      const response = await ocrCircuitBreaker.execute(() => openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           {
@@ -803,7 +809,7 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format:
           },
         ],
         max_tokens: 2000,
-      });
+      }));
 
       const content = response.choices[0]?.message?.content || "";
       
@@ -822,6 +828,13 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format:
 
       res.json({ data });
     } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        return res.status(503).json({
+          error: error.message,
+          retryAfter: error.retryAfterSec,
+          circuitState: ocrCircuitBreaker.getStats(),
+        });
+      }
       console.error("Error in ocr-invoice-text:", error);
       res.status(500).json({ error: "OCR-Analyse fehlgeschlagen" });
     }
@@ -847,7 +860,7 @@ Antworte NUR mit einem JSON-Objekt im folgenden Format:
         return res.status(400).json({ error: "Datei ist zu groß (max. 10MB)" });
       }
 
-      const response = await openai.chat.completions.create({
+      const response = await ocrCircuitBreaker.execute(() => openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           {
@@ -900,7 +913,7 @@ Wichtig:
           },
         ],
         max_tokens: 4000,
-      });
+      }));
 
       const content = response.choices[0]?.message?.content || "";
       
@@ -919,6 +932,13 @@ Wichtig:
 
       res.json({ data });
     } catch (error) {
+      if (error instanceof CircuitOpenError) {
+        return res.status(503).json({
+          error: error.message,
+          retryAfter: error.retryAfterSec,
+          circuitState: ocrCircuitBreaker.getStats(),
+        });
+      }
       console.error("Error in ocr-bank-statement:", error);
       res.status(500).json({ error: "OCR-Analyse fehlgeschlagen" });
     }
