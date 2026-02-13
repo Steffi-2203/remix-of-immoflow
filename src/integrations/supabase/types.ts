@@ -597,6 +597,44 @@ export type Database = {
           },
         ]
       }
+      cost_circles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean
+          name: string
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_circles_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deadlines: {
         Row: {
           category: string
@@ -739,6 +777,7 @@ export type Database = {
           bezeichnung: string
           budget_position: number | null
           category: Database["public"]["Enums"]["expense_category"]
+          cost_circle_id: string | null
           created_at: string
           datum: string
           distribution_key_id: string | null
@@ -761,6 +800,7 @@ export type Database = {
           bezeichnung: string
           budget_position?: number | null
           category: Database["public"]["Enums"]["expense_category"]
+          cost_circle_id?: string | null
           created_at?: string
           datum: string
           distribution_key_id?: string | null
@@ -783,6 +823,7 @@ export type Database = {
           bezeichnung?: string
           budget_position?: number | null
           category?: Database["public"]["Enums"]["expense_category"]
+          cost_circle_id?: string | null
           created_at?: string
           datum?: string
           distribution_key_id?: string | null
@@ -799,6 +840,13 @@ export type Database = {
           year?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "expenses_cost_circle_id_fkey"
+            columns: ["cost_circle_id"]
+            isOneToOne: false
+            referencedRelation: "cost_circles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expenses_distribution_key_id_fkey"
             columns: ["distribution_key_id"]
@@ -4676,6 +4724,42 @@ export type Database = {
           },
           {
             foreignKeyName: "transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unit_cost_circles: {
+        Row: {
+          cost_circle_id: string
+          created_at: string
+          id: string
+          unit_id: string
+        }
+        Insert: {
+          cost_circle_id: string
+          created_at?: string
+          id?: string
+          unit_id: string
+        }
+        Update: {
+          cost_circle_id?: string
+          created_at?: string
+          id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unit_cost_circles_cost_circle_id_fkey"
+            columns: ["cost_circle_id"]
+            isOneToOne: false
+            referencedRelation: "cost_circles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unit_cost_circles_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"

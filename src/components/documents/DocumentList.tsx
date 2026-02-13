@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -28,6 +29,7 @@ import {
 import { FileText, Eye, Download, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { DocumentViewer } from './DocumentViewer';
 
 interface Document {
   id: string;
@@ -59,6 +61,8 @@ export function DocumentList({
   emptyMessage,
   emptyDescription,
 }: DocumentListProps) {
+  const [viewerDoc, setViewerDoc] = useState<Document | null>(null);
+
   const getTypeLabel = (type: string) => {
     return documentTypes.find((t) => t.value === type)?.label || type;
   };
@@ -94,95 +98,103 @@ export function DocumentList({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50">
-            <TableHead>Name</TableHead>
-            <TableHead>Typ</TableHead>
-            <TableHead>Hochgeladen am</TableHead>
-            <TableHead className="text-right">Aktionen</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {documents.map((doc) => (
-            <TableRow key={doc.id} className="hover:bg-muted/30">
-              <TableCell className="font-medium">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  {doc.name}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge className={getTypeColor(doc.type)}>{getTypeLabel(doc.type)}</Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {format(new Date(doc.uploaded_at), 'dd.MM.yyyy HH:mm', { locale: de })}
-              </TableCell>
-              <TableCell>
-                <TooltipProvider>
-                  <div className="flex items-center justify-end gap-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" size="sm" asChild>
-                          <a href={doc.file_url} target="_blank" rel="noreferrer">
-                            <Eye className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Ansehen</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                        >
-                          <a href={doc.file_url} download={doc.name}>
-                            <Download className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Herunterladen</TooltipContent>
-                    </Tooltip>
-                    <AlertDialog>
+    <>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead>Name</TableHead>
+              <TableHead>Typ</TableHead>
+              <TableHead>Hochgeladen am</TableHead>
+              <TableHead className="text-right">Aktionen</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {documents.map((doc) => (
+              <TableRow key={doc.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">
+                  <button
+                    className="flex items-center gap-2 hover:text-primary transition-colors text-left"
+                    onClick={() => setViewerDoc(doc)}
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    {doc.name}
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <Badge className={getTypeColor(doc.type)}>{getTypeLabel(doc.type)}</Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {format(new Date(doc.uploaded_at), 'dd.MM.yyyy HH:mm', { locale: de })}
+                </TableCell>
+                <TableCell>
+                  <TooltipProvider>
+                    <div className="flex items-center justify-end gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
+                          <Button variant="ghost" size="sm" onClick={() => setViewerDoc(doc)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Löschen</TooltipContent>
+                        <TooltipContent>Vorschau</TooltipContent>
                       </Tooltip>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Möchten Sie "{doc.name}" wirklich löschen? Diese Aktion kann nicht
-                            rückgängig gemacht werden.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => onDelete(doc)}
-                            disabled={isDeleting}
-                          >
-                            Löschen
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </TooltipProvider>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={doc.file_url} download={doc.name}>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Herunterladen</TooltipContent>
+                      </Tooltip>
+                      <AlertDialog>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>Löschen</TooltipContent>
+                        </Tooltip>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Möchten Sie "{doc.name}" wirklich löschen? Diese Aktion kann nicht
+                              rückgängig gemacht werden.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => onDelete(doc)}
+                              disabled={isDeleting}
+                            >
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TooltipProvider>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {viewerDoc && (
+        <DocumentViewer
+          open={!!viewerDoc}
+          onOpenChange={(open) => !open && setViewerDoc(null)}
+          fileUrl={viewerDoc.file_url}
+          fileName={viewerDoc.name}
+        />
+      )}
+    </>
   );
 }
