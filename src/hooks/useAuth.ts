@@ -8,6 +8,11 @@ interface User {
   roles: string[];
 }
 
+function getCsrfToken(): string | null {
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
@@ -25,9 +30,13 @@ async function fetchUser(): Promise<User | null> {
 }
 
 async function loginFn(email: string, password: string): Promise<User> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = getCsrfToken();
+  if (csrf) headers["x-csrf-token"] = csrf;
+
   const response = await fetch("/api/auth/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
@@ -46,9 +55,13 @@ async function registerFn(data: {
   fullName?: string;
   token?: string;
 }): Promise<User> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = getCsrfToken();
+  if (csrf) headers["x-csrf-token"] = csrf;
+
   const response = await fetch("/api/auth/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify(data),
   });
@@ -62,8 +75,13 @@ async function registerFn(data: {
 }
 
 async function logoutFn(): Promise<void> {
+  const headers: Record<string, string> = {};
+  const csrf = getCsrfToken();
+  if (csrf) headers["x-csrf-token"] = csrf;
+
   await fetch("/api/auth/logout", {
     method: "POST",
+    headers,
     credentials: "include",
   });
 }
