@@ -36,7 +36,10 @@ import { downloadWegVorschreibungPdf } from '@/utils/wegVorschreibungPdfExport';
 import { downloadOwnerChangePdf } from '@/utils/wegOwnerChangePdfExport';
 import { useProperties } from '@/hooks/useProperties';
 import { useOrganization } from '@/hooks/useOrganization';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Edit2 } from 'lucide-react';
 
 function fmt(amount: number) {
   return `\u20AC ${amount.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -158,6 +161,598 @@ function LoadingSpinner() {
   return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 }
 
+function OwnerStammdatenTab({ orgId }: { orgId: string | null }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [mobilePhone, setMobilePhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('Österreich');
+  const [iban, setIban] = useState('');
+  const [bic, setBic] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [taxNumber, setTaxNumber] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const { data: owners = [], isLoading } = useQuery({
+    queryKey: ['/api/owners'],
+    queryFn: async () => {
+      const res = await fetch('/api/owners', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const createOwnerMut = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest('POST', '/api/owners', data);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/owners'] }); },
+  });
+
+  const updateOwnerMut = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await apiRequest('PATCH', `/api/owners/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/owners'] }); },
+  });
+
+  const deleteOwnerMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/owners/${id}`);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/owners'] }); },
+  });
+
+  const resetForm = () => {
+    setEditId(null); setFirstName(''); setLastName(''); setCompanyName('');
+    setEmail(''); setPhone(''); setMobilePhone(''); setAddress('');
+    setCity(''); setPostalCode(''); setCountry('Österreich');
+    setIban(''); setBic(''); setBankName(''); setTaxNumber(''); setNotes('');
+  };
+
+  const openCreate = () => { resetForm(); setDialogOpen(true); };
+
+  const openEdit = (o: any) => {
+    setEditId(o.id);
+    setFirstName(o.firstName || ''); setLastName(o.lastName || '');
+    setCompanyName(o.companyName || ''); setEmail(o.email || '');
+    setPhone(o.phone || ''); setMobilePhone(o.mobilePhone || '');
+    setAddress(o.address || ''); setCity(o.city || '');
+    setPostalCode(o.postalCode || ''); setCountry(o.country || 'Österreich');
+    setIban(o.iban || ''); setBic(o.bic || '');
+    setBankName(o.bankName || ''); setTaxNumber(o.taxNumber || '');
+    setNotes(o.notes || '');
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    const payload: any = {
+      firstName, lastName, companyName: companyName || null,
+      email: email || null, phone: phone || null, mobilePhone: mobilePhone || null,
+      address: address || null, city: city || null, postalCode: postalCode || null,
+      country: country || null, iban: iban || null, bic: bic || null,
+      bankName: bankName || null, taxNumber: taxNumber || null, notes: notes || null,
+    };
+    if (editId) {
+      await updateOwnerMut.mutateAsync({ id: editId, ...payload });
+    } else {
+      await createOwnerMut.mutateAsync(payload);
+    }
+    setDialogOpen(false);
+    resetForm();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await deleteOwnerMut.mutateAsync(deleteId);
+    setDeleteDialogOpen(false);
+    setDeleteId(null);
+  };
+
+  const isSaving = createOwnerMut.isPending || updateOwnerMut.isPending;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={openCreate} data-testid="button-add-stammdaten-owner">
+          <Plus className="h-4 w-4 mr-2" /> Neuer Eigentümer
+        </Button>
+      </div>
+
+      {isLoading ? <LoadingSpinner /> : owners.length === 0 ? (
+        <EmptyState icon={Users} text="Noch keine Eigentümer-Stammdaten vorhanden." />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Firma</TableHead>
+              <TableHead>E-Mail</TableHead>
+              <TableHead>Telefon</TableHead>
+              <TableHead>Adresse</TableHead>
+              <TableHead>IBAN</TableHead>
+              <TableHead>Aktionen</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {owners.map((o: any) => (
+              <TableRow key={o.id} data-testid={`row-stammdaten-${o.id}`}>
+                <TableCell className="font-medium">{o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim() || '—'}</TableCell>
+                <TableCell>{o.companyName || '—'}</TableCell>
+                <TableCell>{o.email || '—'}</TableCell>
+                <TableCell>{o.phone || o.mobilePhone || '—'}</TableCell>
+                <TableCell>{[o.address, o.postalCode, o.city].filter(Boolean).join(', ') || '—'}</TableCell>
+                <TableCell className="font-mono text-xs">{o.iban || '—'}</TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(o)} data-testid={`button-edit-stammdaten-${o.id}`}>
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => { setDeleteId(o.id); setDeleteDialogOpen(true); }} data-testid={`button-delete-stammdaten-${o.id}`}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) { setDialogOpen(false); resetForm(); } else setDialogOpen(true); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editId ? 'Eigentümer bearbeiten' : 'Neuer Eigentümer'}</DialogTitle>
+            <DialogDescription>Stammdaten des Eigentümers erfassen bzw. bearbeiten.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vorname</Label>
+                <Input value={firstName} onChange={e => setFirstName(e.target.value)} data-testid="input-stamm-firstName" />
+              </div>
+              <div className="space-y-2">
+                <Label>Nachname</Label>
+                <Input value={lastName} onChange={e => setLastName(e.target.value)} data-testid="input-stamm-lastName" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Firma</Label>
+              <Input value={companyName} onChange={e => setCompanyName(e.target.value)} data-testid="input-stamm-companyName" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>E-Mail</Label>
+                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} data-testid="input-stamm-email" />
+              </div>
+              <div className="space-y-2">
+                <Label>Telefon</Label>
+                <Input value={phone} onChange={e => setPhone(e.target.value)} data-testid="input-stamm-phone" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Mobiltelefon</Label>
+              <Input value={mobilePhone} onChange={e => setMobilePhone(e.target.value)} data-testid="input-stamm-mobilePhone" />
+            </div>
+            <div className="space-y-2">
+              <Label>Adresse</Label>
+              <Input value={address} onChange={e => setAddress(e.target.value)} data-testid="input-stamm-address" />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>PLZ</Label>
+                <Input value={postalCode} onChange={e => setPostalCode(e.target.value)} data-testid="input-stamm-postalCode" />
+              </div>
+              <div className="space-y-2">
+                <Label>Ort</Label>
+                <Input value={city} onChange={e => setCity(e.target.value)} data-testid="input-stamm-city" />
+              </div>
+              <div className="space-y-2">
+                <Label>Land</Label>
+                <Input value={country} onChange={e => setCountry(e.target.value)} data-testid="input-stamm-country" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>IBAN</Label>
+                <Input value={iban} onChange={e => setIban(e.target.value)} data-testid="input-stamm-iban" />
+              </div>
+              <div className="space-y-2">
+                <Label>BIC</Label>
+                <Input value={bic} onChange={e => setBic(e.target.value)} data-testid="input-stamm-bic" />
+              </div>
+              <div className="space-y-2">
+                <Label>Bank</Label>
+                <Input value={bankName} onChange={e => setBankName(e.target.value)} data-testid="input-stamm-bankName" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Steuernummer</Label>
+              <Input value={taxNumber} onChange={e => setTaxNumber(e.target.value)} data-testid="input-stamm-taxNumber" />
+            </div>
+            <div className="space-y-2">
+              <Label>Notizen</Label>
+              <Textarea value={notes} onChange={e => setNotes(e.target.value)} data-testid="input-stamm-notes" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }} data-testid="button-cancel-stammdaten">Abbrechen</Button>
+            <Button onClick={handleSave} disabled={!firstName || !lastName || isSaving} data-testid="button-save-stammdaten">
+              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} {editId ? 'Speichern' : 'Anlegen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eigentümer löschen</AlertDialogTitle>
+            <AlertDialogDescription>Möchten Sie diesen Eigentümer wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-stammdaten">Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} data-testid="button-confirm-delete-stammdaten">
+              {deleteOwnerMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function WegSetupWizard({ selectedPropertyId, setSelectedPropertyId, properties, orgId }: {
+  selectedPropertyId: string;
+  setSelectedPropertyId: (id: string) => void;
+  properties: any[];
+  orgId: string | null;
+}) {
+  const [wizardStep, setWizardStep] = useState(1);
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newIban, setNewIban] = useState('');
+  const [assignments, setAssignments] = useState<Record<string, { ownerId: string; meaShare: string; nutzwert: string }>>({});
+
+  const { data: owners = [] } = useQuery({
+    queryKey: ['/api/owners'],
+    queryFn: async () => {
+      const res = await fetch('/api/owners', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const { data: units = [] } = useQuery({
+    queryKey: ['/api/units', selectedPropertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/units?propertyId=${selectedPropertyId}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!selectedPropertyId,
+  });
+
+  const { data: unitOwners = [] } = useQuery({
+    queryKey: ['/api/weg/unit-owners', selectedPropertyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/weg/unit-owners?propertyId=${selectedPropertyId}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!selectedPropertyId,
+  });
+
+  const createOwnerMut = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest('POST', '/api/owners', data);
+      return res.json();
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['/api/owners'] }); },
+  });
+
+  const createUnitOwnerMut = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest('POST', '/api/weg/unit-owners', data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/weg/unit-owners', selectedPropertyId] });
+    },
+  });
+
+  const selectedProp = properties.find((p: any) => p.id === selectedPropertyId);
+
+  const handleAddOwner = async () => {
+    await createOwnerMut.mutateAsync({
+      firstName: newFirstName, lastName: newLastName,
+      email: newEmail || null, iban: newIban || null,
+    });
+    setNewFirstName(''); setNewLastName(''); setNewEmail(''); setNewIban('');
+  };
+
+  const handleAssignUnit = async (unitId: string) => {
+    const a = assignments[unitId];
+    if (!a?.ownerId || !a?.meaShare) return;
+    await createUnitOwnerMut.mutateAsync({
+      organization_id: orgId,
+      property_id: selectedPropertyId,
+      unit_id: unitId,
+      owner_id: a.ownerId,
+      mea_share: parseFloat(a.meaShare.replace(',', '.')) || 0,
+      nutzwert: a.nutzwert ? parseFloat(a.nutzwert.replace(',', '.')) : null,
+      valid_from: null, valid_to: null, notes: null,
+    });
+    setAssignments(prev => {
+      const next = { ...prev };
+      delete next[unitId];
+      return next;
+    });
+  };
+
+  const totalMea = unitOwners.reduce((sum: number, uo: any) => sum + (uo.mea_share || 0), 0);
+  const meaOk = Math.abs(totalMea - 100) < 0.01;
+
+  const getOwnerName = (id: string) => {
+    const o = owners.find((o: any) => o.id === id);
+    return o ? (o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim() || id) : id;
+  };
+
+  const stepLabels = ['Liegenschaft auswählen', 'Eigentümer anlegen', 'Einheiten zuordnen', 'Zusammenfassung'];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 flex-wrap">
+        {stepLabels.map((label, idx) => (
+          <div key={idx} className="flex items-center gap-1">
+            {idx > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <div className={`flex items-center gap-1 text-sm ${wizardStep === idx + 1 ? 'font-bold' : wizardStep > idx + 1 ? 'text-muted-foreground' : 'text-muted-foreground opacity-50'}`}>
+              {wizardStep > idx + 1 ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" /> : <CircleDot className="h-4 w-4" />}
+              <span>Schritt {idx + 1}: {label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {wizardStep === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Building2 className="h-4 w-4" /> Liegenschaft auswählen</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+              <SelectTrigger data-testid="select-wizard-property"><SelectValue placeholder="Liegenschaft wählen..." /></SelectTrigger>
+              <SelectContent>
+                {properties.map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedProp && (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><span className="text-muted-foreground">Adresse:</span> {selectedProp.address}, {selectedProp.postalCode} {selectedProp.city}</div>
+                <div><span className="text-muted-foreground">Einheiten:</span> {selectedProp.totalUnits || units.length}</div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {wizardStep === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Eigentümer anlegen</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {owners.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>E-Mail</TableHead>
+                    <TableHead>IBAN</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {owners.map((o: any) => (
+                    <TableRow key={o.id} data-testid={`row-wizard-owner-${o.id}`}>
+                      <TableCell className="font-medium">{o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim()}</TableCell>
+                      <TableCell>{o.email || '—'}</TableCell>
+                      <TableCell className="font-mono text-xs">{o.iban || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-sm font-medium">Neuen Eigentümer hinzufügen</p>
+              <div className="grid grid-cols-4 gap-3">
+                <Input placeholder="Vorname" value={newFirstName} onChange={e => setNewFirstName(e.target.value)} data-testid="input-wizard-firstName" />
+                <Input placeholder="Nachname" value={newLastName} onChange={e => setNewLastName(e.target.value)} data-testid="input-wizard-lastName" />
+                <Input placeholder="E-Mail" value={newEmail} onChange={e => setNewEmail(e.target.value)} data-testid="input-wizard-email" />
+                <Input placeholder="IBAN" value={newIban} onChange={e => setNewIban(e.target.value)} data-testid="input-wizard-iban" />
+              </div>
+              <Button onClick={handleAddOwner} disabled={!newFirstName || !newLastName || createOwnerMut.isPending} size="sm" data-testid="button-wizard-add-owner">
+                {createOwnerMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Plus className="h-3 w-3 mr-1" /> Hinzufügen
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {wizardStep === 3 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><Building2 className="h-4 w-4" /> Einheiten zuordnen</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Card>
+                <CardContent className="py-2 px-4">
+                  <p className="text-xs text-muted-foreground">MEA-Summe</p>
+                  <p className={`text-lg font-bold ${meaOk ? 'text-green-600 dark:text-green-400' : totalMea > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`} data-testid="text-wizard-mea-total">
+                    {fmtPct(totalMea)}
+                    {meaOk && <CheckCircle2 className="inline h-4 w-4 ml-1" />}
+                  </p>
+                </CardContent>
+              </Card>
+              {!meaOk && totalMea > 0 && (
+                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                  <AlertTriangle className="h-3 w-3 mr-1" /> MEA-Summe muss 100% ergeben
+                </Badge>
+              )}
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Einheit</TableHead>
+                  <TableHead>Zugeordnet</TableHead>
+                  <TableHead>Eigentümer</TableHead>
+                  <TableHead>MEA-Anteil (%)</TableHead>
+                  <TableHead>Nutzwert</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {units.map((u: any) => {
+                  const assigned = unitOwners.find((uo: any) => uo.unit_id === u.id && !uo.valid_to);
+                  const a = assignments[u.id] || { ownerId: '', meaShare: '', nutzwert: '' };
+                  return (
+                    <TableRow key={u.id} data-testid={`row-wizard-unit-${u.id}`}>
+                      <TableCell className="font-medium">{u.name || u.unitNumber || u.topNummer || u.id}</TableCell>
+                      <TableCell>
+                        {assigned ? (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> {getOwnerName(assigned.owner_id)} ({fmtPct(assigned.mea_share)})
+                          </Badge>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      {!assigned ? (
+                        <>
+                          <TableCell>
+                            <Select value={a.ownerId} onValueChange={(v) => setAssignments(prev => ({ ...prev, [u.id]: { ...a, ownerId: v } }))}>
+                              <SelectTrigger data-testid={`select-wizard-assign-owner-${u.id}`}><SelectValue placeholder="Wählen..." /></SelectTrigger>
+                              <SelectContent>
+                                {owners.map((o: any) => <SelectItem key={o.id} value={o.id}>{o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim()}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input value={a.meaShare} onChange={e => setAssignments(prev => ({ ...prev, [u.id]: { ...a, meaShare: e.target.value } }))} placeholder="z.B. 12,50" data-testid={`input-wizard-mea-${u.id}`} />
+                          </TableCell>
+                          <TableCell>
+                            <Input value={a.nutzwert} onChange={e => setAssignments(prev => ({ ...prev, [u.id]: { ...a, nutzwert: e.target.value } }))} placeholder="optional" data-testid={`input-wizard-nutzwert-${u.id}`} />
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" onClick={() => handleAssignUnit(u.id)} disabled={!a.ownerId || !a.meaShare || createUnitOwnerMut.isPending} data-testid={`button-wizard-assign-${u.id}`}>
+                              {createUnitOwnerMut.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Zuordnen
+                            </Button>
+                          </TableCell>
+                        </>
+                      ) : <><TableCell /><TableCell /><TableCell /><TableCell /></>}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {wizardStep === 4 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Zusammenfassung</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="py-3 px-4 space-y-2">
+                  <p className="text-xs text-muted-foreground">Liegenschaft</p>
+                  <p className="font-medium" data-testid="text-wizard-summary-property">{selectedProp?.name || '—'}</p>
+                  <p className="text-sm text-muted-foreground">{selectedProp?.address}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="py-3 px-4 space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Einheiten</p>
+                      <p className="text-lg font-bold" data-testid="text-wizard-summary-units">{units.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Eigentümer</p>
+                      <p className="text-lg font-bold" data-testid="text-wizard-summary-owners">{owners.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">MEA-Summe</p>
+                      <p className={`text-lg font-bold ${meaOk ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`} data-testid="text-wizard-summary-mea">
+                        {fmtPct(totalMea)}
+                        {meaOk ? <CheckCircle2 className="inline h-4 w-4 ml-1" /> : <AlertTriangle className="inline h-4 w-4 ml-1" />}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {unitOwners.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Einheit</TableHead>
+                    <TableHead>Eigentümer</TableHead>
+                    <TableHead className="text-right">MEA-Anteil</TableHead>
+                    <TableHead className="text-right">Nutzwert</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {unitOwners.filter((uo: any) => !uo.valid_to).map((uo: any) => {
+                    const u = units.find((u: any) => u.id === uo.unit_id);
+                    return (
+                      <TableRow key={uo.id} data-testid={`row-wizard-summary-${uo.id}`}>
+                        <TableCell className="font-medium">{u ? (u.name || u.unitNumber || u.topNummer) : uo.unit_id}</TableCell>
+                        <TableCell>{getOwnerName(uo.owner_id)}</TableCell>
+                        <TableCell className="text-right">{fmtPct(uo.mea_share)}</TableCell>
+                        <TableCell className="text-right">{uo.nutzwert != null ? uo.nutzwert.toLocaleString('de-AT') : '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <Button variant="outline" onClick={() => setWizardStep(s => Math.max(1, s - 1))} disabled={wizardStep === 1} data-testid="button-wizard-back">
+          Zurück
+        </Button>
+        <Button onClick={() => setWizardStep(s => Math.min(4, s + 1))} disabled={
+          wizardStep === 4 || (wizardStep === 1 && !selectedPropertyId)
+        } data-testid="button-wizard-next">
+          Weiter
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function WegManagement() {
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const { data: properties = [] } = useProperties();
@@ -165,17 +760,17 @@ export default function WegManagement() {
   const orgId = organization?.id || null;
 
   return (
-    <MainLayout title="WEG-Verwaltung" subtitle="Wohnungseigentumsverwaltung gem\u00E4\u00DF WEG 2002">
+    <MainLayout title="WEG-Verwaltung" subtitle="Wohnungseigentumsverwaltung gemäß WEG 2002">
       <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">WEG-Verwaltung</h1>
-            <p className="text-muted-foreground">Eigent\u00FCmergemeinschaft, Versammlungen, Abstimmungen & Instandhaltung</p>
+            <p className="text-muted-foreground">Eigentümergemeinschaft, Versammlungen, Abstimmungen & Instandhaltung</p>
           </div>
           <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId} data-testid="select-property">
             <SelectTrigger className="w-[260px]" data-testid="select-property-trigger">
               <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Liegenschaft w\u00E4hlen..." />
+              <SelectValue placeholder="Liegenschaft wählen..." />
             </SelectTrigger>
             <SelectContent>
               {properties.map((p: any) => (
@@ -185,17 +780,21 @@ export default function WegManagement() {
           </Select>
         </div>
 
-        <Tabs defaultValue="owners">
+        <Tabs defaultValue="setup">
           <TabsList className="flex-wrap">
-            <TabsTrigger value="owners" data-testid="tab-owners"><Users className="h-4 w-4 mr-1" /> Eigent\u00FCmer & MEA</TabsTrigger>
+            <TabsTrigger value="setup" data-testid="tab-setup"><Zap className="h-4 w-4 mr-1" /> WEG-Einrichtung</TabsTrigger>
+            <TabsTrigger value="owners" data-testid="tab-owners"><Users className="h-4 w-4 mr-1" /> Eigentümer & MEA</TabsTrigger>
+            <TabsTrigger value="stammdaten" data-testid="tab-stammdaten"><UserPlus className="h-4 w-4 mr-1" /> Eigentümer-Stammdaten</TabsTrigger>
             <TabsTrigger value="assemblies" data-testid="tab-assemblies"><Calendar className="h-4 w-4 mr-1" /> Versammlungen</TabsTrigger>
             <TabsTrigger value="votes" data-testid="tab-votes"><Vote className="h-4 w-4 mr-1" /> Abstimmungen</TabsTrigger>
             <TabsTrigger value="budget" data-testid="tab-budget"><FileText className="h-4 w-4 mr-1" /> Wirtschaftsplan</TabsTrigger>
-            <TabsTrigger value="reserve" data-testid="tab-reserve"><PiggyBank className="h-4 w-4 mr-1" /> R\u00FCcklage</TabsTrigger>
+            <TabsTrigger value="reserve" data-testid="tab-reserve"><PiggyBank className="h-4 w-4 mr-1" /> Rücklage</TabsTrigger>
             <TabsTrigger value="maintenance" data-testid="tab-maintenance"><Wrench className="h-4 w-4 mr-1" /> Erhaltung</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="setup"><WegSetupWizard selectedPropertyId={selectedPropertyId} setSelectedPropertyId={setSelectedPropertyId} properties={properties} orgId={orgId} /></TabsContent>
           <TabsContent value="owners"><OwnersTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
+          <TabsContent value="stammdaten"><OwnerStammdatenTab orgId={orgId} /></TabsContent>
           <TabsContent value="assemblies"><AssembliesTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
           <TabsContent value="votes"><VotesTab propertyId={selectedPropertyId} /></TabsContent>
           <TabsContent value="budget"><BudgetTab propertyId={selectedPropertyId} orgId={orgId} properties={properties} /></TabsContent>
@@ -215,6 +814,12 @@ function OwnersTab({ propertyId, orgId, properties = [] }: { propertyId: string;
   const [nutzwert, setNutzwert] = useState('');
   const [validFrom, setValidFrom] = useState('');
   const [validTo, setValidTo] = useState('');
+
+  const [inlineOwnerOpen, setInlineOwnerOpen] = useState(false);
+  const [inlineFirstName, setInlineFirstName] = useState('');
+  const [inlineLastName, setInlineLastName] = useState('');
+  const [inlineEmail, setInlineEmail] = useState('');
+  const [inlineIban, setInlineIban] = useState('');
 
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [changeStep, setChangeStep] = useState(1);
@@ -256,6 +861,28 @@ function OwnersTab({ propertyId, orgId, properties = [] }: { propertyId: string;
   const createChange = useCreateOwnerChange();
   const updateChange = useUpdateOwnerChange();
   const executeChange = useExecuteOwnerChange();
+
+  const inlineCreateOwner = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest('POST', '/api/owners', data);
+      return res.json();
+    },
+    onSuccess: (newOwner: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/owners'] });
+      if (newOwner?.id) setOwnerId(newOwner.id);
+      setInlineOwnerOpen(false);
+      setInlineFirstName(''); setInlineLastName(''); setInlineEmail(''); setInlineIban('');
+    },
+  });
+
+  const handleInlineOwnerCreate = async () => {
+    await inlineCreateOwner.mutateAsync({
+      firstName: inlineFirstName,
+      lastName: inlineLastName,
+      email: inlineEmail || null,
+      iban: inlineIban || null,
+    });
+  };
 
   const { data: preview, isLoading: previewLoading } = useOwnerChangePreview(
     changeStep >= 5 && createdChangeId ? createdChangeId : undefined
@@ -473,14 +1100,39 @@ function OwnersTab({ propertyId, orgId, properties = [] }: { propertyId: string;
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Eigent\u00FCmer</Label>
+              <Label>Eigentümer</Label>
               <Select value={ownerId} onValueChange={setOwnerId}>
-                <SelectTrigger data-testid="select-owner"><SelectValue placeholder="Eigent\u00FCmer w\u00E4hlen..." /></SelectTrigger>
+                <SelectTrigger data-testid="select-owner"><SelectValue placeholder="Eigentümer wählen..." /></SelectTrigger>
                 <SelectContent>
                   {owners.map((o: any) => <SelectItem key={o.id} value={o.id}>{o.name || `${o.firstName || ''} ${o.lastName || ''}`.trim()}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" onClick={() => setInlineOwnerOpen(true)} data-testid="button-inline-new-owner">
+                <UserPlus className="h-3 w-3 mr-1" /> Neu anlegen
+              </Button>
             </div>
+
+            {inlineOwnerOpen && (
+              <Card>
+                <CardContent className="py-3 px-4 space-y-3">
+                  <p className="text-sm font-medium">Neuen Eigentümer schnell anlegen</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input placeholder="Vorname" value={inlineFirstName} onChange={e => setInlineFirstName(e.target.value)} data-testid="input-inline-firstName" />
+                    <Input placeholder="Nachname" value={inlineLastName} onChange={e => setInlineLastName(e.target.value)} data-testid="input-inline-lastName" />
+                    <Input placeholder="E-Mail" value={inlineEmail} onChange={e => setInlineEmail(e.target.value)} data-testid="input-inline-email" />
+                    <Input placeholder="IBAN" value={inlineIban} onChange={e => setInlineIban(e.target.value)} data-testid="input-inline-iban" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleInlineOwnerCreate} disabled={!inlineFirstName || !inlineLastName || inlineCreateOwner.isPending} data-testid="button-inline-save-owner">
+                      {inlineCreateOwner.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Anlegen & auswählen
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => { setInlineOwnerOpen(false); setInlineFirstName(''); setInlineLastName(''); setInlineEmail(''); setInlineIban(''); }} data-testid="button-inline-cancel-owner">
+                      Abbrechen
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>MEA-Anteil (%)</Label>
