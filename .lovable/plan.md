@@ -1,142 +1,67 @@
 
-
-# Refactoring: functions.ts aufbrechen, LSP-Fehler beheben, WAF/IP-Blacklisting
+# Erweiterte Invoice Smoke-Tests
 
 ## Uebersicht
 
-Drei Massnahmen zur Code-Hygiene und Haertung:
+Sechs neue Tests in `tests/unit/routes/finance.test.ts`, die ueber den reinen 401-Check hinausgehen und Validation, Business-Rules und Edge-Cases abdecken. Alle Tests laufen mit gemockter DB/Storage -- kein Live-Postgres noetig.
 
-1. **functions.ts (937 Zeilen, 12 Endpoints)** in thematische Module aufteilen
-2. **LSP-Fehler beheben** (doppelte `isAuthenticated`, Session-Typ-Import)
-3. **WAF / IP-Blacklisting Middleware** fuer Brute-Force-Schutz
+## Mock-Strategie
 
----
+Die bestehenden Mocks fuer `server/db` und `server/storage` muessen erweitert werden, damit authentifizierte Requests (mit `req.session.userId`) durch `isAuthenticated` kommen und die Handler-Logik erreichen. Dafuer:
 
-## 1. functions.ts aufbrechen
+- Session-Middleware setzt `userId` fuer authentifizierte Tests
+- `storage` Mock wird um die benoetigten Methoden erweitert (`getProfileById`, `createInvoice`, `getInvoice`, `updateInvoice`, `deleteInvoice`, `getPaymentAllocationsByInvoice`)
+- `assertOwnership` wird gemockt, um Org-Ownership-Pruefung zu umgehen (Unit-Tests pruefen Route-Logik, nicht Ownership)
 
-Die Datei enthaelt Endpoints aus voellig verschiedenen Domaenen. Aufteilung in bestehende und neue Route-Module:
+## Die 6 Tests
 
-| Endpoint | Ziel-Modul | Status |
-|---|---|---|
-| `generate-monthly-invoices` | `server/routes/finance.ts` | verschieben |
-| `cron-generate-invoices` | `server/routes/jobs.ts` | verschieben |
-| `validate-invoice` | `server/routes/finance.ts` | verschieben |
-| `send-dunning` | `server/routes/finance.ts` | verschieben |
-| `send-settlement-email` | `server/routes/settlements.ts` | verschieben |
-| `send-invite` | **neu:** `server/routes/notifications.ts` | erstellen |
-| `send-message` | **neu:** `server/routes/notifications.ts` | erstellen |
-| `ocr-invoice` | **neu:** `server/routes/ocr.ts` | erstellen |
-| `ocr-invoice-text` | **neu:** `server/routes/ocr.ts` | erstellen |
-| `ocr-bank-statement` | **neu:** `server/routes/ocr.ts` | erstellen |
-| `export-user-data` | `server/routes/exports.ts` | verschieben |
-| `delete-account` | `server/routes/core.ts` | verschieben |
-| `check-maintenance-reminders` | `server/routes/jobs.ts` | verschieben |
+### 1. POST /api/invoices mit fehlendem Pflichtfeld (unitId) -> 400
+Sendet Body ohne `unitId`. Der `insertMonthlyInvoiceSchema.safeParse()` schlaegt fehl, Route antwortet mit `{ error: "Validation failed", details: ... }`.
 
-Nach der Migration wird `server/functions.ts` geloescht und der Import in `server/routes.ts` entfernt.
+### 2. POST /api/invoices mit ungueltigem Monat -> 400
+Sendet `month: 13` oder `month: -1`. Schema-Validation erkennt den ungueltigen Wert.
 
-Hilfsfunktionen (`calculateTenantCarryForward`, `getVatRates`, `calculateVatFromGross`, `formatCurrency`, `ROLE_LABELS`, `VALID_UST_RATES_*`) werden in ein neues `server/lib/invoiceUtils.ts` extrahiert, damit die Route-Module schlank bleiben.
+### 3. POST /api/invoices erfolgreich -> 200 mit korrekten Feldern
+Sendet vollstaendigen Body (tenantId, unitId, year, month). Mock `storage.createInvoice` gibt das erstellte Objekt zurueck. Prueft, dass Response die erwarteten Felder enthaelt.
 
----
+**Anmerkung:** Die aktuelle Route antwortet mit `res.json(invoice)` (Status 200), nicht 201. Der Test prueft das tatsaechliche Verhalten (200). Eine Aenderung auf 201 waere ein separates Ticket.
 
-## 2. LSP-Fehler beheben
+### 4. GET /api/invoices/:id -> 200 mit korrekten Feldern
+Mock `assertOwnership` gibt ein Invoice-Objekt zurueck. Prueft, dass Response die erwarteten Felder (id, unitId, year, month, status) enthaelt.
 
-### 2a. Doppelte isAuthenticated entfernen
+### 5. PATCH /api/invoices/:id Status-Update -> 200
+Sendet `{ status: "bezahlt" }`. Mock `assertOwnership` + `storage.updateInvoice` geben aktualisiertes Objekt zurueck. Prueft, dass der neue Status im Response erscheint.
 
-`functions.ts` (Zeile 15-20) definiert eine eigene `isAuthenticated` -- identisch mit `server/routes/helpers.ts` und `server/auth.ts`. Nach dem Aufbrechen wird diese entfernt. Alle Module importieren aus `./helpers`.
-
-### 2b. Session-Typ-Deklaration zentralisieren
-
-Die `declare module "express-session"` steht aktuell in `server/auth.ts` (Zeile 13-18). Das funktioniert, weil TypeScript das Modul global augmentiert. Um LSP-Fehler in anderen Dateien zu vermeiden (wenn `auth.ts` nicht im Compile-Pfad liegt), wird die Deklaration in eine dedizierte Datei verschoben:
-
-**Neue Datei: `server/types/session.d.ts`**
-```typescript
-import "express-session";
-declare module "express-session" {
-  interface SessionData {
-    userId: string;
-    email: string;
-  }
-}
-```
-
-Aus `server/auth.ts` wird die Deklaration entfernt (Zeilen 13-18).
-
-### 2c. @shared/schema Import-Pfad
-
-Der `@shared/schema`-Alias ist in `tsconfig.json` korrekt konfiguriert. Falls der LSP trotzdem warnt, wird in `tsconfig.node.json` geprueft, ob `paths` dort ebenfalls gesetzt ist. Kein Code-Change noetig, nur Verifikation.
-
----
-
-## 3. WAF / IP-Blacklisting
-
-### Neue Datei: `server/middleware/ipBlacklist.ts`
-
-Funktionalitaet:
-- **Statische Blockliste**: Konfigurierbar via `IP_BLACKLIST` Environment-Variable (kommagetrennte IPs/CIDRs)
-- **Dynamische Brute-Force-Sperre**: Zaehlt fehlgeschlagene Auth-Versuche pro IP (In-Memory Map mit TTL)
-- **Schwellwert**: 10 fehlgeschlagene Versuche in 15 Minuten = 30 Minuten IP-Sperre
-- **Logging**: Blockierte IPs werden via Pino geloggt
-- **Graceful Degradation**: Bei Redis-Ausfall faellt auf In-Memory zurueck (bereits Pattern im Projekt)
-
-Implementierung:
-
-```text
-Anfrage
-  |
-  v
-[IP in statischer Blockliste?] --ja--> 403 Forbidden
-  |
-  nein
-  v
-[IP dynamisch gesperrt?] --ja--> 403 Forbidden + Retry-After
-  |
-  nein
-  v
-[Weiter zu Route]
-  |
-  v
-[Auth fehlgeschlagen?] --ja--> Zaehler erhoehen
-                                Wenn >= 10 --> IP sperren (30 Min)
-```
-
-### Integration in server/index.ts
-
-Die Middleware wird VOR dem Rate-Limiter eingehaengt:
-
-```typescript
-app.use(ipBlacklistMiddleware);  // NEU
-app.use(apiLimiter);             // bestehend
-```
-
-### Auth-Hook in server/auth.ts
-
-Nach fehlgeschlagenem Login (`POST /api/auth/login` mit 401) wird `recordFailedAttempt(ip)` aufgerufen. Nach erfolgreichem Login wird `clearFailedAttempts(ip)` aufgerufen.
-
----
+### 6. DELETE /api/invoices/:id mit Aufbewahrungspflicht -> 409
+Mock `assertOwnership` gibt ein Invoice zurueck. Mock `archiveService.isDeletionFrozen` gibt `{ frozen: true, retentionUntil: "2032-12-31", standard: "bao", reason: "..." }` zurueck. Prueft 409 mit `retentionUntil` und `standard` im Response-Body.
 
 ## Technische Details
 
-### Neue Dateien:
-1. `server/types/session.d.ts` -- Session-Typ-Deklaration
-2. `server/routes/notifications.ts` -- E-Mail-Versand (Invite, Message)
-3. `server/routes/ocr.ts` -- OCR-Endpoints (Invoice, Bank Statement)
-4. `server/lib/invoiceUtils.ts` -- Shared Hilfsfunktionen
-5. `server/middleware/ipBlacklist.ts` -- WAF/IP-Blocking
+### Geaenderte Datei:
+`tests/unit/routes/finance.test.ts`
 
-### Geaenderte Dateien:
-1. `server/routes.ts` -- `registerFunctionRoutes` entfernen, neue Module registrieren
-2. `server/routes/finance.ts` -- Invoice/Dunning-Endpoints aufnehmen
-3. `server/routes/settlements.ts` -- Settlement-Email aufnehmen
-4. `server/routes/exports.ts` -- User-Data-Export aufnehmen
-5. `server/routes/core.ts` -- Delete-Account aufnehmen
-6. `server/routes/jobs.ts` -- Cron/Maintenance-Endpoints aufnehmen
-7. `server/auth.ts` -- Session-Deklaration entfernen, Brute-Force-Hook einfuegen
-8. `server/index.ts` -- ipBlacklist-Middleware registrieren
-9. `server/functions.ts` -- **geloescht**
+### Neue Mocks (vi.mock Erweiterungen):
 
-### Reihenfolge:
-1. `server/types/session.d.ts` + `server/lib/invoiceUtils.ts` erstellen
-2. Neue Route-Module erstellen (notifications, ocr)
-3. Endpoints in bestehende Module verschieben
-4. `functions.ts` loeschen, `routes.ts` bereinigen
-5. `ipBlacklist.ts` erstellen und in `index.ts` + `auth.ts` integrieren
+```text
+server/storage:
+  - getProfileById -> returns { id, organizationId }
+  - createInvoice -> returns input + { id }
+  - updateInvoice -> returns merged object
+  - getInvoice -> returns mock invoice
+  - getPaymentAllocationsByInvoice -> returns []
+
+server/middleware/assertOrgOwnership:
+  - assertOwnership -> returns mock resource or null
+
+server/billing/archiveService:
+  - archiveService.isDeletionFrozen -> configurable per test
+```
+
+### Test-App Setup:
+
+Zweite Express-App mit authentifizierter Session (`req.session.userId = "test-user-id"`) fuer die neuen Tests, damit `isAuthenticated` durchlaesst. Die bestehenden 401-Tests bleiben unveraendert mit der unauthentifizierten App.
+
+### Keine Aenderungen an:
+- Produktivcode (keine Route-Aenderungen)
+- Andere Testdateien
+- DB-Schema
