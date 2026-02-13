@@ -3,21 +3,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageCircle, Send, Loader2, Bot, User, X } from 'lucide-react';
+import { MessageCircle, Send, Loader2, Bot, User, X, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
-type Message = { role: 'user' | 'assistant'; content: string };
+const WELCOME_MSG = 'Hallo! Ich bin Ihr digitaler Assistent. Ich kann Ihnen Auskunft über Ihre Miete, Vorschreibungen und Zahlungen geben. Wie kann ich Ihnen helfen?';
 
 export function TenantChatbot() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: 'Hallo! Ich bin Ihr digitaler Assistent. Ich kann Ihnen Auskunft über Ihre Miete, Vorschreibungen und Zahlungen geben. Wie kann ich Ihnen helfen?',
-    },
-  ]);
+  const {
+    messages,
+    isLoadingHistory,
+    addMessage,
+    updateLastAssistant,
+    finalizeAssistant,
+    clearHistory,
+  } = useChatPersistence({
+    chatType: 'tenant',
+    welcomeMessage: WELCOME_MSG,
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -32,9 +38,7 @@ export function TenantChatbot() {
     const text = input.trim();
     if (!text || isLoading) return;
 
-    const userMsg: Message = { role: 'user', content: text };
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
+    addMessage({ role: 'user', content: text });
     setInput('');
     setIsLoading(true);
 
@@ -45,6 +49,11 @@ export function TenantChatbot() {
 
       const chatUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tenant-chat`;
 
+      // Send all messages except the initial welcome
+      const historyToSend = messages
+        .filter((m, i) => !(i === 0 && m.role === 'assistant'))
+        .concat({ role: 'user', content: text });
+
       const resp = await fetch(chatUrl, {
         method: 'POST',
         headers: {
@@ -52,9 +61,7 @@ export function TenantChatbot() {
           Authorization: `Bearer ${session.access_token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({
-          messages: updatedMessages.filter((m) => m.role !== 'assistant' || m !== updatedMessages[0]),
-        }),
+        body: JSON.stringify({ messages: historyToSend }),
       });
 
       if (!resp.ok) {
@@ -100,15 +107,7 @@ export function TenantChatbot() {
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               assistantContent += content;
-              setMessages((prev) => {
-                const last = prev[prev.length - 1];
-                if (last?.role === 'assistant' && prev.length > updatedMessages.length) {
-                  return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m
-                  );
-                }
-                return [...prev, { role: 'assistant', content: assistantContent }];
-              });
+              updateLastAssistant(assistantContent);
             }
           } catch {
             buffer = line + '\n' + buffer;
@@ -117,17 +116,9 @@ export function TenantChatbot() {
         }
       }
 
-      // Ensure final message is set
+      // Persist final assistant message
       if (assistantContent) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.role === 'assistant') {
-            return prev.map((m, i) =>
-              i === prev.length - 1 ? { ...m, content: assistantContent } : m
-            );
-          }
-          return [...prev, { role: 'assistant', content: assistantContent }];
-        });
+        finalizeAssistant(assistantContent);
       }
     } catch (err) {
       console.error('Chat error:', err);
@@ -156,45 +147,57 @@ export function TenantChatbot() {
           <Bot className="h-5 w-5 text-primary" />
           <CardTitle className="text-sm">Mieter-Assistent</CardTitle>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsOpen(false)}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={clearHistory} title="Verlauf löschen">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsOpen(false)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
           <div className="space-y-4">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {msg.role === 'assistant' && (
-                  <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Bot className="h-4 w-4 text-primary" />
-                  </div>
-                )}
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Verlauf wird geladen...</span>
+              </div>
+            ) : (
+              messages.map((msg, i) => (
                 <div
-                  className={`rounded-lg px-3 py-2 max-w-[280px] text-sm ${
-                    msg.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  }`}
+                  key={i}
+                  className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  {msg.role === 'assistant' ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0 [&>ul]:m-0 [&>ol]:m-0">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  {msg.role === 'assistant' && (
+                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot className="h-4 w-4 text-primary" />
                     </div>
-                  ) : (
-                    msg.content
+                  )}
+                  <div
+                    className={`rounded-lg px-3 py-2 max-w-[280px] text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:m-0 [&>ul]:m-0 [&>ol]:m-0">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
+                      <User className="h-4 w-4 text-primary-foreground" />
+                    </div>
                   )}
                 </div>
-                {msg.role === 'user' && (
-                  <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
-                    <User className="h-4 w-4 text-primary-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
+              ))
+            )}
             {isLoading && messages[messages.length - 1]?.role === 'user' && (
               <div className="flex gap-2 justify-start">
                 <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">

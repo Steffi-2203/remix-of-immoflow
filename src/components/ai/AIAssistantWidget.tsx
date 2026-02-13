@@ -3,14 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { MessageCircle, X, Send, Sparkles, Bot, User, Minimize2 } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Bot, User, Minimize2, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+const WELCOME_MSG = 'Hallo! 👋 Ich bin Ihr ImmoflowMe-Assistent. Fragen Sie mich zu Hausverwaltung, MRG, WEG oder Ihrer Software.';
 
 const QUICK_PROMPTS = [
   'Wie hoch ist meine Leerstandsquote?',
@@ -48,9 +46,10 @@ function getLocalResponse(question: string): string {
 export function AIAssistantWidget() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Hallo! 👋 Ich bin Ihr ImmoflowMe-Assistent. Fragen Sie mich zu Hausverwaltung, MRG, WEG oder Ihrer Software.' },
-  ]);
+  const { messages, isLoadingHistory, addMessage, clearHistory } = useChatPersistence({
+    chatType: 'assistant',
+    welcomeMessage: WELCOME_MSG,
+  });
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,14 +64,14 @@ export function AIAssistantWidget() {
     if (!input.trim()) return;
     const userMsg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    addMessage({ role: 'user', content: userMsg });
     setIsTyping(true);
 
     // Simulate typing delay
     await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
 
     const response = getLocalResponse(userMsg);
-    setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    addMessage({ role: 'assistant', content: response });
     setIsTyping(false);
   };
 
@@ -110,6 +109,15 @@ export function AIAssistantWidget() {
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+            onClick={clearHistory}
+            title="Verlauf löschen"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
             onClick={() => setMinimized(!minimized)}
           >
             <Minimize2 className="h-4 w-4" />
@@ -129,34 +137,41 @@ export function AIAssistantWidget() {
         <>
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-background">
-            {messages.map((msg, i) => (
-              <div key={i} className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                {msg.role === 'assistant' && (
-                  <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Bot className="h-4 w-4 text-primary" />
-                  </div>
-                )}
-                <div className={cn(
-                  'max-w-[80%] rounded-lg px-3 py-2 text-sm',
-                  msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
-                )}>
-                  {msg.role === 'assistant' ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Verlauf wird geladen...</span>
+              </div>
+            ) : (
+              messages.map((msg, i) => (
+                <div key={i} className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                  {msg.role === 'assistant' && (
+                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot className="h-4 w-4 text-primary" />
                     </div>
-                  ) : (
-                    msg.content
+                  )}
+                  <div className={cn(
+                    'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
+                  )}>
+                    {msg.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ol]:mb-2">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="h-7 w-7 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                      <User className="h-4 w-4 text-secondary-foreground" />
+                    </div>
                   )}
                 </div>
-                {msg.role === 'user' && (
-                  <div className="h-7 w-7 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-                    <User className="h-4 w-4 text-secondary-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
+              ))
+            )}
             {isTyping && (
               <div className="flex gap-2">
                 <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -174,7 +189,7 @@ export function AIAssistantWidget() {
           </div>
 
           {/* Quick prompts */}
-          {messages.length <= 2 && (
+          {messages.length <= 2 && !isLoadingHistory && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5">
               {QUICK_PROMPTS.map(prompt => (
                 <button
