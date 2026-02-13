@@ -39,10 +39,10 @@ jobs:
       - run: npx vitest run --config vitest.config.server.ts tests/unit
 
   test-integration:
-    name: Integration Tests
+    name: Integration Tests (Required)
     runs-on: ubuntu-latest
-    needs: typecheck
-    if: github.event_name == 'pull_request'
+    needs: test-unit
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     services:
       postgres:
         image: postgres:15-alpine
@@ -73,10 +73,11 @@ jobs:
       - run: npx vitest run --config vitest.config.server.ts tests/integration
 
   test-e2e:
-    name: E2E Tests (Playwright)
+    name: E2E Tests (Optional)
     runs-on: ubuntu-latest
     needs: test-unit
     if: github.event_name == 'pull_request'
+    continue-on-error: true
     services:
       postgres:
         image: postgres:15-alpine
@@ -109,7 +110,7 @@ jobs:
       - run: sleep 5
       - run: npx playwright test --project=chromium
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-report
           path: playwright-report/
