@@ -1,8 +1,10 @@
+import type { ToastFn } from '@/types/auth';
+
 export function isUnauthorizedError(error: Error): boolean {
   return /^401: .*Unauthorized/.test(error.message);
 }
 
-export function redirectToLogin(toast?: (options: { title: string; description: string; variant: string }) => void) {
+export function redirectToLogin(toast?: ToastFn): void {
   if (toast) {
     toast({
       title: "Unauthorized",

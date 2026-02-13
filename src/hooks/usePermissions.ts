@@ -2,25 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useActiveOrganization } from '@/contexts/ActiveOrganizationContext';
+import type {
+  Permissions,
+  PermissionEntry,
+  PermissionOverrideEntry,
+  PermissionCheckResult,
+} from '@/types/auth';
 
-interface Permissions {
-  canViewFinances: boolean;
-  canEditFinances: boolean;
-  canViewFullTenantData: boolean;
-  canManageMaintenance: boolean;
-  canApproveInvoices: boolean;
-  canSendMessages: boolean;
-  canManageUsers: boolean;
-  role: string | null;
-  isAdmin: boolean;
-  isPropertyManager: boolean;
-  isFinance: boolean;
-  isViewer: boolean;
-  isTester: boolean;
-  isLoading: boolean;
-}
-
-function mapPermissionFlags(perms: { resource: string; action: string }[]): Record<string, boolean> {
+function mapPermissionFlags(perms: PermissionEntry[]): Record<string, boolean> {
   const set = new Set(perms.map(p => `${p.resource}:${p.action}`));
   return {
     canViewFinances: set.has('invoices:read') || set.has('payments:read'),
@@ -72,12 +61,13 @@ export function useHasPermission(resource: string, action: string): { allowed: b
       // Check org override first
       if (organizationId) {
         const { data: overrideRows } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types
           .rpc('check_permission_override' as any, {
             p_org_id: organizationId,
             p_role: userRole,
             p_resource: resource,
             p_action: action,
-          });
+          }) as unknown as { data: PermissionCheckResult[] | null };
         // If we get an override, use it
         if (overrideRows && Array.isArray(overrideRows) && overrideRows.length > 0) {
           return overrideRows[0].allowed === true;
@@ -85,13 +75,14 @@ export function useHasPermission(resource: string, action: string): { allowed: b
       }
 
       // Fall back to default permissions via raw query
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types
+      const { data, error } = await (supabase
         .from('permissions' as any)
         .select('id')
         .eq('role', userRole)
         .eq('resource', resource)
         .eq('action', action)
-        .limit(1);
+        .limit(1) as unknown as Promise<{ data: { id: string }[] | null; error: Error | null }>);
       return !error && (data?.length ?? 0) > 0;
     },
     enabled: !!userRole && !!resource && !!action,
@@ -130,22 +121,24 @@ export function usePermissions(): Permissions {
     queryFn: async () => {
       if (!userRole) return [];
 
-      const { data: basePerms } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types
+      const { data: basePerms } = await (supabase
         .from('permissions' as any)
         .select('resource, action')
-        .eq('role', userRole);
+        .eq('role', userRole) as unknown as Promise<{ data: PermissionEntry[] | null }>);
 
-      const perms: { resource: string; action: string }[] = ((basePerms || []) as unknown as { resource: string; action: string }[]).slice();
+      const perms: PermissionEntry[] = (basePerms || []).slice();
 
       if (organizationId) {
-        const { data: overrides } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table not in generated types
+        const { data: overrides } = await (supabase
           .from('role_permissions_override' as any)
           .select('resource, action, allowed')
           .eq('organization_id', organizationId)
-          .eq('role', userRole);
+          .eq('role', userRole) as unknown as Promise<{ data: PermissionOverrideEntry[] | null }>);
 
         if (overrides) {
-          for (const ov of overrides as unknown as { resource: string; action: string; allowed: boolean }[]) {
+          for (const ov of overrides) {
             if (!ov.allowed) {
               const idx = perms.findIndex(p => p.resource === ov.resource && p.action === ov.action);
               if (idx >= 0) perms.splice(idx, 1);
