@@ -1,4 +1,4 @@
-import { Brain, Lock, Sparkles, Loader2, AlertCircle, AlertTriangle, Info, CreditCard, FileText, Building, Eye } from 'lucide-react';
+import { Brain, Lock, Sparkles, Loader2, AlertCircle, AlertTriangle, Info, CreditCard, FileText, Building, Eye, Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,7 @@ const typeIcons: Record<string, typeof CreditCard> = {
   overdue_payment: CreditCard,
   expiring_lease: FileText,
   vacancy: Building,
+  high_balance: Wallet,
 };
 
 export default function KiInsights() {
