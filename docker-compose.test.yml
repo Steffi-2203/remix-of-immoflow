@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15-alpine
+    container_name: immoflow-test-db
+    environment:
+      POSTGRES_DB: immoflow_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: testpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d immoflow_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  test-db-data:
