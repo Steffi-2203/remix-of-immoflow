@@ -7,7 +7,7 @@ import { eq, and } from "drizzle-orm";
 import { sendEmail } from "./lib/resend";
 
 const SALT_ROUNDS = 12;
-const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "stephania.pfeffer@outlook.de";
 const PASSWORD_RESET_EXPIRY_HOURS = 24;
 
 declare module "express-session" {

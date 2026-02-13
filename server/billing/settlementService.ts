@@ -162,6 +162,53 @@ export class SettlementService {
     return roundMoney(totalPrepayments);
   }
 
+  /**
+   * Pre-load all distribution values for a property's units in one batch query
+   * Call once before processing multiple tenants to avoid N+1 queries
+   */
+  async preloadDistributionValues(
+    propertyUnits: Array<typeof units.$inferSelect>
+  ): Promise<Map<string, Array<{ unitId: string; value: number }>>> {
+    const unitIds = propertyUnits.map(u => u.id);
+    if (unitIds.length === 0) return new Map();
+
+    const allValues = await db.select()
+      .from(unitDistributionValues)
+      .where(inArray(unitDistributionValues.unitId, unitIds));
+
+    const byKey = new Map<string, Array<{ unitId: string; value: number }>>();
+    for (const v of allValues) {
+      const keyId = v.keyId;
+      if (!byKey.has(keyId)) byKey.set(keyId, []);
+      byKey.get(keyId)!.push({ unitId: v.unitId, value: Number(v.value) || 0 });
+    }
+    return byKey;
+  }
+
+  getDistributionValueFromCache(
+    unitId: string,
+    keyId: string,
+    propertyUnits: Array<typeof units.$inferSelect>,
+    cache: Map<string, Array<{ unitId: string; value: number }>>
+  ): { unitValue: number; totalValue: number } {
+    const cached = cache.get(keyId);
+    if (cached && cached.length > 0) {
+      const unitDistValue = cached.find(v => v.unitId === unitId);
+      const unitValue = unitDistValue?.value || 0;
+      const totalValue = cached.reduce((sum, v) => sum + v.value, 0);
+
+      if (totalValue > 0) {
+        return { unitValue, totalValue };
+      }
+    }
+
+    // Fallback to area-based distribution
+    const unit = propertyUnits.find(u => u.id === unitId);
+    const unitSize = Number(unit?.flaeche) || 1;
+    const totalSize = propertyUnits.reduce((sum, u) => sum + (Number(u.flaeche) || 1), 0);
+    return { unitValue: unitSize, totalValue: totalSize };
+  }
+
   async getDistributionValue(
     unitId: string,
     keyId: string,
@@ -192,7 +239,8 @@ export class SettlementService {
     propertyUnits: Array<typeof units.$inferSelect>,
     expensesByCategory: Map<string, number>,
     byDistributionKey: Map<string, { amount: number; keyId: string | null }[]>,
-    organizationId: string
+    organizationId: string,
+    distCache?: Map<string, Array<{ unitId: string; value: number }>>
   ): Promise<TenantSettlementResult | null> {
     const tenant = await db.select({ t: tenants })
       .from(tenants)
@@ -233,11 +281,10 @@ export class SettlementService {
                 orgKeys[0];
         }
         
-        const { unitValue, totalValue } = await this.getDistributionValue(
-          unit.id, 
-          key?.id || '', 
-          propertyUnits
-        );
+        // Use cached distribution values if available (avoids N+1 queries)
+        const { unitValue, totalValue } = distCache
+          ? this.getDistributionValueFromCache(unit.id, key?.id || '', propertyUnits, distCache)
+          : await this.getDistributionValue(unit.id, key?.id || '', propertyUnits);
 
         const share = totalValue > 0 ? roundMoney(exp.amount * unitValue / totalValue) : 0;
         categoryShare = roundMoney(categoryShare + share);
@@ -284,6 +331,9 @@ export class SettlementService {
     const propertyUnits = await db.select().from(units)
       .where(eq(units.propertyId, propertyId));
 
+    // Pre-load ALL distribution values in one batch query (eliminates N+1)
+    const distCache = await this.preloadDistributionValues(propertyUnits);
+
     const unitIds = propertyUnits.map(u => u.id);
     
     // Fetch ALL tenants (active + inactive) for pro-rata mid-year change handling
@@ -324,7 +374,7 @@ export class SettlementService {
             settlementPromises.push(
               this.calculateTenantSettlement(
                 t.id, propertyId, year, propertyUnits,
-                byCategory, byDistributionKey, organizationId
+                byCategory, byDistributionKey, organizationId, distCache
               )
             );
           }
@@ -334,7 +384,7 @@ export class SettlementService {
         settlementPromises.push(
           this.calculateTenantSettlement(
             unitTenants[0].id, propertyId, year, propertyUnits,
-            byCategory, byDistributionKey, organizationId
+            byCategory, byDistributionKey, organizationId, distCache
           )
         );
       }
