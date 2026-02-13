@@ -71,7 +71,7 @@ export function useGenerateContractPdf() {
   return useMutation<Blob, Error, GenerateContractInput>({
     mutationFn: async (input) => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]*)/);
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
       if (csrfMatch) headers['x-csrf-token'] = decodeURIComponent(csrfMatch[1]);
 
       const response = await fetch('/api/lease-contracts/generate-pdf', {

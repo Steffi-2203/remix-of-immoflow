@@ -76,7 +76,7 @@ export default function KiAssistent() {
     setSending(true);
 
     try {
-      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]*)/);
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
       const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : null;
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
