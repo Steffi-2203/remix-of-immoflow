@@ -1,16 +1,21 @@
 import type { Express } from "express";
+import { db } from "../db";
 import { storage } from "../storage";
 import { parsePagination, paginateArray } from "../lib/pagination";
 import { isAuthenticated, snakeToCamel, getProfileFromSession, getUserRoles, isTester, maskPersonalData } from "./helpers";
 import { assertOwnership } from "../middleware/assertOrgOwnership";
 import { paymentService } from "../billing/paymentService";
+import { sendEmail } from "../lib/resend";
+import { ALL_VALID_RATES } from "../lib/invoiceUtils";
 import {
   insertPaymentSchema,
   insertTransactionSchema,
   insertExpenseSchema,
   insertMonthlyInvoiceSchema,
+  monthlyInvoices,
 } from "@shared/schema";
 import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export function registerFinanceRoutes(app: Express) {
   // ====== PAYMENTS ======
@@ -525,6 +530,164 @@ export function registerFinanceRoutes(app: Express) {
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  // ====== DUNNING ======
+  app.post("/api/functions/send-dunning", isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.body.invoiceId) {
+        const invoice = await assertOwnership(req, res, req.body.invoiceId, "invoices");
+        if (!invoice) return;
+      }
+      const {
+        invoiceId, dunningLevel, tenantEmail, tenantName,
+        propertyName, unitNumber, amount, dueDate, invoiceMonth, invoiceYear
+      } = req.body;
+
+      if (!tenantEmail) {
+        return res.status(400).json({ error: "Keine E-Mail-Adresse für den Mieter hinterlegt" });
+      }
+
+      const monthNames = [
+        'Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni',
+        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+      ];
+      const monthName = monthNames[invoiceMonth - 1];
+      const formattedAmount = amount.toLocaleString('de-AT', { minimumFractionDigits: 2 });
+      const formattedDueDate = new Date(dueDate).toLocaleDateString('de-AT');
+
+      let subject: string;
+      let htmlContent: string;
+
+      if (dunningLevel === 1) {
+        subject = `Zahlungserinnerung - Miete ${monthName} ${invoiceYear}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Freundliche Zahlungserinnerung</h2>
+            <p>Sehr geehrte/r ${tenantName},</p>
+            <p>bei Durchsicht unserer Buchhaltung ist uns aufgefallen, dass die nachstehende Forderung noch offen ist:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr style="background: #f5f5f5;">
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Objekt</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${propertyName} - Top ${unitNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Offener Betrag</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd; color: #c00; font-weight: bold;">€ ${formattedAmount}</td>
+              </tr>
+            </table>
+            <p>Wir bitten Sie, den offenen Betrag innerhalb der nächsten <strong>7 Tage</strong> zu überweisen.</p>
+            <p>Mit freundlichen Grüßen,<br>Ihre Hausverwaltung</p>
+          </div>
+        `;
+      } else {
+        subject = `MAHNUNG - Miete ${monthName} ${invoiceYear}`;
+        htmlContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #c00;">Mahnung</h2>
+            <p>Sehr geehrte/r ${tenantName},</p>
+            <p>trotz unserer Zahlungserinnerung ist die nachstehende Forderung weiterhin offen:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr style="background: #f5f5f5;">
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Objekt</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${propertyName} - Top ${unitNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Offener Betrag</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd; color: #c00; font-weight: bold;">€ ${formattedAmount}</td>
+              </tr>
+            </table>
+            <p style="color: #c00; font-weight: bold;">
+              Wir fordern Sie hiermit letztmalig auf, den offenen Betrag innerhalb von <strong>5 Tagen</strong> zu überweisen.
+            </p>
+            <p>Mit freundlichen Grüßen,<br>Ihre Hausverwaltung</p>
+          </div>
+        `;
+      }
+
+      const emailResponse = await sendEmail({
+        to: tenantEmail,
+        subject: subject,
+        html: htmlContent,
+      });
+
+      const updateData: Record<string, any> = { mahnstufe: dunningLevel };
+      if (dunningLevel === 1) {
+        updateData.zahlungserinnerungAm = new Date().toISOString();
+      } else {
+        updateData.mahnungAm = new Date().toISOString();
+      }
+
+      await db.update(monthlyInvoices)
+        .set(updateData)
+        .where(eq(monthlyInvoices.id, invoiceId));
+
+      res.json({
+        success: true,
+        message: dunningLevel === 1 ? 'Zahlungserinnerung versendet' : 'Mahnung versendet',
+        emailId: (emailResponse as any).data?.id
+      });
+    } catch (error) {
+      console.error("Error in send-dunning:", error);
+      res.status(500).json({ error: "Ein Fehler ist aufgetreten." });
+    }
+  });
+
+  // ====== VALIDATE INVOICE ======
+  app.post("/api/functions/validate-invoice", isAuthenticated, async (req: any, res) => {
+    try {
+      const invoiceData = req.body.daten || req.body;
+
+      const report = {
+        ist_valide: true,
+        gefundene_fehler: [] as string[],
+        vorgenommene_korrekturen: [] as string[],
+        unsichere_felder: [] as { feld: string; grund: string }[],
+        hinweise: [] as string[]
+      };
+
+      const corrected = { ...invoiceData };
+
+      if (!corrected.lieferant || corrected.lieferant.trim() === '') {
+        corrected.lieferant = 'UNSICHER - nicht erkannt';
+        report.unsichere_felder.push({ feld: 'lieferant', grund: 'Nicht erkannt oder leer' });
+      }
+
+      if (!corrected.bruttobetrag || corrected.bruttobetrag <= 0) {
+        report.gefundene_fehler.push('Pflichtfeld "bruttobetrag" fehlt');
+        report.ist_valide = false;
+      }
+
+      if (corrected.bruttobetrag && corrected.ust_betrag && !corrected.nettobetrag) {
+        corrected.nettobetrag = Math.round((corrected.bruttobetrag - corrected.ust_betrag) * 100) / 100;
+        report.vorgenommene_korrekturen.push(`Nettobetrag berechnet: ${corrected.nettobetrag}€`);
+      }
+
+      if (corrected.ust_satz !== null && corrected.ust_satz !== undefined) {
+        if (!ALL_VALID_RATES.includes(corrected.ust_satz)) {
+          report.gefundene_fehler.push(`Ungewöhnlicher USt-Satz: ${corrected.ust_satz}%`);
+          report.unsichere_felder.push({ feld: 'ust_satz', grund: `${corrected.ust_satz}% ist kein üblicher Steuersatz` });
+        }
+      }
+
+      if (corrected.iban) {
+        const cleanIban = corrected.iban.replace(/\s/g, '').toUpperCase();
+        if (cleanIban.length < 15 || cleanIban.length > 34) {
+          report.gefundene_fehler.push(`IBAN-Länge ungültig: ${cleanIban.length} Zeichen`);
+        } else {
+          corrected.iban = cleanIban;
+        }
+      }
+
+      if (report.gefundene_fehler.length > 0) {
+        report.ist_valide = false;
+      }
+
+      res.json({ korrigierte_daten: corrected, validierungsbericht: report });
+    } catch (error) {
+      console.error("Error in validate-invoice:", error);
+      res.status(500).json({ error: "Ein Fehler ist aufgetreten." });
     }
   });
 }

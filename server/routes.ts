@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import readonlyRoutes from "./routes/readonly";
 
@@ -16,6 +15,8 @@ import { registerSettlementRoutes } from "./routes/settlements";
 import { registerComplianceRoutes } from "./routes/compliance";
 import { registerExportRoutes } from "./routes/exports";
 import { registerJobRoutes } from "./routes/jobs";
+import { registerNotificationRoutes } from "./routes/notifications";
+import { registerOcrRoutes } from "./routes/ocr";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Readonly API
@@ -33,9 +34,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerComplianceRoutes(app);
   registerExportRoutes(app);
   registerJobRoutes(app);
+  registerNotificationRoutes(app);
+  registerOcrRoutes(app);
 
   // External integrations
-  registerFunctionRoutes(app);
   registerStripeRoutes(app);
 
   const httpServer = createServer(app);
