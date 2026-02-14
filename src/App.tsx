@@ -81,6 +81,9 @@ const Jahresabschluss = lazy(() => import("./pages/Jahresabschluss"));
 const ScheduledReports = lazy(() => import("./pages/ScheduledReports"));
 const Signatures = lazy(() => import("./pages/Signatures"));
 const QueryBuilder = lazy(() => import("./pages/QueryBuilder"));
+const Heizkosten = lazy(() => import("./pages/Heizkosten"));
+const Richtwertmietzins = lazy(() => import("./pages/Richtwertmietzins"));
+const Aktivitaeten = lazy(() => import("./pages/Aktivitaeten"));
 
 const queryClient = new QueryClient();
 
@@ -173,6 +176,9 @@ const App = () => (
             <Route path="/ki-kommunikation" element={<ProtectedRoute><DemoDataProvider><KiKommunikation /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/signaturen" element={<ProtectedRoute><DemoDataProvider><Signatures /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/abfrage-builder" element={<ProtectedRoute><DemoDataProvider><QueryBuilder /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/heizkosten" element={<ProtectedRoute><DemoDataProvider><Heizkosten /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/mietzinsrechner" element={<ProtectedRoute><DemoDataProvider><Richtwertmietzins /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/aktivitaeten" element={<ProtectedRoute><DemoDataProvider><Aktivitaeten /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

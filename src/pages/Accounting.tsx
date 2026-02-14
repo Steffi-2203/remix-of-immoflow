@@ -61,6 +61,7 @@ import {
   useStornoJournalEntry,
 } from '@/hooks/useAccounting';
 import { useProperties } from '@/hooks/useProperties';
+import { EaRechnungTab } from '@/components/accounting/EaRechnungTab';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -750,6 +751,7 @@ export default function Accounting() {
             <TabsTrigger value="balance-sheet" data-testid="tab-balance-sheet"><Scale className="h-4 w-4 mr-1" />Bilanz</TabsTrigger>
             <TabsTrigger value="profit-loss" data-testid="tab-profit-loss"><TrendingUp className="h-4 w-4 mr-1" />GuV</TabsTrigger>
             <TabsTrigger value="uva" data-testid="tab-uva"><Receipt className="h-4 w-4 mr-1" />UVA</TabsTrigger>
+            <TabsTrigger value="ea" data-testid="tab-ea"><Wallet className="h-4 w-4 mr-1" />E/A Rechnung</TabsTrigger>
           </TabsList>
           <TabsContent value="overview"><OverviewTab selectedYear={selectedYear} selectedMonth={selectedMonth} setSelectedYear={setSelectedYear} setSelectedMonth={setSelectedMonth} /></TabsContent>
           <TabsContent value="banking"><BankingTab /></TabsContent>
@@ -759,6 +761,7 @@ export default function Accounting() {
           <TabsContent value="balance-sheet"><BalanceSheetTab propertyId={propertyId} /></TabsContent>
           <TabsContent value="profit-loss"><ProfitLossTab propertyId={propertyId} /></TabsContent>
           <TabsContent value="uva"><UvaTab propertyId={propertyId} /></TabsContent>
+          <TabsContent value="ea"><EaRechnungTab propertyId={propertyId} /></TabsContent>
         </Tabs>
       </div>
     </MainLayout>
