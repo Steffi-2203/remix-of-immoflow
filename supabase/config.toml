@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.backfill-journal]
 verify_jwt = false
+
+[functions.evaluate-rules]
+verify_jwt = false
+
+[functions.sign-document]
+verify_jwt = false
