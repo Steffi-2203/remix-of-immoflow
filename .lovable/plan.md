@@ -1,108 +1,125 @@
 
-# Premium-Addon: Lohnverrechnung und Steuerreporting (120 EUR netto)
+# Plan: EBICS Live-Verbesserung + E1a/E1b Steuer-Export
 
-Zwei Features werden schrittweise umgesetzt. Dieses erste Paket startet mit der **ELDA/OeGK-Schnittstelle fuer Hausbetreuer-Lohnverrechnung**.
+## Zusammenfassung
+
+Zwei Verbesserungen: (1) EBICS von CSV-Import auf echte Live-Banking-Anbindung optimieren und (2) E1a/E1b Steuerbeilagen fuer Eigentuemer als neues Modul implementieren.
 
 ---
 
-## Feature 1: ELDA/OeGK-Lohnverrechnung
+## Teil 1: EBICS Live-Banking Verbesserung
 
-### Was wird gebaut
+### Ist-Zustand
 
-Ein Modul zur Verwaltung von Hausbetreuern (Reinigung, Winterdienst, Haustechnik) mit automatischer Berechnung der Sozialversicherungsbeitraege und Export im ELDA-XML-Format fuer die Anmeldung/Abmeldung und monatliche Beitragsgrundlagenmeldung an die OeGK.
+- EBICS-Infrastruktur existiert vollstaendig: Schema (3 Tabellen mit RLS), Service (664 Zeilen), Routes, Frontend
+- RSA-Key-Management, INI/HIA-Initialisierung, CAMT.053-Download, pain.001-Upload sind implementiert
+- Problem: Die Verbindung zum Bankserver ist "fire-and-forget" -- es fehlt Retry-Logik, Statuspolling und automatisierte Intervall-Abrufe
 
-### Datenbank (neue Tabellen)
+### Verbesserungen
 
-**`property_employees`** -- Hausbetreuer-Stammdaten
-- id, organization_id, property_id (Zuordnung zur Liegenschaft)
-- vorname, nachname, svnr (Sozialversicherungsnummer)
-- geburtsdatum, adresse, plz, ort
-- eintrittsdatum, austrittsdatum
-- beschaeftigungsart: geringfuegig | teilzeit | vollzeit
-- wochenstunden, bruttolohn_monatlich
-- kollektivvertrag_stufe (Hausbetreuer-KV)
-- status: aktiv | karenz | ausgeschieden
-- created_at, updated_at
+1. **Automatischer Abruf-Scheduler**: Konfigurierbare Intervalle (taeglich/stuendlich) fuer automatischen Kontoauszugsabruf via CAMT.053
+2. **Retry-Logik mit Backoff**: Bei Netzwerkfehlern automatisch 3 Versuche mit exponentiellem Backoff
+3. **Connection Health Check**: Statusanzeige der Bankverbindung (letzte erfolgreiche Kommunikation, Fehlerquote)
+4. **Batch-Payment Verbesserung**: Direkte Erstellung von Zahlungsauftraegen aus offenen Lieferantenrechnungen und Loehnen
+5. **CAMT.053-Auto-Matching**: Automatische Zuordnung heruntergeladener Bankbewegungen zu offenen Forderungen
 
-**`payroll_entries`** -- Monatliche Lohnabrechnungen
-- id, employee_id, year, month
-- bruttolohn, sv_dn (SV Dienstnehmeranteil), sv_dg (SV Dienstgeberanteil)
-- lohnsteuer, db_beitrag (Dienstgeberbeitrag), dz_beitrag (Zuschlag zum DB)
-- kommunalsteuer, mvk_beitrag (Mitarbeitervorsorgekasse)
-- nettolohn, gesamtkosten_dg (Gesamtkosten Dienstgeber)
-- auszahlungsdatum, status: entwurf | freigegeben | ausbezahlt
-- created_at
+---
 
-**`elda_submissions`** -- ELDA-Meldungsprotokoll
-- id, organization_id, employee_id
-- meldungsart: anmeldung | abmeldung | aenderung | beitragsgrundlage
-- zeitraum, xml_content, status: erstellt | uebermittelt | bestaetigt | fehler
-- created_at
+## Teil 2: E1a/E1b Steuer-Export (NEU)
 
-### Backend-Service: `eldaPayrollService.ts`
+### Was ist E1a/E1b?
 
-- `calculatePayroll(employeeId, year, month)` -- Berechnung nach oesterreichischen SV-Saetzen 2025/2026:
-  - Geringfuegigkeitsgrenze: 518,44 EUR/Monat
-  - SV-DN: 18,12% (KV 3,87% + PV 10,25% + AV 3,00% + AK 0,50% + WF 0,50%)
-  - SV-DG: 21,23% (KV 3,78% + PV 12,55% + AV 3,00% + UV 1,10% + IESG 0,20% + WF 0,60%)
-  - DB: 3,7%, DZ: je nach Bundesland (Wien 0,36%)
-  - Kommunalsteuer: 3%
-  - MVK: 1,53%
-- `generateEldaXml(employeeId, meldungsart)` -- ELDA-konformes XML (Anmeldung/Abmeldung nach ASVG)
-- `generateBeitragsgrundlage(organizationId, year, month)` -- Monatliche mBGM
-- `calculateGeringfuegig(brutto)` -- Pruefung Geringfuegigkeitsgrenze
+- **E1a**: Beilage zur Einkommenssteuererklaerung fuer "Einkuenfte aus Vermietung und Verpachtung"
+- **E1b**: Beilage fuer "Einkuenfte aus Grundstuecksveraeusserungen" (optional, spaeter)
+- Jeder Eigentuemer braucht jaehrlich eine E1a pro Liegenschaft fuer den Steuerberater bzw. FinanzOnline
 
-### API-Endpunkte (in `server/routes/payroll.ts`)
+### Datenbank: Neue Tabelle
+
+**`tax_reports`** -- Protokoll generierter Steuerbeilagen
+
+| Spalte | Typ | Beschreibung |
+|--------|-----|-------------|
+| id | UUID PK | |
+| organization_id | UUID FK | Organisation |
+| owner_id | UUID FK | Eigentuemer |
+| property_id | UUID FK | Liegenschaft |
+| report_type | TEXT | 'E1a' oder 'E1b' |
+| tax_year | INTEGER | Steuerjahr |
+| data | JSONB | Berechnete Kennzahlen |
+| xml_content | TEXT | FinanzOnline-XML |
+| status | TEXT | 'entwurf', 'freigegeben', 'exportiert' |
+| created_at | TIMESTAMPTZ | |
+
+RLS: Nur eigene Organisation sichtbar.
+
+### Backend-Service: `taxReportingService.ts`
+
+Aggregiert aus bestehenden Daten:
+
+- **Mieteinnahmen**: Aus `monthly_invoices` (Grundmiete pro Liegenschaft/Eigentuemer-Anteil)
+- **Betriebskosten-Einnahmen**: Aus `monthly_invoices` (BK-Vorschreibungen)
+- **Werbungskosten/Ausgaben**: Aus `expenses` (Instandhaltung, Versicherung, Verwaltung, etc.)
+- **AfA**: Berechnung aus Gebaeude-Anschaffungskosten (1,5% p.a. nach EStG)
+- **Zinsaufwand**: Aus Kreditzinsen (falls erfasst)
+
+E1a-Kennzahlen (FinanzOnline-Formular):
+- KZ 370: Mieteinnahmen brutto
+- KZ 371: Betriebskosten-Einnahmen
+- KZ 380: Werbungskosten (Instandhaltung)
+- KZ 381: AfA
+- KZ 382: Zinsen Fremdkapital
+- KZ 383: Verwaltungskosten
+- KZ 390: Einkuenfte aus V+V (Saldo)
+
+### API-Endpunkte
 
 ```text
-GET    /api/employees                  -- Liste aller Hausbetreuer
-POST   /api/employees                  -- Neuen Hausbetreuer anlegen
-PUT    /api/employees/:id              -- Stammdaten aendern
-DELETE /api/employees/:id              -- Soft-Delete
-
-GET    /api/payroll/:employeeId/:year  -- Jahresuebersicht
-POST   /api/payroll/calculate          -- Lohn berechnen
-POST   /api/payroll/finalize           -- Freigeben
-
-GET    /api/elda/generate/:employeeId  -- ELDA-XML generieren
-GET    /api/elda/submissions           -- Meldungshistorie
-POST   /api/elda/submit                -- Meldung erstellen
+GET    /api/tax-reports/:ownerId/:year      -- E1a-Berechnung fuer Eigentuemer
+GET    /api/tax-reports/:ownerId/:year/xml   -- FinanzOnline-XML-Export
+GET    /api/tax-reports/properties/:propId/:year  -- E1a pro Liegenschaft
+POST   /api/tax-reports/generate             -- Report generieren + speichern
+GET    /api/tax-reports/history               -- Alle generierten Reports
 ```
 
 ### Frontend
 
-- Neuer Tab "Lohnverrechnung" in der Navigation (unter Buchhaltung oder als eigener Menue-Punkt)
-- **Hausbetreuer-Verwaltung**: Tabelle mit Stammdaten, Status-Badge, Neu/Bearbeiten-Dialog
-- **Lohnabrechnung**: Monatsauswahl, automatische Berechnung, Aufschluesselung SV/LSt/Nebenkosten
-- **ELDA-Export**: Button fuer An-/Abmeldungs-XML, Beitragsgrundlagen-XML, Meldungshistorie mit Status
+- Neuer Tab "Steuer-Export" in der bestehenden FinanzOnline/Export-Seite
+- **Eigentuemer-Auswahl** + Jahresauswahl
+- **E1a-Vorschau**: Tabelle mit allen Kennzahlen, aufgeschluesselt nach Liegenschaft
+- **Eigentuemer-Anteil**: Automatische Berechnung basierend auf `property_owners.ownership_share`
+- **XML-Download**: Button fuer FinanzOnline-konformes XML
+- **PDF-Export**: Zusammenfassung fuer den Steuerberater
 
-### Buchhaltungs-Integration
+### Integration mit bestehenden Daten
 
-Jede freigegebene Lohnabrechnung erzeugt automatisch Journalbuchungen:
-- Konto 6200 (Loehne) / Konto 3600 (Verbindlichkeiten AN)
-- Konto 6500 (SV-DG) / Konto 3520 (Verbindlichkeiten SV)
-- Konto 6560 (DB+DZ) / Konto 3540 (Verbindlichkeiten FA)
-- Konto 6600 (Kommunalsteuer) / Konto 3560 (Verbindlichkeiten Gemeinde)
-
----
-
-## Feature 2: E1a/E1b Steuerreporting (naechster Schritt)
-
-Wird nach Fertigstellung der Lohnverrechnung umgesetzt:
-- E1a-Beilage (Einkuenfte aus Vermietung und Verpachtung)
-- E1b-Beilage (Einkuenfte aus Grundstuecksveraeusserungen)
-- Aggregation aus bestehenden Buchhaltungsdaten
-- FinanzOnline-XML-Export
+```text
+property_owners (Anteil%) --+
+                             |
+monthly_invoices (Einnahmen) +--> taxReportingService --> E1a-Kennzahlen
+                             |
+expenses (Ausgaben)        --+
+                             |
+properties (Gebaeudedaten) --+
+```
 
 ---
 
-## Technischer Umfang (Feature 1)
+## Technischer Umfang
 
-| Bereich | Dateien |
-|---------|---------|
-| DB-Migration | 3 neue Tabellen (property_employees, payroll_entries, elda_submissions) |
-| Backend-Service | `server/services/eldaPayrollService.ts` |
-| API-Routes | `server/routes/payroll.ts` + Registrierung in `server/routes.ts` |
-| Schema | `shared/schema/payroll.ts` (Drizzle-Definitionen + Zod) |
-| Frontend | Hausbetreuer-Seite, Lohnabrechnung-Komponente, ELDA-Export-View |
-| Hooks | `src/hooks/usePayrollApi.ts` (SWR-Pattern wie bestehende Hooks) |
+| Bereich | Dateien | Aufwand |
+|---------|---------|--------|
+| DB-Migration | 1 neue Tabelle (tax_reports) | Klein |
+| Schema | `shared/schema/taxReporting.ts` | Klein |
+| Backend | `server/services/taxReportingService.ts` | Mittel |
+| API-Routes | `server/routes/taxReports.ts` + Registrierung | Klein |
+| EBICS-Verbesserung | Update `ebicsService.ts` (Retry, Health, Scheduler) | Mittel |
+| Frontend E1a | Neue Komponente in Export-Seite | Mittel |
+| Frontend EBICS | Updates in `EbicsBanking.tsx` (Status-Dashboard) | Klein |
+| Hooks | `useEbicsApi.ts` erweitern + `useTaxReports.ts` neu | Klein |
+
+### Reihenfolge
+
+1. E1a-Schema + Migration
+2. taxReportingService (Kernlogik)
+3. API-Routes + Frontend
+4. EBICS-Verbesserungen (Retry, Health Check, Auto-Abruf)
