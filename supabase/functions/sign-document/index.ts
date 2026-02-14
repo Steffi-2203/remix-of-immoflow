@@ -24,8 +24,8 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
@@ -46,8 +46,7 @@ serve(async (req) => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // Get user email
-    const { data: { user } } = await supabase.auth.getUser();
+    // User already retrieved above
 
     // Store signature
     const { data, error } = await supabase
@@ -56,7 +55,7 @@ serve(async (req) => {
         document_type,
         document_id,
         hash,
-        signer_id: claimsData.claims.sub,
+        signer_id: user.id,
         signer_email: user?.email || null,
         signature_level: 'advanced',
       })
