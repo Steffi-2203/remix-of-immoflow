@@ -11,6 +11,7 @@ packages = ["jq", "bc", "chromium", "imagemagick"]
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
 build = ["npm", "run", "build"]
+publicDir = "dist/public"
 
 [workflows]
 runButton = "Project"
