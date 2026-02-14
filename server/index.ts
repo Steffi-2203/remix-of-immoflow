@@ -15,6 +15,8 @@ import { registerTenantPortalRoutes } from "./routes/tenantPortalRoutes";
 import { registerTenantAuthRoutes } from "./routes/tenantAuthRoutes";
 import { registerOwnerPortalRoutes } from "./routes/ownerPortalRoutes";
 import { registerOwnerAuthRoutes } from "./routes/ownerAuthRoutes";
+import { registerMetricsRoutes } from "./routes/metricsRoutes";
+import { registerRetestRoutes } from "./routes/retestRoutes";
 import { setupVite, serveStatic, log, logInfo, logError } from "./vite";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
@@ -27,6 +29,7 @@ import { csrfTokenMiddleware, csrfProtection, getCsrfToken } from "./middleware/
 import { inputSanitizer } from "./middleware/sanitize";
 import { logger, createRequestLogger } from "./lib/logger";
 import { apiErrorHandler } from "./lib/apiErrors";
+import { gracefulDegradation, getPerformanceStatus, bulkOperationsLimiter, exportLimiter, backpressureMiddleware } from "./middleware/performanceSafety";
 import { ensureIndexes } from "./lib/ensureIndexes";
 import { setupRLS } from "./lib/rlsPolicies";
 import { setupFullTextSearch } from "./lib/fullTextSearch";
@@ -102,6 +105,13 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.use('/api/auth', authLimiter);
+
+app.use(gracefulDegradation);
+
+app.use('/api/bulk', bulkOperationsLimiter, backpressureMiddleware);
+app.use('/api/massen-aktionen', bulkOperationsLimiter, backpressureMiddleware);
+app.use('/api/weg-reports', exportLimiter);
+app.use('/api/weg/reports', exportLimiter);
 
 // Security: CORS with whitelist
 const allowedOrigins = [
@@ -190,6 +200,10 @@ app.post(
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+app.get("/api/admin/performance", (_req, res) => {
+  res.json(getPerformanceStatus());
 });
 
 app.get("/ready", async (_req, res) => {
@@ -330,6 +344,8 @@ async function initStripe() {
   registerTenantPortalRoutes(app);
   registerOwnerAuthRoutes(app);
   registerOwnerPortalRoutes(app);
+  registerMetricsRoutes(app);
+  registerRetestRoutes(app);
   const server = await registerRoutes(app);
 
   app.use(apiErrorHandler);
