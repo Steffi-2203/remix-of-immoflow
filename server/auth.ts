@@ -155,6 +155,7 @@ declare module "express-session" {
   interface SessionData {
     userId: string;
     email: string;
+    pending2FAUserId?: string;
   }
 }
 
@@ -384,6 +385,25 @@ export function setupAuth(app: Express) {
       }
 
       await recordLoginAttempt(email, ipAddress, true);
+
+      const twoFaRecord = await db.select().from(schema.user2fa)
+        .where(and(eq(schema.user2fa.userId, profile.id), eq(schema.user2fa.isEnabled, true)))
+        .limit(1);
+
+      if (twoFaRecord[0]) {
+        (req.session as any).pending2FAUserId = profile.id;
+        delete req.session.userId;
+        delete req.session.email;
+
+        req.session.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
+          }
+          res.json({ requires2FA: true });
+        });
+        return;
+      }
 
       req.session.userId = profile.id;
       req.session.email = profile.email;

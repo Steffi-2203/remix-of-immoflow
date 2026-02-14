@@ -7,6 +7,7 @@ import { storage } from "../storage";
 import { isAuthenticated, requireRole, requireMutationAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, parsePagination } from "./helpers";
 import { verifyTransactionOwnership, verifyInvoiceOwnership, verifyPaymentOwnership, verifyTenantOwnership, verifyUnitOwnership, verifyCategoryOwnership, verifyPropertyOwnership } from "../lib/ownershipCheck";
 import { paymentService } from "../services/paymentService";
+import { idempotencyMiddleware } from "../middleware/idempotency";
 import { billingService } from "../services/billing.service";
 import { parseCamt053 } from "../services/camt053Service";
 import { generateVorschreibungPdf, type VorschreibungData } from "../services/pdfService";
@@ -54,7 +55,7 @@ router.get("/api/payments", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/payments", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+router.post("/api/payments", isAuthenticated, requireRole('property_manager', 'finance'), idempotencyMiddleware, async (req: any, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const normalizedBody = snakeToCamel(req.body);

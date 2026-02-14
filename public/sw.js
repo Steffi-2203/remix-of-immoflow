@@ -1,22 +1,16 @@
-const CACHE_NAME = 'immoflow-v2';
-const API_CACHE_NAME = 'immoflow-api-v1';
+const CACHE_VERSION = 'immoflow-v3';
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const API_CACHE = `api-${CACHE_VERSION}`;
+
 const STATIC_ASSETS = [
   '/',
   '/favicon.png',
   '/manifest.json'
 ];
 
-const API_CACHE_ROUTES = [
-  '/api/properties',
-  '/api/units',
-  '/api/tenants',
-  '/api/damage-reports/stats',
-  '/api/esg/dashboard',
-];
-
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -26,7 +20,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k !== CACHE_NAME && k !== API_CACHE_NAME)
+          .filter((k) => k !== STATIC_CACHE && k !== API_CACHE)
           .map((k) => caches.delete(k))
       )
     )
@@ -40,46 +34,64 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (url.pathname.startsWith('/api/')) {
-    const shouldCache = API_CACHE_ROUTES.some(r => url.pathname.startsWith(r));
-    if (shouldCache) {
-      event.respondWith(
-        fetch(event.request)
-          .then((response) => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(API_CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return response;
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(API_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => {
+            if (cached) return cached;
+            return new Response(JSON.stringify({ error: 'Offline' }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' }
+            });
           })
-          .catch(() => caches.match(event.request))
-      );
-    }
+        )
+    );
     return;
   }
 
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() =>
-        caches.match(event.request).then((cached) => {
-          if (cached) return cached;
+    caches.match(event.request).then((cached) => {
+      if (cached) {
+        fetch(event.request).then((response) => {
+          if (response.ok) {
+            caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, response));
+          }
+        }).catch(() => {});
+        return cached;
+      }
+      return fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => {
           if (event.request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('/').then((fallback) => {
+              if (fallback) return fallback;
+              return new Response(
+                '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline</title></head><body><h1>Offline</h1><p>ImmoflowMe ist derzeit nicht erreichbar. Bitte prüfen Sie Ihre Internetverbindung.</p></body></html>',
+                { status: 503, headers: { 'Content-Type': 'text/html' } }
+              );
+            });
           }
           return new Response('Offline', { status: 503 });
-        })
-      )
+        });
+    })
   );
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'ImmoflowMe', body: 'Neue Benachrichtigung', icon: '/favicon.png' };
+  let data = { title: 'ImmoflowMe', body: 'Neue Benachrichtigung', icon: '/icons/icon-192.png' };
 
   if (event.data) {
     try {
@@ -91,7 +103,7 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/favicon.png',
+    icon: data.icon || '/icons/icon-192.png',
     badge: '/favicon.png',
     tag: data.tag || 'immoflow-notification',
     data: data.url ? { url: data.url } : {},
@@ -129,6 +141,6 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
   if (event.data === 'clearApiCache') {
-    caches.delete(API_CACHE_NAME);
+    caches.delete(API_CACHE);
   }
 });

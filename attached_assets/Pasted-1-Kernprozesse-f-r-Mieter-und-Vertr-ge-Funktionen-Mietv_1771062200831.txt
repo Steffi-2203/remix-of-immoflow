@@ -1,0 +1,120 @@
+1 Kernprozesse für Mieter und Verträge
+Funktionen
+
+Mietvertrags‑Lifecycle: Erstellung, Verlängerung, Kündigung, Indexierung/Staffelmiete, Vertragsanhänge, automatische Fristen‑Reminder.
+
+Mieterakte: Kontaktdaten, Bonitätsprüfung, Dokumenten‑History, Kautionsverwaltung, Mahnstatus.
+
+Move In / Move Out: Übergabeprotokoll, Zählerstände, Kautionsabrechnung, Endabrechnung.
+
+Kautionsverwaltung: Treuhandkonto, Zinsberechnung, Rückzahlungsworkflow.
+
+Akzeptanz
+
+Vertragsänderungen sind auditierbar; Indexierungen laufen automatisch zum Stichtag; Move‑Out erzeugt Endabrechnung mit Belegliste.
+
+Priorität: Hoch
+
+2 Instandhaltung und Facility Management
+Funktionen
+
+Ticketing System: Erfassung, Priorisierung, SLA, Zuweisung an Dienstleister, Status‑Timeline.
+
+Wartungspläne: wiederkehrende Aufgaben (Heizung, Aufzug), automatische Terminierung, Checklisten.
+
+Inspektionen: Checklisten, Fotos, Mängelverfolgung, Fristen, Eskalation.
+
+Material‑ und Inventarverwaltung: Lagerbestände, Bestellvorschläge, Kostenstellenzuordnung.
+
+Akzeptanz
+
+Ticket → Zuweisung < X Minuten; SLA‑Verletzungen erzeugen Alert; Inspektionsberichte exportierbar.
+
+Priorität: Hoch
+
+3 Kommunikation und Dokumentenmanagement
+Funktionen
+
+Zentrales DMS: Versioning, Volltextsuche, ACLs pro Rolle/Organisation, Beleg‑Metadaten.
+
+Vorlagen & Serienbriefe: Mietverträge, Mahnungen, Beschlussvorlagen, PDF‑Erzeugung.
+
+E‑Signatur Integration: eIDAS‑konforme Signaturen für Verträge.
+
+Kommunikationscenter: E‑Mail/SMS/Push, Templates, Versandlog, Empfangsbestätigung.
+
+Akzeptanz
+
+Dokumente revisionssicher; Signatur‑Workflow nachweisbar; alle Nachrichten sind objekt‑gebunden und durchsuchbar.
+
+Priorität: Mittel–Hoch
+
+4 Prozesse rund um Zahlungen und Forderungsmanagement (nicht Buchhaltung)
+Funktionen
+
+Zahlungswege: SEPA, Lastschrift, Kreditkarte, manuelle Buchung, Split‑Payments.
+
+Reconciliation Engine: automatische Zuordnung, Vorschläge, manuelle Korrektur, Matching‑Confidence.
+
+Mahnwesen: konfigurierbare Stufen, Gebühren, automatische Generierung und Versand, Inkasso‑Schnittstelle.
+
+Kreditmanagement: Bonitätschecks, Limit‑Regeln, Sicherheitsmechanismen.
+
+Akzeptanz
+
+Automatische Zuordnung trifft Zielquote ≥ 90%; Mahnworkflow erzeugt korrekte Gebühren und Dokumentation.
+
+Priorität: Hoch
+
+5 Reporting, Analytics und Entscheidungsunterstützung
+Funktionen
+
+Standardreports: Offene Posten, Aging, Leerstand, Yield, Rücklagenstatus, Instandhaltungsbudget.
+
+Ad‑hoc Reporting: Query Builder, Export CSV/XLSX/PDF, geplante Reports per E‑Mail.
+
+Dashboards: KPI Widgets, Drill‑Down, Owner‑View vs. Verwalter‑View.
+
+Forecasting: Cashflow‑Prognosen, Rücklagenplanung, Szenario‑Simulationen.
+
+Akzeptanz
+
+Reports sind filterbar, exportierbar und rollenbasiert zugänglich; Forecasts zeigen Annahmen und Sensitivitäten.
+
+Priorität: Mittel–Hoch
+
+6 Compliance, Sicherheit, Betrieb und Integrationen
+Funktionen
+
+RLS / Multi‑Tenant‑Isolation: DB‑Policies + Server‑Checks, automatisierte Tests.
+
+Audit Trail: unveränderliche Logs für Finanzaktionen und Vertragsänderungen.
+
+DSGVO / GoBD: Löschkonzepte, Aufbewahrungsfristen, Beleg‑Archivierung.
+
+Monitoring & Resilience: Circuit‑Breaker für externe APIs, SLOs, Alerts, Backups, DR‑Playbooks.
+
+Integrationen: Banken (PSD2/SEPA), Steuerberater‑Exports (DATEV), SAML/OIDC, Zahlungsanbieter, eSign‑Provider, Buchhaltungssoftware.
+
+Akzeptanz
+
+RLS‑Tests grün; kritische Alerts < 5 Minuten; Backups getestet und Restore‑Zeit dokumentiert.
+
+Priorität: Sehr hoch
+
+7 Automatisierung, Workflows und UX
+Funktionen
+
+Rules Engine: If‑this‑then‑that für Automatisierungen (z. B. Zahlungseingang → Rechnung schließen → Eigentümer informieren).
+
+Webhooks & API: Event‑Driven Integrationen, idempotente Endpunkte.
+
+Role Based UI: kontextuelle Sidebar, eingeschränkte Aktionen, Audit‑Prompts.
+
+Mobile & Offline: einfache mobile UI für Techniker, Offline‑Sync für Inspektionen.
+
+Akzeptanz
+
+Regeln können im UI getestet (dry‑run); Webhooks retry‑fähig; mobile Checklisten offline nutzbar.
+
+Priorität: Mittel

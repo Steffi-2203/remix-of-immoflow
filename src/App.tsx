@@ -76,6 +76,9 @@ const KiKommunikation = lazy(() => import("./pages/KiKommunikation"));
 const EbicsBanking = lazy(() => import("./pages/EbicsBanking"));
 const OffenePosten = lazy(() => import("./pages/OffenePosten"));
 const Jahresabschluss = lazy(() => import("./pages/Jahresabschluss"));
+const ScheduledReports = lazy(() => import("./pages/ScheduledReports"));
+const Signatures = lazy(() => import("./pages/Signatures"));
+const QueryBuilder = lazy(() => import("./pages/QueryBuilder"));
 
 const queryClient = new QueryClient();
 
@@ -139,6 +142,7 @@ const App = () => (
             <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><DemoDataProvider><Reports /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/geplante-berichte" element={<ProtectedRoute><DemoDataProvider><ScheduledReports /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/wartungen" element={<ProtectedRoute><DemoDataProvider><MaintenanceHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute><DemoDataProvider><Budgets /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
@@ -163,6 +167,8 @@ const App = () => (
             <Route path="/ki-rechnungen" element={<ProtectedRoute><DemoDataProvider><InvoiceOcr /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/ki-insights" element={<ProtectedRoute><DemoDataProvider><KiInsights /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/ki-kommunikation" element={<ProtectedRoute><DemoDataProvider><KiKommunikation /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/signaturen" element={<ProtectedRoute><DemoDataProvider><Signatures /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/abfrage-builder" element={<ProtectedRoute><DemoDataProvider><QueryBuilder /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
             
             {/* Redirects for merged routes */}

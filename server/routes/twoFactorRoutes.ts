@@ -1,0 +1,307 @@
+import { Express, Request, Response } from "express";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
+import * as schema from "@shared/schema";
+import { isAuthenticated } from "./helpers";
+import {
+  generateSecret,
+  verifyToken,
+  generateBackupCodes,
+  hashBackupCode,
+  verifyBackupCode,
+} from "../services/twoFactorService";
+import bcrypt from "bcrypt";
+
+function is2FASessionValid(req: Request): boolean {
+  return !!(req.session as any)?.pending2FAUserId;
+}
+
+export function registerTwoFactorRoutes(app: Express) {
+  app.get("/api/2fa/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+      const result = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, userId))
+        .limit(1);
+
+      const record = result[0];
+      res.json({
+        isEnabled: record?.isEnabled ?? false,
+        hasBackupCodes: (record?.backupCodes?.length ?? 0) > 0,
+      });
+    } catch (error) {
+      console.error("2FA status error:", error);
+      res.status(500).json({ error: "Fehler beim Laden des 2FA-Status" });
+    }
+  });
+
+  app.post("/api/2fa/setup", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+      const profile = await db
+        .select()
+        .from(schema.profiles)
+        .where(eq(schema.profiles.id, userId))
+        .limit(1);
+      if (!profile[0]) return res.status(404).json({ error: "Profil nicht gefunden" });
+
+      const existing = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, userId))
+        .limit(1);
+
+      if (existing[0]?.isEnabled) {
+        return res.status(400).json({ error: "2FA ist bereits aktiviert" });
+      }
+
+      const { secret, otpauthUrl, qrCodeDataUrl } = await generateSecret(
+        userId,
+        profile[0].email
+      );
+
+      if (existing[0]) {
+        await db
+          .update(schema.user2fa)
+          .set({ secret, isEnabled: false, backupCodes: null })
+          .where(eq(schema.user2fa.userId, userId));
+      } else {
+        await db.insert(schema.user2fa).values({
+          userId,
+          secret,
+          isEnabled: false,
+        });
+      }
+
+      res.json({ qrCodeDataUrl, secret, otpauthUrl });
+    } catch (error) {
+      console.error("2FA setup error:", error);
+      res.status(500).json({ error: "Fehler beim Einrichten von 2FA" });
+    }
+  });
+
+  app.post("/api/2fa/verify-setup", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Code ist erforderlich" });
+
+      const record = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, userId))
+        .limit(1);
+
+      if (!record[0]) return res.status(404).json({ error: "2FA wurde noch nicht eingerichtet" });
+      if (record[0].isEnabled) return res.status(400).json({ error: "2FA ist bereits aktiviert" });
+
+      const isValid = verifyToken(record[0].secret, token);
+      if (!isValid) return res.status(400).json({ error: "Ungültiger Code. Bitte versuchen Sie es erneut." });
+
+      const backupCodes = generateBackupCodes();
+      const hashedCodes = backupCodes.map(hashBackupCode);
+
+      await db
+        .update(schema.user2fa)
+        .set({
+          isEnabled: true,
+          backupCodes: hashedCodes,
+          lastUsed: new Date(),
+        })
+        .where(eq(schema.user2fa.userId, userId));
+
+      res.json({ success: true, backupCodes });
+    } catch (error) {
+      console.error("2FA verify-setup error:", error);
+      res.status(500).json({ error: "Fehler beim Verifizieren des 2FA-Codes" });
+    }
+  });
+
+  app.post("/api/2fa/verify", async (req: Request, res: Response) => {
+    try {
+      const pendingUserId = (req.session as any).pending2FAUserId;
+      if (!pendingUserId) {
+        return res.status(401).json({ error: "Keine ausstehende 2FA-Verifizierung" });
+      }
+
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: "Code ist erforderlich" });
+
+      const record = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, pendingUserId))
+        .limit(1);
+
+      if (!record[0]?.isEnabled) {
+        return res.status(400).json({ error: "2FA ist nicht aktiviert" });
+      }
+
+      const isValid = verifyToken(record[0].secret, token);
+      if (!isValid) {
+        return res.status(400).json({ error: "Ungültiger Code. Bitte versuchen Sie es erneut." });
+      }
+
+      await db
+        .update(schema.user2fa)
+        .set({ lastUsed: new Date() })
+        .where(eq(schema.user2fa.userId, pendingUserId));
+
+      const profile = await db
+        .select()
+        .from(schema.profiles)
+        .where(eq(schema.profiles.id, pendingUserId))
+        .limit(1);
+
+      const roles = await db
+        .select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, pendingUserId));
+
+      req.session.userId = pendingUserId;
+      req.session.email = profile[0]?.email || "";
+      delete (req.session as any).pending2FAUserId;
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
+        }
+        res.json({
+          id: profile[0]?.id,
+          email: profile[0]?.email,
+          fullName: profile[0]?.fullName,
+          organizationId: profile[0]?.organizationId,
+          roles: roles.map((r) => r.role),
+        });
+      });
+    } catch (error) {
+      console.error("2FA verify error:", error);
+      res.status(500).json({ error: "Fehler bei der 2FA-Verifizierung" });
+    }
+  });
+
+  app.post("/api/2fa/backup-verify", async (req: Request, res: Response) => {
+    try {
+      const pendingUserId = (req.session as any).pending2FAUserId;
+      if (!pendingUserId) {
+        return res.status(401).json({ error: "Keine ausstehende 2FA-Verifizierung" });
+      }
+
+      const { code } = req.body;
+      if (!code) return res.status(400).json({ error: "Backup-Code ist erforderlich" });
+
+      const record = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, pendingUserId))
+        .limit(1);
+
+      if (!record[0]?.isEnabled || !record[0].backupCodes) {
+        return res.status(400).json({ error: "Keine Backup-Codes verfügbar" });
+      }
+
+      const { valid, remainingCodes } = verifyBackupCode(record[0].backupCodes, code);
+      if (!valid) {
+        return res.status(400).json({ error: "Ungültiger Backup-Code" });
+      }
+
+      await db
+        .update(schema.user2fa)
+        .set({ backupCodes: remainingCodes, lastUsed: new Date() })
+        .where(eq(schema.user2fa.userId, pendingUserId));
+
+      const profile = await db
+        .select()
+        .from(schema.profiles)
+        .where(eq(schema.profiles.id, pendingUserId))
+        .limit(1);
+
+      const roles = await db
+        .select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, pendingUserId));
+
+      req.session.userId = pendingUserId;
+      req.session.email = profile[0]?.email || "";
+      delete (req.session as any).pending2FAUserId;
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
+        }
+        res.json({
+          id: profile[0]?.id,
+          email: profile[0]?.email,
+          fullName: profile[0]?.fullName,
+          organizationId: profile[0]?.organizationId,
+          roles: roles.map((r) => r.role),
+          backupCodesRemaining: remainingCodes.length,
+        });
+      });
+    } catch (error) {
+      console.error("2FA backup-verify error:", error);
+      res.status(500).json({ error: "Fehler bei der Backup-Code-Verifizierung" });
+    }
+  });
+
+  app.post("/api/2fa/disable", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+      const { password, token } = req.body;
+      if (!password) return res.status(400).json({ error: "Passwort ist erforderlich" });
+      if (!token) return res.status(400).json({ error: "2FA-Code ist erforderlich" });
+
+      const profile = await db
+        .select()
+        .from(schema.profiles)
+        .where(eq(schema.profiles.id, userId))
+        .limit(1);
+
+      if (!profile[0]?.passwordHash) {
+        return res.status(400).json({ error: "Passwort nicht gefunden" });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, profile[0].passwordHash);
+      if (!isPasswordValid) {
+        return res.status(400).json({ error: "Ungültiges Passwort" });
+      }
+
+      const record = await db
+        .select()
+        .from(schema.user2fa)
+        .where(eq(schema.user2fa.userId, userId))
+        .limit(1);
+
+      if (!record[0]?.isEnabled) {
+        return res.status(400).json({ error: "2FA ist nicht aktiviert" });
+      }
+
+      const isValid = verifyToken(record[0].secret, token);
+      if (!isValid) {
+        return res.status(400).json({ error: "Ungültiger 2FA-Code" });
+      }
+
+      await db
+        .update(schema.user2fa)
+        .set({ isEnabled: false, secret: "", backupCodes: null })
+        .where(eq(schema.user2fa.userId, userId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("2FA disable error:", error);
+      res.status(500).json({ error: "Fehler beim Deaktivieren von 2FA" });
+    }
+  });
+}

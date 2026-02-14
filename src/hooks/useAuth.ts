@@ -29,7 +29,7 @@ async function fetchUser(): Promise<User | null> {
   return response.json();
 }
 
-async function loginFn(email: string, password: string): Promise<User> {
+async function loginFn(email: string, password: string): Promise<User | { requires2FA: true }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const csrf = getCsrfToken();
   if (csrf) headers["x-csrf-token"] = csrf;
@@ -100,6 +100,7 @@ export const useAuth = () => {
     mutationFn: (data: { email: string; password: string }) => 
       loginFn(data.email, data.password),
     onSuccess: (userData) => {
+      if ('requires2FA' in userData) return;
       queryClient.setQueryData(["/api/auth/user"], userData);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
     },
