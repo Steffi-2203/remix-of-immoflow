@@ -29,6 +29,10 @@ ImmoflowMe is an Austrian property management (Hausverwaltung) application desig
 - **Trial Balance Validation**: Automated Soll=Haben checks with reconciliation rate metrics, property-level filtering.
 - **Payment Splitting**: Austrian law priority allocation (Miete→BK→HK→WK→Mahngebühren), auto-matching for unallocated payments, org-scoped validation.
 - **WEG XLSX Reports**: Jahresabrechnung (3 sheets: summary, owner details, cost distribution), Rücklagen overview, Kautionen overview, Saldenliste export.
+- **Penetration Test Suite**: 60+ security tests covering RLS-bypass, IDOR, payment flow edge cases, SQL injection, XSS, business logic validation (MEA, Kaution, trial balance).
+- **Observability/Metrics**: metricsService with circuit breaker monitoring, OCR cost per tenant tracking (GPT-4o/4o-mini pricing), reconciliation failure rate, threshold-based alerts, `/api/admin/metrics` endpoint.
+- **Automated Retests**: retestService with security findings management, 5 built-in test functions (RLS, IDOR, payment, SQL injection, trial balance), batch retest execution, `/api/admin/security-findings` and `/api/admin/retests` endpoints.
+- **Performance Safety**: Granular rate limits per endpoint category (bulk 5/min, export 10/min, OCR 10/min, reports 15/min), BackpressureController (max 3 concurrent bulk jobs, queue depth 10), graceful degradation (memory-pressure based), `/api/admin/performance` endpoint.
 
 ## System Architecture
 ImmoflowMe employs a modern full-stack architecture with a Node.js (Express.js) backend and a React (Vite) frontend. PostgreSQL (Neon) with Drizzle ORM handles data persistence.

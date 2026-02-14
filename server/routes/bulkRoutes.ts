@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, sql, inArray, gte, lte } from "drizzle-orm";
-import * as schema from "@shared/schema";
+import * as schema from "../../shared/schema";
 import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, objectToSnakeCase } from "./helpers";
 import { storage } from "../storage";
 
