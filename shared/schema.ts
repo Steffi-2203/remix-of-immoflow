@@ -1815,7 +1815,7 @@ export const chartOfAccounts = pgTable("chart_of_accounts", {
   organizationId: uuid("organization_id").references(() => organizations.id),
   accountNumber: text("account_number").notNull(),
   name: text("name").notNull(),
-  accountType: text("account_type").notNull(),
+  accountType: accountTypeEnum("account_type").notNull(),
   description: text("description"),
   parentId: uuid("parent_id"),
   isActive: boolean("is_active").default(true).notNull(),
