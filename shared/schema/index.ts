@@ -18,3 +18,4 @@ export * from "./audit";
 export * from "./messaging";
 export * from "./commercial";
 export * from "./payroll";
+export * from "./ebics";

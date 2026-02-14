@@ -828,6 +828,212 @@ export type Database = {
           },
         ]
       }
+      ebics_connections: {
+        Row: {
+          auth_key_hash: string | null
+          bank_account_id: string | null
+          bank_name: string | null
+          created_at: string
+          encryption_key_hash: string | null
+          error_message: string | null
+          host_id: string
+          host_url: string
+          id: string
+          key_version: string
+          keys_initialized_at: string | null
+          last_download_at: string | null
+          last_upload_at: string | null
+          organization_id: string | null
+          partner_id: string
+          signature_key_hash: string | null
+          status: string
+          system_id: string | null
+          updated_at: string
+          user_id_ebics: string
+        }
+        Insert: {
+          auth_key_hash?: string | null
+          bank_account_id?: string | null
+          bank_name?: string | null
+          created_at?: string
+          encryption_key_hash?: string | null
+          error_message?: string | null
+          host_id: string
+          host_url: string
+          id?: string
+          key_version?: string
+          keys_initialized_at?: string | null
+          last_download_at?: string | null
+          last_upload_at?: string | null
+          organization_id?: string | null
+          partner_id: string
+          signature_key_hash?: string | null
+          status?: string
+          system_id?: string | null
+          updated_at?: string
+          user_id_ebics: string
+        }
+        Update: {
+          auth_key_hash?: string | null
+          bank_account_id?: string | null
+          bank_name?: string | null
+          created_at?: string
+          encryption_key_hash?: string | null
+          error_message?: string | null
+          host_id?: string
+          host_url?: string
+          id?: string
+          key_version?: string
+          keys_initialized_at?: string | null
+          last_download_at?: string | null
+          last_upload_at?: string | null
+          organization_id?: string | null
+          partner_id?: string
+          signature_key_hash?: string | null
+          status?: string
+          system_id?: string | null
+          updated_at?: string
+          user_id_ebics?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebics_connections_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ebics_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ebics_orders: {
+        Row: {
+          business_code: string | null
+          connection_id: string
+          created_at: string
+          direction: string
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          order_id: string | null
+          order_type: string
+          payload_hash: string | null
+          records_count: number | null
+          status: string
+          technical_code: string | null
+        }
+        Insert: {
+          business_code?: string | null
+          connection_id: string
+          created_at?: string
+          direction: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          order_type: string
+          payload_hash?: string | null
+          records_count?: number | null
+          status?: string
+          technical_code?: string | null
+        }
+        Update: {
+          business_code?: string | null
+          connection_id?: string
+          created_at?: string
+          direction?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          order_type?: string
+          payload_hash?: string | null
+          records_count?: number | null
+          status?: string
+          technical_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebics_orders_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "ebics_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ebics_payment_batches: {
+        Row: {
+          batch_type: string
+          connection_id: string
+          created_at: string
+          id: string
+          order_id: string | null
+          organization_id: string | null
+          pain_xml: string | null
+          payment_count: number
+          response_code: string | null
+          response_message: string | null
+          status: string
+          submitted_at: string | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          batch_type: string
+          connection_id: string
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          organization_id?: string | null
+          pain_xml?: string | null
+          payment_count?: number
+          response_code?: string | null
+          response_message?: string | null
+          status?: string
+          submitted_at?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          batch_type?: string
+          connection_id?: string
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          organization_id?: string | null
+          pain_xml?: string | null
+          payment_count?: number
+          response_code?: string | null
+          response_message?: string | null
+          status?: string
+          submitted_at?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebics_payment_batches_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "ebics_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ebics_payment_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       elda_submissions: {
         Row: {
           created_at: string
