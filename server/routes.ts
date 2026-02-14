@@ -1,3 +1,25 @@
+import type { Express, Request, Response, NextFunction } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { db } from "./db";
+import { eq, and, sql, desc, asc, count, or, isNull, gte, lte, inArray, ne, ilike } from "drizzle-orm";
+import * as schema from "@shared/schema";
+import { isAuthenticated, requireRole, requireMutationAccess, requireFinanceAccess, requireAdminAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData } from "./routes/helpers";
+import { registerFunctionRoutes } from "./functions";
+import { registerStripeRoutes } from "./stripeRoutes";
+import { jobQueueService } from "./services/jobQueueService";
+import { apiErrorHandler as globalErrorHandler } from "./lib/apiErrors";
+import multer from "multer";
+import OpenAI from "openai";
+import propertyRoutes from "./routes/propertyRoutes";
+import tenantRoutes from "./routes/tenantRoutes";
+import paymentRoutes from "./routes/paymentRoutes";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  app.use(propertyRoutes);
+  app.use(tenantRoutes);
+  app.use(paymentRoutes);
+
   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
   
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
