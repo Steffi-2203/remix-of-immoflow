@@ -100,6 +100,8 @@ const navGroups: NavGroup[] = [
       { label: 'Banking', icon: BookOpen, href: '/buchhaltung', tourId: 'nav-banking' },
       { label: 'Finanzbuchhaltung', icon: Calculator, href: '/finanzbuchhaltung' },
       { label: 'EBICS Banking', icon: Landmark, href: '/ebics-banking' },
+      { label: 'Offene Posten', icon: AlertTriangle, href: '/offene-posten' },
+      { label: 'Jahresabschluss', icon: Lock, href: '/jahresabschluss' },
       { label: 'Reports', icon: TrendingUp, href: '/reports', tourId: 'nav-reports' },
     ],
   },

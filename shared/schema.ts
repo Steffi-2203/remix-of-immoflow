@@ -1937,3 +1937,48 @@ export const ebicsPaymentBatches = pgTable("ebics_payment_batches", {
 export const insertEbicsPaymentBatchesSchema = createInsertSchema(ebicsPaymentBatches).omit({ id: true, createdAt: true, submittedAt: true, completedAt: true });
 export type InsertEbicsPaymentBatch = z.infer<typeof insertEbicsPaymentBatchesSchema>;
 export type EbicsPaymentBatch = typeof ebicsPaymentBatches.$inferSelect;
+
+// ====== FISCAL PERIODS (Geschäftsjahre/Perioden) ======
+export const fiscalPeriodStatusEnum = pgEnum('fiscal_period_status', ['open', 'in_review', 'closed']);
+
+export const fiscalPeriods = pgTable("fiscal_periods", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  year: integer("year").notNull(),
+  status: fiscalPeriodStatusEnum("status").default('open').notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closedBy: text("closed_by"),
+  depreciationBooked: boolean("depreciation_booked").default(false).notNull(),
+  accrualsReviewed: boolean("accruals_reviewed").default(false).notNull(),
+  balanceReviewed: boolean("balance_reviewed").default(false).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertFiscalPeriodSchema = createInsertSchema(fiscalPeriods).omit({ id: true, createdAt: true, updatedAt: true, closedAt: true });
+export type InsertFiscalPeriod = z.infer<typeof insertFiscalPeriodSchema>;
+export type FiscalPeriod = typeof fiscalPeriods.$inferSelect;
+
+// ====== DEPRECIATION ASSETS (Anlagevermögen/AfA) ======
+export const depreciationAssets = pgTable("depreciation_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  acquisitionDate: date("acquisition_date").notNull(),
+  acquisitionCost: numeric("acquisition_cost", { precision: 12, scale: 2 }).notNull(),
+  usefulLifeYears: integer("useful_life_years").notNull(),
+  depreciationRate: numeric("depreciation_rate", { precision: 5, scale: 2 }).notNull(),
+  accumulatedDepreciation: numeric("accumulated_depreciation", { precision: 12, scale: 2 }).default('0').notNull(),
+  bookValue: numeric("book_value", { precision: 12, scale: 2 }).notNull(),
+  accountId: uuid("account_id").references(() => chartOfAccounts.id),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertDepreciationAssetSchema = createInsertSchema(depreciationAssets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDepreciationAsset = z.infer<typeof insertDepreciationAssetSchema>;
+export type DepreciationAsset = typeof depreciationAssets.$inferSelect;

@@ -16,6 +16,8 @@ import tenantRoutes from "./routes/tenantRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import accountingRoutes from "./routes/accountingRoutes";
 import ebicsRoutes from "./routes/ebicsRoutes";
+import openItemsRoutes from "./routes/openItemsRoutes";
+import fiscalYearRoutes from "./routes/fiscalYearRoutes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(propertyRoutes);
@@ -23,6 +25,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(paymentRoutes);
   app.use(accountingRoutes);
   app.use(ebicsRoutes);
+  app.use(openItemsRoutes);
+  app.use(fiscalYearRoutes);
 
   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
   
