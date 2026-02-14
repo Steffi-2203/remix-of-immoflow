@@ -37,6 +37,8 @@ import {
   RotateCcw,
   List,
   Building2,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { useAccountCategories, AccountCategory } from '@/hooks/useAccountCategories';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -59,6 +61,34 @@ import { de } from 'date-fns/locale';
 
 function formatEur(value: number): string {
   return value.toLocaleString('de-AT', { style: 'currency', currency: 'EUR' });
+}
+
+function useXlsxDownload() {
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const download = async (url: string, filename: string, key: string) => {
+    setDownloading(key);
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Export fehlgeschlagen');
+      const blob = await response.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast({ title: 'Export erfolgreich', description: `${filename} wurde heruntergeladen.` });
+    } catch {
+      toast({ title: 'Export fehlgeschlagen', variant: 'destructive' });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return { download, downloading };
 }
 
 function OverviewTab({ selectedYear, selectedMonth, setSelectedYear, setSelectedMonth }: any) {
@@ -277,6 +307,7 @@ function TrialBalanceTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const { data, isLoading } = useTrialBalance({ from: `${year}-01-01`, to: `${year}-12-31`, propertyId });
+  const { download, downloading } = useXlsxDownload();
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
@@ -284,15 +315,27 @@ function TrialBalanceTab({ propertyId }: { propertyId?: string }) {
   const totalDebit = rows.reduce((s: number, r: any) => s + Number(r.total_debit || 0), 0);
   const totalCredit = rows.reduce((s: number, r: any) => s + Number(r.total_credit || 0), 0);
 
+  const handleXlsxExport = () => {
+    const params = new URLSearchParams({ from: `${year}-01-01`, to: `${year}-12-31` });
+    if (propertyId) params.set('propertyId', propertyId);
+    download(`/api/accounting/export/saldenliste?${params}`, `Saldenliste_${year}.xlsx`, 'saldenliste');
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-4 w-4" />Saldenliste {year}</CardTitle>
-          <Select value={year.toString()} onValueChange={v => setYear(Number(v))}>
-            <SelectTrigger className="w-[100px]" data-testid="select-trial-year"><SelectValue /></SelectTrigger>
-            <SelectContent>{[0,1,2,3,4].map(i => { const y = now.getFullYear() - i; return <SelectItem key={y} value={y.toString()}>{y}</SelectItem>; })}</SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleXlsxExport} disabled={downloading === 'saldenliste'} data-testid="button-export-saldenliste-xlsx">
+              {downloading === 'saldenliste' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              XLSX Export
+            </Button>
+            <Select value={year.toString()} onValueChange={v => setYear(Number(v))}>
+              <SelectTrigger className="w-[100px]" data-testid="select-trial-year"><SelectValue /></SelectTrigger>
+              <SelectContent>{[0,1,2,3,4].map(i => { const y = now.getFullYear() - i; return <SelectItem key={y} value={y.toString()}>{y}</SelectItem>; })}</SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -328,11 +371,19 @@ function TrialBalanceTab({ propertyId }: { propertyId?: string }) {
 
 function BalanceSheetTab({ propertyId }: { propertyId?: string }) {
   const { data, isLoading } = useBalanceSheet({ propertyId });
+  const { download, downloading } = useXlsxDownload();
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
   const bs = data as any;
   if (!bs) return <div className="text-center py-12 text-muted-foreground">Keine Bilanzdaten</div>;
+
+  const handleXlsxExport = () => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set('propertyId', propertyId);
+    const qs = params.toString() ? `?${params}` : '';
+    download(`/api/accounting/export/bilanz${qs}`, `Bilanz_${new Date().getFullYear()}.xlsx`, 'bilanz');
+  };
 
   const renderSection = (title: string, items: any[], total: number, colorClass: string) => (
     <div className="space-y-2">
@@ -355,7 +406,15 @@ function BalanceSheetTab({ propertyId }: { propertyId?: string }) {
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><Scale className="h-4 w-4" />Bilanz per {bs.date}</CardTitle></CardHeader>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2"><Scale className="h-4 w-4" />Bilanz per {bs.date}</CardTitle>
+          <Button variant="outline" onClick={handleXlsxExport} disabled={downloading === 'bilanz'} data-testid="button-export-bilanz-xlsx">
+            {downloading === 'bilanz' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            XLSX Export
+          </Button>
+        </div>
+      </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>{renderSection('Aktiva', bs.assets?.items || [], bs.assets?.total || 0, 'text-blue-600 dark:text-blue-400')}</div>
@@ -379,21 +438,34 @@ function ProfitLossTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const { data, isLoading } = useProfitLoss({ from: `${year}-01-01`, to: `${year}-12-31`, propertyId });
+  const { download, downloading } = useXlsxDownload();
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
   const pl = data as any;
   if (!pl) return <div className="text-center py-12 text-muted-foreground">Keine GuV-Daten</div>;
 
+  const handleXlsxExport = () => {
+    const params = new URLSearchParams({ from: `${year}-01-01`, to: `${year}-12-31` });
+    if (propertyId) params.set('propertyId', propertyId);
+    download(`/api/accounting/export/guv?${params}`, `GuV_${year}.xlsx`, 'guv');
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Gewinn- und Verlustrechnung {year}</CardTitle>
-          <Select value={year.toString()} onValueChange={v => setYear(Number(v))}>
-            <SelectTrigger className="w-[100px]" data-testid="select-guv-year"><SelectValue /></SelectTrigger>
-            <SelectContent>{[0,1,2,3,4].map(i => { const y = now.getFullYear() - i; return <SelectItem key={y} value={y.toString()}>{y}</SelectItem>; })}</SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleXlsxExport} disabled={downloading === 'guv'} data-testid="button-export-guv-xlsx">
+              {downloading === 'guv' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              XLSX Export
+            </Button>
+            <Select value={year.toString()} onValueChange={v => setYear(Number(v))}>
+              <SelectTrigger className="w-[100px]" data-testid="select-guv-year"><SelectValue /></SelectTrigger>
+              <SelectContent>{[0,1,2,3,4].map(i => { const y = now.getFullYear() - i; return <SelectItem key={y} value={y.toString()}>{y}</SelectItem>; })}</SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

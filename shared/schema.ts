@@ -133,6 +133,20 @@ export const loginAttempts = pgTable("login_attempts", {
   attemptedAt: timestamp("attempted_at", { withTimezone: true }).defaultNow(),
 });
 
+export const user2fa = pgTable("user_2fa", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull().unique(),
+  secret: text("secret").notNull(),
+  isEnabled: boolean("is_enabled").default(false),
+  backupCodes: text("backup_codes").array(),
+  lastUsed: timestamp("last_used", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertUser2faSchema = createInsertSchema(user2fa).omit({ id: true, createdAt: true });
+export type User2fa = typeof user2fa.$inferSelect;
+export type InsertUser2fa = typeof user2fa.$inferInsert;
+
 export const properties = pgTable("properties", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
@@ -329,6 +343,37 @@ export const paymentAllocations = pgTable("payment_allocations", {
 export const insertPaymentAllocationSchema = createInsertSchema(paymentAllocations).omit({ id: true, createdAt: true });
 export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
 export type InsertPaymentAllocation = typeof paymentAllocations.$inferInsert;
+
+// ====== IDEMPOTENCY KEYS ======
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  key: text("key").notNull().unique(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  endpoint: text("endpoint"),
+  requestHash: text("request_hash"),
+  responseStatus: integer("response_status"),
+  responseBody: jsonb("response_body"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+});
+
+export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type InsertIdempotencyKey = typeof idempotencyKeys.$inferInsert;
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => profiles.id).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
 
 export const bankAccounts = pgTable("bank_accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -1503,6 +1548,24 @@ export const insertJobQueueSchema = createInsertSchema(jobQueue).omit({ id: true
 export type JobQueue = typeof jobQueue.$inferSelect;
 export type InsertJobQueue = typeof jobQueue.$inferInsert;
 
+// ====== REPORT SCHEDULES (Geplante Berichte) ======
+export const reportSchedules = pgTable("report_schedules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  reportType: text("report_type").notNull(),
+  schedule: text("schedule").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  recipients: text("recipients").array().notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastRun: timestamp("last_run", { withTimezone: true }),
+  nextRun: timestamp("next_run", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertReportScheduleSchema = createInsertSchema(reportSchedules).omit({ id: true, createdAt: true, lastRun: true, nextRun: true });
+export type ReportSchedule = typeof reportSchedules.$inferSelect;
+export type InsertReportSchedule = z.infer<typeof insertReportScheduleSchema>;
+
 export const reconcileRuns = pgTable("reconcile_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
   runId: text("run_id").notNull().unique(),
@@ -1983,3 +2046,139 @@ export const depreciationAssets = pgTable("depreciation_assets", {
 export const insertDepreciationAssetSchema = createInsertSchema(depreciationAssets).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertDepreciationAsset = z.infer<typeof insertDepreciationAssetSchema>;
 export type DepreciationAsset = typeof depreciationAssets.$inferSelect;
+
+// ====== DOCUMENT VERSIONING & TAGGING ======
+
+export const documentVersions = pgTable("document_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  documentId: text("document_id").notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  versionNumber: integer("version_number").notNull(),
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+  storagePath: text("storage_path").notNull(),
+  uploadedBy: uuid("uploaded_by").references(() => profiles.id),
+  changeNote: text("change_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDocumentVersionSchema = createInsertSchema(documentVersions).omit({ id: true, createdAt: true });
+export type InsertDocumentVersion = z.infer<typeof insertDocumentVersionSchema>;
+export type DocumentVersion = typeof documentVersions.$inferSelect;
+
+export const documentTags = pgTable("document_tags", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  name: text("name").notNull(),
+  color: text("color"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDocumentTagSchema = createInsertSchema(documentTags).omit({ id: true, createdAt: true });
+export type InsertDocumentTag = z.infer<typeof insertDocumentTagSchema>;
+export type DocumentTag = typeof documentTags.$inferSelect;
+
+export const documentTagAssignments = pgTable("document_tag_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  documentId: text("document_id").notNull(),
+  tagId: uuid("tag_id").references(() => documentTags.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertDocumentTagAssignmentSchema = createInsertSchema(documentTagAssignments).omit({ id: true, createdAt: true });
+export type InsertDocumentTagAssignment = z.infer<typeof insertDocumentTagAssignmentSchema>;
+export type DocumentTagAssignment = typeof documentTagAssignments.$inferSelect;
+
+// ====== ELECTRONIC SIGNATURES (eIDAS-conformant) ======
+export const signatureRequests = pgTable("signature_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  documentId: text("document_id").notNull(),
+  documentName: text("document_name").notNull(),
+  requestedBy: uuid("requested_by").references(() => profiles.id),
+  status: text("status").default('pending'),
+  signatureType: text("signature_type").default('simple'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+});
+
+export const insertSignatureRequestSchema = createInsertSchema(signatureRequests).omit({ id: true, createdAt: true });
+export type InsertSignatureRequest = z.infer<typeof insertSignatureRequestSchema>;
+export type SignatureRequest = typeof signatureRequests.$inferSelect;
+
+export const signatures = pgTable("signatures", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  requestId: uuid("request_id").references(() => signatureRequests.id).notNull(),
+  signerId: uuid("signer_id").references(() => profiles.id),
+  signerName: text("signer_name").notNull(),
+  signerEmail: text("signer_email").notNull(),
+  signedAt: timestamp("signed_at", { withTimezone: true }),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  signatureHash: text("signature_hash"),
+  signatureData: text("signature_data"),
+  verificationCode: text("verification_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertSignatureSchema = createInsertSchema(signatures).omit({ id: true, createdAt: true });
+export type InsertSignature = z.infer<typeof insertSignatureSchema>;
+export type Signature = typeof signatures.$inferSelect;
+
+// ====== SAVED REPORTS (Query Builder) ======
+export const savedReports = pgTable("saved_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  reportConfig: jsonb("report_config").notNull(),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  isShared: boolean("is_shared").default(false),
+  lastRun: timestamp("last_run", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertSavedReportSchema = createInsertSchema(savedReports).omit({ id: true, createdAt: true, updatedAt: true, lastRun: true });
+export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
+export type SavedReport = typeof savedReports.$inferSelect;
+
+// ====== AUTOMATION RULES (Rules Engine) ======
+export const automationRules = pgTable("automation_rules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  triggerType: text("trigger_type").notNull(),
+  conditions: jsonb("conditions"),
+  actions: jsonb("actions"),
+  isActive: boolean("is_active").default(false),
+  lastRun: timestamp("last_run", { withTimezone: true }),
+  runCount: integer("run_count").default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertAutomationRuleSchema = createInsertSchema(automationRules).omit({ id: true, createdAt: true, updatedAt: true, lastRun: true, runCount: true });
+export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
+export type AutomationRule = typeof automationRules.$inferSelect;
+
+// ====== AUTOMATION RULE LOGS ======
+export const automationRuleLogs = pgTable("automation_rule_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ruleId: uuid("rule_id").references(() => automationRules.id).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  isDryRun: boolean("is_dry_run").notNull().default(false),
+  triggerData: jsonb("trigger_data"),
+  matchedItems: integer("matched_items"),
+  actionsPreview: jsonb("actions_preview"),
+  actionsExecuted: jsonb("actions_executed"),
+  status: text("status"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertAutomationRuleLogSchema = createInsertSchema(automationRuleLogs).omit({ id: true, createdAt: true });
+export type InsertAutomationRuleLog = z.infer<typeof insertAutomationRuleLogSchema>;
+export type AutomationRuleLog = typeof automationRuleLogs.$inferSelect;

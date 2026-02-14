@@ -18,6 +18,54 @@ import accountingRoutes from "./routes/accountingRoutes";
 import ebicsRoutes from "./routes/ebicsRoutes";
 import openItemsRoutes from "./routes/openItemsRoutes";
 import fiscalYearRoutes from "./routes/fiscalYearRoutes";
+import searchRoutes from "./routes/searchRoutes";
+import bulkRoutes from "./routes/bulkRoutes";
+import { registerPushRoutes } from "./routes/pushRoutes";
+import { registerScheduledReportRoutes } from "./routes/scheduledReportRoutes";
+import { registerDocumentRoutes } from "./routes/documentRoutes";
+import { registerAutomationRoutes } from "./routes/automationRoutes";
+import { registerTwoFactorRoutes } from "./routes/twoFactorRoutes";
+import { registerSignatureRoutes } from "./routes/signatureRoutes";
+import { registerQueryBuilderRoutes } from "./routes/queryBuilderRoutes";
+import { reportSchedules } from "@shared/schema";
+import { sendScheduledReport, parseNextRun } from "./services/scheduledReportsService";
+
+function startScheduledReportChecker() {
+  const INTERVAL_MS = 5 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const dueSchedules = await db.select().from(reportSchedules)
+        .where(and(
+          eq(reportSchedules.isActive, true),
+          lte(reportSchedules.nextRun, now)
+        ));
+
+      for (const schedule of dueSchedules) {
+        try {
+          await sendScheduledReport(
+            schedule.organizationId,
+            schedule.reportType,
+            schedule.recipients,
+            schedule.propertyId || undefined
+          );
+
+          const nextRun = parseNextRun(schedule.schedule, now);
+          await db.update(reportSchedules)
+            .set({ lastRun: now, nextRun })
+            .where(eq(reportSchedules.id, schedule.id));
+
+          console.log(`[ScheduledReports] Executed schedule ${schedule.id} (${schedule.reportType})`);
+        } catch (err) {
+          console.error(`[ScheduledReports] Error executing schedule ${schedule.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error('[ScheduledReports] Checker error:', err);
+    }
+  }, INTERVAL_MS);
+  console.log(`[ScheduledReports] Checker started (every ${INTERVAL_MS / 1000}s)`);
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(propertyRoutes);
@@ -27,6 +75,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(ebicsRoutes);
   app.use(openItemsRoutes);
   app.use(fiscalYearRoutes);
+  app.use(searchRoutes);
+  app.use(bulkRoutes);
+  registerPushRoutes(app);
+  registerDocumentRoutes(app);
+  registerAutomationRoutes(app);
+  registerTwoFactorRoutes(app);
+  registerSignatureRoutes(app);
+  registerQueryBuilderRoutes(app);
 
   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
   
@@ -3227,8 +3283,11 @@ Antworte im JSON-Format: { "subject": "Betreff", "body": "E-Mail-Text" }`
 
   registerFunctionRoutes(app);
   registerStripeRoutes(app);
+  registerScheduledReportRoutes(app);
 
   jobQueueService.startPolling(5000);
+
+  startScheduledReportChecker();
 
   app.use(globalErrorHandler);
 

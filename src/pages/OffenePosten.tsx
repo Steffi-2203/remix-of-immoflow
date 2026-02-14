@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Receipt, AlertTriangle, CheckCircle2, TrendingUp, ArrowRight, Search, Link2, Calendar, Euro, Clock, Users, ArrowUpDown, Building2 } from 'lucide-react';
+import { Loader2, Receipt, AlertTriangle, CheckCircle2, TrendingUp, ArrowRight, Search, Link2, Calendar, Euro, Clock, Users, ArrowUpDown, Building2, Download } from 'lucide-react';
 import { useProperties } from '@/hooks/useProperties';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -206,6 +206,8 @@ function OPListeTab() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortField, setSortField] = useState<string>('dueDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [xlsxDownloading, setXlsxDownloading] = useState(false);
+  const { toast } = useToast();
 
   const toggleSort = (field: string) => {
     if (sortField === field) {
@@ -294,6 +296,30 @@ function OPListeTab() {
     );
   }
 
+  const handleXlsxExport = async () => {
+    setXlsxDownloading(true);
+    try {
+      const params = new URLSearchParams();
+      if (propertyFilter !== 'all') params.set('propertyId', propertyFilter);
+      const qs = params.toString() ? `?${params}` : '';
+      const response = await fetch(`/api/accounting/export/op-liste${qs}`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Export fehlgeschlagen');
+      const blob = await response.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `OP-Liste_${new Date().getFullYear()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast({ title: 'Export erfolgreich', description: 'OP-Liste wurde heruntergeladen.' });
+    } catch {
+      toast({ title: 'Export fehlgeschlagen', variant: 'destructive' });
+    } finally {
+      setXlsxDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -329,6 +355,10 @@ function OPListeTab() {
             <SelectItem value="ueberfaellig">Ueberfaellig</SelectItem>
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={handleXlsxExport} disabled={xlsxDownloading} data-testid="button-export-op-xlsx">
+          {xlsxDownloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          XLSX Export
+        </Button>
       </div>
 
       <Card>

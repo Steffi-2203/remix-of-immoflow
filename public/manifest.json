@@ -1,40 +1,14 @@
 {
   "name": "ImmoflowMe - Hausverwaltung",
   "short_name": "ImmoflowMe",
-  "description": "Professionelle Hausverwaltungssoftware für Österreich - MRG/WEG-konform",
-  "start_url": "/dashboard",
+  "description": "Österreichische Immobilienverwaltung - MRG & WEG konform",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#1e40af",
-  "orientation": "any",
-  "scope": "/",
-  "lang": "de-AT",
-  "categories": ["business", "finance", "productivity"],
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "/favicon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [],
-  "prefer_related_applications": false,
-  "shortcuts": [
-    {
-      "name": "Dashboard",
-      "url": "/dashboard",
-      "description": "Zur Übersicht"
-    },
-    {
-      "name": "Schadensmeldung",
-      "url": "/schadensmeldungen",
-      "description": "Schaden melden"
-    },
-    {
-      "name": "Liegenschaften",
-      "url": "/liegenschaften",
-      "description": "Liegenschaften verwalten"
-    }
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}
   ]
 }

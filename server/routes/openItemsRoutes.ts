@@ -3,6 +3,7 @@ import { isAuthenticated } from "./helpers";
 import { db } from "../db";
 import { monthlyInvoices, units, tenants, properties, payments, paymentAllocations } from "@shared/schema";
 import { eq, ne, and, sql, gte, lte, desc, sum, isNull } from "drizzle-orm";
+import { exportOPListe } from "../services/xlsxExportService";
 
 const router = Router();
 
@@ -287,6 +288,57 @@ router.post("/api/bank-matching/confirm", isAuthenticated, async (req: Request, 
     res.json({ success: true, message: "Zahlung erfolgreich zugeordnet" });
   } catch (error: any) {
     console.error("Error confirming bank matching:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ====== XLSX EXPORT ======
+
+router.get("/api/accounting/export/op-liste", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(400).json({ error: "Keine Organisation zugeordnet" });
+    const { propertyId } = req.query;
+
+    let conditions: any[] = [ne(monthlyInvoices.status, 'bezahlt'), eq(properties.organizationId, orgId)];
+
+    if (propertyId) {
+      conditions.push(eq(units.propertyId, propertyId as string));
+    }
+
+    const results = await db
+      .select({
+        invoice: monthlyInvoices,
+        unitTopNummer: units.topNummer,
+        propertyId: properties.id,
+        propertyName: properties.name,
+        tenantFirstName: tenants.firstName,
+        tenantLastName: tenants.lastName,
+      })
+      .from(monthlyInvoices)
+      .innerJoin(units, eq(monthlyInvoices.unitId, units.id))
+      .innerJoin(properties, eq(units.propertyId, properties.id))
+      .leftJoin(tenants, eq(monthlyInvoices.tenantId, tenants.id))
+      .where(and(...conditions))
+      .orderBy(desc(monthlyInvoices.faelligAm));
+
+    const items = results.map((r) => ({
+      ...r.invoice,
+      unitTopNummer: r.unitTopNummer,
+      propertyName: r.propertyName,
+      tenantName: r.tenantFirstName && r.tenantLastName
+        ? `${r.tenantFirstName} ${r.tenantLastName}`
+        : null,
+    }));
+
+    const orgName = (req as any).session?.organizationName || "Organisation";
+    const buffer = exportOPListe(items, orgName);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="OP-Liste_${new Date().getFullYear()}.xlsx"`);
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("Error exporting OP-Liste:", error);
     res.status(500).json({ error: error.message });
   }
 });

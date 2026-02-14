@@ -28,6 +28,9 @@ import { inputSanitizer } from "./middleware/sanitize";
 import { logger, createRequestLogger } from "./lib/logger";
 import { apiErrorHandler } from "./lib/apiErrors";
 import { ensureIndexes } from "./lib/ensureIndexes";
+import { setupRLS } from "./lib/rlsPolicies";
+import { setupFullTextSearch } from "./lib/fullTextSearch";
+import { rlsMiddleware } from "./middleware/rlsMiddleware";
 import promClient from "prom-client";
 
 promClient.collectDefaultMetrics();
@@ -313,8 +316,11 @@ async function initStripe() {
   await initStripe();
   await seedDistributionKeys();
   await ensureIndexes();
+  await setupRLS();
+  await setupFullTextSearch();
   setupAuth(app);
   app.use(trackSession);
+  app.use(rlsMiddleware);
   registerDsgvoRoutes(app);
   registerSecurityRoutes(app);
   registerTicketRoutes(app);

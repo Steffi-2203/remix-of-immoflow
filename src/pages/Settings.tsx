@@ -25,6 +25,7 @@ import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { useUserRole } from '@/hooks/useUserRole';
+import { TwoFactorSettings } from '@/components/settings/TwoFactorSettings';
 
 // Mask IBAN for display
 function maskIban(iban: string | null): string {
@@ -74,6 +75,7 @@ export default function Settings() {
             <TabsTrigger value="account">Konto</TabsTrigger>
             <TabsTrigger value="subscription">Abo</TabsTrigger>
             {canViewFinancials && <TabsTrigger value="banking">Bankkonten</TabsTrigger>}
+            <TabsTrigger value="security">Sicherheit</TabsTrigger>
             <TabsTrigger value="privacy">Datenschutz</TabsTrigger>
             {isAdmin && <TabsTrigger value="branding">Branding</TabsTrigger>}
             <TabsTrigger value="distribution">Verteilungsschlüssel</TabsTrigger>
@@ -199,6 +201,10 @@ export default function Settings() {
               <BankAccountsSection />
             </TabsContent>
           )}
+
+          <TabsContent value="security" className="space-y-6">
+            <TwoFactorSettings />
+          </TabsContent>
 
           <TabsContent value="privacy">
             <PrivacySettings />

@@ -3,6 +3,7 @@ import { db } from "../db";
 import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences, properties } from "@shared/schema";
 import { eq, and, sql, desc, between, gte, lte, asc, or, isNull } from "drizzle-orm";
 import { isAuthenticated } from "./helpers";
+import { exportSaldenliste, exportBilanz, exportGuV } from "../services/xlsxExportService";
 
 const router = Router();
 
@@ -536,6 +537,161 @@ router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (
     `);
 
     res.json(result.rows || result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ====== XLSX EXPORT ENDPOINTS ======
+
+router.get("/api/accounting/export/saldenliste", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    const { from, to, propertyId } = req.query;
+    const year = new Date().getFullYear();
+    const startDate = (from as string) || `${year}-01-01`;
+    const endDate = (to as string) || `${year}-12-31`;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
+    const dateCondition = sql`je.entry_date BETWEEN ${startDate} AND ${endDate}`;
+    const orgCondition = orgId
+      ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
+      : sql``;
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
+
+    const result = await db.execute(sql`
+      SELECT
+        coa.id, coa.account_number, coa.name, coa.account_type,
+        COALESCE(SUM(jel.debit), 0) as total_debit,
+        COALESCE(SUM(jel.credit), 0) as total_credit,
+        COALESCE(SUM(jel.debit), 0) - COALESCE(SUM(jel.credit), 0) as balance
+      FROM chart_of_accounts coa
+      LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
+      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND ${dateCondition} ${orgCondition} ${propertyCondition}
+      WHERE coa.is_active = true
+      GROUP BY coa.id, coa.account_number, coa.name, coa.account_type
+      HAVING COALESCE(SUM(jel.debit), 0) != 0 OR COALESCE(SUM(jel.credit), 0) != 0
+      ORDER BY coa.account_number
+    `);
+
+    const rows = result.rows || result;
+    const orgName = (req as any).session?.organizationName || "Organisation";
+    const buffer = exportSaldenliste(rows as any[], orgName);
+
+    const fileYear = startDate.substring(0, 4);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="Saldenliste_${fileYear}.xlsx"`);
+    res.send(buffer);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/accounting/export/bilanz", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    const { date, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
+    const endDate = (date as string) || new Date().toISOString().split("T")[0];
+    const orgCondition = orgId
+      ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
+      : sql``;
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
+
+    const result = await db.execute(sql`
+      SELECT
+        coa.account_type, coa.account_number, coa.name,
+        COALESCE(SUM(jel.debit), 0) - COALESCE(SUM(jel.credit), 0) as balance
+      FROM chart_of_accounts coa
+      LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
+      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND je.entry_date <= ${endDate} ${orgCondition} ${propertyCondition}
+      WHERE coa.is_active = true AND coa.account_type IN ('asset', 'liability', 'equity')
+      GROUP BY coa.account_type, coa.account_number, coa.name
+      HAVING ABS(COALESCE(SUM(jel.debit), 0) - COALESCE(SUM(jel.credit), 0)) > 0.001
+      ORDER BY coa.account_number
+    `);
+
+    const rows: any[] = result.rows || result;
+    const assets = rows.filter((r: any) => r.account_type === "asset");
+    const liabilities = rows.filter((r: any) => r.account_type === "liability");
+    const equity = rows.filter((r: any) => r.account_type === "equity");
+
+    const bilanzData = {
+      assets: { items: assets },
+      liabilities: { items: liabilities },
+      equity: { items: equity },
+    };
+
+    const orgName = (req as any).session?.organizationName || "Organisation";
+    const buffer = exportBilanz(bilanzData as any, orgName);
+
+    const fileYear = endDate.substring(0, 4);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="Bilanz_${fileYear}.xlsx"`);
+    res.send(buffer);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/accounting/export/guv", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    const { from, to, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
+    const year = new Date().getFullYear();
+    const startDate = (from as string) || `${year}-01-01`;
+    const endDate = (to as string) || `${year}-12-31`;
+
+    const orgCondition = orgId
+      ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
+      : sql``;
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
+
+    const result = await db.execute(sql`
+      SELECT
+        coa.account_type, coa.account_number, coa.name,
+        COALESCE(SUM(jel.credit), 0) - COALESCE(SUM(jel.debit), 0) as balance
+      FROM chart_of_accounts coa
+      LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
+      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id
+        AND je.entry_date BETWEEN ${startDate} AND ${endDate} ${orgCondition} ${propertyCondition}
+      WHERE coa.is_active = true AND coa.account_type IN ('revenue', 'expense')
+      GROUP BY coa.account_type, coa.account_number, coa.name
+      HAVING ABS(COALESCE(SUM(jel.credit), 0) - COALESCE(SUM(jel.debit), 0)) > 0.001
+      ORDER BY coa.account_number
+    `);
+
+    const rows: any[] = result.rows || result;
+    const revenue = rows.filter((r: any) => r.account_type === "revenue");
+    const expenses = rows.filter((r: any) => r.account_type === "expense");
+    const totalRevenue = revenue.reduce((s: number, r: any) => s + Number(r.balance), 0);
+    const totalExpenses = expenses.reduce((s: number, r: any) => s + Math.abs(Number(r.balance)), 0);
+
+    const guvData = {
+      revenue: { items: revenue },
+      expenses: { items: expenses },
+      netIncome: totalRevenue - totalExpenses,
+    };
+
+    const orgName = (req as any).session?.organizationName || "Organisation";
+    const buffer = exportGuV(guvData as any, orgName);
+
+    const fileYear = startDate.substring(0, 4);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="GuV_${fileYear}.xlsx"`);
+    res.send(buffer);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

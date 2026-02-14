@@ -14,6 +14,7 @@ import { useIsAdmin } from '@/hooks/useAdmin';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
+import { GlobalSearch } from '@/components/GlobalSearch';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -63,6 +64,7 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        <GlobalSearch />
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
