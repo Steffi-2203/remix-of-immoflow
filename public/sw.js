@@ -1,12 +1,40 @@
-const CACHE_VERSION = 'immoflow-v3';
+const CACHE_VERSION = 'immoflow-v4';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
   '/',
   '/favicon.png',
-  '/manifest.json'
+  '/manifest.json',
+  '/icons/icon-192.png'
 ];
+
+const OFFLINE_PAGE = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ImmoflowMe - Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #1a1a2e; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
+    .container { text-align: center; max-width: 400px; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.6; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    p { color: #6b7280; line-height: 1.6; margin-bottom: 1.5rem; }
+    button { background: #1a1a2e; color: white; border: none; padding: 0.75rem 2rem; border-radius: 0.375rem; font-size: 1rem; cursor: pointer; }
+    button:active { opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">&#x1F4F6;</div>
+    <h1>Keine Verbindung</h1>
+    <p>ImmoflowMe ist derzeit nicht erreichbar. Bitte pr&uuml;fen Sie Ihre Internetverbindung und versuchen Sie es erneut.</p>
+    <button onclick="location.reload()">Erneut versuchen</button>
+  </div>
+</body>
+</html>`;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -46,7 +74,7 @@ self.addEventListener('fetch', (event) => {
         .catch(() =>
           caches.match(event.request).then((cached) => {
             if (cached) return cached;
-            return new Response(JSON.stringify({ error: 'Offline' }), {
+            return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
               status: 503,
               headers: { 'Content-Type': 'application/json' }
             });
@@ -76,12 +104,9 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           if (event.request.mode === 'navigate') {
-            return caches.match('/').then((fallback) => {
-              if (fallback) return fallback;
-              return new Response(
-                '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline</title></head><body><h1>Offline</h1><p>ImmoflowMe ist derzeit nicht erreichbar. Bitte prüfen Sie Ihre Internetverbindung.</p></body></html>',
-                { status: 503, headers: { 'Content-Type': 'text/html' } }
-              );
+            return new Response(OFFLINE_PAGE, {
+              status: 503,
+              headers: { 'Content-Type': 'text/html' }
             });
           }
           return new Response('Offline', { status: 503 });
@@ -142,5 +167,8 @@ self.addEventListener('message', (event) => {
   }
   if (event.data === 'clearApiCache') {
     caches.delete(API_CACHE);
+  }
+  if (event.data === 'getVersion') {
+    event.source.postMessage({ type: 'version', version: CACHE_VERSION });
   }
 });
