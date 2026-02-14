@@ -1,125 +1,85 @@
 
-# Plan: EBICS Live-Verbesserung + E1a/E1b Steuer-Export
 
-## Zusammenfassung
+# Plan: Journal-Nachbuchung (Backfill) der Bestandsdaten
 
-Zwei Verbesserungen: (1) EBICS von CSV-Import auf echte Live-Banking-Anbindung optimieren und (2) E1a/E1b Steuerbeilagen fuer Eigentuemer als neues Modul implementieren.
+## Ausgangslage
 
----
+- **123 Rechnungen** (2025-2026), **65 Zahlungen**, **40 Ausgaben** existieren in der Datenbank
+- **0 Journal-Eintraege** -- die DB-Trigger (`auto_book_invoice`, `auto_book_payment`, `auto_book_expense`) greifen nur bei neuen INSERT-Operationen, nicht rueckwirkend
+- **53 Konten** im Kontenrahmen (Organisation `2f3536af...`)
+- Die `booking_number_sequences`-Tabelle ist leer -- noch keine Buchungsnummern vergeben
 
-## Teil 1: EBICS Live-Banking Verbesserung
+## Loesung: Edge Function fuer einmaligen Backfill
 
-### Ist-Zustand
+Eine Edge Function `backfill-journal`, die alle bestehenden Rechnungen, Zahlungen und Ausgaben durchgeht und die gleiche Buchungslogik wie die DB-Trigger anwendet -- aber idempotent (ueberspringt bereits gebuchte Quellen).
 
-- EBICS-Infrastruktur existiert vollstaendig: Schema (3 Tabellen mit RLS), Service (664 Zeilen), Routes, Frontend
-- RSA-Key-Management, INI/HIA-Initialisierung, CAMT.053-Download, pain.001-Upload sind implementiert
-- Problem: Die Verbindung zum Bankserver ist "fire-and-forget" -- es fehlt Retry-Logik, Statuspolling und automatisierte Intervall-Abrufe
-
-### Verbesserungen
-
-1. **Automatischer Abruf-Scheduler**: Konfigurierbare Intervalle (taeglich/stuendlich) fuer automatischen Kontoauszugsabruf via CAMT.053
-2. **Retry-Logik mit Backoff**: Bei Netzwerkfehlern automatisch 3 Versuche mit exponentiellem Backoff
-3. **Connection Health Check**: Statusanzeige der Bankverbindung (letzte erfolgreiche Kommunikation, Fehlerquote)
-4. **Batch-Payment Verbesserung**: Direkte Erstellung von Zahlungsauftraegen aus offenen Lieferantenrechnungen und Loehnen
-5. **CAMT.053-Auto-Matching**: Automatische Zuordnung heruntergeladener Bankbewegungen zu offenen Forderungen
-
----
-
-## Teil 2: E1a/E1b Steuer-Export (NEU)
-
-### Was ist E1a/E1b?
-
-- **E1a**: Beilage zur Einkommenssteuererklaerung fuer "Einkuenfte aus Vermietung und Verpachtung"
-- **E1b**: Beilage fuer "Einkuenfte aus Grundstuecksveraeusserungen" (optional, spaeter)
-- Jeder Eigentuemer braucht jaehrlich eine E1a pro Liegenschaft fuer den Steuerberater bzw. FinanzOnline
-
-### Datenbank: Neue Tabelle
-
-**`tax_reports`** -- Protokoll generierter Steuerbeilagen
-
-| Spalte | Typ | Beschreibung |
-|--------|-----|-------------|
-| id | UUID PK | |
-| organization_id | UUID FK | Organisation |
-| owner_id | UUID FK | Eigentuemer |
-| property_id | UUID FK | Liegenschaft |
-| report_type | TEXT | 'E1a' oder 'E1b' |
-| tax_year | INTEGER | Steuerjahr |
-| data | JSONB | Berechnete Kennzahlen |
-| xml_content | TEXT | FinanzOnline-XML |
-| status | TEXT | 'entwurf', 'freigegeben', 'exportiert' |
-| created_at | TIMESTAMPTZ | |
-
-RLS: Nur eigene Organisation sichtbar.
-
-### Backend-Service: `taxReportingService.ts`
-
-Aggregiert aus bestehenden Daten:
-
-- **Mieteinnahmen**: Aus `monthly_invoices` (Grundmiete pro Liegenschaft/Eigentuemer-Anteil)
-- **Betriebskosten-Einnahmen**: Aus `monthly_invoices` (BK-Vorschreibungen)
-- **Werbungskosten/Ausgaben**: Aus `expenses` (Instandhaltung, Versicherung, Verwaltung, etc.)
-- **AfA**: Berechnung aus Gebaeude-Anschaffungskosten (1,5% p.a. nach EStG)
-- **Zinsaufwand**: Aus Kreditzinsen (falls erfasst)
-
-E1a-Kennzahlen (FinanzOnline-Formular):
-- KZ 370: Mieteinnahmen brutto
-- KZ 371: Betriebskosten-Einnahmen
-- KZ 380: Werbungskosten (Instandhaltung)
-- KZ 381: AfA
-- KZ 382: Zinsen Fremdkapital
-- KZ 383: Verwaltungskosten
-- KZ 390: Einkuenfte aus V+V (Saldo)
-
-### API-Endpunkte
+### Ablauf
 
 ```text
-GET    /api/tax-reports/:ownerId/:year      -- E1a-Berechnung fuer Eigentuemer
-GET    /api/tax-reports/:ownerId/:year/xml   -- FinanzOnline-XML-Export
-GET    /api/tax-reports/properties/:propId/:year  -- E1a pro Liegenschaft
-POST   /api/tax-reports/generate             -- Report generieren + speichern
-GET    /api/tax-reports/history               -- Alle generierten Reports
+1. Lade Organisation + Kontenrahmen (Konto-IDs fuer 4000, 4100, 4200, 3540, 2100, 2800, 2500, 5000-6300)
+2. Fuer jede Rechnung (monthly_invoices):
+   - Pruefen ob source_type='invoice' + source_id bereits in journal_entries existiert
+   - Wenn nein: Buchungssatz erstellen (Forderung Soll / Mieterloes + BK + HK + USt Haben)
+3. Fuer jede Zahlung (payments):
+   - Pruefen ob source_type='payment' + source_id bereits existiert
+   - Wenn nein: Buchungssatz erstellen (Bank Soll / Forderung Haben)
+4. Fuer jede Ausgabe (expenses):
+   - Pruefen ob source_type='expense' + source_id bereits existiert
+   - Wenn nein: Buchungssatz erstellen (Aufwand + Vorsteuer Soll / Bank Haben)
+5. Buchungsnummer-Sequenz hochzaehlen via next_booking_number()
 ```
 
-### Frontend
+### Idempotenz-Garantie
 
-- Neuer Tab "Steuer-Export" in der bestehenden FinanzOnline/Export-Seite
-- **Eigentuemer-Auswahl** + Jahresauswahl
-- **E1a-Vorschau**: Tabelle mit allen Kennzahlen, aufgeschluesselt nach Liegenschaft
-- **Eigentuemer-Anteil**: Automatische Berechnung basierend auf `property_owners.ownership_share`
-- **XML-Download**: Button fuer FinanzOnline-konformes XML
-- **PDF-Export**: Zusammenfassung fuer den Steuerberater
+Vor jedem Insert wird geprueft:
+```text
+SELECT id FROM journal_entries
+WHERE source_type = ? AND source_id = ?
+LIMIT 1
+```
+Falls ein Eintrag gefunden wird, wird uebersprungen. Damit kann die Funktion beliebig oft aufgerufen werden.
 
-### Integration mit bestehenden Daten
+### Dateien
+
+| Datei | Aktion | Beschreibung |
+|-------|--------|-------------|
+| `supabase/functions/backfill-journal/index.ts` | NEU | Edge Function: Iteriert ueber alle Rechnungen, Zahlungen, Ausgaben und erstellt fehlende Journal-Eintraege |
+
+### Technische Details
+
+Die Edge Function:
+- Verwendet den `service_role` Key fuer vollen DB-Zugriff
+- Ermittelt die Organisation aus der `chart_of_accounts`-Tabelle
+- Mappt Ausgaben-Kategorien auf Kontonummern (gleiche Logik wie der `auto_book_expense`-Trigger)
+- Gibt einen Statusbericht zurueck: `{ invoices_booked, payments_booked, expenses_booked, skipped }`
+- Kann per HTTP-Call oder ueber die UI ausgeloest werden
+
+### Konten-Mapping (aus bestehendem Trigger)
 
 ```text
-property_owners (Anteil%) --+
-                             |
-monthly_invoices (Einnahmen) +--> taxReportingService --> E1a-Kennzahlen
-                             |
-expenses (Ausgaben)        --+
-                             |
-properties (Gebaeudedaten) --+
+Rechnungen:
+  Soll 2100 (Forderungen Mieter) = Gesamtbetrag
+  Haben 4000 (Mieterloes) = Grundmiete
+  Haben 4100 (BK-Erloes) = Betriebskosten
+  Haben 4200 (HK-Erloes) = Heizungskosten
+  Haben 3540 (USt-Zahllast) = USt
+
+Zahlungen:
+  Soll 2800 (Bank) = Betrag
+  Haben 2100 (Forderungen Mieter) = Betrag
+
+Ausgaben:
+  Soll 5000-6300 (Aufwandskonto) = Netto
+  Soll 2500 (Vorsteuer) = VSt (20%)
+  Haben 2800 (Bank) = Brutto
 ```
 
----
+### Erwartetes Ergebnis
 
-## Technischer Umfang
+Nach Ausfuehrung:
+- ~123 Journal-Eintraege fuer Rechnungen (mit je 3-5 Buchungszeilen)
+- ~65 Journal-Eintraege fuer Zahlungen (mit je 2 Buchungszeilen)
+- ~40 Journal-Eintraege fuer Ausgaben (mit je 3 Buchungszeilen)
+- **Insgesamt ca. 228 Buchungssaetze** mit ca. 750+ Buchungszeilen
+- Saldenliste, Bilanz und GuV zeigen ab sofort echte Daten
 
-| Bereich | Dateien | Aufwand |
-|---------|---------|--------|
-| DB-Migration | 1 neue Tabelle (tax_reports) | Klein |
-| Schema | `shared/schema/taxReporting.ts` | Klein |
-| Backend | `server/services/taxReportingService.ts` | Mittel |
-| API-Routes | `server/routes/taxReports.ts` + Registrierung | Klein |
-| EBICS-Verbesserung | Update `ebicsService.ts` (Retry, Health, Scheduler) | Mittel |
-| Frontend E1a | Neue Komponente in Export-Seite | Mittel |
-| Frontend EBICS | Updates in `EbicsBanking.tsx` (Status-Dashboard) | Klein |
-| Hooks | `useEbicsApi.ts` erweitern + `useTaxReports.ts` neu | Klein |
-
-### Reihenfolge
-
-1. E1a-Schema + Migration
-2. taxReportingService (Kernlogik)
-3. API-Routes + Frontend
-4. EBICS-Verbesserungen (Retry, Health Check, Auto-Abruf)
