@@ -1,0 +1,170 @@
+1. Kern: Mandanten, Objekte, Einheiten (must-have)
+Konkrete Features
+
+Row‑Level Security (Postgres RLS) auf allen tenant‑kritischen Tabellen (properties, units, tenants, invoices, payments).
+
+Implementierung: Policies per Tabelle; setze app.current_org pro DB‑Session.
+
+Tests: Unit‑Tests: versuche mit Test‑Accounts aus Org A auf Org B Daten zuzugreifen → 403/leer.
+
+Metrik: Anzahl RLS‑Policy‑Verstöße in Tests (0).
+
+Zentrales Objektmodell: organisation → property → unit → contract(lease) → tenant.
+
+UX: Breadcrumbs, schnelle Suche nach Objekt/Einheit.
+
+Data: eindeutige UUIDs, audit fields (created_by, org_id).
+
+Schnellsuche & Filter: Suche über Adresse, Einheit, Mieter, Vertragsnummer.
+
+Performance: Elastic/PG full‑text index; Pagination.
+
+2. Finance & Billing (Produktionsrelevant)
+Konkrete Features
+
+Invoice Engine (Erstellen, Splitting, Verteilungslogik)
+
+Server‑Autorität: Alle Berechnungen serverseitig; Client nur UI.
+
+Edge Cases: Rundung, Teilzahlungen, Gutschriften.
+
+Payment Capture + Reconciliation
+
+Integrationen: Stripe/Bank‑Sandbox; Webhooks für Zahlungsstatus.
+
+Idempotency: Idempotency‑Keys für wiederholte Calls.
+
+Automatisiertes Mahnwesen (Dunning)
+
+Regeln: Staffelstufen, Fristen, Gebühren, E‑Mail/Brief‑Templates.
+
+Audit: Jede Mahnung versioniert; manuelle Overrides protokolliert.
+
+Buchungslogik & Export
+
+Exports: DATEV/CSV für Steuerberater; Mapping konfigurierbar.
+
+Tests & Monitoring
+
+Tests: Szenarien: Invoice→Partial Payment→Settlement; Race‑Condition Tests (concurrent payments).
+
+Metriken: offene Forderungen, Dunning‑Queue‑Depth, Payment‑Failure‑Rate.
+
+3. Automation & OCR / Bankabstimmung
+Konkrete Features
+
+OCR Pipeline für Belege & Kontoauszüge
+
+Funktionen: automatische Texterkennung, Feldextraktion (Betrag, Datum, IBAN), Confidence‑Score.
+
+Fallbacks: Circuit‑Breaker (open/half‑open) bei externen OCR‑Ausfällen; lokale Tesseract‑Fallback für kritische Fälle.
+
+Security: PII‑Redaction in Logs, temporäre Speicherung verschlüsselt.
+
+Automatische Bankabstimmung
+
+Matching‑Engine: heuristische Regeln (Betrag, Datum, Verwendungszweck), manuelle Review‑Queue.
+
+Reconciliation UI: Vorschläge akzeptieren/ablehnen, Bulk‑Actions.
+
+Rules Engine / Autopilot
+
+Use Cases: automatische Zuordnung von Zahlungen zu Rechnungen, wiederkehrende Buchungen, Reminder‑Triggers.
+
+Admin UI: Regeln testen (dry‑run) bevor Aktivierung.
+
+Observability
+
+Metriken: OCR calls, failure rate, circuit state, avg match confidence, manual review rate.
+
+4. Dokumente, Kommunikation & Signaturen
+Konkrete Features
+
+Zentrales DMS (Belege, Verträge, Protokolle)
+
+Versioning, Tagging, Volltext‑Suche, ACLs per org/role.
+
+Retention Policies (GoBD / gesetzliche Vorgaben).
+
+Elektronische Signatur (eIDAS‑konform)
+
+Use Cases: Mietverträge, Übergabeprotokolle.
+
+Audit Trail: Signaturzeitpunkt, IP, Signatur‑Provider‑ID.
+
+Kommunikationscenter
+
+Templates: E‑Mail, SMS, Brief (PDF‑Export).
+
+History: alle Nachrichten an Objekt/Einheit/Person gebunden.
+
+Benachrichtigungen & Mobile
+
+Push / E‑Mail / SMS für Fälligkeiten, Mahnungen, neue Dokumente.
+
+5. Reports, KPIs & Operations
+Konkrete Features
+
+Standardreports: Vacancy, Yield, Operations, Reserve‑Compliance (wie du bereits extrahiert hast).
+
+Export: CSV, XLSX, PDF; scheduled exports per cron.
+
+Filters: Zeitraum, Objekt, Portfolio, Role‑based visibility.
+
+Ad‑hoc Reporting / Query Builder
+
+UI: Drag‑and‑drop Felder, Saveable reports, Sharing.
+
+Dashboards für Verwalter & Eigentümer
+
+KPI: Mieteingang (MTD), p95 Invoice‑Processing‑Time, offene Forderungen, Leerstandsraten.
+
+Alerting: Thresholds (z. B. p95 > 1s, OCR failure > 5%).
+
+Operational Tools
+
+Bulk Actions: Mass‑Invoices, Mass‑Notifications, Bulk‑Exports.
+
+Audit & Activity Log: Who did what, when.
+
+6. Security, Compliance, DevOps & Qualität
+Konkrete Features
+
+Auth & RBAC
+
+SAML / OIDC für Enterprise‑Login; 2FA optional; fine‑grained roles (admin, finance, property_manager, viewer, auditor, tester).
+
+Sidebar‑Filtering wie du implementiert hast: allowedRoles pro Nav‑Item.
+
+Audit Logging & Immutable Trails
+
+Write‑once logs für Finanzaktionen; exportierbar für Prüfungen.
+
+Backups & Disaster Recovery
+
+Daily snapshots, tested restore procedure, RPO/RTO definiert.
+
+CI/CD & Tests
+
+Coverage Ziel: 80%+; Integration tests for RLS and finance flows; Playwright E2E for critical flows.
+
+Security Scans: SCA (Snyk), DAST (ZAP/Burp), periodic pentest.
+
+Operational Security
+
+Secrets Management, Key rotation (OpenAI/Stripe), rate limits, WAF rules, prometheus metrics + grafana dashboards (circuit breaker, OCR cost).
+
+Compliance
+
+DSGVO: Data subject requests, data minimization, processing agreements.
+
+GoBD: retention, tamper‑evident logs for accounting records.
+
+Umsetzungsempfehlung (Priorisierung & Quick Wins)
+Sofort (1–2 Wochen): RLS POC auf kritischen Tabellen; Test‑Accounts; enable 2FA for admin; circuit‑breaker for OCR already done — monitor.
+
+Kurzfristig (1–3 Monate): Automatisierte Bankabstimmung + OCR pipeline; Invoice engine server‑side; Dunning automation.
+
+Mittelfristig (3–6 Monate): DMS + eSign; Reports & dashboards; API‑first approach für Integrationen.
+
+Langfristig: Mobile Apps, Marketplace für Integrationen, SLA/enterprise features (SAML, multi‑region).

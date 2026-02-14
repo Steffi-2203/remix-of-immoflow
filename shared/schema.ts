@@ -1944,6 +1944,7 @@ export const fiscalPeriodStatusEnum = pgEnum('fiscal_period_status', ['open', 'i
 export const fiscalPeriods = pgTable("fiscal_periods", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
   year: integer("year").notNull(),
   status: fiscalPeriodStatusEnum("status").default('open').notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),

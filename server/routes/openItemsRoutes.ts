@@ -77,7 +77,9 @@ router.get("/api/open-items/kpis", isAuthenticated, async (req: Request, res: Re
     if (!orgId) return res.status(400).json({ error: "Keine Organisation zugeordnet" });
     const today = new Date().toISOString().split("T")[0];
 
+    const { propertyId } = req.query;
     const orgFilter = sql`AND p.organization_id = ${orgId}`;
+    const propertyFilter = propertyId ? sql`AND p.id = ${propertyId}` : sql``;
 
     const openResult = await db.execute(sql`
       SELECT
@@ -88,6 +90,7 @@ router.get("/api/open-items/kpis", isAuthenticated, async (req: Request, res: Re
       INNER JOIN properties p ON p.id = u.property_id
       WHERE mi.status != 'bezahlt'
       ${orgFilter}
+      ${propertyFilter}
     `);
 
     const overdueResult = await db.execute(sql`
@@ -100,6 +103,7 @@ router.get("/api/open-items/kpis", isAuthenticated, async (req: Request, res: Re
       WHERE mi.status != 'bezahlt'
         AND mi.faellig_am < ${today}
       ${orgFilter}
+      ${propertyFilter}
     `);
 
     const paymentsResult = await db.execute(sql`
@@ -112,6 +116,7 @@ router.get("/api/open-items/kpis", isAuthenticated, async (req: Request, res: Re
       INNER JOIN properties p ON p.id = u.property_id
       WHERE pay.buchungs_datum >= (CURRENT_DATE - INTERVAL '7 days')::date
       ${orgFilter}
+      ${propertyFilter}
     `);
 
     const agingResult = await db.execute(sql`
@@ -130,6 +135,7 @@ router.get("/api/open-items/kpis", isAuthenticated, async (req: Request, res: Re
       WHERE mi.status != 'bezahlt'
         AND mi.faellig_am < ${today}
       ${orgFilter}
+      ${propertyFilter}
     `);
 
     const open = (openResult.rows || openResult)[0] as any;
