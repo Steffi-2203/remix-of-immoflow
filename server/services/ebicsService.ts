@@ -15,7 +15,39 @@ import { eq, desc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import crypto from "crypto";
 
-// ── Austrian SV rates & EBICS order types ────────────────────────────────
+// ── Retry with exponential backoff ───────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  retries = MAX_RETRIES
+): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isNetworkError =
+        error.code === "ECONNREFUSED" ||
+        error.code === "ECONNRESET" ||
+        error.code === "ETIMEDOUT" ||
+        error.code === "ENOTFOUND" ||
+        error.message?.includes("fetch failed");
+
+      if (!isNetworkError || attempt === retries) {
+        console.error(`[EBICS] ${label} failed after ${attempt} attempt(s):`, error.message);
+        throw error;
+      }
+
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      console.warn(`[EBICS] ${label} attempt ${attempt}/${retries} failed, retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error("Unreachable");
+}
 
 export const EBICS_ORDER_TYPES = {
   INI: "INI",      // Initialize signature key
@@ -256,12 +288,15 @@ export const ebicsService = {
       .returning();
 
     try {
-      // Send to bank (HTTP POST to hostUrl)
-      const response = await fetch(conn.hostUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/xml; charset=UTF-8" },
-        body: xml,
-      });
+      // Send to bank with retry logic
+      const response = await withRetry(
+        () => fetch(conn.hostUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/xml; charset=UTF-8" },
+          body: xml,
+        }),
+        `INI order ${orderId}`
+      );
 
       const responseText = await response.text();
       const technicalCode = extractReturnCode(responseText);
@@ -324,11 +359,14 @@ export const ebicsService = {
       .returning();
 
     try {
-      const response = await fetch(conn.hostUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/xml; charset=UTF-8" },
-        body: xml,
-      });
+      const response = await withRetry(
+        () => fetch(conn.hostUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/xml; charset=UTF-8" },
+          body: xml,
+        }),
+        `HIA order ${orderId}`
+      );
 
       const responseText = await response.text();
       const technicalCode = extractReturnCode(responseText);
@@ -398,11 +436,14 @@ export const ebicsService = {
       .returning();
 
     try {
-      const response = await fetch(conn.hostUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/xml; charset=UTF-8" },
-        body: xml,
-      });
+      const response = await withRetry(
+        () => fetch(conn.hostUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/xml; charset=UTF-8" },
+          body: xml,
+        }),
+        `${orderType} download ${orderId}`
+      );
 
       const responseText = await response.text();
       const technicalCode = extractReturnCode(responseText);
@@ -482,11 +523,14 @@ export const ebicsService = {
       .returning();
 
     try {
-      const response = await fetch(conn.hostUrl, {
-        method: "POST",
-        headers: { "Content-Type": "text/xml; charset=UTF-8" },
-        body: ebicsXml,
-      });
+      const response = await withRetry(
+        () => fetch(conn.hostUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/xml; charset=UTF-8" },
+          body: ebicsXml,
+        }),
+        `CCT submit ${orderId}`
+      );
 
       const responseText = await response.text();
       const technicalCode = extractReturnCode(responseText);
@@ -637,6 +681,47 @@ export const ebicsService = {
       encryptionKeyHash: conn.encryptionKeyHash,
       authKeyHash: conn.authKeyHash,
       generatedAt: new Date().toISOString(),
+    };
+  },
+
+  /** Connection health check — aggregates recent order success/failure rates */
+  async getHealthStatus(connectionId: string) {
+    const [conn] = await db
+      .select()
+      .from(schema.ebicsConnections)
+      .where(eq(schema.ebicsConnections.id, connectionId));
+
+    if (!conn) throw new Error("EBICS connection not found");
+
+    const recentOrders = await db
+      .select()
+      .from(schema.ebicsOrders)
+      .where(eq(schema.ebicsOrders.connectionId, connectionId))
+      .orderBy(desc(schema.ebicsOrders.createdAt))
+      .limit(20);
+
+    const total = recentOrders.length;
+    const errors = recentOrders.filter((o) => o.status === "error").length;
+    const errorRate = total > 0 ? errors / total : 0;
+    const lastSuccess = recentOrders.find((o) => o.status === "completed");
+    const lastError = recentOrders.find((o) => o.status === "error");
+
+    let health: "healthy" | "degraded" | "offline" | "unknown" = "unknown";
+    if (conn.status !== "active") health = "offline";
+    else if (errorRate > 0.5) health = "degraded";
+    else if (total > 0) health = "healthy";
+
+    return {
+      connectionId,
+      status: conn.status,
+      health,
+      lastDownloadAt: conn.lastDownloadAt,
+      lastUploadAt: conn.lastUploadAt,
+      recentOrders: total,
+      errorRate: Math.round(errorRate * 100),
+      lastSuccessAt: lastSuccess?.createdAt ?? null,
+      lastErrorAt: lastError?.createdAt ?? null,
+      lastErrorMessage: lastError?.errorMessage ?? null,
     };
   },
 };

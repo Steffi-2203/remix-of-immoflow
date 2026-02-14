@@ -4650,6 +4650,70 @@ export type Database = {
           },
         ]
       }
+      tax_reports: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          organization_id: string
+          owner_id: string
+          property_id: string
+          report_type: string
+          status: string
+          tax_year: number
+          updated_at: string
+          xml_content: string | null
+        }
+        Insert: {
+          created_at?: string
+          data?: Json
+          id?: string
+          organization_id: string
+          owner_id: string
+          property_id: string
+          report_type?: string
+          status?: string
+          tax_year: number
+          updated_at?: string
+          xml_content?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          organization_id?: string
+          owner_id?: string
+          property_id?: string
+          report_type?: string
+          status?: string
+          tax_year?: number
+          updated_at?: string
+          xml_content?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_reports_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_reports_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "property_owners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_reports_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_announcements: {
         Row: {
           category: string
