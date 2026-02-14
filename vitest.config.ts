@@ -10,7 +10,7 @@ export default defineConfig({
   },
   test: {
     globals: false,
-    include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
+    include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts', 'server/__tests__/**/*.test.ts'],
     exclude: ['tests/loadtest.ts', 'tests/manual/**'],
     testTimeout: 30000,
     hookTimeout: 10000,

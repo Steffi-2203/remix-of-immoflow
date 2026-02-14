@@ -24,6 +24,7 @@ import kautionRoutes from "./routes/kautionRoutes";
 import wegReportRoutes from "./routes/wegReportRoutes";
 import eaRechnungRoutes from "./routes/eaRechnungRoutes";
 import heatingSettlementRoutes from "./routes/heatingSettlementRoutes";
+import heatBillingRoutes from "./routes/heatBillingRoutes";
 import richtwertRoutes from "./routes/richtwertRoutes";
 import activityRoutes from "./routes/activityRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
@@ -87,6 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(wegReportRoutes);
   app.use(eaRechnungRoutes);
   app.use(heatingSettlementRoutes);
+  app.use(heatBillingRoutes);
   app.use(richtwertRoutes);
   app.use(activityRoutes);
   registerPushRoutes(app);

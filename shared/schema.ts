@@ -2328,6 +2328,102 @@ export type InsertHeatingSettlement = z.infer<typeof insertHeatingSettlementSche
 export type HeatingSettlement = typeof heatingSettlements.$inferSelect;
 export type HeatingSettlementDetail = typeof heatingSettlementDetails.$inferSelect;
 
+export const heatBillingStatusEnum = pgEnum('heat_billing_status', ['entwurf', 'berechnet', 'geprueft', 'versendet', 'storniert']);
+export const heatMeterTypeEnum = pgEnum('heat_meter_type', ['hkv', 'waermemengenzaehler', 'warmwasserzaehler']);
+
+export const heatBillingRuns = pgTable("heat_billing_runs", {
+  id: serial("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  periodFrom: date("period_from").notNull(),
+  periodTo: date("period_to").notNull(),
+  status: heatBillingStatusEnum("status").default('entwurf'),
+  version: integer("version").default(1),
+  parentRunId: integer("parent_run_id"),
+
+  heatingSupplyCost: numeric("heating_supply_cost", { precision: 12, scale: 2 }).notNull(),
+  hotWaterSupplyCost: numeric("hot_water_supply_cost", { precision: 12, scale: 2 }).default('0'),
+  maintenanceCost: numeric("maintenance_cost", { precision: 12, scale: 2 }).default('0'),
+  meterReadingCost: numeric("meter_reading_cost", { precision: 12, scale: 2 }).default('0'),
+
+  heatingConsumptionSharePct: numeric("heating_consumption_share_pct", { precision: 5, scale: 2 }).default('65'),
+  heatingAreaSharePct: numeric("heating_area_share_pct", { precision: 5, scale: 2 }).default('35'),
+  hotWaterConsumptionSharePct: numeric("hot_water_consumption_share_pct", { precision: 5, scale: 2 }).default('65'),
+  hotWaterAreaSharePct: numeric("hot_water_area_share_pct", { precision: 5, scale: 2 }).default('35'),
+
+  roundingMethod: text("rounding_method").default('kaufmaennisch'),
+  restCentRule: text("rest_cent_rule").default('assign_to_largest_share'),
+
+  totalDistributed: numeric("total_distributed", { precision: 12, scale: 2 }),
+  trialBalanceDiff: numeric("trial_balance_diff", { precision: 12, scale: 4 }),
+
+  complianceCheckResult: jsonb("compliance_check_result"),
+  warnings: jsonb("warnings"),
+
+  computedAt: timestamp("computed_at", { withTimezone: true }),
+  computedBy: text("computed_by"),
+  stornoReason: text("storno_reason"),
+  stornoAt: timestamp("storno_at", { withTimezone: true }),
+
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const heatBillingLines = pgTable("heat_billing_lines", {
+  id: serial("id").primaryKey(),
+  runId: integer("run_id").references(() => heatBillingRuns.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  tenantName: text("tenant_name"),
+
+  areaM2: numeric("area_m2", { precision: 10, scale: 2 }).notNull(),
+  mea: numeric("mea", { precision: 10, scale: 6 }),
+  occupancy: integer("occupancy").default(1),
+
+  heatingMeterType: heatMeterTypeEnum("heating_meter_type"),
+  heatingMeterValue: numeric("heating_meter_value", { precision: 12, scale: 4 }),
+  heatingMeterMissing: boolean("heating_meter_missing").default(false),
+
+  hotWaterMeterValue: numeric("hot_water_meter_value", { precision: 12, scale: 4 }),
+  hotWaterMeterMissing: boolean("hot_water_meter_missing").default(false),
+
+  heatingConsumptionShare: numeric("heating_consumption_share", { precision: 12, scale: 2 }),
+  heatingAreaShare: numeric("heating_area_share", { precision: 12, scale: 2 }),
+  heatingTotal: numeric("heating_total", { precision: 12, scale: 2 }),
+
+  hotWaterConsumptionShare: numeric("hot_water_consumption_share", { precision: 12, scale: 2 }),
+  hotWaterAreaShare: numeric("hot_water_area_share", { precision: 12, scale: 2 }),
+  hotWaterTotal: numeric("hot_water_total", { precision: 12, scale: 2 }),
+
+  maintenanceShare: numeric("maintenance_share", { precision: 12, scale: 2 }),
+  meterReadingShare: numeric("meter_reading_share", { precision: 12, scale: 2 }),
+
+  totalCost: numeric("total_cost", { precision: 12, scale: 2 }),
+  prepayment: numeric("prepayment", { precision: 12, scale: 2 }).default('0'),
+  balance: numeric("balance", { precision: 12, scale: 2 }),
+
+  isEstimated: boolean("is_estimated").default(false),
+  estimationReason: text("estimation_reason"),
+  plausibilityFlags: jsonb("plausibility_flags"),
+});
+
+export const heatBillingAuditLog = pgTable("heat_billing_audit_log", {
+  id: serial("id").primaryKey(),
+  runId: integer("run_id").references(() => heatBillingRuns.id).notNull(),
+  action: text("action").notNull(),
+  field: text("field"),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  userId: text("user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertHeatBillingRunSchema = createInsertSchema(heatBillingRuns).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertHeatBillingRun = z.infer<typeof insertHeatBillingRunSchema>;
+export type HeatBillingRun = typeof heatBillingRuns.$inferSelect;
+export type HeatBillingLine = typeof heatBillingLines.$inferSelect;
+export type HeatBillingAuditEntry = typeof heatBillingAuditLog.$inferSelect;
+
 export const activityTypeEnum = pgEnum('activity_type', ['anruf', 'email', 'notiz', 'meeting', 'brief', 'besichtigung', 'wartung']);
 
 export const activities = pgTable("activities", {
