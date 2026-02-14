@@ -40,6 +40,8 @@ const Payroll = lazy(() => import("@/pages/Payroll"));
 const EbicsBanking = lazy(() => import("@/pages/EbicsBanking"));
 const AnnualClosing = lazy(() => import("@/pages/AnnualClosing"));
 const OpenItemsManagement = lazy(() => import("@/pages/OpenItemsManagement"));
+const AutomationRules = lazy(() => import("@/pages/AutomationRules"));
+const QueryBuilder = lazy(() => import("@/pages/QueryBuilder"));
 
 /** Wraps a page component with ProtectedRoute + DemoDataProvider */
 function Protected({ children }: { children: React.ReactNode }) {
@@ -110,6 +112,12 @@ export const protectedRoutes = (
 
     {/* Batch */}
     <Route path="/massenaktionen" element={<Protected><BatchOperations /></Protected>} />
+
+    {/* Automation */}
+    <Route path="/automatisierung" element={<Protected><AutomationRules /></Protected>} />
+
+    {/* Ad-hoc Reporting */}
+    <Route path="/query-builder" element={<Protected><QueryBuilder /></Protected>} />
 
     {/* Settings */}
     <Route path="/einstellungen" element={<Protected><Settings /></Protected>} />

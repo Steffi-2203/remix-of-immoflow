@@ -26,10 +26,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { FileText, Eye, Download, Trash2 } from 'lucide-react';
+import { FileText, Eye, Download, Trash2, History, PenTool } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { DocumentViewer } from './DocumentViewer';
+import { DocumentVersionsDialog } from './DocumentVersionsDialog';
+import { DocumentTagsEditor } from './DocumentTagsEditor';
 
 interface Document {
   id: string;
@@ -51,6 +53,7 @@ interface DocumentListProps {
   isDeleting: boolean;
   emptyMessage: string;
   emptyDescription: string;
+  documentTypePrefix?: string; // 'property' | 'unit' | 'tenant' for versioning/tags
 }
 
 export function DocumentList({
@@ -60,8 +63,10 @@ export function DocumentList({
   isDeleting,
   emptyMessage,
   emptyDescription,
+  documentTypePrefix = 'property',
 }: DocumentListProps) {
   const [viewerDoc, setViewerDoc] = useState<Document | null>(null);
+  const [versionsDoc, setVersionsDoc] = useState<Document | null>(null);
 
   const getTypeLabel = (type: string) => {
     return documentTypes.find((t) => t.value === type)?.label || type;
@@ -101,9 +106,10 @@ export function DocumentList({
     <>
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <Table>
-          <TableHeader>
+           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead>Name</TableHead>
+              <TableHead>Tags</TableHead>
               <TableHead>Typ</TableHead>
               <TableHead>Hochgeladen am</TableHead>
               <TableHead className="text-right">Aktionen</TableHead>
@@ -122,13 +128,16 @@ export function DocumentList({
                   </button>
                 </TableCell>
                 <TableCell>
+                  <DocumentTagsEditor documentType={documentTypePrefix} documentId={doc.id} />
+                </TableCell>
+                <TableCell>
                   <Badge className={getTypeColor(doc.type)}>{getTypeLabel(doc.type)}</Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {format(new Date(doc.uploaded_at), 'dd.MM.yyyy HH:mm', { locale: de })}
                 </TableCell>
                 <TableCell>
-                  <TooltipProvider>
+                   <TooltipProvider>
                     <div className="flex items-center justify-end gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -137,6 +146,14 @@ export function DocumentList({
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>Vorschau</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => setVersionsDoc(doc)}>
+                            <History className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Versionen</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -193,6 +210,16 @@ export function DocumentList({
           onOpenChange={(open) => !open && setViewerDoc(null)}
           fileUrl={viewerDoc.file_url}
           fileName={viewerDoc.name}
+        />
+      )}
+
+      {versionsDoc && (
+        <DocumentVersionsDialog
+          open={!!versionsDoc}
+          onOpenChange={(open) => !open && setVersionsDoc(null)}
+          documentType={documentTypePrefix}
+          documentId={versionsDoc.id}
+          documentName={versionsDoc.name}
         />
       )}
     </>

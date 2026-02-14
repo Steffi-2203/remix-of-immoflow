@@ -140,3 +140,36 @@ After any recovery:
 | Schema compat | Every PR | CI | `tools/schema_compat_check.sh` |
 | SLO validation | Post-run | Automated | `/api/admin/billing-runs/:id/slo` |
 | Rollback drill | Quarterly | Ops | Manual via API |
+
+---
+
+## 7. Lovable Cloud Restore-Prozedur
+
+### 7.1 PITR-Restore
+1. Lovable Cloud Backend öffnen (Cloud View)
+2. "Run SQL" → Live-Umgebung auswählen
+3. Restore-Zeitpunkt bestimmen (vor dem Vorfall)
+4. Support kontaktieren für PITR-Restore (aktuell manueller Prozess)
+
+### 7.2 Kommunikationsplan bei Ausfall
+
+| Phase | Zeitrahmen | Aktion | Verantwortlich |
+|-------|-----------|--------|----------------|
+| Erkennung | 0–5 Min | Monitoring-Alert → Incident Channel | Ops |
+| Eskalation | 5–15 Min | Team informieren, Status-Page updaten | Ops Lead |
+| Diagnose | 15–30 Min | Root Cause identifizieren | SRE + App Team |
+| Recovery | 30–120 Min | Restore oder Failover | SRE |
+| Post-Mortem | +24h | Incident-Report erstellen | Team Lead |
+
+### 7.3 Eskalationsmatrix
+
+| Stufe | Rolle | Verantwortung |
+|-------|-------|---------------|
+| L1 | Ops / SRE | Ersterkennung, erste Diagnose |
+| L2 | App Team Lead | Datenintegrität, Business-Logik |
+| L3 | CTO / Geschäftsführung | Entscheidung bei Datenverlust |
+
+### 7.4 Kontakte
+- **Ops-Team**: ops@immoflow.me
+- **Security**: security@immoflow.me
+- **Lovable Cloud Support**: Über Dashboard → Support
