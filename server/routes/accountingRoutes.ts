@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
-import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences } from "@shared/schema";
+import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences, properties } from "@shared/schema";
 import { eq, and, sql, desc, between, gte, lte, asc, or, isNull } from "drizzle-orm";
 import { isAuthenticated } from "./helpers";
 
@@ -8,6 +8,13 @@ const router = Router();
 
 function getOrgId(req: any): string | null {
   return req.session?.organizationId || null;
+}
+
+async function validatePropertyOwnership(propertyId: string, orgId: string): Promise<boolean> {
+  const result = await db.select({ id: properties.id }).from(properties)
+    .where(and(eq(properties.id, propertyId), eq(properties.organizationId, orgId)))
+    .limit(1);
+  return result.length > 0;
 }
 
 function getNextBookingNumber(year: number, current: number): string {
@@ -81,6 +88,11 @@ router.get("/api/journal-entries", isAuthenticated, async (req: Request, res: Re
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
     let conditions: any[] = [];
 
     if (orgId) conditions.push(eq(journalEntries.organizationId, orgId));
@@ -135,6 +147,10 @@ router.post("/api/journal-entries", isAuthenticated, async (req: Request, res: R
   try {
     const orgId = getOrgId(req);
     const { lines, ...entryData } = req.body;
+
+    if (entryData.propertyId && orgId && !(await validatePropertyOwnership(entryData.propertyId, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
 
     if (!lines || lines.length < 2) {
       return res.status(400).json({ error: "Mindestens 2 Buchungszeilen erforderlich" });
@@ -266,7 +282,11 @@ router.post("/api/journal-entries/:id/storno", isAuthenticated, async (req: Requ
 router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const orgId = getOrgId(req);
-    const { from, to } = req.query;
+    const { from, to, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
 
     let dateCondition = sql`1=1`;
     if (from && to) {
@@ -281,6 +301,8 @@ router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request
       ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
       : sql``;
 
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
+
     const result = await db.execute(sql`
       SELECT
         coa.id,
@@ -292,7 +314,7 @@ router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request
         COALESCE(SUM(jel.debit), 0) - COALESCE(SUM(jel.credit), 0) as balance
       FROM chart_of_accounts coa
       LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
-      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND ${dateCondition} ${orgCondition}
+      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND ${dateCondition} ${orgCondition} ${propertyCondition}
       WHERE coa.is_active = true
       GROUP BY coa.id, coa.account_number, coa.name, coa.account_type
       HAVING COALESCE(SUM(jel.debit), 0) != 0 OR COALESCE(SUM(jel.credit), 0) != 0
@@ -310,12 +332,19 @@ router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request
 router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const orgId = getOrgId(req);
-    const { date } = req.query;
+    const { date, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
     const endDate = date || new Date().toISOString().split('T')[0];
 
     const orgCondition = orgId
       ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
       : sql``;
+
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
 
     const result = await db.execute(sql`
       SELECT
@@ -325,7 +354,7 @@ router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: Request
         COALESCE(SUM(jel.debit), 0) - COALESCE(SUM(jel.credit), 0) as balance
       FROM chart_of_accounts coa
       LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
-      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND je.entry_date <= ${endDate} ${orgCondition}
+      LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id AND je.entry_date <= ${endDate} ${orgCondition} ${propertyCondition}
       WHERE coa.is_active = true
         AND coa.account_type IN ('asset', 'liability', 'equity')
       GROUP BY coa.account_type, coa.account_number, coa.name
@@ -359,7 +388,12 @@ router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: Request
 router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const orgId = getOrgId(req);
-    const { from, to } = req.query;
+    const { from, to, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
     const year = new Date().getFullYear();
     const startDate = from || `${year}-01-01`;
     const endDate = to || `${year}-12-31`;
@@ -367,6 +401,8 @@ router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, 
     const orgCondition = orgId
       ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
       : sql``;
+
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
 
     const result = await db.execute(sql`
       SELECT
@@ -377,7 +413,7 @@ router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, 
       FROM chart_of_accounts coa
       LEFT JOIN journal_entry_lines jel ON jel.account_id = coa.id
       LEFT JOIN journal_entries je ON je.id = jel.journal_entry_id
-        AND je.entry_date BETWEEN ${startDate} AND ${endDate} ${orgCondition}
+        AND je.entry_date BETWEEN ${startDate} AND ${endDate} ${orgCondition} ${propertyCondition}
       WHERE coa.is_active = true
         AND coa.account_type IN ('revenue', 'expense')
       GROUP BY coa.account_type, coa.account_number, coa.name
@@ -408,7 +444,12 @@ router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, 
 router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const orgId = getOrgId(req);
-    const { month, year } = req.query;
+    const { month, year, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
     const y = Number(year) || new Date().getFullYear();
     const m = Number(month) || new Date().getMonth() + 1;
     const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
@@ -417,6 +458,8 @@ router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Res
     const orgCondition = orgId
       ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
       : sql``;
+
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
 
     const result = await db.execute(sql`
       SELECT
@@ -427,7 +470,7 @@ router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Res
       FROM chart_of_accounts coa
       JOIN journal_entry_lines jel ON jel.account_id = coa.id
       JOIN journal_entries je ON je.id = jel.journal_entry_id
-        AND je.entry_date BETWEEN ${startDate} AND ${endDate} ${orgCondition}
+        AND je.entry_date BETWEEN ${startDate} AND ${endDate} ${orgCondition} ${propertyCondition}
       WHERE coa.account_number IN ('2500', '3400', '3410', '3420')
       GROUP BY coa.account_number, coa.name
       ORDER BY coa.account_number
@@ -456,7 +499,12 @@ router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Res
 router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (req: Request, res: Response) => {
   try {
     const orgId = getOrgId(req);
-    const { from, to } = req.query;
+    const { from, to, propertyId } = req.query;
+
+    if (propertyId && orgId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
     let dateCondition = sql`1=1`;
     if (from && to) {
       dateCondition = sql`je.entry_date BETWEEN ${from} AND ${to}`;
@@ -466,6 +514,8 @@ router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (
       ? sql`AND (je.organization_id = ${orgId} OR je.organization_id IS NULL)`
       : sql``;
 
+    const propertyCondition = propertyId ? sql`AND je.property_id = ${propertyId}` : sql``;
+
     const result = await db.execute(sql`
       SELECT
         je.entry_date,
@@ -474,12 +524,14 @@ router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (
         jel.debit,
         jel.credit,
         jel.description as line_description,
-        je.beleg_nummer
+        je.beleg_nummer,
+        je.property_id
       FROM journal_entry_lines jel
       JOIN journal_entries je ON je.id = jel.journal_entry_id
       WHERE jel.account_id = ${req.params.accountId}
         AND ${dateCondition}
         ${orgCondition}
+        ${propertyCondition}
       ORDER BY je.entry_date, je.created_at
     `);
 

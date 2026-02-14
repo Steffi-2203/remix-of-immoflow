@@ -51,10 +51,11 @@ export function useStornoJournalEntry() {
   });
 }
 
-export function useTrialBalance(params?: { from?: string; to?: string }) {
+export function useTrialBalance(params?: { from?: string; to?: string; propertyId?: string }) {
   const searchParams = new URLSearchParams();
   if (params?.from) searchParams.set('from', params.from);
   if (params?.to) searchParams.set('to', params.to);
+  if (params?.propertyId) searchParams.set('propertyId', params.propertyId);
   const qs = searchParams.toString();
 
   return useQuery({
@@ -67,21 +68,27 @@ export function useTrialBalance(params?: { from?: string; to?: string }) {
   });
 }
 
-export function useBalanceSheet(date?: string) {
+export function useBalanceSheet(params?: { date?: string; propertyId?: string }) {
+  const searchParams = new URLSearchParams();
+  if (params?.date) searchParams.set('date', params.date);
+  if (params?.propertyId) searchParams.set('propertyId', params.propertyId);
+  const qs = searchParams.toString();
+
   return useQuery({
-    queryKey: ['/api/accounting/balance-sheet', date],
+    queryKey: ['/api/accounting/balance-sheet', params],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/balance-sheet${date ? `?date=${date}` : ''}`, { credentials: 'include' });
+      const res = await fetch(`/api/accounting/balance-sheet${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der Bilanz');
       return res.json();
     },
   });
 }
 
-export function useProfitLoss(params?: { from?: string; to?: string }) {
+export function useProfitLoss(params?: { from?: string; to?: string; propertyId?: string }) {
   const searchParams = new URLSearchParams();
   if (params?.from) searchParams.set('from', params.from);
   if (params?.to) searchParams.set('to', params.to);
+  if (params?.propertyId) searchParams.set('propertyId', params.propertyId);
   const qs = searchParams.toString();
 
   return useQuery({
@@ -94,13 +101,14 @@ export function useProfitLoss(params?: { from?: string; to?: string }) {
   });
 }
 
-export function useUva(params?: { month?: number; year?: number }) {
+export function useUva(params?: { month?: number; year?: number; propertyId?: string }) {
   return useQuery({
     queryKey: ['/api/accounting/uva', params],
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (params?.month) searchParams.set('month', String(params.month));
       if (params?.year) searchParams.set('year', String(params.year));
+      if (params?.propertyId) searchParams.set('propertyId', params.propertyId);
       const qs = searchParams.toString();
       const res = await fetch(`/api/accounting/uva${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der UVA');
@@ -109,10 +117,11 @@ export function useUva(params?: { month?: number; year?: number }) {
   });
 }
 
-export function useAccountLedger(accountId: string, params?: { from?: string; to?: string }) {
+export function useAccountLedger(accountId: string, params?: { from?: string; to?: string; propertyId?: string }) {
   const searchParams = new URLSearchParams();
   if (params?.from) searchParams.set('from', params.from);
   if (params?.to) searchParams.set('to', params.to);
+  if (params?.propertyId) searchParams.set('propertyId', params.propertyId);
   const qs = searchParams.toString();
 
   return useQuery({

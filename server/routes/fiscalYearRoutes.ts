@@ -14,9 +14,15 @@ router.get("/api/fiscal-year/periods", isAuthenticated, async (req: Request, res
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(400).json({ error: "Keine Organisation gefunden" });
+    const { propertyId } = req.query;
+
+    const conditions: any[] = [eq(fiscalPeriods.organizationId, orgId)];
+    if (propertyId) {
+      conditions.push(eq(fiscalPeriods.propertyId, propertyId as string));
+    }
 
     const periods = await db.select().from(fiscalPeriods)
-      .where(eq(fiscalPeriods.organizationId, orgId))
+      .where(and(...conditions))
       .orderBy(desc(fiscalPeriods.year));
 
     res.json(periods);
@@ -30,11 +36,15 @@ router.post("/api/fiscal-year/periods", isAuthenticated, async (req: Request, re
     const orgId = getOrgId(req);
     if (!orgId) return res.status(400).json({ error: "Keine Organisation gefunden" });
 
-    const { year, notes } = req.body;
+    const { year, notes, propertyId } = req.body;
     if (!year) return res.status(400).json({ error: "Jahr ist erforderlich" });
 
+    const existingConditions: any[] = [eq(fiscalPeriods.organizationId, orgId), eq(fiscalPeriods.year, year)];
+    if (propertyId) {
+      existingConditions.push(eq(fiscalPeriods.propertyId, propertyId));
+    }
     const existing = await db.select().from(fiscalPeriods)
-      .where(and(eq(fiscalPeriods.organizationId, orgId), eq(fiscalPeriods.year, year)));
+      .where(and(...existingConditions));
 
     if (existing.length > 0) {
       return res.status(409).json({ error: `Periode für Jahr ${year} existiert bereits` });
@@ -42,6 +52,7 @@ router.post("/api/fiscal-year/periods", isAuthenticated, async (req: Request, re
 
     const [period] = await db.insert(fiscalPeriods).values({
       organizationId: orgId,
+      propertyId: propertyId || null,
       year,
       status: 'open',
       notes: notes || null,
@@ -58,8 +69,14 @@ router.get("/api/fiscal-year/depreciation-assets", isAuthenticated, async (req: 
     const orgId = getOrgId(req);
     if (!orgId) return res.status(400).json({ error: "Keine Organisation gefunden" });
 
+    const { propertyId } = req.query;
+    const assetConditions: any[] = [eq(depreciationAssets.organizationId, orgId)];
+    if (propertyId) {
+      assetConditions.push(eq(depreciationAssets.propertyId, propertyId as string));
+    }
+
     const assets = await db.select().from(depreciationAssets)
-      .where(eq(depreciationAssets.organizationId, orgId));
+      .where(and(...assetConditions));
 
     const year = req.query.year ? Number(req.query.year) : null;
 

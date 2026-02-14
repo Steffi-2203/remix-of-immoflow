@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Receipt, AlertTriangle, CheckCircle2, TrendingUp, ArrowRight, Search, Link2, Calendar, Euro, Clock, Users } from 'lucide-react';
+import { Loader2, Receipt, AlertTriangle, CheckCircle2, TrendingUp, ArrowRight, Search, Link2, Calendar, Euro, Clock, Users, ArrowUpDown, Building2 } from 'lucide-react';
+import { useProperties } from '@/hooks/useProperties';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { MainLayout } from '@/components/layout/MainLayout';
 import {
@@ -27,10 +28,22 @@ function formatEur(value: number): string {
 const AGING_COLORS = ['#3b82f6', '#f59e0b', '#f97316', '#ef4444'];
 
 function AbstimmungTab() {
+  const [kpiPropertyId, setKpiPropertyId] = useState('all');
+  const { data: propertiesList } = useProperties();
+
+  const sortedProperties = useMemo(() => {
+    return [...(propertiesList || [])].sort((a: any, b: any) =>
+      (a.name || '').localeCompare(b.name || '', 'de')
+    );
+  }, [propertiesList]);
+
   const { data: kpis, isLoading } = useQuery({
-    queryKey: ['/api/open-items/kpis'],
+    queryKey: ['/api/open-items/kpis', kpiPropertyId],
     queryFn: async () => {
-      const res = await fetch('/api/open-items/kpis', { credentials: 'include' });
+      const url = kpiPropertyId !== 'all'
+        ? `/api/open-items/kpis?propertyId=${kpiPropertyId}`
+        : '/api/open-items/kpis';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('KPI-Daten konnten nicht geladen werden');
       return res.json();
     },
@@ -63,6 +76,21 @@ function AbstimmungTab() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <Building2 className="h-4 w-4 text-muted-foreground" />
+        <Select value={kpiPropertyId} onValueChange={setKpiPropertyId}>
+          <SelectTrigger className="w-[240px]" data-testid="select-kpi-property-filter">
+            <SelectValue placeholder="Alle Liegenschaften" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Liegenschaften</SelectItem>
+            {sortedProperties.map((p: any) => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-kpi-open">
           <CardContent className="p-4">
@@ -176,11 +204,25 @@ function OPListeTab() {
   const [search, setSearch] = useState('');
   const [propertyFilter, setPropertyFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortField, setSortField] = useState<string>('dueDate');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
 
   const { data: openItems, isLoading } = useQuery({
-    queryKey: ['/api/open-items'],
+    queryKey: ['/api/open-items', propertyFilter],
     queryFn: async () => {
-      const res = await fetch('/api/open-items', { credentials: 'include' });
+      const url = propertyFilter !== 'all'
+        ? `/api/open-items?propertyId=${propertyFilter}`
+        : '/api/open-items';
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Offene Posten konnten nicht geladen werden');
       return res.json();
     },
@@ -197,16 +239,42 @@ function OPListeTab() {
       );
     }
 
-    if (propertyFilter !== 'all') {
-      list = list.filter((item: any) => (item.propertyId || item.property_id) === propertyFilter);
-    }
-
     if (statusFilter !== 'all') {
       list = list.filter((item: any) => (item.status || '').toLowerCase() === statusFilter);
     }
 
+    list = [...list].sort((a: any, b: any) => {
+      let valA: any, valB: any;
+      switch (sortField) {
+        case 'propertyName':
+          valA = (a.propertyName || a.property_name || '').toLowerCase();
+          valB = (b.propertyName || b.property_name || '').toLowerCase();
+          break;
+        case 'mieter':
+          valA = (a.mieter || a.tenantName || '').toLowerCase();
+          valB = (b.mieter || b.tenantName || '').toLowerCase();
+          break;
+        case 'einheit':
+          valA = (a.einheit || a.unitName || '').toLowerCase();
+          valB = (b.einheit || b.unitName || '').toLowerCase();
+          break;
+        case 'amount':
+          valA = Number(a.gesamtbetrag || a.totalAmount || 0);
+          valB = Number(b.gesamtbetrag || b.totalAmount || 0);
+          break;
+        case 'dueDate':
+        default:
+          valA = a.faelligAm || a.dueDate || '';
+          valB = b.faelligAm || b.dueDate || '';
+          break;
+      }
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
     return list;
-  }, [openItems, search, propertyFilter, statusFilter]);
+  }, [openItems, search, statusFilter, sortField, sortDir]);
 
   const properties = useMemo(() => {
     const map = new Map<string, string>();
@@ -215,7 +283,7 @@ function OPListeTab() {
       const name = item.propertyName || item.property_name || id;
       if (id) map.set(id, name);
     });
-    return Array.from(map.entries());
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'de'));
   }, [openItems]);
 
   if (isLoading) {
@@ -274,11 +342,22 @@ function OPListeTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mieter</TableHead>
-                  <TableHead>Einheit</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('propertyName')} data-testid="sort-liegenschaft">
+                    <span className="flex items-center gap-1">Liegenschaft <ArrowUpDown className="h-3 w-3" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('mieter')} data-testid="sort-mieter">
+                    <span className="flex items-center gap-1">Mieter <ArrowUpDown className="h-3 w-3" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('einheit')} data-testid="sort-einheit">
+                    <span className="flex items-center gap-1">Einheit <ArrowUpDown className="h-3 w-3" /></span>
+                  </TableHead>
                   <TableHead>Monat/Jahr</TableHead>
-                  <TableHead className="text-right">Gesamtbetrag</TableHead>
-                  <TableHead>Faellig am</TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort('amount')} data-testid="sort-amount">
+                    <span className="flex items-center justify-end gap-1">Gesamtbetrag <ArrowUpDown className="h-3 w-3" /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dueDate')} data-testid="sort-due-date">
+                    <span className="flex items-center gap-1">Faellig am <ArrowUpDown className="h-3 w-3" /></span>
+                  </TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -287,6 +366,9 @@ function OPListeTab() {
                   const id = item.id || index;
                   return (
                     <TableRow key={id} data-testid={`row-op-${id}`}>
+                      <TableCell className="text-sm" data-testid={`text-op-liegenschaft-${id}`}>
+                        {item.propertyName || item.property_name || '-'}
+                      </TableCell>
                       <TableCell className="text-sm" data-testid={`text-op-mieter-${id}`}>
                         {item.mieter || item.tenantName || '-'}
                       </TableCell>

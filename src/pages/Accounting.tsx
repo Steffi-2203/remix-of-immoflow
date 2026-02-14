@@ -36,6 +36,7 @@ import {
   Receipt,
   RotateCcw,
   List,
+  Building2,
 } from 'lucide-react';
 import { useAccountCategories, AccountCategory } from '@/hooks/useAccountCategories';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -51,6 +52,7 @@ import {
   useCreateJournalEntry,
   useStornoJournalEntry,
 } from '@/hooks/useAccounting';
+import { useProperties } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -151,8 +153,8 @@ function OverviewTab({ selectedYear, selectedMonth, setSelectedYear, setSelected
   );
 }
 
-function JournalTab() {
-  const { data: entries, isLoading } = useJournalEntries();
+function JournalTab({ propertyId }: { propertyId?: string }) {
+  const { data: entries, isLoading } = useJournalEntries({ propertyId });
   const stornoMutation = useStornoJournalEntry();
   const { toast } = useToast();
 
@@ -271,10 +273,10 @@ function ChartOfAccountsTab() {
   );
 }
 
-function TrialBalanceTab() {
+function TrialBalanceTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
-  const { data, isLoading } = useTrialBalance({ from: `${year}-01-01`, to: `${year}-12-31` });
+  const { data, isLoading } = useTrialBalance({ from: `${year}-01-01`, to: `${year}-12-31`, propertyId });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
@@ -324,8 +326,8 @@ function TrialBalanceTab() {
   );
 }
 
-function BalanceSheetTab() {
-  const { data, isLoading } = useBalanceSheet();
+function BalanceSheetTab({ propertyId }: { propertyId?: string }) {
+  const { data, isLoading } = useBalanceSheet({ propertyId });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
@@ -373,10 +375,10 @@ function BalanceSheetTab() {
   );
 }
 
-function ProfitLossTab() {
+function ProfitLossTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
-  const { data, isLoading } = useProfitLoss({ from: `${year}-01-01`, to: `${year}-12-31` });
+  const { data, isLoading } = useProfitLoss({ from: `${year}-01-01`, to: `${year}-12-31`, propertyId });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
@@ -428,11 +430,11 @@ function ProfitLossTab() {
   );
 }
 
-function UvaTab() {
+function UvaTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const { data, isLoading } = useUva({ month, year });
+  const { data, isLoading } = useUva({ month, year, propertyId });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
@@ -478,7 +480,10 @@ export default function Accounting() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
+  const { data: properties } = useProperties();
+  const propertyId = selectedPropertyId === 'all' ? undefined : selectedPropertyId;
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
   const months = [
@@ -517,6 +522,20 @@ export default function Accounting() {
               <SelectTrigger className="w-[100px]" data-testid="select-accounting-year"><SelectValue /></SelectTrigger>
               <SelectContent>{years.map(y => <SelectItem key={y} value={y.toString()} data-testid={`select-year-${y}`}>{y}</SelectItem>)}</SelectContent>
             </Select>
+            <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+              <SelectTrigger className="w-[220px]" data-testid="select-accounting-property">
+                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Alle Liegenschaften" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" data-testid="select-property-all">Alle Liegenschaften</SelectItem>
+                {(properties as any[] || []).map((p: any) => (
+                  <SelectItem key={p.id} value={p.id} data-testid={`select-property-${p.id}`}>
+                    {p.name || p.address}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-[140px]" data-testid="select-accounting-month"><SelectValue placeholder="Alle Monate" /></SelectTrigger>
               <SelectContent>
@@ -540,12 +559,12 @@ export default function Accounting() {
             <TabsTrigger value="uva" data-testid="tab-uva"><Receipt className="h-4 w-4 mr-1" />UVA</TabsTrigger>
           </TabsList>
           <TabsContent value="overview"><OverviewTab selectedYear={selectedYear} selectedMonth={selectedMonth} setSelectedYear={setSelectedYear} setSelectedMonth={setSelectedMonth} /></TabsContent>
-          <TabsContent value="journal"><JournalTab /></TabsContent>
+          <TabsContent value="journal"><JournalTab propertyId={propertyId} /></TabsContent>
           <TabsContent value="accounts"><ChartOfAccountsTab /></TabsContent>
-          <TabsContent value="trial-balance"><TrialBalanceTab /></TabsContent>
-          <TabsContent value="balance-sheet"><BalanceSheetTab /></TabsContent>
-          <TabsContent value="profit-loss"><ProfitLossTab /></TabsContent>
-          <TabsContent value="uva"><UvaTab /></TabsContent>
+          <TabsContent value="trial-balance"><TrialBalanceTab propertyId={propertyId} /></TabsContent>
+          <TabsContent value="balance-sheet"><BalanceSheetTab propertyId={propertyId} /></TabsContent>
+          <TabsContent value="profit-loss"><ProfitLossTab propertyId={propertyId} /></TabsContent>
+          <TabsContent value="uva"><UvaTab propertyId={propertyId} /></TabsContent>
         </Tabs>
       </div>
     </MainLayout>

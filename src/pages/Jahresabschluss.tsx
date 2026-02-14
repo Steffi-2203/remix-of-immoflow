@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle2, Circle, ArrowRight, ArrowLeft, Calendar, Calculator, FileCheck, BarChart3, Lock, FileText, Download, AlertTriangle, Plus } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, ArrowRight, ArrowLeft, Calendar, Calculator, FileCheck, BarChart3, Lock, FileText, Download, AlertTriangle, Plus, Building2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useProperties } from '@/hooks/useProperties';
 
 function formatEur(value: number): string {
   return value.toLocaleString('de-AT', { style: 'currency', currency: 'EUR' });
@@ -73,19 +74,28 @@ function Step1PeriodeWaehlen({
   setSelectedPeriodId,
   setSelectedYear,
   setSelectedPeriod,
+  selectedPropertyId,
+  setSelectedPropertyId,
 }: {
   selectedPeriodId: string | null;
   setSelectedPeriodId: (id: string) => void;
   setSelectedYear: (year: number) => void;
   setSelectedPeriod: (p: any) => void;
+  selectedPropertyId: string;
+  setSelectedPropertyId: (id: string) => void;
 }) {
   const { toast } = useToast();
   const [newYear, setNewYear] = useState(new Date().getFullYear().toString());
+  const { data: properties } = useProperties();
+
+  const periodsQueryParams = new URLSearchParams();
+  if (selectedPropertyId) periodsQueryParams.set('propertyId', selectedPropertyId);
+  const periodsQs = periodsQueryParams.toString();
 
   const { data: periods, isLoading } = useQuery({
-    queryKey: ['/api/fiscal-year/periods'],
+    queryKey: ['/api/fiscal-year/periods', selectedPropertyId],
     queryFn: async () => {
-      const res = await fetch('/api/fiscal-year/periods', { credentials: 'include' });
+      const res = await fetch(`/api/fiscal-year/periods${periodsQs ? `?${periodsQs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Perioden konnten nicht geladen werden');
       return res.json();
     },
@@ -93,7 +103,9 @@ function Step1PeriodeWaehlen({
 
   const createPeriodMutation = useMutation({
     mutationFn: async (year: number) => {
-      const res = await apiRequest('POST', '/api/fiscal-year/periods', { year });
+      const body: any = { year };
+      if (selectedPropertyId) body.propertyId = selectedPropertyId;
+      const res = await apiRequest('POST', '/api/fiscal-year/periods', body);
       return res.json();
     },
     onSuccess: () => {
@@ -120,6 +132,25 @@ function Step1PeriodeWaehlen({
       <div>
         <h2 className="text-lg font-semibold mb-1">Geschaeftsperiode waehlen</h2>
         <p className="text-sm text-muted-foreground">Waehlen Sie die Periode fuer den Jahresabschluss oder erstellen Sie eine neue.</p>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-sm text-muted-foreground flex items-center gap-1.5">
+          <Building2 className="h-3.5 w-3.5" />
+          Liegenschaft
+        </label>
+        <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId} data-testid="select-property">
+          <SelectTrigger className="w-full max-w-xs" data-testid="select-property-trigger">
+            <SelectValue placeholder="Liegenschaft waehlen..." />
+          </SelectTrigger>
+          <SelectContent>
+            {(properties || []).map((prop: any) => (
+              <SelectItem key={prop.id} value={prop.id} data-testid={`select-property-option-${prop.id}`}>
+                {prop.name || prop.address || prop.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {periodList.length === 0 ? (
@@ -218,18 +249,24 @@ function Step2AfABuchen({
   selectedYear,
   selectedPeriodId,
   selectedPeriod,
+  selectedPropertyId,
 }: {
   selectedYear: number;
   selectedPeriodId: string;
   selectedPeriod: any;
+  selectedPropertyId: string;
 }) {
   const { toast } = useToast();
   const [newAsset, setNewAsset] = useState({ name: '', acquisitionDate: '', acquisitionCost: '', usefulLifeYears: '' });
 
+  const assetQueryParams = new URLSearchParams();
+  assetQueryParams.set('year', String(selectedYear));
+  if (selectedPropertyId) assetQueryParams.set('propertyId', selectedPropertyId);
+
   const { data: assets, isLoading } = useQuery({
-    queryKey: ['/api/fiscal-year/depreciation-assets', selectedYear],
+    queryKey: ['/api/fiscal-year/depreciation-assets', selectedYear, selectedPropertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/fiscal-year/depreciation-assets?year=${selectedYear}`, { credentials: 'include' });
+      const res = await fetch(`/api/fiscal-year/depreciation-assets?${assetQueryParams.toString()}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Anlagevermoegen konnte nicht geladen werden');
       return res.json();
     },
@@ -237,7 +274,9 @@ function Step2AfABuchen({
 
   const bookDepreciationMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('POST', '/api/fiscal-year/book-depreciation', { periodId: selectedPeriodId });
+      const body: any = { periodId: selectedPeriodId };
+      if (selectedPropertyId) body.propertyId = selectedPropertyId;
+      const res = await apiRequest('POST', '/api/fiscal-year/book-depreciation', body);
       return res.json();
     },
     onSuccess: () => {
@@ -548,17 +587,24 @@ function Step4BilanzGuVReview({
   selectedYear,
   selectedPeriodId,
   selectedPeriod,
+  selectedPropertyId,
 }: {
   selectedYear: number;
   selectedPeriodId: string;
   selectedPeriod: any;
+  selectedPropertyId: string;
 }) {
   const { toast } = useToast();
 
+  const trialBalanceParams = new URLSearchParams();
+  trialBalanceParams.set('from', `${selectedYear}-01-01`);
+  trialBalanceParams.set('to', `${selectedYear}-12-31`);
+  if (selectedPropertyId) trialBalanceParams.set('propertyId', selectedPropertyId);
+
   const { data: trialBalance, isLoading } = useQuery({
-    queryKey: ['/api/accounting/trial-balance', selectedYear],
+    queryKey: ['/api/accounting/trial-balance', selectedYear, selectedPropertyId],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/trial-balance?from=${selectedYear}-01-01&to=${selectedYear}-12-31`, { credentials: 'include' });
+      const res = await fetch(`/api/accounting/trial-balance?${trialBalanceParams.toString()}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Saldenliste konnte nicht geladen werden');
       return res.json();
     },
@@ -966,6 +1012,7 @@ function Jahresabschluss() {
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedPeriod, setSelectedPeriod] = useState<any>(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
 
   const completedSteps = useMemo(() => {
     const set = new Set<number>();
@@ -994,6 +1041,8 @@ function Jahresabschluss() {
             setSelectedPeriodId={setSelectedPeriodId}
             setSelectedYear={setSelectedYear}
             setSelectedPeriod={setSelectedPeriod}
+            selectedPropertyId={selectedPropertyId}
+            setSelectedPropertyId={setSelectedPropertyId}
           />
         );
       case 1:
@@ -1002,6 +1051,7 @@ function Jahresabschluss() {
             selectedYear={selectedYear}
             selectedPeriodId={selectedPeriodId!}
             selectedPeriod={selectedPeriod}
+            selectedPropertyId={selectedPropertyId}
           />
         );
       case 2:
@@ -1018,6 +1068,7 @@ function Jahresabschluss() {
             selectedYear={selectedYear}
             selectedPeriodId={selectedPeriodId!}
             selectedPeriod={selectedPeriod}
+            selectedPropertyId={selectedPropertyId}
           />
         );
       case 4:
