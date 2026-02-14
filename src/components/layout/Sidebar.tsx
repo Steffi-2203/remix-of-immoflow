@@ -35,6 +35,7 @@ import {
   Sparkles,
   ClipboardList,
   Landmark,
+  Flame,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -78,7 +79,10 @@ const navGroups: NavGroup[] = [
       { label: 'Mieter', icon: Users, href: '/mieter', tourId: 'nav-tenants' },
       { label: 'Mieteinnahmen', icon: Wallet, href: '/zahlungen' },
       { label: 'BK-Abrechnung', icon: Calculator, href: '/abrechnung' },
+      { label: 'Heizkosten', icon: Flame, href: '/heizkosten' },
+      { label: 'Mietzinsrechner', icon: Calculator, href: '/mietzinsrechner' },
       { label: 'Mieterportal', icon: DoorOpen, href: '/mieterportal' },
+      { label: 'Aktivitäten', icon: ClipboardList, href: '/aktivitaeten' },
     ],
   },
   {

@@ -2269,3 +2269,83 @@ export const automationRuleLogs = pgTable("automation_rule_logs", {
 export const insertAutomationRuleLogSchema = createInsertSchema(automationRuleLogs).omit({ id: true, createdAt: true });
 export type InsertAutomationRuleLog = z.infer<typeof insertAutomationRuleLogSchema>;
 export type AutomationRuleLog = typeof automationRuleLogs.$inferSelect;
+
+export const eaBookingTypeEnum = pgEnum('ea_booking_type', ['einnahme', 'ausgabe']);
+
+export const eaBookings = pgTable("ea_bookings", {
+  id: serial("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  type: eaBookingTypeEnum("type").notNull(),
+  date: date("date").notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description").notNull(),
+  category: text("category").notNull(),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).default('20'),
+  netAmount: numeric("net_amount", { precision: 10, scale: 2 }),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }),
+  documentRef: text("document_ref"),
+  belegNummer: text("beleg_nummer"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertEaBookingSchema = createInsertSchema(eaBookings).omit({ id: true, createdAt: true });
+export type InsertEaBooking = z.infer<typeof insertEaBookingSchema>;
+export type EaBooking = typeof eaBookings.$inferSelect;
+
+export const heatingSettlementStatusEnum = pgEnum('heating_settlement_status', ['entwurf', 'berechnet', 'versendet', 'abgeschlossen']);
+
+export const heatingSettlements = pgTable("heating_settlements", {
+  id: serial("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  periodStart: date("period_start").notNull(),
+  periodEnd: date("period_end").notNull(),
+  totalCost: numeric("total_cost", { precision: 10, scale: 2 }).notNull(),
+  fixedCostShare: numeric("fixed_cost_share", { precision: 5, scale: 2 }).default('45'),
+  variableCostShare: numeric("variable_cost_share", { precision: 5, scale: 2 }).default('55'),
+  status: heatingSettlementStatusEnum("status").default('entwurf'),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const heatingSettlementDetails = pgTable("heating_settlement_details", {
+  id: serial("id").primaryKey(),
+  settlementId: integer("settlement_id").references(() => heatingSettlements.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  tenantName: text("tenant_name"),
+  area: numeric("area", { precision: 10, scale: 2 }).notNull(),
+  consumption: numeric("consumption", { precision: 10, scale: 2 }).notNull(),
+  fixedAmount: numeric("fixed_amount", { precision: 10, scale: 2 }).notNull(),
+  variableAmount: numeric("variable_amount", { precision: 10, scale: 2 }).notNull(),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  prepayment: numeric("prepayment", { precision: 10, scale: 2 }).default('0'),
+  balance: numeric("balance", { precision: 10, scale: 2 }),
+});
+
+export const insertHeatingSettlementSchema = createInsertSchema(heatingSettlements).omit({ id: true, createdAt: true });
+export type InsertHeatingSettlement = z.infer<typeof insertHeatingSettlementSchema>;
+export type HeatingSettlement = typeof heatingSettlements.$inferSelect;
+export type HeatingSettlementDetail = typeof heatingSettlementDetails.$inferSelect;
+
+export const activityTypeEnum = pgEnum('activity_type', ['anruf', 'email', 'notiz', 'meeting', 'brief', 'besichtigung', 'wartung']);
+
+export const activities = pgTable("activities", {
+  id: serial("id").primaryKey(),
+  organizationId: uuid("organization_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  unitId: uuid("unit_id").references(() => units.id),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  type: activityTypeEnum("type").notNull(),
+  subject: text("subject").notNull(),
+  description: text("description"),
+  contactPerson: text("contact_person"),
+  createdBy: text("created_by"),
+  dueDate: date("due_date"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertActivitySchema = createInsertSchema(activities).omit({ id: true, createdAt: true });
+export type InsertActivity = z.infer<typeof insertActivitySchema>;
+export type Activity = typeof activities.$inferSelect;
