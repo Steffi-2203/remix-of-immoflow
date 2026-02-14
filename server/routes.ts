@@ -20,6 +20,8 @@ import openItemsRoutes from "./routes/openItemsRoutes";
 import fiscalYearRoutes from "./routes/fiscalYearRoutes";
 import searchRoutes from "./routes/searchRoutes";
 import bulkRoutes from "./routes/bulkRoutes";
+import kautionRoutes from "./routes/kautionRoutes";
+import wegReportRoutes from "./routes/wegReportRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
 import { registerScheduledReportRoutes } from "./routes/scheduledReportRoutes";
 import { registerDocumentRoutes } from "./routes/documentRoutes";
@@ -77,6 +79,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(fiscalYearRoutes);
   app.use(searchRoutes);
   app.use(bulkRoutes);
+  app.use(kautionRoutes);
+  app.use(wegReportRoutes);
   registerPushRoutes(app);
   registerDocumentRoutes(app);
   registerAutomationRoutes(app);

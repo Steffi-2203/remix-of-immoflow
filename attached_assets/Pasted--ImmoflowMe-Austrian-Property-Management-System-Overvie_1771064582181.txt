@@ -23,12 +23,6 @@ ImmoflowMe is an Austrian property management (Hausverwaltung) application desig
 - **eIDAS Signatures**: Electronic signature requests, canvas signature pad, SHA-256 document hashing, public verification endpoint, signature_requests/signatures tables, at `/signaturen`.
 - **Ad-hoc Query Builder**: Custom report builder with 5 entities, field selection, filters, grouping, sorting, saved_reports table, at `/abfrage-builder`.
 - **Property-Level Isolation**: All accounting endpoints filter by propertyId with ownership validation.
-- **WEG Settlement System**: MEA-based cost distribution with Restcent-Verteilung (remainder cent to largest MEA owner), annual Jahresabrechnung (Soll/Ist/Saldo per owner), weg_settlements and weg_settlement_details tables.
-- **WEG Accounting**: Reserve fund operations with interest booking, withdrawal with Beschluss control (requires voteId unless emergency), insurance claim workflow, special assessment invoicing.
-- **Kaution Lifecycle Management**: Security deposit trust account booking, interest calculation (365-day basis), return workflow with deduction support, kautionen and kautions_bewegungen tables, 10 API endpoints.
-- **Trial Balance Validation**: Automated Soll=Haben checks with reconciliation rate metrics, property-level filtering.
-- **Payment Splitting**: Austrian law priority allocation (Miete→BK→HK→WK→Mahngebühren), auto-matching for unallocated payments, org-scoped validation.
-- **WEG XLSX Reports**: Jahresabrechnung (3 sheets: summary, owner details, cost distribution), Rücklagen overview, Kautionen overview, Saldenliste export.
 
 ## System Architecture
 ImmoflowMe employs a modern full-stack architecture with a Node.js (Express.js) backend and a React (Vite) frontend. PostgreSQL (Neon) with Drizzle ORM handles data persistence.
