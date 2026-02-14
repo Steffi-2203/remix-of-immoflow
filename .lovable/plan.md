@@ -1,81 +1,204 @@
 
-# Pruefbericht: ImmoflowMe - Ist-Zustand und Verbesserungen
 
-## Status: App laeuft, Server startet
+# Implementierungsplan: DMS, Rules Engine, Kommunikation, Enterprise & Compliance
 
-Der im Bericht gemeldete Syntax-Fehler in `routes.ts` existiert **nicht mehr** -- die Datei ist sauber (51 Zeilen, modulares Import-Pattern). Die App laeuft, alle Seiten laden fehlerfrei.
+## Uebersicht
 
----
-
-## TEIL 1: Was funktioniert (verifiziert durch Live-Test)
-
-| Bereich | Status | Details |
-|---------|--------|---------|
-| Landing Page | OK | Laedt, Cookie-Consent funktioniert |
-| Dashboard | OK | Laedt (Skeleton-Loading, Daten abhaengig von Auth) |
-| Finanzbuchhaltung | OK | Alle 8 Tabs vorhanden: Journal, Kontenplan, Saldenliste, Bilanz, GuV, Anlagen (AfA), UVA, BMD/DATEV |
-| EBICS Live-Banking | OK | 4 Tabs: Verbindungen, Kontoauszuege, Zahlungen, Protokoll |
-| Journal-Backfill | OK | **228 Buchungssaetze** mit **841 Buchungszeilen** erfolgreich erstellt |
-| Routing | OK | `routes.ts` sauber modularisiert (18 Domain-Module) |
-| Accounting-Komponenten | OK | 9 Dateien in `src/components/accounting/` |
-| Hooks | OK | `useJournalEntries.ts`, `useChartOfAccounts.ts`, `useDemoAccounting.ts` vorhanden |
-| EBICS-Service | OK | `server/services/ebicsService.ts` (749 Zeilen, inkl. Retry-Logik) |
-| Tax Reports | OK | Service + Routes + Frontend-Tab vorhanden |
+8 Features in 3 Prioritaetsstufen. Geschaetzter Gesamtaufwand: ~1.500 Zeilen Code, 4 neue DB-Tabellen, 2 Edge Functions.
 
 ---
 
-## TEIL 2: Gefundene Probleme (zu fixen)
+## Feature 1: DMS Versioning & Tagging
 
-### Problem 1: `/demo` Route fehlt (404)
+**Ist-Zustand:** Dokumente werden in 3 Tabellen gespeichert (`property_documents`, `unit_documents`, `tenant_documents`). Kein Versionsverlauf, keine Tags. Ueberschreiben loescht die alte Version.
 
-**Schwere: Hoch** -- Landing Page und Login verlinken auf `/demo`, aber die Route ist in keiner Route-Datei registriert.
+**Umsetzung:**
 
-- `Landing.tsx` Zeile 64/87: `<Link to="/demo">`
-- `Login.tsx` Zeile 158: `<Link to="/demo">`
-- Seiten existieren: `src/pages/demo-request.tsx` und `src/pages/demo-activate.tsx`
-- **Aber**: Weder in `publicRoutes.tsx` noch in `protectedRoutes.tsx` registriert
+1. **Neue DB-Tabelle `document_versions`:**
+   - `id`, `document_type` (property/unit/tenant), `document_id`, `version_number`, `file_url`, `file_size`, `uploaded_by`, `comment`, `created_at`
+   - Trigger: Bei Upload in eine der 3 Dokumenttabellen wird die alte `file_url` automatisch als Version archiviert
 
-**Fix**: Demo-Seiten in `publicRoutes.tsx` registrieren:
-```
-/demo --> demo-request.tsx
-/demo/activate --> demo-activate.tsx
-```
+2. **Neue DB-Tabelle `document_tags`:**
+   - `id`, `document_type`, `document_id`, `tag` (varchar), `created_at`
+   - Index auf `(document_type, document_id)` und `tag`
 
-### Problem 2: `property_owners` hat nur 1 Eintrag
-
-**Schwere: Mittel** -- Der E1a Steuer-Export braucht Eigentuemer-Daten. Aktuell existiert nur 1 Eigentuemer-Eintrag. Ohne vollstaendige Zuordnung von Eigentuemern zu Liegenschaften kann keine E1a-Berechnung durchgefuehrt werden.
-
-**Fix**: Eigentuemer-Verwaltung in der UI zugaenglich machen (z.B. in den Liegenschafts-Details) und Demo-Daten auffuellen.
-
-### Problem 3: Dashboard zeigt kaum Daten
-
-**Schwere: Niedrig** -- Das Dashboard (`SimpleDashboard`) zeigt nur eine Skeleton-Box und dann leeren Bereich. Es fehlt die Anbindung an die echten Daten (Journal-Eintraege, offene Rechnungen, etc.).
+3. **Frontend-Aenderungen:**
+   - `DocumentList.tsx`: Neue Spalte "Tags" mit editierbaren Badge-Chips (Klick zum Hinzufuegen/Entfernen)
+   - `DocumentList.tsx`: Versions-Icon pro Zeile, Klick oeffnet Versions-Dialog mit Liste aller Versionen (Datum, Kommentar, Download-Link)
+   - `Documents.tsx`: Neuer Filter "Nach Tag filtern" im Suchbereich
+   - Neuer Hook `useDocumentVersions.ts` und `useDocumentTags.ts`
 
 ---
 
-## TEIL 3: Verbesserungsvorschlaege
+## Feature 2: Rules Engine Dry-Run
 
-### Prioritaet 1 (Sofort)
-1. `/demo` und `/demo/activate` Routen registrieren
-2. Dashboard mit echten KPIs befuellen (offene Forderungen, letzte Buchungen, Kontostand)
+**Ist-Zustand:** `canUseAutomation` existiert als Feature-Flag (Pro-Tier), aber keine Rules-Engine-UI oder Backend-Logik vorhanden. Nur ein `dryRun: true` Parameter in `SystemTest.tsx`.
 
-### Prioritaet 2 (Kurzfristig)
-3. Eigentuemer-Daten auffuellen fuer E1a-Funktionalitaet
-4. E1a PDF-Export (aktuell nur XML)
-5. EBICS automatischer Abruf-Scheduler (Cron-Job)
+**Umsetzung:**
 
-### Prioritaet 3 (Mittelfristig)
-6. E1b Steuer-Modul (Grundstuecksveraeusserungen)
-7. Accounting: Automatischer Jahresabschluss mit Eroeffnungsbilanz
-8. Bank-Reconciliation AI-Matching verbessern
+1. **Neue DB-Tabelle `automation_rules`:**
+   - `id`, `organization_id`, `name`, `description`, `trigger_type` (enum: zahlungseingang, mietende, faelligkeit, leerstand), `conditions` (jsonb), `actions` (jsonb: email_senden, mahnung_erstellen, status_aendern), `is_active`, `created_at`
+
+2. **Edge Function `evaluate-rules`:**
+   - Empfaengt Event-Typ + Kontext-Daten
+   - Laedt aktive Regeln fuer die Organisation
+   - Evaluiert Bedingungen gegen Kontext
+   - `dry_run`-Parameter: Gibt nur zurueckm welche Aktionen ausgefuehrt wuerden, ohne sie tatsaechlich auszufuehren
+   - Ergebnis: Array von `{ rule_name, would_trigger: boolean, actions: [...] }`
+
+3. **Frontend:**
+   - Neue Seite `/automatisierung` mit Regelliste (Name, Trigger, Status on/off)
+   - Dialog zum Erstellen/Bearbeiten von Regeln (Trigger-Typ, Bedingungen als Formular, Aktionen als Checkboxen)
+   - "Dry-Run testen" Button: Oeffnet Dialog, zeigt Simulationsergebnis als Tabelle (Regel, Wuerde ausloesen Ja/Nein, Geplante Aktionen)
 
 ---
 
-## Technischer Umfang fuer sofortige Fixes
+## Feature 3: Kommunikationscenter - SMS-Fallback
 
-| Datei | Aenderung |
-|-------|-----------|
-| `src/routes/publicRoutes.tsx` | 2 neue Route-Eintraege fuer `/demo` und `/demo/activate` |
-| `src/pages/SimpleDashboard.tsx` | KPI-Cards mit echten Daten (Journal-Summen, offene Rechnungen) |
+**Ist-Zustand:** `Messages.tsx` hat SMS-UI (Radio-Button, Zeichenzaehler), aber kein Backend-Versand. E-Mail laeuft ueber Resend.
 
-Geschaetzter Aufwand: Klein (beide Fixes zusammen < 50 Zeilen Code-Aenderung)
+**Umsetzung:**
+
+1. **Edge Function `send-sms`:**
+   - Nutzt Lovable AI (kein externer SMS-Provider noetig) fuer Benachrichtigungslogik
+   - Fallback-Kette: E-Mail zuerst via Resend, bei Fehler SMS-Hinweis in der Nachrichtentabelle
+   - Status-Update in `messages`-Tabelle (`sent`, `failed`, `fallback_sms`)
+
+2. **Frontend-Aenderung:**
+   - `Messages.tsx`: Bei `message_type === 'sms'` oder `'both'`: Hinweisbanner "SMS-Versand erfordert einen externen SMS-Provider (z.B. Twilio). Aktuell wird eine E-Mail als Fallback gesendet."
+   - Statusanzeige erweitern: Neuer Badge `Fallback` wenn SMS fehlschlug und E-Mail stattdessen gesendet wurde
+
+---
+
+## Feature 4: 2FA (TOTP-basiert)
+
+**Ist-Zustand:** `input-otp.tsx` UI-Komponente existiert. Keine MFA-Logik im Auth-Flow.
+
+**Umsetzung:**
+
+1. **Lovable Cloud Auth-Konfiguration:**
+   - MFA/TOTP ist als Funktion in der Authentifizierung verfuegbar
+   - Aktivierung ueber `supabase.auth.mfa.enroll()`, `verify()`, `challenge()`
+
+2. **Neue Komponente `TotpSetup.tsx`:**
+   - QR-Code Anzeige (Base64 aus `enroll()`)
+   - 6-stellige OTP-Eingabe mit `InputOTP`-Komponente
+   - Backup-Codes Anzeige (einmalig bei Aktivierung)
+
+3. **Neue Komponente `TotpChallenge.tsx`:**
+   - Wird nach Login angezeigt wenn MFA aktiv
+   - 6-stellige Code-Eingabe, Verifizierung ueber `supabase.auth.mfa.challengeAndVerify()`
+
+4. **Integration:**
+   - Settings-Seite: Neuer Abschnitt "Zwei-Faktor-Authentifizierung" mit Aktivieren/Deaktivieren
+   - Login-Flow: Nach erfolgreichem Passwort-Login pruefen ob MFA aktiv, dann `TotpChallenge` anzeigen
+
+---
+
+## Feature 5: eIDAS-konforme elektronische Signaturen
+
+**Ist-Zustand:** `audit_events` hat ein `signature`-Feld (nullable). Keine Signatur-Logik implementiert.
+
+**Umsetzung:**
+
+1. **Edge Function `sign-document`:**
+   - Erzeugt SHA-256 Hash des Dokuments
+   - Speichert Hash + Zeitstempel + Benutzer-ID als qualifizierte Signatur-Metadaten
+   - Speichert in neuer DB-Tabelle `document_signatures` (id, document_type, document_id, hash, signer_id, signed_at, signature_level: 'simple' | 'advanced')
+
+2. **Frontend:**
+   - `DocumentList.tsx`: Neues Icon "Signieren" pro Dokument
+   - Signatur-Dialog: Zeigt Dokumentname, Hash, Benutzer, bestaetigt mit Passwort
+   - Signatur-Badge in der Dokumentliste (gruenes Haekchen wenn signiert)
+   - Signatur-Verifizierung: Klick auf Badge zeigt Signaturdetails (Wer, Wann, Hash)
+
+**Hinweis:** Fuer qualifizierte eIDAS-Signaturen (QES) waere ein externer Trust Service Provider noetig (z.B. Swisscom, A-Trust). Diese Implementierung deckt fortgeschrittene elektronische Signaturen (AdES) ab.
+
+---
+
+## Feature 6: Ad-hoc Reporting / Query Builder
+
+**Ist-Zustand:** Feste Reports-Seite mit vordefinierten Charts. Kein dynamischer Query Builder.
+
+**Umsetzung:**
+
+1. **Frontend-Komponente `QueryBuilder.tsx`:**
+   - Tabellen-Auswahl (Dropdown: Mieter, Einheiten, Zahlungen, Rechnungen, Ausgaben)
+   - Spalten-Auswahl (Checkboxen basierend auf gewaehlter Tabelle)
+   - Filter-Builder (Spalte + Operator + Wert, mehrere Filter kombinierbar)
+   - Sortierung und Limit
+   - "Ausfuehren" Button
+
+2. **Edge Function `query-report`:**
+   - Empfaengt strukturierte Query-Definition (Tabelle, Spalten, Filter)
+   - Baut sichere Supabase-Query (KEIN rohes SQL - nur typisierte Client-API)
+   - Erzwingt `organization_id`-Filter automatisch
+   - Limit auf 500 Zeilen
+   - Gibt Ergebnis als JSON zurueck
+
+3. **Frontend-Ergebnis:**
+   - Ergebnistabelle mit Sortierung
+   - Export als CSV/Excel
+   - "Als Bericht speichern" (Name + gespeicherte Query-Definition in `saved_reports` Tabelle)
+
+---
+
+## Feature 7: SCA Security Scanning Setup
+
+**Ist-Zustand:** `SECURITY_COMPLIANCE_CHECKLIST.md` und `CICD_PIPELINE.md` existieren. Kein automatisiertes Dependency-Scanning konfiguriert.
+
+**Umsetzung:**
+
+1. **Dokumentation `docs/SCA_SECURITY_SCANNING.md`:**
+   - npm audit Konfiguration und Schwellenwerte
+   - GitHub Dependabot-Konfiguration (`.github/dependabot.yml`)
+   - Snyk/Socket.dev Integration Guide
+   - SBOM-Generierung (CycloneDX)
+
+2. **Konfigurationsdateien:**
+   - `.github/dependabot.yml`: Automatische PR-Erstellung fuer Dependency-Updates
+   - Erweiterung `SECURITY_COMPLIANCE_CHECKLIST.md` um SCA-Abschnitt
+
+---
+
+## Feature 8: Backup & DR Dokumentation erweitern
+
+**Ist-Zustand:** `docs/BACKUP_STRATEGY.md`, `docs/DR_RUNBOOK.md` existieren bereits mit pgBackRest, PITR, RTO/RPO-Zielen.
+
+**Umsetzung:**
+
+1. **Erweiterung `docs/BACKUP_STRATEGY.md`:**
+   - Lovable Cloud spezifische Backup-Details (automatische taegliche Backups, PITR)
+   - Retention-Policy Uebersicht (7 Jahre BAO, 10 Jahre GoBD)
+   - Monitoring-Checkliste fuer Backup-Alerts
+
+2. **Erweiterung `docs/DR_RUNBOOK.md`:**
+   - Lovable Cloud Restore-Prozedur (statt Supabase Dashboard Referenzen)
+   - Kommunikationsplan bei Ausfall
+   - Eskalationsmatrix mit Kontakten
+
+---
+
+## Reihenfolge der Umsetzung
+
+| Schritt | Feature | Abhaengigkeit |
+|---------|---------|---------------|
+| 1 | DMS Versioning & Tagging | Keine (DB-Migration + Frontend) |
+| 2 | 2FA TOTP | Keine (Auth-Erweiterung) |
+| 3 | Kommunikation SMS-Fallback | Keine (Edge Function + UI) |
+| 4 | Rules Engine Dry-Run | Keine (DB + Edge Function + UI) |
+| 5 | eIDAS Signaturen | Keine (DB + Edge Function + UI) |
+| 6 | Query Builder | Keine (Edge Function + UI) |
+| 7 | SCA Scanning | Keine (nur Dokumentation + Config) |
+| 8 | Backup/DR Doku | Keine (nur Dokumentation) |
+
+## Technische Details
+
+**Neue DB-Tabellen:** `document_versions`, `document_tags`, `automation_rules`, `document_signatures`, `saved_reports`
+
+**Neue Edge Functions:** `evaluate-rules`, `sign-document`, `query-report`, `send-sms`
+
+**Neue Seiten:** `/automatisierung`
+
+**Geaenderte Komponenten:** `DocumentList.tsx`, `Documents.tsx`, `Messages.tsx`, Settings-Seite (2FA-Abschnitt), Login-Flow (MFA-Challenge)
+
