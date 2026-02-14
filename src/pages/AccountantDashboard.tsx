@@ -18,6 +18,7 @@ import {
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { RentIndexationCalculator } from '@/components/accountant/RentIndexationCalculator';
+import { TaxExportTab } from '@/components/tax/TaxExportTab';
 
 interface AccountantDashboardData {
   dunning: {
@@ -195,6 +196,7 @@ export default function AccountantDashboard() {
             <TabsTrigger value="vpi" data-testid="tab-vpi">VPI-Anpassungen</TabsTrigger>
             <TabsTrigger value="indexation" data-testid="tab-indexation">MieWeG-Rechner</TabsTrigger>
             <TabsTrigger value="exports" data-testid="tab-exports">Exporte</TabsTrigger>
+            <TabsTrigger value="tax" data-testid="tab-tax">Steuer-Export</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dunning" className="space-y-4">
@@ -439,6 +441,10 @@ export default function AccountantDashboard() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="tax">
+            <TaxExportTab />
           </TabsContent>
         </Tabs>
       </div>

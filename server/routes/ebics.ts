@@ -255,6 +255,18 @@ export function registerEbicsRoutes(app: Express) {
     }
   });
 
+  // ── Health Check ──────────────────────────────────────────────────────
+
+  app.get("/api/ebics/connections/:id/health", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await getProfileFromSession(req);
+      const health = await ebicsService.getHealthStatus(req.params.id);
+      res.json(health);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ── Order History ────────────────────────────────────────────────────
 
   app.get("/api/ebics/orders", isAuthenticated, async (req: any, res) => {
