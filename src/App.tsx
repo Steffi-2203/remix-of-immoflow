@@ -82,6 +82,7 @@ const ScheduledReports = lazy(() => import("./pages/ScheduledReports"));
 const Signatures = lazy(() => import("./pages/Signatures"));
 const QueryBuilder = lazy(() => import("./pages/QueryBuilder"));
 const Heizkosten = lazy(() => import("./pages/Heizkosten"));
+const Pricing = lazy(() => import("./pages/Pricing"));
 const Richtwertmietzins = lazy(() => import("./pages/Richtwertmietzins"));
 const Aktivitaeten = lazy(() => import("./pages/Aktivitaeten"));
 
@@ -116,6 +117,7 @@ const App = () => (
             <Route path="/impressum" element={<Impressum />} />
             <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="/agb" element={<AGB />} />
+            <Route path="/preise" element={<Pricing />} />
             <Route path="/mieter-login" element={<TenantLogin />} />
             <Route path="/mieter-portal" element={<TenantPortalStandalone />} />
             <Route path="/eigentuemer-login" element={<OwnerLogin />} />

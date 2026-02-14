@@ -35,11 +35,10 @@ interface SubscriptionLimits {
 
 const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
   trial: {
-    // Tester: 1 Einheit, 3 Mieter, 1 OCR-Rechnung, 1 OCR-Kontoauszug
-    maxProperties: 0, // Keine Liegenschaften - nur Einheiten
-    maxUnits: 1,
-    maxTenants: 3,
-    maxOcrInvoices: 1,
+    maxProperties: 1,
+    maxUnits: 5,
+    maxTenants: 5,
+    maxOcrInvoices: 3,
     maxOcrBankStatements: 1,
     canExport: false,
     canUpload: true, // OCR Upload erlaubt
@@ -93,7 +92,7 @@ const TIER_LIMITS: Record<UserSubscriptionTier, SubscriptionLimits> = {
   },
   starter: {
     maxProperties: 10,
-    maxUnits: Infinity,
+    maxUnits: 50,
     maxTenants: Infinity,
     maxOcrInvoices: Infinity,
     maxOcrBankStatements: Infinity,
