@@ -25,6 +25,7 @@ const KI_AUTOPILOT_PRICE_ID = process.env.STRIPE_PRICE_KI_AUTOPILOT || 'price_ki
 const USER_PRICE_IDS: Record<string, string> = {
   starter: process.env.STRIPE_USER_PRICE_STARTER || 'price_1StPYOGMeISjSnLCRsy43IwZ',
   pro: process.env.STRIPE_USER_PRICE_PRO || 'price_1StPYOGMeISjSnLC67Qo1IYQ',
+  enterprise: process.env.STRIPE_USER_PRICE_ENTERPRISE || 'price_enterprise_user',
 };
 
 async function getProfileById(id: string) {
