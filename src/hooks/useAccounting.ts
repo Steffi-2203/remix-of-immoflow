@@ -60,7 +60,7 @@ export function useTrialBalance(params?: { from?: string; to?: string }) {
   return useQuery({
     queryKey: ['/api/accounting/trial-balance', params],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/trial-balance${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`/api/accounting/trial-balance${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der Saldenliste');
       return res.json();
     },
@@ -71,7 +71,7 @@ export function useBalanceSheet(date?: string) {
   return useQuery({
     queryKey: ['/api/accounting/balance-sheet', date],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/balance-sheet${date ? `?date=${date}` : ''}`);
+      const res = await fetch(`/api/accounting/balance-sheet${date ? `?date=${date}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der Bilanz');
       return res.json();
     },
@@ -87,7 +87,7 @@ export function useProfitLoss(params?: { from?: string; to?: string }) {
   return useQuery({
     queryKey: ['/api/accounting/profit-loss', params],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/profit-loss${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`/api/accounting/profit-loss${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der GuV');
       return res.json();
     },
@@ -102,7 +102,7 @@ export function useUva(params?: { month?: number; year?: number }) {
       if (params?.month) searchParams.set('month', String(params.month));
       if (params?.year) searchParams.set('year', String(params.year));
       const qs = searchParams.toString();
-      const res = await fetch(`/api/accounting/uva${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`/api/accounting/uva${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden der UVA');
       return res.json();
     },
@@ -118,7 +118,7 @@ export function useAccountLedger(accountId: string, params?: { from?: string; to
   return useQuery({
     queryKey: ['/api/accounting/account-ledger', accountId, params],
     queryFn: async () => {
-      const res = await fetch(`/api/accounting/account-ledger/${accountId}${qs ? `?${qs}` : ''}`);
+      const res = await fetch(`/api/accounting/account-ledger/${accountId}${qs ? `?${qs}` : ''}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Fehler beim Laden des Kontoblatts');
       return res.json();
     },
