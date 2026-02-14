@@ -20,6 +20,7 @@ import {
   ScrollText,
   AlertTriangle,
   Banknote,
+  Wifi,
 } from 'lucide-react';
 import type { AppRole } from '@/hooks/useUserRole';
 
@@ -89,6 +90,13 @@ export const navSections: NavSection[] = [
     allowedRoles: ['admin', 'finance'],
     items: [
       { label: 'Hausbetreuer & Löhne', icon: Banknote, href: '/lohnverrechnung' },
+    ],
+  },
+  {
+    label: 'EBICS Banking',
+    allowedRoles: ['admin', 'finance'],
+    items: [
+      { label: 'Live-Banking', icon: Wifi, href: '/ebics' },
     ],
   },
 ];
