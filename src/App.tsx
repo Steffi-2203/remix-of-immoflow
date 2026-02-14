@@ -73,6 +73,7 @@ const AutomationSettings = lazy(() => import("./pages/AutomationSettings"));
 const InvoiceOcr = lazy(() => import("./pages/InvoiceOcr"));
 const KiInsights = lazy(() => import("./pages/KiInsights"));
 const KiKommunikation = lazy(() => import("./pages/KiKommunikation"));
+const EbicsBanking = lazy(() => import("./pages/EbicsBanking"));
 
 const queryClient = new QueryClient();
 
@@ -129,6 +130,7 @@ const App = () => (
             <Route path="/auto-zuordnung" element={<ProtectedRoute><DemoDataProvider><AutoMatch /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/bank-abgleich" element={<ProtectedRoute><DemoDataProvider><BankReconciliation /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/finanzbuchhaltung" element={<ProtectedRoute><DemoDataProvider><Accounting /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/ebics-banking" element={<ProtectedRoute><DemoDataProvider><EbicsBanking /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><CostsHub /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />

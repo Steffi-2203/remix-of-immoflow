@@ -14,11 +14,15 @@ import OpenAI from "openai";
 import propertyRoutes from "./routes/propertyRoutes";
 import tenantRoutes from "./routes/tenantRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import accountingRoutes from "./routes/accountingRoutes";
+import ebicsRoutes from "./routes/ebicsRoutes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(propertyRoutes);
   app.use(tenantRoutes);
   app.use(paymentRoutes);
+  app.use(accountingRoutes);
+  app.use(ebicsRoutes);
 
   const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
   
