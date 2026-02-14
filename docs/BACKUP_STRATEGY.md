@@ -562,3 +562,26 @@ In der Lovable Cloud Umgebung ist die Backup-Infrastruktur **vollständig verwal
 - [ ] Monitoring-Alerts konfiguriert
 - [ ] Wöchentlicher Restore-Test (Staging) läuft
 - [ ] Monatliche DR-Übung durchgeführt
+
+---
+
+## Anhang A: Lovable Cloud Spezifika
+
+### Automatische Backups
+Lovable Cloud erstellt automatisch tägliche Backups mit Point-in-Time Recovery (PITR). Diese Backups werden verschlüsselt gespeichert und sind bis zu 30 Tage verfügbar.
+
+### Retention-Policy Übersicht
+| Datentyp | Aufbewahrung | Rechtsgrundlage |
+|----------|-------------|-----------------|
+| Buchhaltungsdaten | 7 Jahre | BAO §132 |
+| Steuerrelevante Belege | 10 Jahre | GoBD |
+| Audit-Logs | 10 Jahre | GoBD + DSGVO Art.30 |
+| Mietverträge | 7 Jahre nach Ende | BAO |
+| Personenbezogene Daten | Gemäß DSGVO | Art.17 DSGVO |
+
+### Monitoring-Checkliste
+- [ ] Tägliche Backup-Completion prüfen (Lovable Cloud Dashboard)
+- [ ] Wöchentliche PITR-Restore-Probe (Staging)
+- [ ] Monatliche Backup-Größe überwachen
+- [ ] Quartalsmäßige Retention-Policy-Review
+- [ ] Jährliche Compliance-Prüfung (BAO/GoBD)

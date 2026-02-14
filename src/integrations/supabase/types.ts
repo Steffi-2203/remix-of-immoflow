@@ -243,6 +243,53 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_rules: {
+        Row: {
+          actions: Json
+          conditions: Json
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          trigger_type: Database["public"]["Enums"]["automation_trigger_type"]
+          updated_at: string
+        }
+        Insert: {
+          actions?: Json
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          trigger_type: Database["public"]["Enums"]["automation_trigger_type"]
+          updated_at?: string
+        }
+        Update: {
+          actions?: Json
+          conditions?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          trigger_type?: Database["public"]["Enums"]["automation_trigger_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_rules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_accounts: {
         Row: {
           account_name: string
@@ -827,6 +874,99 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      document_signatures: {
+        Row: {
+          document_id: string
+          document_type: string
+          hash: string
+          id: string
+          signature_level: string
+          signed_at: string
+          signer_email: string | null
+          signer_id: string
+        }
+        Insert: {
+          document_id: string
+          document_type: string
+          hash: string
+          id?: string
+          signature_level?: string
+          signed_at?: string
+          signer_email?: string | null
+          signer_id: string
+        }
+        Update: {
+          document_id?: string
+          document_type?: string
+          hash?: string
+          id?: string
+          signature_level?: string
+          signed_at?: string
+          signer_email?: string | null
+          signer_id?: string
+        }
+        Relationships: []
+      }
+      document_tags: {
+        Row: {
+          created_at: string
+          document_id: string
+          document_type: string
+          id: string
+          tag: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          document_type: string
+          id?: string
+          tag: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          document_type?: string
+          id?: string
+          tag?: string
+        }
+        Relationships: []
+      }
+      document_versions: {
+        Row: {
+          comment: string | null
+          created_at: string
+          document_id: string
+          document_type: string
+          file_size: number | null
+          file_url: string
+          id: string
+          uploaded_by: string | null
+          version_number: number
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          document_id: string
+          document_type: string
+          file_size?: number | null
+          file_url: string
+          id?: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          document_id?: string
+          document_type?: string
+          file_size?: number | null
+          file_url?: string
+          id?: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Relationships: []
       }
       ebics_connections: {
         Row: {
@@ -4167,6 +4307,47 @@ export type Database = {
           },
         ]
       }
+      saved_reports: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          organization_id: string
+          query_definition: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          query_definition: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          query_definition?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_reports_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sensitive_data_access_log: {
         Row: {
           access_type: string
@@ -6464,6 +6645,11 @@ export type Database = {
         | "auditor"
         | "ops"
       ausstattungskategorie: "A" | "B" | "C" | "D"
+      automation_trigger_type:
+        | "zahlungseingang"
+        | "mietende"
+        | "faelligkeit"
+        | "leerstand"
       billing_run_status:
         | "pending"
         | "running"
@@ -6683,6 +6869,12 @@ export const Constants = {
         "ops",
       ],
       ausstattungskategorie: ["A", "B", "C", "D"],
+      automation_trigger_type: [
+        "zahlungseingang",
+        "mietende",
+        "faelligkeit",
+        "leerstand",
+      ],
       billing_run_status: [
         "pending",
         "running",

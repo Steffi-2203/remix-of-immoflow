@@ -646,6 +646,12 @@ export default function MessagesPage() {
                 placeholder="Ihre Nachricht..."
                 rows={5}
               />
+              {(newMessage.message_type === 'sms' || newMessage.message_type === 'both') && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">SMS-Fallback aktiv</p>
+                  <p>SMS-Versand erfordert einen externen Provider (z.B. Twilio). Aktuell wird eine E-Mail als Fallback gesendet.</p>
+                </div>
+              )}
               {newMessage.message_type === 'sms' && (
                 <p className="text-xs text-muted-foreground">
                   SMS: {newMessage.message_body.length}/160 Zeichen

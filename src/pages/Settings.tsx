@@ -21,6 +21,7 @@ import { UserRoleManager } from '@/components/settings/UserRoleManager';
 import { BrandingSettings } from '@/components/settings/BrandingSettings';
 import { BankAccountsSection } from '@/components/settings/BankAccountsSection';
 import { ArchiveManagement } from '@/components/archive/ArchiveManagement';
+import { TotpSetup } from '@/components/auth/TotpSetup';
 import { SubscriptionSettings } from '@/components/settings/SubscriptionSettings';
 import { useFeatureTour } from '@/hooks/useFeatureTour';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
@@ -82,6 +83,7 @@ export default function Settings() {
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="handbook">Handbuch</TabsTrigger>
             {isAdmin && <TabsTrigger value="admin">Administration</TabsTrigger>}
+            <TabsTrigger value="security">Sicherheit</TabsTrigger>
             <TabsTrigger value="archive">Archivierung</TabsTrigger>
           </TabsList>
 
@@ -274,6 +276,10 @@ export default function Settings() {
               </Card>
             </TabsContent>
           )}
+
+          <TabsContent value="security">
+            <TotpSetup />
+          </TabsContent>
 
           <TabsContent value="archive">
             <ArchiveManagement />
