@@ -1,85 +1,81 @@
 
+# Pruefbericht: ImmoflowMe - Ist-Zustand und Verbesserungen
 
-# Plan: Journal-Nachbuchung (Backfill) der Bestandsdaten
+## Status: App laeuft, Server startet
 
-## Ausgangslage
+Der im Bericht gemeldete Syntax-Fehler in `routes.ts` existiert **nicht mehr** -- die Datei ist sauber (51 Zeilen, modulares Import-Pattern). Die App laeuft, alle Seiten laden fehlerfrei.
 
-- **123 Rechnungen** (2025-2026), **65 Zahlungen**, **40 Ausgaben** existieren in der Datenbank
-- **0 Journal-Eintraege** -- die DB-Trigger (`auto_book_invoice`, `auto_book_payment`, `auto_book_expense`) greifen nur bei neuen INSERT-Operationen, nicht rueckwirkend
-- **53 Konten** im Kontenrahmen (Organisation `2f3536af...`)
-- Die `booking_number_sequences`-Tabelle ist leer -- noch keine Buchungsnummern vergeben
+---
 
-## Loesung: Edge Function fuer einmaligen Backfill
+## TEIL 1: Was funktioniert (verifiziert durch Live-Test)
 
-Eine Edge Function `backfill-journal`, die alle bestehenden Rechnungen, Zahlungen und Ausgaben durchgeht und die gleiche Buchungslogik wie die DB-Trigger anwendet -- aber idempotent (ueberspringt bereits gebuchte Quellen).
+| Bereich | Status | Details |
+|---------|--------|---------|
+| Landing Page | OK | Laedt, Cookie-Consent funktioniert |
+| Dashboard | OK | Laedt (Skeleton-Loading, Daten abhaengig von Auth) |
+| Finanzbuchhaltung | OK | Alle 8 Tabs vorhanden: Journal, Kontenplan, Saldenliste, Bilanz, GuV, Anlagen (AfA), UVA, BMD/DATEV |
+| EBICS Live-Banking | OK | 4 Tabs: Verbindungen, Kontoauszuege, Zahlungen, Protokoll |
+| Journal-Backfill | OK | **228 Buchungssaetze** mit **841 Buchungszeilen** erfolgreich erstellt |
+| Routing | OK | `routes.ts` sauber modularisiert (18 Domain-Module) |
+| Accounting-Komponenten | OK | 9 Dateien in `src/components/accounting/` |
+| Hooks | OK | `useJournalEntries.ts`, `useChartOfAccounts.ts`, `useDemoAccounting.ts` vorhanden |
+| EBICS-Service | OK | `server/services/ebicsService.ts` (749 Zeilen, inkl. Retry-Logik) |
+| Tax Reports | OK | Service + Routes + Frontend-Tab vorhanden |
 
-### Ablauf
+---
 
-```text
-1. Lade Organisation + Kontenrahmen (Konto-IDs fuer 4000, 4100, 4200, 3540, 2100, 2800, 2500, 5000-6300)
-2. Fuer jede Rechnung (monthly_invoices):
-   - Pruefen ob source_type='invoice' + source_id bereits in journal_entries existiert
-   - Wenn nein: Buchungssatz erstellen (Forderung Soll / Mieterloes + BK + HK + USt Haben)
-3. Fuer jede Zahlung (payments):
-   - Pruefen ob source_type='payment' + source_id bereits existiert
-   - Wenn nein: Buchungssatz erstellen (Bank Soll / Forderung Haben)
-4. Fuer jede Ausgabe (expenses):
-   - Pruefen ob source_type='expense' + source_id bereits existiert
-   - Wenn nein: Buchungssatz erstellen (Aufwand + Vorsteuer Soll / Bank Haben)
-5. Buchungsnummer-Sequenz hochzaehlen via next_booking_number()
+## TEIL 2: Gefundene Probleme (zu fixen)
+
+### Problem 1: `/demo` Route fehlt (404)
+
+**Schwere: Hoch** -- Landing Page und Login verlinken auf `/demo`, aber die Route ist in keiner Route-Datei registriert.
+
+- `Landing.tsx` Zeile 64/87: `<Link to="/demo">`
+- `Login.tsx` Zeile 158: `<Link to="/demo">`
+- Seiten existieren: `src/pages/demo-request.tsx` und `src/pages/demo-activate.tsx`
+- **Aber**: Weder in `publicRoutes.tsx` noch in `protectedRoutes.tsx` registriert
+
+**Fix**: Demo-Seiten in `publicRoutes.tsx` registrieren:
+```
+/demo --> demo-request.tsx
+/demo/activate --> demo-activate.tsx
 ```
 
-### Idempotenz-Garantie
+### Problem 2: `property_owners` hat nur 1 Eintrag
 
-Vor jedem Insert wird geprueft:
-```text
-SELECT id FROM journal_entries
-WHERE source_type = ? AND source_id = ?
-LIMIT 1
-```
-Falls ein Eintrag gefunden wird, wird uebersprungen. Damit kann die Funktion beliebig oft aufgerufen werden.
+**Schwere: Mittel** -- Der E1a Steuer-Export braucht Eigentuemer-Daten. Aktuell existiert nur 1 Eigentuemer-Eintrag. Ohne vollstaendige Zuordnung von Eigentuemern zu Liegenschaften kann keine E1a-Berechnung durchgefuehrt werden.
 
-### Dateien
+**Fix**: Eigentuemer-Verwaltung in der UI zugaenglich machen (z.B. in den Liegenschafts-Details) und Demo-Daten auffuellen.
 
-| Datei | Aktion | Beschreibung |
-|-------|--------|-------------|
-| `supabase/functions/backfill-journal/index.ts` | NEU | Edge Function: Iteriert ueber alle Rechnungen, Zahlungen, Ausgaben und erstellt fehlende Journal-Eintraege |
+### Problem 3: Dashboard zeigt kaum Daten
 
-### Technische Details
+**Schwere: Niedrig** -- Das Dashboard (`SimpleDashboard`) zeigt nur eine Skeleton-Box und dann leeren Bereich. Es fehlt die Anbindung an die echten Daten (Journal-Eintraege, offene Rechnungen, etc.).
 
-Die Edge Function:
-- Verwendet den `service_role` Key fuer vollen DB-Zugriff
-- Ermittelt die Organisation aus der `chart_of_accounts`-Tabelle
-- Mappt Ausgaben-Kategorien auf Kontonummern (gleiche Logik wie der `auto_book_expense`-Trigger)
-- Gibt einen Statusbericht zurueck: `{ invoices_booked, payments_booked, expenses_booked, skipped }`
-- Kann per HTTP-Call oder ueber die UI ausgeloest werden
+---
 
-### Konten-Mapping (aus bestehendem Trigger)
+## TEIL 3: Verbesserungsvorschlaege
 
-```text
-Rechnungen:
-  Soll 2100 (Forderungen Mieter) = Gesamtbetrag
-  Haben 4000 (Mieterloes) = Grundmiete
-  Haben 4100 (BK-Erloes) = Betriebskosten
-  Haben 4200 (HK-Erloes) = Heizungskosten
-  Haben 3540 (USt-Zahllast) = USt
+### Prioritaet 1 (Sofort)
+1. `/demo` und `/demo/activate` Routen registrieren
+2. Dashboard mit echten KPIs befuellen (offene Forderungen, letzte Buchungen, Kontostand)
 
-Zahlungen:
-  Soll 2800 (Bank) = Betrag
-  Haben 2100 (Forderungen Mieter) = Betrag
+### Prioritaet 2 (Kurzfristig)
+3. Eigentuemer-Daten auffuellen fuer E1a-Funktionalitaet
+4. E1a PDF-Export (aktuell nur XML)
+5. EBICS automatischer Abruf-Scheduler (Cron-Job)
 
-Ausgaben:
-  Soll 5000-6300 (Aufwandskonto) = Netto
-  Soll 2500 (Vorsteuer) = VSt (20%)
-  Haben 2800 (Bank) = Brutto
-```
+### Prioritaet 3 (Mittelfristig)
+6. E1b Steuer-Modul (Grundstuecksveraeusserungen)
+7. Accounting: Automatischer Jahresabschluss mit Eroeffnungsbilanz
+8. Bank-Reconciliation AI-Matching verbessern
 
-### Erwartetes Ergebnis
+---
 
-Nach Ausfuehrung:
-- ~123 Journal-Eintraege fuer Rechnungen (mit je 3-5 Buchungszeilen)
-- ~65 Journal-Eintraege fuer Zahlungen (mit je 2 Buchungszeilen)
-- ~40 Journal-Eintraege fuer Ausgaben (mit je 3 Buchungszeilen)
-- **Insgesamt ca. 228 Buchungssaetze** mit ca. 750+ Buchungszeilen
-- Saldenliste, Bilanz und GuV zeigen ab sofort echte Daten
+## Technischer Umfang fuer sofortige Fixes
 
+| Datei | Aenderung |
+|-------|-----------|
+| `src/routes/publicRoutes.tsx` | 2 neue Route-Eintraege fuer `/demo` und `/demo/activate` |
+| `src/pages/SimpleDashboard.tsx` | KPI-Cards mit echten Daten (Journal-Summen, offene Rechnungen) |
+
+Geschaetzter Aufwand: Klein (beide Fixes zusammen < 50 Zeilen Code-Aenderung)
