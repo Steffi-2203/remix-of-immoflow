@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -579,6 +580,20 @@ function OffenePosten() {
           <h1 className="text-2xl font-bold" data-testid="text-op-title">OP-Management</h1>
           <p className="text-muted-foreground" data-testid="text-op-subtitle">Offene Posten, Abstimmung und Bank-Matching</p>
         </div>
+
+        <Card className="border-dashed" data-testid="card-ki-hint-op">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-medium">Tipp:</span>
+              </div>
+              <span>Die Bank-OP Zuordnung matcht Zahlungen automatisch per IBAN, Betrag und Referenz.</span>
+              <span className="text-muted-foreground/50">|</span>
+              <Link to="/auto-zuordnung" className="underline underline-offset-2 hover:text-foreground" data-testid="link-op-auto-match">Zur Auto-Zuordnung</Link>
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList data-testid="tabs-op">

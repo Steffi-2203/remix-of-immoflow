@@ -9,6 +9,8 @@ ImmoflowMe is an Austrian property management (Hausverwaltung) application desig
 - Date format: DD.MM.YYYY
 
 ## Recent Changes (2026-02-14)
+- **Accounting UX Improvements**: Consolidated sidebar (Banking merged into Finanzbuchhaltung as a tab), extended feature tour with 5 accounting-specific steps, beginner-friendly quick-start guide on WEG Management page, contextual KI feature hints on Accounting and OffenePosten pages linking to OCR/AI/Anomaly Detection, backward-compatible /buchhaltung redirect.
+
 - **Postgres RLS**: Row-Level Security policies on 9 tenant-critical tables (properties, units, tenants, monthly_invoices, payments, payment_allocations, leases, settlements, journal_entries) with org-isolation and bypass policies. Middleware sets `app.current_org` per request.
 - **Idempotency Keys**: Deduplizierung for payment endpoints via `Idempotency-Key` header, idempotency_keys table, 24h TTL.
 - **Full-Text Search**: pg_trgm extension with GIN trigram indexes, `/api/search` endpoint, GlobalSearch component with Ctrl+K shortcut.
