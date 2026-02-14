@@ -4,6 +4,19 @@ import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequen
 import { eq, and, sql, desc, between, gte, lte, asc, or, isNull } from "drizzle-orm";
 import { isAuthenticated } from "./helpers";
 import { exportSaldenliste, exportBilanz, exportGuV } from "../services/xlsxExportService";
+import {
+  validateTrialBalance,
+  getAccountBalances,
+  validateSettlementTotals,
+  getReconciliationRate,
+  runDailyChecks,
+} from "../services/trialBalanceService";
+import {
+  splitPaymentByPriority,
+  allocatePaymentToInvoice,
+  getUnallocatedPayments,
+  autoMatchPayments,
+} from "../services/paymentSplittingService";
 
 const router = Router();
 
@@ -692,6 +705,141 @@ router.get("/api/accounting/export/guv", isAuthenticated, async (req: Request, r
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="GuV_${fileYear}.xlsx"`);
     res.send(buffer);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ====== TRIAL BALANCE VALIDATION SERVICE ROUTES ======
+
+router.get("/api/accounting/account-balances", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { propertyId, from, to } = req.query;
+
+    if (propertyId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
+    const balances = await getAccountBalances(
+      orgId,
+      propertyId as string | undefined,
+      from as string | undefined,
+      to as string | undefined
+    );
+    res.json(balances);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/accounting/reconciliation-rate", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { propertyId, year } = req.query;
+
+    if (propertyId && !(await validatePropertyOwnership(propertyId as string, orgId))) {
+      return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
+    }
+
+    const rate = await getReconciliationRate(
+      orgId,
+      propertyId as string | undefined,
+      year ? Number(year) : undefined
+    );
+    res.json(rate);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/accounting/validate-settlement", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { settlementId } = req.body;
+
+    if (!settlementId) {
+      return res.status(400).json({ error: "settlementId ist erforderlich" });
+    }
+
+    const result = await validateSettlementTotals(settlementId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/accounting/daily-checks", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+    const warnings = await runDailyChecks(orgId);
+    res.json({ warnings, checkedAt: new Date() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ====== PAYMENT SPLITTING SERVICE ROUTES ======
+
+router.post("/api/payments/split", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { paymentAmount, tenantId } = req.body;
+
+    if (!paymentAmount || !tenantId) {
+      return res.status(400).json({ error: "paymentAmount und tenantId sind erforderlich" });
+    }
+
+    const result = await splitPaymentByPriority(Number(paymentAmount), tenantId, orgId);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/payments/allocate", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { paymentId, invoiceId, amount } = req.body;
+
+    if (!paymentId || !invoiceId || !amount) {
+      return res.status(400).json({ error: "paymentId, invoiceId und amount sind erforderlich" });
+    }
+
+    const allocation = await allocatePaymentToInvoice(paymentId, invoiceId, Number(amount), orgId);
+    res.json(allocation);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/api/payments/unallocated", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+    const { tenantId } = req.query;
+
+    const payments = await getUnallocatedPayments(orgId, tenantId as string | undefined);
+    res.json(payments);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/payments/auto-match", isAuthenticated, async (req: Request, res: Response) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
+
+    const result = await autoMatchPayments(orgId);
+    res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

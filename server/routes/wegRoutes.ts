@@ -1538,4 +1538,210 @@ router.delete("/api/weg/vorschreibungen/run/:runId", async (req: Request, res: R
   }
 });
 
+// ====== WEG JAHRESABRECHNUNG (ANNUAL SETTLEMENT) ======
+
+router.get("/api/weg/settlement/preview", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const propertyId = req.query.propertyId as string;
+    const year = parseInt(req.query.year as string);
+    if (!propertyId || !year) {
+      return res.status(400).json({ error: "propertyId und year erforderlich" });
+    }
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { calculateOwnerSettlement } = await import("../services/wegSettlementService");
+    const result = await calculateOwnerSettlement(propertyId, year, ctx.orgId);
+    res.json(objectToSnakeCase(result));
+  } catch (error: any) {
+    console.error("Error previewing WEG settlement:", error);
+    res.status(400).json({ error: error.message || "Fehler bei der Abrechnungsvorschau" });
+  }
+});
+
+router.post("/api/weg/settlement/create", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const body = objectToCamelCase(req.body);
+    const { propertyId, year } = body;
+    if (!propertyId || !year) {
+      return res.status(400).json({ error: "propertyId und year erforderlich" });
+    }
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { createWegSettlement } = await import("../services/wegSettlementService");
+    const result = await createWegSettlement(propertyId, parseInt(year), ctx.orgId, ctx.userId);
+    res.json(objectToSnakeCase(result));
+  } catch (error: any) {
+    console.error("Error creating WEG settlement:", error);
+    res.status(400).json({ error: error.message || "Fehler beim Erstellen der Abrechnung" });
+  }
+});
+
+router.get("/api/weg/settlement/:propertyId/:year", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const { propertyId, year } = req.params;
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const settlement = await db.select().from(schema.wegSettlements).where(and(
+      eq(schema.wegSettlements.propertyId, propertyId),
+      eq(schema.wegSettlements.year, parseInt(year)),
+      eq(schema.wegSettlements.organizationId, ctx.orgId)
+    )).limit(1);
+
+    if (!settlement.length) return res.status(404).json({ error: "Keine Abrechnung für dieses Jahr gefunden" });
+
+    const details = await db.select().from(schema.wegSettlementDetails).where(eq(schema.wegSettlementDetails.settlementId, settlement[0].id));
+
+    res.json(objectToSnakeCase({ settlement: settlement[0], details }));
+  } catch (error: any) {
+    console.error("Error fetching WEG settlement:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Abrechnung" });
+  }
+});
+
+// ====== RESERVE FUND OPERATIONS ======
+
+router.post("/api/weg/reserve/interest", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const body = objectToCamelCase(req.body);
+    const { propertyId, year, month, amount, description } = body;
+    if (!propertyId || !year || !month || !amount) {
+      return res.status(400).json({ error: "propertyId, year, month und amount erforderlich" });
+    }
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { bookReserveInterest } = await import("../services/wegAccountingService");
+    const entry = await bookReserveInterest(propertyId, ctx.orgId, parseInt(year), parseInt(month), parseFloat(amount), description || "");
+    res.json(objectToSnakeCase(entry));
+  } catch (error: any) {
+    console.error("Error booking reserve interest:", error);
+    res.status(400).json({ error: error.message || "Fehler beim Buchen der Zinsen" });
+  }
+});
+
+router.post("/api/weg/reserve/withdraw", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const body = objectToCamelCase(req.body);
+    const { propertyId, amount, description, voteId, isEmergency } = body;
+    if (!propertyId || !amount || !description) {
+      return res.status(400).json({ error: "propertyId, amount und description erforderlich" });
+    }
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { withdrawFromReserve } = await import("../services/wegAccountingService");
+    const result = await withdrawFromReserve(propertyId, ctx.orgId, parseFloat(amount), description, voteId, isEmergency);
+    res.json(objectToSnakeCase(result));
+  } catch (error: any) {
+    console.error("Error withdrawing from reserve:", error);
+    res.status(400).json({ error: error.message || "Fehler bei der Entnahme" });
+  }
+});
+
+router.post("/api/weg/reserve/insurance", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const body = objectToCamelCase(req.body);
+    const { propertyId, totalDamage, insurancePayout, description, voteId } = body;
+    if (!propertyId || totalDamage === undefined || insurancePayout === undefined || !description) {
+      return res.status(400).json({ error: "propertyId, totalDamage, insurancePayout und description erforderlich" });
+    }
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { bookInsuranceClaim } = await import("../services/wegAccountingService");
+    const result = await bookInsuranceClaim(propertyId, ctx.orgId, {
+      totalDamage: parseFloat(totalDamage),
+      insurancePayout: parseFloat(insurancePayout),
+      description,
+      voteId,
+    });
+    res.json(objectToSnakeCase(result));
+  } catch (error: any) {
+    console.error("Error booking insurance claim:", error);
+    res.status(400).json({ error: error.message || "Fehler beim Buchen des Versicherungsfalls" });
+  }
+});
+
+router.get("/api/weg/reserve/overview", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const propertyId = req.query.propertyId as string;
+    if (!propertyId) return res.status(400).json({ error: "propertyId erforderlich" });
+
+    const property = await db.select().from(schema.properties).where(and(eq(schema.properties.id, propertyId), eq(schema.properties.organizationId, ctx.orgId))).limit(1);
+    if (!property.length) return res.status(404).json({ error: "Liegenschaft nicht gefunden" });
+
+    const { getReserveFundOverview } = await import("../services/wegAccountingService");
+    const overview = await getReserveFundOverview(propertyId, ctx.orgId);
+    res.json(objectToSnakeCase(overview));
+  } catch (error: any) {
+    console.error("Error fetching reserve fund overview:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Rücklagenübersicht" });
+  }
+});
+
+// ====== SPECIAL ASSESSMENT INVOICING ======
+
+router.post("/api/weg/special-assessments/:id/invoice", async (req: Request, res: Response) => {
+  try {
+    const ctx = await getAuthContext(req, res);
+    if (!ctx) return;
+    if (!(await checkMutationPermission(req, res))) return;
+    if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
+
+    const assessment = await db.select().from(schema.wegSpecialAssessments).where(and(eq(schema.wegSpecialAssessments.id, req.params.id), eq(schema.wegSpecialAssessments.organizationId, ctx.orgId))).limit(1);
+    if (!assessment.length) return res.status(404).json({ error: "Sonderumlage nicht gefunden" });
+
+    const { createSpecialAssessmentInvoices } = await import("../services/wegAccountingService");
+    const result = await createSpecialAssessmentInvoices(req.params.id, ctx.orgId);
+    res.json(objectToSnakeCase({
+      message: `${result.created.length} Vorschreibungen für Sonderumlage erstellt`,
+      count: result.created.length,
+      vorschreibungen: result.created,
+    }));
+  } catch (error: any) {
+    console.error("Error creating special assessment invoices:", error);
+    res.status(400).json({ error: error.message || "Fehler beim Erstellen der Sonderumlagen-Vorschreibungen" });
+  }
+});
+
 export default router;

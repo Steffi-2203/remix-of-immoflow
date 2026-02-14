@@ -262,6 +262,49 @@ export const rentHistory = pgTable("rent_history", {
 export type RentHistory = typeof rentHistory.$inferSelect;
 export type InsertRentHistory = typeof rentHistory.$inferInsert;
 
+// ====== KAUTIONEN (SECURITY DEPOSITS - § 16b MRG) ======
+export const kautionen = pgTable("kautionen", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  leaseId: uuid("lease_id").references(() => leases.id),
+  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
+  eingangsdatum: date("eingangsdatum"),
+  treuhandkontoIban: text("treuhandkonto_iban"),
+  treuhandkontoBank: text("treuhandkonto_bank"),
+  zinssatz: numeric("zinssatz", { precision: 5, scale: 3 }).default('0'),
+  aufgelaufeneZinsen: numeric("aufgelaufene_zinsen", { precision: 12, scale: 2 }).default('0'),
+  letzteZinsberechnung: date("letzte_zinsberechnung"),
+  status: text("status").default('aktiv'),
+  rueckzahlungsdatum: date("rueckzahlungsdatum"),
+  rueckzahlungsbetrag: numeric("rueckzahlungsbetrag", { precision: 12, scale: 2 }),
+  einbehaltenBetrag: numeric("einbehalten_betrag", { precision: 12, scale: 2 }).default('0'),
+  einbehaltenGrund: text("einbehalten_grund"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertKautionSchema = createInsertSchema(kautionen).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertKaution = z.infer<typeof insertKautionSchema>;
+export type Kaution = typeof kautionen.$inferSelect;
+
+// ====== KAUTIONS-BEWEGUNGEN (DEPOSIT TRANSACTIONS) ======
+export const kautionsBewegungen = pgTable("kautions_bewegungen", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  kautionId: uuid("kaution_id").references(() => kautionen.id).notNull(),
+  datum: date("datum").notNull(),
+  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
+  typ: text("typ").notNull(),
+  beschreibung: text("beschreibung"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertKautionsBewegungSchema = createInsertSchema(kautionsBewegungen).omit({ id: true, createdAt: true });
+export type InsertKautionsBewegung = z.infer<typeof insertKautionsBewegungSchema>;
+export type KautionsBewegung = typeof kautionsBewegungen.$inferSelect;
+
 export const monthlyInvoices = pgTable("monthly_invoices", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id),
@@ -1227,6 +1270,50 @@ export const wegSpecialAssessments = pgTable("weg_special_assessments", {
 export const insertWegSpecialAssessmentSchema = createInsertSchema(wegSpecialAssessments).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWegSpecialAssessment = z.infer<typeof insertWegSpecialAssessmentSchema>;
 export type WegSpecialAssessment = typeof wegSpecialAssessments.$inferSelect;
+
+// ====== WEG JAHRESABRECHNUNG (ANNUAL SETTLEMENT) ======
+export const wegSettlements = pgTable("weg_settlements", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  propertyId: uuid("property_id").references(() => properties.id).notNull(),
+  year: integer("year").notNull(),
+  totalExpenses: numeric("total_expenses", { precision: 12, scale: 2 }).default('0'),
+  totalPrepayments: numeric("total_prepayments", { precision: 12, scale: 2 }).default('0'),
+  totalDifference: numeric("total_difference", { precision: 12, scale: 2 }).default('0'),
+  ownerCount: integer("owner_count").default(0),
+  totalMea: numeric("total_mea", { precision: 10, scale: 4 }).default('0'),
+  reserveFundBalance: numeric("reserve_fund_balance", { precision: 12, scale: 2 }).default('0'),
+  status: text("status").default('entwurf'),
+  createdBy: uuid("created_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegSettlementSchema = createInsertSchema(wegSettlements).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWegSettlement = z.infer<typeof insertWegSettlementSchema>;
+export type WegSettlement = typeof wegSettlements.$inferSelect;
+
+// ====== WEG ABRECHNUNGS-DETAILS (SETTLEMENT DETAILS PER OWNER) ======
+export const wegSettlementDetails = pgTable("weg_settlement_details", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  settlementId: uuid("settlement_id").references(() => wegSettlements.id).notNull(),
+  ownerId: uuid("owner_id").references(() => owners.id).notNull(),
+  unitId: uuid("unit_id").references(() => units.id).notNull(),
+  meaShare: numeric("mea_share", { precision: 10, scale: 4 }).notNull(),
+  meaRatio: numeric("mea_ratio", { precision: 10, scale: 6 }).notNull(),
+  totalSoll: numeric("total_soll", { precision: 12, scale: 2 }).default('0'),
+  totalIst: numeric("total_ist", { precision: 12, scale: 2 }).default('0'),
+  saldo: numeric("saldo", { precision: 12, scale: 2 }).default('0'),
+  ruecklageAnteil: numeric("ruecklage_anteil", { precision: 12, scale: 2 }).default('0'),
+  sonderumlagen: numeric("sonderumlagen", { precision: 12, scale: 2 }).default('0'),
+  categoryDetails: jsonb("category_details"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertWegSettlementDetailSchema = createInsertSchema(wegSettlementDetails).omit({ id: true, createdAt: true });
+export type InsertWegSettlementDetail = z.infer<typeof insertWegSettlementDetailSchema>;
+export type WegSettlementDetail = typeof wegSettlementDetails.$inferSelect;
 
 // ====== WEG ERHALTUNG & VERBESSERUNG (MAINTENANCE - § 28-29 WEG 2002) ======
 export const wegMaintenanceItems = pgTable("weg_maintenance_items", {
