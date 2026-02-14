@@ -1,0 +1,67 @@
+Erwartete Ausgaben
+
+Per Unit: Verbrauchsanteil, anteilige Kosten, Vorauszahlungen, Nachzahlung/Gutschrift, Erläuterung der Berechnung.
+
+Gesamt: Summen, Verteilungsfaktoren, nicht verbrauchsabhängige Anteile, Prüfprotokoll.
+
+PDF: Abrechnungsdokument mit Pflichtangaben, Anlagenverzeichnis, Messdaten, Unterschriftsfeld.
+
+Maschinenlesbar: JSON Export für Steuerberater (DATEV/CSV optional).
+
+Rechenlogik Anforderungen
+
+Verbrauchsabhängige Aufteilung: Ermittle Verbrauchsanteile gemäß Messdaten; falls Messdaten fehlen, nutze Ersatzverteilung nach Fläche oder MEA. 
+
+Nicht verbrauchsabhängige Anteile: Verteile nach MEA oder Fläche je Konfiguration.
+
+Rundung: kaufmännisch auf 2 Dezimalstellen; Restcentregel dokumentiert und reproduzierbar.
+
+Trennungsregel: Heizung und Warmwasser getrennt ausweisen. 
+
+Validierungen und Plausibilitätschecks
+
+Messwerte plausibel (z. B. Verbrauch > 0 und < 10x Median der letzten 3 Perioden).
+
+Summe der Einzelanteile = Gesamtkosten ± Toleranz (z. B. 0.01 EUR).
+
+Fehlende Messwerte melden und Ersatzverteilung dokumentieren.
+
+Audit‑Log für jede Änderung an Messdaten oder Verteilungsparametern.
+
+Edge Cases und Fehlerbehandlung
+
+Fehlende Messgeräte: Fallback auf Flächenverteilung; markiere Abrechnung als „teilweise geschätzt“.
+
+Extremer Verbrauch: Flag für manuelle Prüfung, automatische Benachrichtigung an Verwalter.
+
+Rückwirkende Korrekturen: Versioniere Abrechnungen, erstelle Storno‑ und Korrekturbuchungen.
+
+Datenschutz: PII in PDFs minimieren; Logs redacted.
+
+Testfälle (Beispiele)
+
+Unit Test: korrekte Verteilung bei vollständigen Messdaten.
+
+Integration Test: End‑to‑End Abrechnung → PDF → JSON Export → Import in DATEV‑Mock.
+
+Edge Test: 0 Messwerte in 30% der Einheiten → Ersatzverteilung korrekt angewandt.
+
+Security Test: RLS prüft, dass nur Org‑kontext die Abrechnung sehen kann.
+
+Akzeptanzkriterien
+
+Abrechnung erzeugt reproduzierbare Ergebnisse bei gleichen Inputs.
+
+Trial Balance Check: Summe Soll = Summe Haben.
+
+PDF enthält alle gesetzlich geforderten Angaben und ist revisionssicher archivierbar.
+
+Automatische Tests grün in CI.
+
+Compliance Hinweise für Österreich
+
+Halte HeizKG Vorgaben ein für Verbrauchsabhängigkeit und Messgerätepflichten. 
+
+Bewahre Abrechnungen revisionssicher auf gemäß GoBD/BAO Anforderungen.
+
+Dokumentiere Prüfpflichten und Stammdatenblatt pro Gebäude.
