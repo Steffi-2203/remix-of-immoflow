@@ -8,6 +8,8 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AdminRoute } from "@/components/auth/AdminRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CookieConsent } from "@/components/CookieConsent";
+import { InstallBanner } from "@/components/pwa/InstallBanner";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
 import { ActiveOrganizationProvider } from "@/contexts/ActiveOrganizationContext";
 import { Loader2 } from "lucide-react";
@@ -95,6 +97,8 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <ActiveOrganizationProvider>
       <TooltipProvider>
+        <InstallBanner />
+        <OfflineIndicator />
         <Toaster />
         <Sonner />
         <BrowserRouter>
