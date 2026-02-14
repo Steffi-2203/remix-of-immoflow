@@ -781,6 +781,23 @@ export default function WegManagement() {
           </Select>
         </div>
 
+        <Card className="border-dashed" data-testid="card-weg-quickstart">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Info className="h-4 w-4 shrink-0" />
+                <span className="font-medium">Schnellstart:</span>
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                <span>1. Liegenschaft oben auswählen</span>
+                <span>2. Eigentümer & MEA zuordnen</span>
+                <span>3. Wirtschaftsplan erstellen</span>
+                <span>4. Vorschreibungen unter "WEG-Vorschreibungen" generieren</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Tabs defaultValue="setup">
           <TabsList className="flex-wrap">
             <TabsTrigger value="setup" data-testid="tab-setup"><Zap className="h-4 w-4 mr-1" /> WEG-Einrichtung</TabsTrigger>

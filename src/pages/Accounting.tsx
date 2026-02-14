@@ -39,7 +39,13 @@ import {
   Building2,
   Download,
   Loader2,
+  CreditCard,
+  ArrowRight,
+  Upload,
+  LinkIcon,
+  Sparkles,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAccountCategories, AccountCategory } from '@/hooks/useAccountCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useBankAccounts } from '@/hooks/useBankAccounts';
@@ -502,6 +508,104 @@ function ProfitLossTab({ propertyId }: { propertyId?: string }) {
   );
 }
 
+function BankingTab() {
+  const { data: bankAccounts, isLoading } = useBankAccounts();
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+
+  const accounts = (bankAccounts as any[]) || [];
+  const totalBalance = accounts.reduce((s: number, ba: any) => s + Number(ba.balance || ba.current_balance || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" />Bankkonten ({accounts.length})</CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-sm">{formatEur(totalBalance)} Gesamtsaldo</Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {accounts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">Noch keine Bankkonten eingerichtet</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {accounts.map((ba: any) => (
+                <Card key={ba.id} data-testid={`card-bank-account-${ba.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                        <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{ba.name || ba.bankName}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{ba.iban || '-'}</p>
+                      </div>
+                    </div>
+                    <p className={`text-lg font-bold ${Number(ba.balance || ba.current_balance || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {formatEur(Number(ba.balance || ba.current_balance || 0))}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="hover-elevate">
+          <Link to="/auto-zuordnung" data-testid="link-auto-match">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-md bg-green-100 dark:bg-green-900/30">
+                <LinkIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">Auto-Zuordnung</p>
+                <p className="text-xs text-muted-foreground">Zahlungen automatisch zuordnen</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Link>
+        </Card>
+        <Card className="hover-elevate">
+          <Link to="/bank-abgleich" data-testid="link-bank-reconciliation">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-md bg-amber-100 dark:bg-amber-900/30">
+                <BarChart3 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">Bank-Abgleich</p>
+                <p className="text-xs text-muted-foreground">Kontobewegungen abstimmen</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Link>
+        </Card>
+        <Card className="hover-elevate">
+          <Link to="/ebics-banking" data-testid="link-ebics">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-md bg-purple-100 dark:bg-purple-900/30">
+                <Upload className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">EBICS Banking</p>
+                <p className="text-xs text-muted-foreground">Elektronischer Zahlungsverkehr</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Link>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function UvaTab({ propertyId }: { propertyId?: string }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -587,7 +691,7 @@ export default function Accounting() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-accounting-title">Finanzbuchhaltung</h1>
-            <p className="text-muted-foreground" data-testid="text-accounting-subtitle">Doppelte Buchführung, Bilanz, GuV & UVA</p>
+            <p className="text-muted-foreground" data-testid="text-accounting-subtitle">Banking, Doppelte Buchführung, Bilanz, GuV & UVA</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(Number(v))}>
@@ -620,9 +724,26 @@ export default function Accounting() {
           </div>
         </div>
 
+        <Card className="border-dashed" data-testid="card-ki-hint-accounting">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-medium">KI-Funktionen verfügbar:</span>
+              </div>
+              <Link to="/ki-rechnungen" className="underline underline-offset-2 hover:text-foreground" data-testid="link-ki-ocr">Belege per OCR erfassen</Link>
+              <span className="text-muted-foreground/50">|</span>
+              <Link to="/ki-assistent" className="underline underline-offset-2 hover:text-foreground" data-testid="link-ki-assistant">KI-Assistent fragen</Link>
+              <span className="text-muted-foreground/50">|</span>
+              <Link to="/ki-insights" className="underline underline-offset-2 hover:text-foreground" data-testid="link-ki-anomalies">Anomalie-Erkennung</Link>
+            </div>
+          </CardContent>
+        </Card>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="flex flex-wrap gap-1" data-testid="tabs-accounting">
             <TabsTrigger value="overview" data-testid="tab-overview"><Calculator className="h-4 w-4 mr-1" />Übersicht</TabsTrigger>
+            <TabsTrigger value="banking" data-testid="tab-banking"><CreditCard className="h-4 w-4 mr-1" />Banking</TabsTrigger>
             <TabsTrigger value="journal" data-testid="tab-journal"><BookOpen className="h-4 w-4 mr-1" />Journal</TabsTrigger>
             <TabsTrigger value="accounts" data-testid="tab-accounts"><List className="h-4 w-4 mr-1" />Kontenrahmen</TabsTrigger>
             <TabsTrigger value="trial-balance" data-testid="tab-trial-balance"><BarChart3 className="h-4 w-4 mr-1" />Saldenliste</TabsTrigger>
@@ -631,6 +752,7 @@ export default function Accounting() {
             <TabsTrigger value="uva" data-testid="tab-uva"><Receipt className="h-4 w-4 mr-1" />UVA</TabsTrigger>
           </TabsList>
           <TabsContent value="overview"><OverviewTab selectedYear={selectedYear} selectedMonth={selectedMonth} setSelectedYear={setSelectedYear} setSelectedMonth={setSelectedMonth} /></TabsContent>
+          <TabsContent value="banking"><BankingTab /></TabsContent>
           <TabsContent value="journal"><JournalTab propertyId={propertyId} /></TabsContent>
           <TabsContent value="accounts"><ChartOfAccountsTab /></TabsContent>
           <TabsContent value="trial-balance"><TrialBalanceTab propertyId={propertyId} /></TabsContent>

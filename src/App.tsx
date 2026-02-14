@@ -131,7 +131,7 @@ const App = () => (
             <Route path="/mieter/:tenantId" element={<ProtectedRoute><DemoDataProvider><TenantDetail /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><RentalFinance /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/buchhaltung" element={<ProtectedRoute><DemoDataProvider><Banking /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/buchhaltung" element={<Navigate to="/finanzbuchhaltung" replace />} />
             <Route path="/auto-zuordnung" element={<ProtectedRoute><DemoDataProvider><AutoMatch /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/bank-abgleich" element={<ProtectedRoute><DemoDataProvider><BankReconciliation /></DemoDataProvider></ProtectedRoute>} />
             <Route path="/finanzbuchhaltung" element={<ProtectedRoute><DemoDataProvider><Accounting /></DemoDataProvider></ProtectedRoute>} />

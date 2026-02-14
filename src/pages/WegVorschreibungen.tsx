@@ -163,7 +163,7 @@ export default function WegVorschreibungen() {
   const totalHz = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.heizung) || 0), 0);
   const totalUst = vorschreibungen.reduce((s: number, v: any) => s + (parseFloat(v.ust) || 0), 0);
 
-  const currentRuns: string[] = [...new Set(vorschreibungen.map((v: any) => v.run_id as string).filter(Boolean))];
+  const currentRuns: string[] = [...new Set(vorschreibungen.map((v: any) => v.run_id as string).filter(Boolean))] as string[];
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 1 + i);
 
