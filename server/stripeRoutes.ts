@@ -423,8 +423,7 @@ export async function handleSubscriptionWebhook(event: any) {
     const customerId = invoice.customer;
     const subscriptionId = invoice.subscription;
     
-    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
-    let profiles = [];
+    let profiles: any[] = [];
     if (customerId) {
       profiles = await db.select().from(schema.profiles)
         .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
@@ -447,14 +446,12 @@ export async function handleSubscriptionWebhook(event: any) {
     }
   }
 
-  // Handle subscription cancellation - lock account
   if (type === 'customer.subscription.deleted') {
     const subscription = data.object;
     const customerId = subscription.customer;
     const subscriptionId = subscription.id;
     
-    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
-    let profiles = [];
+    let profiles: any[] = [];
     if (customerId) {
       profiles = await db.select().from(schema.profiles)
         .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
@@ -475,7 +472,6 @@ export async function handleSubscriptionWebhook(event: any) {
         } as any)
         .where(eq(schema.profiles.id, profiles[0].id));
       
-      // Also update organization status if user has one
       if (profiles[0].organizationId) {
         await db.update(schema.organizations)
           .set({ 
@@ -488,14 +484,12 @@ export async function handleSubscriptionWebhook(event: any) {
     }
   }
 
-  // Handle successful payment - reactivate if was past_due
   if (type === 'invoice.payment_succeeded' || type === 'invoice.paid') {
     const invoice = data.object;
     const customerId = invoice.customer;
     const subscriptionId = invoice.subscription;
     
-    // Try to find user by stripeCustomerId first, then by stripeSubscriptionId
-    let profiles = [];
+    let profiles: any[] = [];
     if (customerId) {
       profiles = await db.select().from(schema.profiles)
         .where(eq((schema.profiles as any).stripeCustomerId, customerId)).limit(1);
@@ -518,7 +512,6 @@ export async function handleSubscriptionWebhook(event: any) {
         } as any)
         .where(eq(schema.profiles.id, profiles[0].id));
       
-      // Also reactivate organization if user has one
       if (profiles[0].organizationId) {
         await db.update(schema.organizations)
           .set({ 
