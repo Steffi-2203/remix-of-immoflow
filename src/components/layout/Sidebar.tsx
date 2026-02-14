@@ -34,6 +34,7 @@ import {
   MessageSquarePlus,
   Sparkles,
   ClipboardList,
+  Landmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -97,6 +98,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Kosten & Belege', icon: Receipt, href: '/kosten', tourId: 'nav-expenses' },
       { label: 'Banking', icon: BookOpen, href: '/buchhaltung', tourId: 'nav-banking' },
+      { label: 'Finanzbuchhaltung', icon: Calculator, href: '/finanzbuchhaltung' },
+      { label: 'EBICS Banking', icon: Landmark, href: '/ebics-banking' },
       { label: 'Reports', icon: TrendingUp, href: '/reports', tourId: 'nav-reports' },
     ],
   },

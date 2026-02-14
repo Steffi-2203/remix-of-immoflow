@@ -1805,3 +1805,135 @@ export const automationLog = pgTable("automation_log", {
 export const insertAutomationLogSchema = createInsertSchema(automationLog).omit({ id: true, createdAt: true });
 export type InsertAutomationLog = z.infer<typeof insertAutomationLogSchema>;
 export type AutomationLog = typeof automationLog.$inferSelect;
+
+// ====== DOPPELTE BUCHFÜHRUNG / DOUBLE-ENTRY ACCOUNTING ======
+
+export const accountTypeEnum = pgEnum('account_type', ['asset', 'liability', 'equity', 'revenue', 'expense']);
+
+export const chartOfAccounts = pgTable("chart_of_accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  accountNumber: text("account_number").notNull(),
+  name: text("name").notNull(),
+  accountType: text("account_type").notNull(),
+  description: text("description"),
+  parentId: uuid("parent_id"),
+  isActive: boolean("is_active").default(true).notNull(),
+  isSystem: boolean("is_system").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertChartOfAccountsSchema = createInsertSchema(chartOfAccounts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChartOfAccounts = z.infer<typeof insertChartOfAccountsSchema>;
+export type ChartOfAccounts = typeof chartOfAccounts.$inferSelect;
+
+export const journalEntries = pgTable("journal_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  bookingNumber: text("booking_number").notNull(),
+  entryDate: date("entry_date").notNull(),
+  description: text("description").notNull(),
+  belegNummer: text("beleg_nummer"),
+  belegUrl: text("beleg_url"),
+  sourceType: text("source_type"),
+  sourceId: uuid("source_id"),
+  propertyId: uuid("property_id").references(() => properties.id),
+  unitId: uuid("unit_id").references(() => units.id),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  isStorno: boolean("is_storno").default(false).notNull(),
+  stornoOf: uuid("storno_of"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertJournalEntriesSchema = createInsertSchema(journalEntries).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertJournalEntries = z.infer<typeof insertJournalEntriesSchema>;
+export type JournalEntry = typeof journalEntries.$inferSelect;
+
+export const journalEntryLines = pgTable("journal_entry_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id).notNull(),
+  accountId: uuid("account_id").references(() => chartOfAccounts.id).notNull(),
+  debit: numeric("debit", { precision: 12, scale: 2 }).default("0").notNull(),
+  credit: numeric("credit", { precision: 12, scale: 2 }).default("0").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertJournalEntryLinesSchema = createInsertSchema(journalEntryLines).omit({ id: true, createdAt: true });
+export type InsertJournalEntryLines = z.infer<typeof insertJournalEntryLinesSchema>;
+export type JournalEntryLine = typeof journalEntryLines.$inferSelect;
+
+export const bookingNumberSequences = pgTable("booking_number_sequences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  currentYear: integer("current_year").notNull(),
+  currentNumber: integer("current_number").default(0).notNull(),
+});
+
+export const insertBookingNumberSequencesSchema = createInsertSchema(bookingNumberSequences).omit({ id: true });
+export type InsertBookingNumberSequences = z.infer<typeof insertBookingNumberSequencesSchema>;
+export type BookingNumberSequence = typeof bookingNumberSequences.$inferSelect;
+
+// ====== EBICS LIVE-BANKING ======
+
+export const ebicsConnections = pgTable("ebics_connections", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  bankName: text("bank_name").notNull(),
+  hostId: text("host_id").notNull(),
+  hostUrl: text("host_url").notNull(),
+  partnerId: text("partner_id").notNull(),
+  userId: text("user_id").notNull(),
+  iban: text("iban").notNull(),
+  bic: text("bic"),
+  status: text("status").default("pending").notNull(),
+  keyInitialized: boolean("key_initialized").default(false).notNull(),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  encryptedKeys: text("encrypted_keys"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertEbicsConnectionsSchema = createInsertSchema(ebicsConnections).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEbicsConnection = z.infer<typeof insertEbicsConnectionsSchema>;
+export type EbicsConnection = typeof ebicsConnections.$inferSelect;
+
+export const ebicsOrders = pgTable("ebics_orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  connectionId: uuid("connection_id").references(() => ebicsConnections.id).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  orderType: text("order_type").notNull(),
+  orderStatus: text("order_status").default("pending").notNull(),
+  requestData: text("request_data"),
+  responseData: text("response_data"),
+  errorMessage: text("error_message"),
+  transactionCount: integer("transaction_count").default(0),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export const insertEbicsOrdersSchema = createInsertSchema(ebicsOrders).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertEbicsOrder = z.infer<typeof insertEbicsOrdersSchema>;
+export type EbicsOrder = typeof ebicsOrders.$inferSelect;
+
+export const ebicsPaymentBatches = pgTable("ebics_payment_batches", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  connectionId: uuid("connection_id").references(() => ebicsConnections.id).notNull(),
+  batchType: text("batch_type").notNull(),
+  status: text("status").default("draft").notNull(),
+  paymentCount: integer("payment_count").default(0).notNull(),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).default("0").notNull(),
+  sepaXml: text("sepa_xml"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertEbicsPaymentBatchesSchema = createInsertSchema(ebicsPaymentBatches).omit({ id: true, createdAt: true, submittedAt: true, completedAt: true });
+export type InsertEbicsPaymentBatch = z.infer<typeof insertEbicsPaymentBatchesSchema>;
+export type EbicsPaymentBatch = typeof ebicsPaymentBatches.$inferSelect;
