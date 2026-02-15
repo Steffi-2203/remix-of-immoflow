@@ -53,6 +53,14 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Feature Routes Architecture**: Modular route structure organized by domain with consistent naming and organization-scoped access control.
 - **Defense in Depth**: App-level organization checks + Postgres RLS policies + property ownership validation.
 
+## Legal Pages (Public Routes)
+- **/impressum**: Impressum nach § 5 ECG, Aufsichtsbehörde (DSB), Platzhalter für Adresse/UID
+- **/datenschutz**: DSGVO-konforme Datenschutzerklärung mit Löschfristen (BAO §132: 7J, UStG §18: 22J), Sub-Auftragsverarbeiter-Liste, TOM, Betroffenenrechte, Drittlandtransfer
+- **/agb**: AGB mit Haftungsbegrenzung (EUR 10.000 Cap), Berechnungs-Disclaimer, SaaS-Klauseln, B2B/B2C USt, Datenexport, geistiges Eigentum
+- **/avv**: Auftragsverarbeitungsvertrag nach Art. 28 DSGVO mit TOM, Sub-Auftragsverarbeiter (Neon, Replit, Stripe, Resend, OpenAI), Löschkonzept, Kontrollrechte
+- **/sla**: Service Level Agreement mit 3 Tiers (99%/99.5%/99.9%), Störungskategorien, Gutschriften, Backup-Details
+- **Hinweis**: Alle Dokumente enthalten Muster-Disclaimer und sollten vor Verwendung anwaltlich geprüft werden
+
 ## SEO & Domain Configuration
 - **Domain**: www.immoflowme.at (canonical host)
 - **DNS**: CNAME records at World4You pointing to cname.replit.com

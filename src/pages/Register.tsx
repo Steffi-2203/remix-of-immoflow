@@ -201,10 +201,12 @@ export default function Register() {
                 Zur Anmeldung
               </Link>
             </p>
-            <div className="flex gap-4 justify-center text-xs">
+            <div className="flex gap-4 justify-center text-xs flex-wrap">
               <Link to="/impressum" className="hover:underline">Impressum</Link>
               <Link to="/datenschutz" className="hover:underline">Datenschutz</Link>
               <Link to="/agb" className="hover:underline">AGB</Link>
+              <Link to="/avv" className="hover:underline">AVV</Link>
+              <Link to="/sla" className="hover:underline">SLA</Link>
             </div>
           </CardFooter>
         </Card>

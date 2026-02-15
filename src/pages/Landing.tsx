@@ -297,6 +297,8 @@ export default function Landing() {
               <Link to="/datenschutz" className="hover:text-foreground transition-colors">Datenschutz</Link>
               <Link to="/impressum" className="hover:text-foreground transition-colors">Impressum</Link>
               <Link to="/agb" className="hover:text-foreground transition-colors">AGB</Link>
+              <Link to="/avv" className="hover:text-foreground transition-colors">AVV</Link>
+              <Link to="/sla" className="hover:text-foreground transition-colors">SLA</Link>
             </div>
           </div>
         </div>
