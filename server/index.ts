@@ -216,6 +216,7 @@ app.get("/sitemap.xml", (_req, res) => {
     { loc: "/agb", priority: "0.3", changefreq: "yearly" },
     { loc: "/avv", priority: "0.3", changefreq: "yearly" },
     { loc: "/sla", priority: "0.4", changefreq: "yearly" },
+    { loc: "/loeschkonzept", priority: "0.3", changefreq: "yearly" },
   ];
   const today = new Date().toISOString().split("T")[0];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
