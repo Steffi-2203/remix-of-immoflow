@@ -116,7 +116,7 @@ export default function DemoActivatePage() {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Building2 className="w-8 h-8 text-blue-600" />
-            <span className="text-2xl font-bold">ImmoflowMe</span>
+            <span className="text-2xl font-bold">ImmoFlowMe</span>
           </div>
           <CardTitle>Demo aktivieren</CardTitle>
           <CardDescription>

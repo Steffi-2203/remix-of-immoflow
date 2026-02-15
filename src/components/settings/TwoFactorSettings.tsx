@@ -108,7 +108,7 @@ export function TwoFactorSettings() {
 
   const downloadBackupCodes = () => {
     const content = [
-      "ImmoflowMe - Backup-Codes für Zwei-Faktor-Authentifizierung",
+      "ImmoFlowMe - Backup-Codes für Zwei-Faktor-Authentifizierung",
       "============================================================",
       "",
       "Bewahren Sie diese Codes sicher auf.",

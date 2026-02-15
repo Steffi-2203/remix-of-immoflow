@@ -144,7 +144,7 @@ async function seedAuditLog() {
 }
 
 async function main() {
-  console.log("=== ImmoflowMe Demo Data Seed ===\n");
+  console.log("=== ImmoFlowMe Demo Data Seed ===\n");
 
   const leases = await seedLeases();
   console.log(`Leases created: ${leases}`);

@@ -116,13 +116,13 @@ export default function DemoRequestPage() {
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <Building2 className="w-10 h-10 text-blue-600" />
-            <h1 className="text-3xl font-bold">ImmoflowMe</h1>
+            <h1 className="text-3xl font-bold">ImmoFlowMe</h1>
           </div>
           <h2 className="text-4xl font-bold leading-tight">
             Testen Sie unsere Hausverwaltungssoftware
           </h2>
           <p className="text-lg text-muted-foreground">
-            Erleben Sie alle Funktionen von ImmoflowMe mit realistischen Beispieldaten - 
+            Erleben Sie alle Funktionen von ImmoFlowMe mit realistischen Beispieldaten - 
             kostenlos und unverbindlich.
           </p>
           <div className="space-y-4">

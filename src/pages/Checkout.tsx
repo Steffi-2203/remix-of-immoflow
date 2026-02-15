@@ -21,7 +21,7 @@ const planDetails: Record<PlanId, PlanDetails> = {
   starter: {
     id: 'starter',
     name: 'Starter',
-    price: '€149',
+    price: '€39',
     priceDetail: 'pro Monat',
     features: [
       'Bis zu 50 Immobilien',

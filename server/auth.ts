@@ -43,7 +43,7 @@ async function checkLeakedPassword(password: string): Promise<boolean> {
     const suffix = sha1Hash.substring(5);
 
     const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
-      headers: { "User-Agent": "ImmoflowMe-PasswordCheck" },
+      headers: { "User-Agent": "ImmoFlowMe-PasswordCheck" },
     });
 
     if (!response.ok) {
@@ -272,11 +272,11 @@ export function setupAuth(app: Express) {
 
       if (isAdmin) {
         let adminOrg = await db.select().from(schema.organizations)
-          .where(eq(schema.organizations.name, "ImmoflowMe Admin")).limit(1);
+          .where(eq(schema.organizations.name, "ImmoFlowMe Admin")).limit(1);
         
         if (!adminOrg[0]) {
           const newOrg = await db.insert(schema.organizations).values({
-            name: "ImmoflowMe Admin",
+            name: "ImmoFlowMe Admin",
             subscriptionStatus: 'active',
             subscriptionTier: 'enterprise',
           }).returning();
@@ -510,7 +510,7 @@ export function setupAuth(app: Express) {
         
         await sendEmail({
           to: profile.email,
-          subject: "Passwort zurücksetzen - ImmoflowMe",
+          subject: "Passwort zurücksetzen - ImmoFlowMe",
           html: `
             <h2>Passwort zurücksetzen</h2>
             <p>Hallo ${profile.fullName || 'Nutzer'},</p>
@@ -519,7 +519,7 @@ export function setupAuth(app: Express) {
             <p><a href="${resetUrl}">Passwort zurücksetzen</a></p>
             <p>Dieser Link ist ${PASSWORD_RESET_EXPIRY_HOURS} Stunden gültig.</p>
             <p>Falls Sie diese Anfrage nicht gestellt haben, ignorieren Sie diese E-Mail.</p>
-            <p>Mit freundlichen Grüßen,<br>Ihr ImmoflowMe Team</p>
+            <p>Mit freundlichen Grüßen,<br>Ihr ImmoFlowMe Team</p>
           `,
         });
       }

@@ -8,7 +8,7 @@ export async function generateSecret(userId: string, email: string): Promise<{
   qrCodeDataUrl: string;
 }> {
   const totp = new OTPAuth.TOTP({
-    issuer: "ImmoflowMe",
+    issuer: "ImmoFlowMe",
     label: email,
     algorithm: "SHA1",
     digits: 6,
@@ -25,7 +25,7 @@ export async function generateSecret(userId: string, email: string): Promise<{
 
 export function verifyToken(secret: string, token: string): boolean {
   const totp = new OTPAuth.TOTP({
-    issuer: "ImmoflowMe",
+    issuer: "ImmoFlowMe",
     algorithm: "SHA1",
     digits: 6,
     period: 30,

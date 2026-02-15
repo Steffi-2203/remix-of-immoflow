@@ -128,7 +128,7 @@ export function BrandingSettings() {
                       />
                     </FormControl>
                     <FormDescription>
-                      Dieser Name wird anstelle von "ImmoflowMe" angezeigt
+                      Dieser Name wird anstelle von "ImmoFlowMe" angezeigt
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -283,7 +283,7 @@ export function BrandingSettings() {
                 </div>
               )}
               <span className="font-semibold text-lg">
-                {form.watch('brandName') || 'ImmoflowMe'}
+                {form.watch('brandName') || 'ImmoFlowMe'}
               </span>
             </div>
             <div className="flex gap-2">

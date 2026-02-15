@@ -395,9 +395,9 @@ export default function Admin() {
                 <SelectValue placeholder="Plan auswählen" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="starter">Starter (€29/Monat)</SelectItem>
-                <SelectItem value="professional">Professional (€59/Monat)</SelectItem>
-                <SelectItem value="enterprise">Premium (€49/Monat)</SelectItem>
+                <SelectItem value="starter">Starter (€39/Monat)</SelectItem>
+                <SelectItem value="professional">Professional (€299/Monat)</SelectItem>
+                <SelectItem value="enterprise">Enterprise (€399/Monat)</SelectItem>
               </SelectContent>
             </Select>
           </div>

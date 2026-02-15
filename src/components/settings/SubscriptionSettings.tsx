@@ -31,9 +31,9 @@ const planFeatures: PlanFeature[] = [
 ];
 
 const prices = {
-  starter: { monthly: 29, yearly: 290 },
-  professional: { monthly: 59, yearly: 590 },
-  enterprise: { monthly: 149, yearly: 1490 },
+  starter: { monthly: 39, yearly: 390 },
+  professional: { monthly: 299, yearly: 2990 },
+  enterprise: { monthly: 399, yearly: 3990 },
 };
 
 export function SubscriptionSettings() {

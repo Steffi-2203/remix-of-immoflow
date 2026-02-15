@@ -424,7 +424,7 @@ router.get("/api/heizkosten/export/:id", isAuthenticated, async (req: Request, r
       meta: {
         exportDate: new Date().toISOString(),
         format: 'DATEV-kompatibel',
-        system: 'ImmoflowMe HeizKG',
+        system: 'ImmoFlowMe HeizKG',
       },
       run: {
         id: result.run.id,
@@ -746,7 +746,7 @@ ${warningsHtml}
 
 <div class="footer">
   Diese Abrechnung wurde gem&auml;&szlig; dem Heiz- und K&auml;ltekostenabrechnungsgesetz (HeizKG) erstellt.<br>
-  Generiert am ${new Date().toLocaleDateString('de-AT')} um ${new Date().toLocaleTimeString('de-AT')} | ImmoflowMe Hausverwaltungssoftware
+  Generiert am ${new Date().toLocaleDateString('de-AT')} um ${new Date().toLocaleTimeString('de-AT')} | ImmoFlowMe Hausverwaltungssoftware
 </div>
 
 </body>

@@ -119,7 +119,7 @@ export default function TenantPortalStandalone() {
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
             <Skeleton className="h-9 w-24" />
           </div>
         </header>
@@ -142,7 +142,7 @@ export default function TenantPortalStandalone() {
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
             <Button variant="outline" onClick={handleLogout} data-testid="button-tenant-logout">
               <LogOut className="h-4 w-4 mr-2" /> Abmelden
             </Button>
@@ -171,7 +171,7 @@ export default function TenantPortalStandalone() {
       <header className="border-b bg-card sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoflowMe" className="h-8 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
             <span className="text-sm text-muted-foreground hidden sm:inline">Mieterportal</span>
           </div>
           <div className="flex items-center gap-3">
@@ -624,7 +624,7 @@ export default function TenantPortalStandalone() {
 
       <footer className="border-t bg-card mt-8">
         <div className="max-w-6xl mx-auto px-4 py-4 text-center text-sm text-muted-foreground">
-          ImmoflowMe Mieterportal – Bereitgestellt von Ihrer Hausverwaltung
+          ImmoFlowMe Mieterportal – Bereitgestellt von Ihrer Hausverwaltung
         </div>
       </footer>
     </div>

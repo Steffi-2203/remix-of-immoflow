@@ -67,7 +67,7 @@ export default function Register() {
       
       toast({
         title: "Erfolgreich registriert",
-        description: "Willkommen bei ImmoflowMe!",
+        description: "Willkommen bei ImmoFlowMe!",
       });
       
       navigate('/dashboard', { replace: true });
@@ -99,7 +99,7 @@ export default function Register() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
+              <img src={immoflowLogo} alt="ImmoFlowMe" className="h-16 w-auto" />
             </div>
             <CardTitle className="text-2xl font-bold">
               {inviteToken ? 'Einladung annehmen' : 'Registrieren'}
@@ -107,7 +107,7 @@ export default function Register() {
             <CardDescription>
               {inviteToken 
                 ? 'Erstellen Sie Ihr Konto, um die Einladung anzunehmen'
-                : 'Erstellen Sie Ihr Konto bei ImmoflowMe'}
+                : 'Erstellen Sie Ihr Konto bei ImmoFlowMe'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>

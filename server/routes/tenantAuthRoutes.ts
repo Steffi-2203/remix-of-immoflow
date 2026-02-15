@@ -244,11 +244,11 @@ export function registerTenantAuthRoutes(app: Express) {
 
       await sendEmail({
         to: access[0].email,
-        subject: "Einladung zum Mieterportal - ImmoflowMe",
+        subject: "Einladung zum Mieterportal - ImmoFlowMe",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #1a365d; margin-bottom: 5px;">ImmoflowMe</h1>
+              <h1 style="color: #1a365d; margin-bottom: 5px;">ImmoFlowMe</h1>
               <p style="color: #666; font-size: 14px;">Professionelle Hausverwaltung</p>
             </div>
             
@@ -256,7 +256,7 @@ export function registerTenantAuthRoutes(app: Express) {
             
             <p>Sehr geehrte(r) ${tenantName},</p>
             
-            <p>Sie wurden zum <strong>ImmoflowMe Mieterportal</strong> eingeladen. 
+            <p>Sie wurden zum <strong>ImmoFlowMe Mieterportal</strong> eingeladen. 
             Über das Mieterportal haben Sie jederzeit Zugriff auf:</p>
             
             <ul style="color: #333; line-height: 1.8;">
@@ -289,14 +289,14 @@ export function registerTenantAuthRoutes(app: Express) {
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
             
             <p style="color: #999; font-size: 12px; text-align: center;">
-              ImmoflowMe - Professionelle Hausverwaltung<br/>
+              ImmoFlowMe - Professionelle Hausverwaltung<br/>
               Diese E-Mail wurde automatisch generiert.
             </p>
           </div>
         `,
         text: `Sehr geehrte(r) ${tenantName},
 
-Sie wurden zum ImmoflowMe Mieterportal eingeladen.
+Sie wurden zum ImmoFlowMe Mieterportal eingeladen.
 
 Klicken Sie auf den folgenden Link, um Ihr Passwort festzulegen und sich anzumelden:
 ${inviteUrl}

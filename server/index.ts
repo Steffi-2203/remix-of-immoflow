@@ -397,7 +397,7 @@ async function initStripe() {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    logger.info(`ImmoflowMe server started`, { port, env: app.get("env"), pid: process.pid });
+    logger.info(`ImmoFlowMe server started`, { port, env: app.get("env"), pid: process.pid });
     log(`serving on port ${port}`);
   });
 })();
