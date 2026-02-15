@@ -60,18 +60,44 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const result = await signIn(email, password);
-      if (result && typeof result === 'object' && 'requires2FA' in result) {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const csrf = getCsrfToken();
+      if (csrf) headers["x-csrf-token"] = csrf;
+
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Anmeldung fehlgeschlagen",
+          description: data.error || "Ungültige E-Mail oder Passwort",
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (data.requires2FA) {
         setRequires2FA(true);
         setIsSubmitting(false);
         return;
       }
+
+      queryClient.setQueryData(["/api/auth/user"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         title: "Anmeldung fehlgeschlagen",
-        description: error.message || "Ungültige E-Mail oder Passwort",
+        description: "Netzwerkfehler. Bitte versuchen Sie es erneut.",
         variant: "destructive",
       });
     } finally {
