@@ -27,7 +27,17 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   handleReset = () => {
     this.setState({ hasError: false, error: undefined });
-    window.location.href = '/dashboard';
+    window.location.href = '/';
+  };
+
+  handleClearAndReload = () => {
+    if ('caches' in window) {
+      caches.keys().then((keys: string[]) => Promise.all(keys.map((k: string) => caches.delete(k)))).then(() => {
+        window.location.reload();
+      });
+    } else {
+      window.location.reload();
+    }
   };
 
   render() {
@@ -45,14 +55,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               {this.state.error?.message || 'Ein unerwarteter Fehler ist aufgetreten'}
             </p>
             <div className="flex flex-col gap-2">
-              <Button onClick={this.handleReset}>
-                Zum Dashboard
+              <Button onClick={this.handleReset} data-testid="button-error-home">
+                Zur Startseite
               </Button>
               <Button 
                 variant="outline" 
-                onClick={() => window.location.reload()}
+                onClick={this.handleClearAndReload}
+                data-testid="button-error-reload"
               >
-                Seite neu laden
+                Cache leeren &amp; neu laden
               </Button>
             </div>
           </div>
