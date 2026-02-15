@@ -276,7 +276,7 @@ export class EbicsService {
     const secret = process.env.SESSION_SECRET || 'default-ebics-key-do-not-use-in-prod';
     const key = crypto.scryptSync(secret, 'ebics-salt', 32);
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    const cipher = crypto.createCipheriv(algorithm, key, iv, { authTagLength: 16 });
     let encrypted = cipher.update(keys, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const authTag = cipher.getAuthTag();
@@ -290,7 +290,7 @@ export class EbicsService {
     const [ivHex, authTagHex, data] = encrypted.split(':');
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    const decipher = crypto.createDecipheriv(algorithm, key, iv, { authTagLength: 16 });
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(data, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
