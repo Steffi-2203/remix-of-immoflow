@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import onFinished from "on-finished";
 import cookieParser from "cookie-parser";
@@ -123,6 +124,9 @@ const allowedOrigins = [
   'https://app.immoflowme.com',
   'https://immoflow.me',
   'https://www.immoflow.me',
+  'https://immoflowme.at',
+  'https://www.immoflowme.at',
+  'https://app.immoflowme.at',
 ].filter(Boolean);
 
 app.use((req, res, next) => {
@@ -197,6 +201,34 @@ app.post(
     }
   }
 );
+
+app.use(compression());
+
+app.get("/sitemap.xml", (_req, res) => {
+  const baseUrl = "https://www.immoflowme.at";
+  const pages = [
+    { loc: "/", priority: "1.0", changefreq: "weekly" },
+    { loc: "/preise", priority: "0.9", changefreq: "monthly" },
+    { loc: "/demo", priority: "0.8", changefreq: "monthly" },
+    { loc: "/login", priority: "0.5", changefreq: "yearly" },
+    { loc: "/impressum", priority: "0.3", changefreq: "yearly" },
+    { loc: "/datenschutz", priority: "0.3", changefreq: "yearly" },
+    { loc: "/agb", priority: "0.3", changefreq: "yearly" },
+  ];
+  const today = new Date().toISOString().split("T")[0];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages.map(p => `  <url>
+    <loc>${baseUrl}${p.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${p.changefreq}</changefreq>
+    <priority>${p.priority}</priority>
+  </url>`).join("\n")}
+</urlset>`;
+  res.set("Content-Type", "application/xml");
+  res.set("Cache-Control", "public, max-age=86400");
+  res.send(xml);
+});
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", uptime: process.uptime() });

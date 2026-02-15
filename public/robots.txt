@@ -1,8 +1,14 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /admin
 
 User-agent: Bingbot
 Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /admin
 
 User-agent: Twitterbot
 Allow: /
@@ -12,3 +18,8 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /admin
+
+Sitemap: https://www.immoflowme.at/sitemap.xml
