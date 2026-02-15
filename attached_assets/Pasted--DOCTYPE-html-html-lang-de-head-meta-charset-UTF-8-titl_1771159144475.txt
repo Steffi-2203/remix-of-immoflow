@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Löschkonzept | ImmoFlowMe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<main>
+  <h1>Löschkonzept für personenbezogene Daten</h1>
+  <p><strong>Stand:</strong> Februar 2026</p>
+  <p><strong>Hinweis:</strong> Dieses Löschkonzept dient als Muster und sollte vor Verwendung von einem Rechtsanwalt geprüft werden.</p>
+
+  <h2>1. Ziel und Geltungsbereich</h2>
+  <p>Dieses Löschkonzept beschreibt die Grundsätze und Prozesse zur Löschung und Anonymisierung personenbezogener Daten in der SaaS-Plattform ImmoFlowMe unter Berücksichtigung der DSGVO sowie der österreichischen Aufbewahrungspflichten (BAO, UStG, HeizKG).</p>
+
+  <h2>2. Aufbewahrungsfristen</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Datenkategorie</th>
+        <th>Aufbewahrungsfrist</th>
+        <th>Rechtsgrundlage</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Vertragsdaten</td>
+        <td>7 Jahre nach Vertragsende</td>
+        <td>§ 132 BAO</td>
+      </tr>
+      <tr>
+        <td>Finanzdaten / Buchungsbelege</td>
+        <td>7 Jahre</td>
+        <td>§ 132 BAO</td>
+      </tr>
+      <tr>
+        <td>Grundstücksbezogene Unterlagen</td>
+        <td>22 Jahre</td>
+        <td>§ 18 UStG</td>
+      </tr>
+      <tr>
+        <td>Betriebskostenabrechnungen</td>
+        <td>7 Jahre</td>
+        <td>§ 132 BAO</td>
+      </tr>
+      <tr>
+        <td>Heizkostenabrechnungen</td>
+        <td>7 Jahre</td>
+        <td>HeizKG i.V.m. § 132 BAO</td>
+      </tr>
+      <tr>
+        <td>Server-Log-Dateien</td>
+        <td>90 Tage</td>
+        <td>Berechtigtes Interesse (Systemsicherheit)</td>
+      </tr>
+      <tr>
+        <td>Bewerberdaten</td>
+        <td>6 Monate nach Absage</td>
+        <td>Berechtigtes Interesse</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Lösch- und Anonymisierungsmethoden</h2>
+  <ul>
+    <li>Automatisierte Löschung von Datensätzen nach Ablauf der definierten Fristen.</li>
+    <li>Anonymisierung, wenn eine vollständige Löschung aus technischen oder rechtlichen Gründen nicht möglich ist.</li>
+    <li>Überschreiben von Backups nach einem definierten Zeitraum (z. B. 90 Tage).</li>
+  </ul>
+
+  <h2>4. Löschprozesse</h2>
+  <ul>
+    <li>Regelmäßige, automatisierte Jobs prüfen das Alter der Datensätze und markieren diese zur Löschung.</li>
+    <li>Löschvorgänge werden protokolliert, um Nachweise gegenüber Verantwortlichen und Aufsichtsbehörden erbringen zu können.</li>
+    <li>Betroffenenrechte (z. B. Löschung nach Art. 17 DSGVO) werden durch manuelle oder halbautomatisierte Prozesse umgesetzt.</li>
+  </ul>
+
+  <h2>5. Verantwortlichkeiten</h2>
+  <ul>
+    <li>ImmoFlowMe ist für die technische Umsetzung der Löschung und Anonymisierung verantwortlich.</li>
+    <li>Der jeweilige Verantwortliche (Kunde) ist für die rechtliche Bewertung und Klassifizierung der von ihm verarbeiteten Daten verantwortlich.</li>
+  </ul>
+
+  <h2>6. Beziehung zum AVV und zur Datenschutzerklärung</h2>
+  <p>Dieses Löschkonzept ergänzt die Regelungen im Auftragsverarbeitungsvertrag (AVV) und in der Datenschutzerklärung. Im Zweifel gelten die gesetzlichen Aufbewahrungspflichten und die vertraglichen Vereinbarungen im AVV.</p>
+
+  <p><strong>Muster-Disclaimer:</strong> Dieses Löschkonzept stellt ein Muster dar und ersetzt keine individuelle Rechtsberatung.</p>
+</main>
+</body>
+</html>
