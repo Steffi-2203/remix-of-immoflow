@@ -1,9 +1,8 @@
-const CACHE_VERSION = 'immoflow-v4';
+const CACHE_VERSION = 'immoflow-v5';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
-  '/',
   '/favicon.png',
   '/manifest.json',
   '/icons/icon-192.png'
@@ -84,16 +83,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.mjs')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok && url.pathname.match(/\.(js|css|mjs)$/)) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => {
+          if (event.request.mode === 'navigate') {
+            return caches.match(event.request).then((cached) => {
+              if (cached) return cached;
+              return new Response(OFFLINE_PAGE, {
+                status: 503,
+                headers: { 'Content-Type': 'text/html' }
+              });
+            });
+          }
+          return caches.match(event.request).then((cached) => {
+            if (cached) return cached;
+            return new Response('Offline', { status: 503 });
+          });
+        })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      if (cached) {
-        fetch(event.request).then((response) => {
-          if (response.ok) {
-            caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, response));
-          }
-        }).catch(() => {});
-        return cached;
-      }
+      if (cached) return cached;
       return fetch(event.request)
         .then((response) => {
           if (response.ok) {
@@ -102,15 +123,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => {
-          if (event.request.mode === 'navigate') {
-            return new Response(OFFLINE_PAGE, {
-              status: 503,
-              headers: { 'Content-Type': 'text/html' }
-            });
-          }
-          return new Response('Offline', { status: 503 });
-        });
+        .catch(() => new Response('Offline', { status: 503 }));
     })
   );
 });
@@ -167,6 +180,9 @@ self.addEventListener('message', (event) => {
   }
   if (event.data === 'clearApiCache') {
     caches.delete(API_CACHE);
+  }
+  if (event.data === 'clearAllCaches') {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
   }
   if (event.data === 'getVersion') {
     event.source.postMessage({ type: 'version', version: CACHE_VERSION });

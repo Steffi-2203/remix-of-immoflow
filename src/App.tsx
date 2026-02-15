@@ -97,10 +97,21 @@ function PageLoader() {
   );
 }
 
+function ProtectedWithOrg({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <ActiveOrganizationProvider>
+        <DemoDataProvider>
+          {children}
+        </DemoDataProvider>
+      </ActiveOrganizationProvider>
+    </ProtectedRoute>
+  );
+}
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <ActiveOrganizationProvider>
       <TooltipProvider>
         <InstallBanner />
         <OfflineIndicator />
@@ -125,65 +136,65 @@ const App = () => (
             <Route path="/eigentuemer-login" element={<OwnerLogin />} />
             <Route path="/eigentuemer-portal" element={<OwnerPortalStandalone />} />
             
-            {/* Protected routes - wrapped with DemoDataProvider */}
-            <Route path="/dashboard" element={<ProtectedRoute><DemoDataProvider><SimpleDashboard /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften" element={<ProtectedRoute><DemoDataProvider><PropertyList /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften/neu" element={<ProtectedRoute><DemoDataProvider><PropertyForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften/:id" element={<ProtectedRoute><DemoDataProvider><PropertyDetail /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften/:id/bearbeiten" element={<ProtectedRoute><DemoDataProvider><PropertyForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<ProtectedRoute><DemoDataProvider><UnitForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><UnitForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/einheiten" element={<ProtectedRoute><DemoDataProvider><UnitList /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedRoute><DemoDataProvider><UnitDetail /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mieter" element={<ProtectedRoute><DemoDataProvider><TenantList /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mieter/neu" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mieter/:tenantId" element={<ProtectedRoute><DemoDataProvider><TenantDetail /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedRoute><DemoDataProvider><TenantForm /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/zahlungen" element={<ProtectedRoute><DemoDataProvider><RentalFinance /></DemoDataProvider></ProtectedRoute>} />
+            {/* Protected routes - wrapped with ActiveOrganizationProvider and DemoDataProvider */}
+            <Route path="/dashboard" element={<ProtectedWithOrg><SimpleDashboard /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften" element={<ProtectedWithOrg><PropertyList /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften/neu" element={<ProtectedWithOrg><PropertyForm /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften/:id" element={<ProtectedWithOrg><PropertyDetail /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften/:id/bearbeiten" element={<ProtectedWithOrg><PropertyForm /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften/:propertyId/einheiten/neu" element={<ProtectedWithOrg><UnitForm /></ProtectedWithOrg>} />
+            <Route path="/liegenschaften/:propertyId/einheiten/:unitId/bearbeiten" element={<ProtectedWithOrg><UnitForm /></ProtectedWithOrg>} />
+            <Route path="/einheiten" element={<ProtectedWithOrg><UnitList /></ProtectedWithOrg>} />
+            <Route path="/einheiten/:propertyId/:unitId" element={<ProtectedWithOrg><UnitDetail /></ProtectedWithOrg>} />
+            <Route path="/einheiten/:propertyId/:unitId/mieter/neu" element={<ProtectedWithOrg><TenantForm /></ProtectedWithOrg>} />
+            <Route path="/einheiten/:propertyId/:unitId/mieter/:tenantId/bearbeiten" element={<ProtectedWithOrg><TenantForm /></ProtectedWithOrg>} />
+            <Route path="/mieter" element={<ProtectedWithOrg><TenantList /></ProtectedWithOrg>} />
+            <Route path="/mieter/neu" element={<ProtectedWithOrg><TenantForm /></ProtectedWithOrg>} />
+            <Route path="/mieter/:tenantId" element={<ProtectedWithOrg><TenantDetail /></ProtectedWithOrg>} />
+            <Route path="/mieter/:tenantId/bearbeiten" element={<ProtectedWithOrg><TenantForm /></ProtectedWithOrg>} />
+            <Route path="/zahlungen" element={<ProtectedWithOrg><RentalFinance /></ProtectedWithOrg>} />
             <Route path="/buchhaltung" element={<Navigate to="/finanzbuchhaltung" replace />} />
-            <Route path="/auto-zuordnung" element={<ProtectedRoute><DemoDataProvider><AutoMatch /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/bank-abgleich" element={<ProtectedRoute><DemoDataProvider><BankReconciliation /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/finanzbuchhaltung" element={<ProtectedRoute><DemoDataProvider><Accounting /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/ebics-banking" element={<ProtectedRoute><DemoDataProvider><EbicsBanking /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/offene-posten" element={<ProtectedRoute><DemoDataProvider><OffenePosten /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/jahresabschluss" element={<ProtectedRoute><DemoDataProvider><Jahresabschluss /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/kosten" element={<ProtectedRoute><DemoDataProvider><CostsHub /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/abrechnung" element={<ProtectedRoute><DemoDataProvider><OperatingCostSettlement /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/dokumente" element={<ProtectedRoute><DemoDataProvider><Documents /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/reports" element={<ProtectedRoute><DemoDataProvider><Reports /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/geplante-berichte" element={<ProtectedRoute><DemoDataProvider><ScheduledReports /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/wartungen" element={<ProtectedRoute><DemoDataProvider><MaintenanceHub /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/budgets" element={<ProtectedRoute><DemoDataProvider><Budgets /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/nachrichten" element={<ProtectedRoute><DemoDataProvider><MessagesPage /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/team" element={<ProtectedRoute><DemoDataProvider><TeamManagement /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/weg" element={<ProtectedRoute><DemoDataProvider><WegManagement /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/weg-vorschreibungen" element={<ProtectedRoute><DemoDataProvider><WegVorschreibungen /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/versicherungen" element={<ProtectedRoute><DemoDataProvider><InsuranceManagement /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/fristen" element={<ProtectedRoute><DemoDataProvider><DeadlineCalendar /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/serienbriefe" element={<ProtectedRoute><DemoDataProvider><SerialLetters /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/hv-vertraege" element={<ProtectedRoute><DemoDataProvider><ManagementContracts /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mieterportal" element={<ProtectedRoute><DemoDataProvider><TenantPortal /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/eigentuemerportal" element={<ProtectedRoute><DemoDataProvider><OwnerPortal /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/dsgvo" element={<ProtectedRoute><DemoDataProvider><DsgvoCompliance /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/sicherheit" element={<ProtectedRoute><DemoDataProvider><SecurityDashboard /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/tickets" element={<ProtectedRoute><DemoDataProvider><SupportTickets /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/workflows" element={<ProtectedRoute><DemoDataProvider><GuidedWorkflows /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/esg" element={<ProtectedRoute><DemoDataProvider><EsgDashboard /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/schadensmeldungen" element={<ProtectedRoute><DemoDataProvider><DamageReports /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mietvertrag-generator" element={<ProtectedRoute><DemoDataProvider><LeaseContractGenerator /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/ki-assistent" element={<ProtectedRoute><DemoDataProvider><KiAssistent /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/automatisierung" element={<ProtectedRoute><DemoDataProvider><AutomationSettings /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/ki-rechnungen" element={<ProtectedRoute><DemoDataProvider><InvoiceOcr /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/ki-insights" element={<ProtectedRoute><DemoDataProvider><KiInsights /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/ki-kommunikation" element={<ProtectedRoute><DemoDataProvider><KiKommunikation /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/signaturen" element={<ProtectedRoute><DemoDataProvider><Signatures /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/abfrage-builder" element={<ProtectedRoute><DemoDataProvider><QueryBuilder /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/heizkosten" element={<ProtectedRoute><DemoDataProvider><Heizkosten /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/mietzinsrechner" element={<ProtectedRoute><DemoDataProvider><Richtwertmietzins /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/aktivitaeten" element={<ProtectedRoute><DemoDataProvider><Aktivitaeten /></DemoDataProvider></ProtectedRoute>} />
-            <Route path="/einstellungen" element={<ProtectedRoute><DemoDataProvider><Settings /></DemoDataProvider></ProtectedRoute>} />
+            <Route path="/auto-zuordnung" element={<ProtectedWithOrg><AutoMatch /></ProtectedWithOrg>} />
+            <Route path="/bank-abgleich" element={<ProtectedWithOrg><BankReconciliation /></ProtectedWithOrg>} />
+            <Route path="/finanzbuchhaltung" element={<ProtectedWithOrg><Accounting /></ProtectedWithOrg>} />
+            <Route path="/ebics-banking" element={<ProtectedWithOrg><EbicsBanking /></ProtectedWithOrg>} />
+            <Route path="/offene-posten" element={<ProtectedWithOrg><OffenePosten /></ProtectedWithOrg>} />
+            <Route path="/jahresabschluss" element={<ProtectedWithOrg><Jahresabschluss /></ProtectedWithOrg>} />
+            <Route path="/kosten" element={<ProtectedWithOrg><CostsHub /></ProtectedWithOrg>} />
+            <Route path="/abrechnung" element={<ProtectedWithOrg><OperatingCostSettlement /></ProtectedWithOrg>} />
+            <Route path="/dokumente" element={<ProtectedWithOrg><Documents /></ProtectedWithOrg>} />
+            <Route path="/reports" element={<ProtectedWithOrg><Reports /></ProtectedWithOrg>} />
+            <Route path="/geplante-berichte" element={<ProtectedWithOrg><ScheduledReports /></ProtectedWithOrg>} />
+            <Route path="/wartungen" element={<ProtectedWithOrg><MaintenanceHub /></ProtectedWithOrg>} />
+            <Route path="/budgets" element={<ProtectedWithOrg><Budgets /></ProtectedWithOrg>} />
+            <Route path="/nachrichten" element={<ProtectedWithOrg><MessagesPage /></ProtectedWithOrg>} />
+            <Route path="/team" element={<ProtectedWithOrg><TeamManagement /></ProtectedWithOrg>} />
+            <Route path="/weg" element={<ProtectedWithOrg><WegManagement /></ProtectedWithOrg>} />
+            <Route path="/weg-vorschreibungen" element={<ProtectedWithOrg><WegVorschreibungen /></ProtectedWithOrg>} />
+            <Route path="/versicherungen" element={<ProtectedWithOrg><InsuranceManagement /></ProtectedWithOrg>} />
+            <Route path="/fristen" element={<ProtectedWithOrg><DeadlineCalendar /></ProtectedWithOrg>} />
+            <Route path="/serienbriefe" element={<ProtectedWithOrg><SerialLetters /></ProtectedWithOrg>} />
+            <Route path="/hv-vertraege" element={<ProtectedWithOrg><ManagementContracts /></ProtectedWithOrg>} />
+            <Route path="/mieterportal" element={<ProtectedWithOrg><TenantPortal /></ProtectedWithOrg>} />
+            <Route path="/eigentuemerportal" element={<ProtectedWithOrg><OwnerPortal /></ProtectedWithOrg>} />
+            <Route path="/dsgvo" element={<ProtectedWithOrg><DsgvoCompliance /></ProtectedWithOrg>} />
+            <Route path="/sicherheit" element={<ProtectedWithOrg><SecurityDashboard /></ProtectedWithOrg>} />
+            <Route path="/tickets" element={<ProtectedWithOrg><SupportTickets /></ProtectedWithOrg>} />
+            <Route path="/workflows" element={<ProtectedWithOrg><GuidedWorkflows /></ProtectedWithOrg>} />
+            <Route path="/esg" element={<ProtectedWithOrg><EsgDashboard /></ProtectedWithOrg>} />
+            <Route path="/schadensmeldungen" element={<ProtectedWithOrg><DamageReports /></ProtectedWithOrg>} />
+            <Route path="/mietvertrag-generator" element={<ProtectedWithOrg><LeaseContractGenerator /></ProtectedWithOrg>} />
+            <Route path="/ki-assistent" element={<ProtectedWithOrg><KiAssistent /></ProtectedWithOrg>} />
+            <Route path="/automatisierung" element={<ProtectedWithOrg><AutomationSettings /></ProtectedWithOrg>} />
+            <Route path="/ki-rechnungen" element={<ProtectedWithOrg><InvoiceOcr /></ProtectedWithOrg>} />
+            <Route path="/ki-insights" element={<ProtectedWithOrg><KiInsights /></ProtectedWithOrg>} />
+            <Route path="/ki-kommunikation" element={<ProtectedWithOrg><KiKommunikation /></ProtectedWithOrg>} />
+            <Route path="/signaturen" element={<ProtectedWithOrg><Signatures /></ProtectedWithOrg>} />
+            <Route path="/abfrage-builder" element={<ProtectedWithOrg><QueryBuilder /></ProtectedWithOrg>} />
+            <Route path="/heizkosten" element={<ProtectedWithOrg><Heizkosten /></ProtectedWithOrg>} />
+            <Route path="/mietzinsrechner" element={<ProtectedWithOrg><Richtwertmietzins /></ProtectedWithOrg>} />
+            <Route path="/aktivitaeten" element={<ProtectedWithOrg><Aktivitaeten /></ProtectedWithOrg>} />
+            <Route path="/einstellungen" element={<ProtectedWithOrg><Settings /></ProtectedWithOrg>} />
             
             {/* Redirects for merged routes */}
             <Route path="/vorschreibungen" element={<Navigate to="/zahlungen?tab=invoices" replace />} />
@@ -193,8 +204,8 @@ const App = () => (
             
             {/* Admin routes */}
             <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
-              <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
-              <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
+            <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+            <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
             <Route path="/admin/system-test" element={<AdminRoute><SystemTest /></AdminRoute>} />
             
             <Route path="*" element={<NotFound />} />
@@ -203,7 +214,6 @@ const App = () => (
           <CookieConsent />
         </BrowserRouter>
       </TooltipProvider>
-      </ActiveOrganizationProvider>
     </QueryClientProvider>
   </ErrorBoundary>
 );
