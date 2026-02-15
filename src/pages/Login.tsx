@@ -401,10 +401,12 @@ export default function Login() {
             <p>
               Noch kein Konto? <Link to="/demo" className="text-primary hover:underline">Kostenlos testen</Link>
             </p>
-            <div className="flex gap-4 justify-center text-xs">
+            <div className="flex gap-4 justify-center text-xs flex-wrap">
               <Link to="/impressum" className="hover:underline">Impressum</Link>
               <Link to="/datenschutz" className="hover:underline">Datenschutz</Link>
               <Link to="/agb" className="hover:underline">AGB</Link>
+              <Link to="/avv" className="hover:underline">AVV</Link>
+              <Link to="/sla" className="hover:underline">SLA</Link>
             </div>
           </CardFooter>
         </Card>

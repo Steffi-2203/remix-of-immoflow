@@ -15,7 +15,7 @@ export default function Impressum() {
             <span className="font-bold text-xl text-foreground">ImmoFlowMe</span>
           </Link>
           <Link to="/">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" data-testid="button-back-impressum">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Zurück
             </Button>
@@ -32,7 +32,9 @@ export default function Impressum() {
             <h2 className="text-xl font-semibold text-foreground mb-4">Angaben gemäß § 5 ECG</h2>
             <div className="space-y-2">
               <p className="font-medium text-foreground">Stephania Pfeffer - ImmoFlowMe</p>
-              <p>Einzelunternehmen</p>
+              <p>[Adresse wird ergänzt]</p>
+              <p>Einzelunternehmen nach österreichischem Recht</p>
+              <p>UID-Nummer: [wird nach Erteilung ergänzt]</p>
             </div>
           </section>
 
@@ -47,8 +49,8 @@ export default function Impressum() {
               </div>
               <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4" />
-                <a href="https://immoflowme.at" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  https://immoflowme.at
+                <a href="https://www.immoflowme.at" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  https://www.immoflowme.at
                 </a>
               </div>
             </div>
@@ -58,7 +60,14 @@ export default function Impressum() {
             <h2 className="text-xl font-semibold text-foreground mb-4">Unternehmensgegenstand</h2>
             <p>
               Entwicklung und Betrieb einer webbasierten Hausverwaltungssoftware für 
-              kleine Hausverwaltungen und Privatvermieter.
+              professionelle Hausverwaltungen jeder Größe sowie Privatvermieter in Österreich.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-foreground mb-4">Aufsichtsbehörde</h2>
+            <p>
+              Österreichische Datenschutzbehörde (DSB), Barichgasse 40-42, 1030 Wien, dsb@dsb.gv.at, <a href="https://www.dsb.gv.at" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">https://www.dsb.gv.at</a>
             </p>
           </section>
 
@@ -113,12 +122,18 @@ export default function Impressum() {
         </div>
 
         {/* Footer Links */}
-        <div className="mt-12 pt-8 border-t border-border flex gap-6 text-sm">
+        <div className="mt-12 pt-8 border-t border-border flex flex-wrap gap-6 text-sm">
           <Link to="/datenschutz" className="text-muted-foreground hover:text-foreground">
             Datenschutz
           </Link>
           <Link to="/agb" className="text-muted-foreground hover:text-foreground">
             AGB
+          </Link>
+          <Link to="/avv" className="text-muted-foreground hover:text-foreground">
+            AVV
+          </Link>
+          <Link to="/sla" className="text-muted-foreground hover:text-foreground">
+            SLA
           </Link>
         </div>
       </main>

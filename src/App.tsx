@@ -58,6 +58,8 @@ const ManagementContracts = lazy(() => import("./pages/ManagementContracts"));
 const Impressum = lazy(() => import("./pages/Impressum"));
 const Datenschutz = lazy(() => import("./pages/Datenschutz"));
 const AGB = lazy(() => import("./pages/AGB"));
+const AVV = lazy(() => import("./pages/AVV"));
+const SLA = lazy(() => import("./pages/SLA"));
 const DsgvoCompliance = lazy(() => import("./pages/DsgvoCompliance"));
 const SecurityDashboard = lazy(() => import("./pages/SecurityDashboard"));
 const SupportTickets = lazy(() => import("./pages/SupportTickets"));
@@ -129,6 +131,8 @@ const App = () => (
             <Route path="/impressum" element={<Impressum />} />
             <Route path="/datenschutz" element={<Datenschutz />} />
             <Route path="/agb" element={<AGB />} />
+            <Route path="/avv" element={<AVV />} />
+            <Route path="/sla" element={<SLA />} />
             <Route path="/preise" element={<Pricing />} />
             <Route path="/demo" element={<DemoRequest />} />
             <Route path="/mieter-login" element={<TenantLogin />} />
