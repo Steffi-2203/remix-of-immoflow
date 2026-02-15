@@ -1,0 +1,100 @@
+ofortmaßnahmen (0–7 Tage) — technische Basis
+Domain in Replit eintragen
+
+Replit → Project → Settings → Domains → app.deinedomain.tld hinzufügen und Verifizierung starten.
+
+DNS bei world4you setzen (Copy/Paste‑Beispiel)
+
+Subdomain (Frontend):
+app  CNAME  cname.replit.com
+
+WWW (Redirect/alias):
+www  CNAME  cname.replit.com
+
+Root: falls kein ALIAS/ANAME möglich, leite @ per HTTP‑Redirect auf www.
+
+SSL prüfen
+
+Nach Verifizierung stellt Replit TLS aus; prüfe mit curl -I https://app.deinedomain.tld.
+
+Robots / Sitemap
+
+robots.txt erlauben Crawler und verweisen auf Sitemap:
+Sitemap: https://app.deinedomain.tld/sitemap.xml
+
+Analytics & Search Console
+
+Google Search Console & Bing Webmaster anlegen; Domain verifizieren (DNS TXT) und Sitemap einreichen.
+
+Google Analytics / GA4 einbinden (Consent‑Banner beachten).
+
+Kurzfristig (7–30 Tage) — SEO‑Grundlagen & Rendering
+Meta Tags & Open Graph
+
+Jede Seite: <title>, <meta name="description">, Open Graph (og:title, og:description, og:image) und Twitter Card.
+
+Structured Data (JSON‑LD)
+
+Organization, SoftwareApplication und BreadcrumbList einbinden für bessere Rich Results.
+
+Sitemap generieren
+
+Automatisch erzeugen (z. B. /sitemap.xml) und in Search Console einreichen.
+
+Server‑Side Rendering / Prerender
+
+Wenn App SPA (Vite/React): setze Prerendering oder dynamic rendering (Prerender.io, Rendertron) für SEO‑Crawler, damit Inhalte indexierbar sind.
+
+Canonical Tags
+
+Vermeide Duplicate Content mit <link rel="canonical" href="https://app.deinedomain.tld/page">.
+
+Performance
+
+Lighthouse prüfen; Ladezeit < 2s anstreben; Bilder WebP/AVIF, lazy loading, gzip/Brotli.
+
+PWA‑Meta
+
+Manifest, Icons, Service Worker; sorgt für bessere Sichtbarkeit auf Mobilgeräten und „Installability“.
+
+Mittelfristig (30–90 Tage) — Sichtbarkeit & Vertrauen
+Content & Landing Pages
+
+SEO‑optimierte Landingpage(n): Produkt‑USP, Preise, Features, Demo, FAQ, Blog/News. Regelmäßig Inhalte veröffentlichen.
+
+Backlinks & Verzeichnisse
+
+Einträge in Branchenverzeichnissen, Partnerseiten, Pressemitteilungen, Gastbeiträge.
+
+Social & Produktprofile
+
+LinkedIn Company Page, X/Twitter, Facebook, Produktseiten (z. B. Product Hunt, Capterra falls relevant).
+
+Local SEO
+
+Google Business Profile (falls lokal relevant), Adresse/Telefon auf Impressum/Contact‑Page.
+
+Trust Signals
+
+SSL, Impressum, Datenschutzerklärung, AGB, Kunden‑Referenzen, Demo/Case Studies.
+
+Monitoring & Alerts
+
+Search Console Alerts, Sentry für Errors, Grafana/Datadog für Performance, Uptime checks.
+
+Priorisierte technische Verbesserungen (Wichtig für Replit‑Hosting)
+CDN / Edge Caching
+
+Replit bietet begrenzte CDN‑Funktionen; setze Cloudflare vor die Domain für Caching, WAF, Brotli, HTTP/2, CNAME flattening.
+
+Canonical Host + Redirects
+
+Entscheide canonical (www oder root) und setze 301 Redirects konsistent.
+
+Cache‑Headers
+
+Statische Assets mit Cache-Control: public, max-age=31536000, immutable.
+
+Pre‑render für dynamische Seiten
+
+Nutze Prerendering für Seiten mit dynamischem Content (z. B. Produktseiten, Blogartikel).
