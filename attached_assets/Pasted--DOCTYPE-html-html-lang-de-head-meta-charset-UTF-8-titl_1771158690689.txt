@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Auftragsverarbeitungsvertrag (AVV) | ImmoFlowMe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<main>
+  <h1>Auftragsverarbeitungsvertrag (AVV)</h1>
+  <p><strong>Stand:</strong> Februar 2026</p>
+  <p><strong>Hinweis:</strong> Dieser AVV dient als Muster und sollte vor Verwendung von einem Rechtsanwalt geprüft werden.</p>
+
+  <h2>Präambel</h2>
+  <p>Dieser Auftragsverarbeitungsvertrag (nachfolgend „AVV") wird gemäß Art. 28 DSGVO zwischen dem Kunden der SaaS-Plattform ImmoFlowMe (nachfolgend „Verantwortlicher") und Stephania Pfeffer – ImmoFlowMe, als Betreiberin der SaaS-Hausverwaltungssoftware ImmoFlowMe (nachfolgend „Auftragsverarbeiter"), geschlossen.</p>
+  <p>Der Verantwortliche ist eine Hausverwaltung oder ein Immobilienverwalter, der die Software ImmoFlowMe zur Verwaltung von Liegenschaften, Mietverhältnissen und damit verbundenen personenbezogenen Daten nutzt. Der Auftragsverarbeiter stellt die technische Infrastruktur und den Betrieb der Software bereit und verarbeitet personenbezogene Daten ausschließlich im Auftrag und nach Weisung des Verantwortlichen.</p>
+
+  <h2>§ 1 Gegenstand und Dauer</h2>
+  <p>(1) Gegenstand dieses AVV ist die Verarbeitung personenbezogener Daten durch den Auftragsverarbeiter im Rahmen der Bereitstellung der SaaS-Hausverwaltungssoftware ImmoFlowMe. Die Software dient der digitalen Verwaltung von Liegenschaften, Mietverhältnissen, Eigentümerverhältnissen, Abrechnungen, Dokumenten und der Kommunikation mit Mietern, Eigentümern und Dienstleistern.</p>
+  <p>(2) Die Dauer dieses AVV richtet sich nach der Laufzeit des zwischen dem Verantwortlichen und dem Auftragsverarbeiter geschlossenen Hauptvertrages (Nutzungsvertrag/Abonnement). Der AVV endet automatisch mit Beendigung des Hauptvertrages, unbeschadet etwaiger Aufbewahrungspflichten gemäß § 10 dieses AVV.</p>
+
+  <h2>§ 2 Art und Zweck der Verarbeitung</h2>
+  <p>Die Verarbeitung personenbezogener Daten erfolgt zum Zweck der Bereitstellung und des Betriebs der SaaS-Hausverwaltungssoftware ImmoFlowMe. Dies umfasst insbesondere:</p>
+  <ul>
+    <li>Hosting und Speicherung von Hausverwaltungsdaten in der Cloud</li>
+    <li>Verarbeitung von Mieterdaten (Stammdaten, Mietverträge, Zahlungen)</li>
+    <li>Verarbeitung von Eigentümerdaten (Stammdaten, Abrechnungen, Ausschüttungen)</li>
+    <li>Verarbeitung von Finanzdaten (Vorschreibungen, Zahlungseingänge, Betriebskostenabrechnungen)</li>
+    <li>Dokumentenverwaltung und -speicherung</li>
+    <li>E-Mail-Kommunikation und Benachrichtigungen</li>
+    <li>Erstellung von Berichten und Auswertungen</li>
+    <li>Optionale KI-gestützte Analyse und Textverarbeitung</li>
+  </ul>
+
+  <h2>§ 3 Kategorien betroffener Personen</h2>
+  <ul>
+    <li>Mieterinnen und Mieter der verwalteten Liegenschaften</li>
+    <li>Eigentümerinnen und Eigentümer der verwalteten Liegenschaften</li>
+    <li>Mitarbeiterinnen und Mitarbeiter der Hausverwaltung (des Verantwortlichen)</li>
+    <li>Dienstleister und Auftragnehmer (z. B. Handwerker, Hausbesorger, Versicherungen)</li>
+  </ul>
+
+  <h2>§ 4 Kategorien personenbezogener Daten</h2>
+  <ul>
+    <li>Vor- und Nachnamen</li>
+    <li>Anschriften und Wohnadressen</li>
+    <li>Kontaktdaten (E-Mail-Adressen, Telefonnummern)</li>
+    <li>Bankverbindungen (IBAN, BIC) und Zahlungsdaten</li>
+    <li>Mietvertragsdaten (Mietbeginn, Mietende, Mietzins, Kaution)</li>
+    <li>Zahlungsdaten (Vorschreibungen, Zahlungseingänge, offene Posten)</li>
+    <li>Zählerstände und Verbrauchsdaten</li>
+    <li>Korrespondenz (E-Mails, Nachrichten, Mahnungen, Protokolle)</li>
+    <li>Dokumente (Verträge, Rechnungen, Bescheide, Protokolle)</li>
+  </ul>
+
+  <h2>§ 5 Pflichten des Auftragsverarbeiters</h2>
+  <p>Der Auftragsverarbeiter verpflichtet sich insbesondere:</p>
+  <ul>
+    <li>Personenbezogene Daten ausschließlich auf dokumentierte Weisung des Verantwortlichen zu verarbeiten, es sei denn, der Auftragsverarbeiter ist nach dem Recht der Union oder der Mitgliedstaaten zur Verarbeitung verpflichtet.</li>
+    <li>Sicherzustellen, dass sich die zur Verarbeitung befugten Personen zur Vertraulichkeit verpflichtet haben oder einer gesetzlichen Verschwiegenheitspflicht unterliegen.</li>
+    <li>Alle gemäß Art. 32 DSGVO erforderlichen technisch-organisatorischen Maßnahmen (TOM) zu ergreifen.</li>
+    <li>Den Verantwortlichen bei der Erfüllung der Pflichten aus den Art. 32 bis 36 DSGVO zu unterstützen.</li>
+    <li>Nach Abschluss der Verarbeitungstätigkeiten alle personenbezogenen Daten nach Wahl des Verantwortlichen zu löschen oder zurückzugeben, sofern keine gesetzliche Aufbewahrungspflicht besteht.</li>
+    <li>Dem Verantwortlichen alle erforderlichen Informationen zum Nachweis der Einhaltung der in Art. 28 DSGVO niedergelegten Pflichten zur Verfügung zu stellen und Über
