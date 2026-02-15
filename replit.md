@@ -53,6 +53,14 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Feature Routes Architecture**: Modular route structure organized by domain with consistent naming and organization-scoped access control.
 - **Defense in Depth**: App-level organization checks + Postgres RLS policies + property ownership validation.
 
+## SEO & Domain Configuration
+- **Domain**: www.immoflowme.at (canonical host)
+- **DNS**: CNAME records at World4You pointing to cname.replit.com
+- **SEO**: robots.txt, dynamic sitemap.xml, JSON-LD structured data (Organization, SoftwareApplication, BreadcrumbList), Open Graph, Twitter Cards, canonical tags
+- **Performance**: gzip/brotli compression via `compression` middleware, immutable 1-year cache for static assets, no-cache for HTML
+- **Auth Architecture**: ActiveOrganizationProvider only wraps protected routes via `ProtectedWithOrg` wrapper; public routes render without auth context
+- **Service Worker**: v5, network-first for HTML/JS/CSS, cache-first for images/fonts
+
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service with pg_trgm extension and RLS.
 - **Replit Auth**: Authentication service.
