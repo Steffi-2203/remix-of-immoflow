@@ -24,12 +24,7 @@ export default function AGB() {
 
       <main className="container mx-auto px-4 py-12 max-w-3xl">
         <h1 className="text-3xl font-bold text-foreground mb-2">Allgemeine Geschäftsbedingungen (AGB)</h1>
-        <p className="text-sm text-muted-foreground mb-2">Stand: Februar 2026</p>
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md p-4 mb-8">
-          <p className="text-sm text-amber-800 dark:text-amber-200">
-            <strong>Hinweis:</strong> Diese AGB dienen als Muster und sollten vor Verwendung von einem Rechtsanwalt geprüft werden.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground mb-8">Stand: Februar 2026</p>
 
         <div className="space-y-8 text-muted-foreground">
           <section>
