@@ -98,7 +98,7 @@
     "helmet": "^8.1.0",
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.3",
-    "jspdf": "^3.0.4",
+    "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.462.0",
     "memoizee": "^0.4.17",
@@ -139,7 +139,7 @@
     "vitest": "^2.1.9",
     "web-push": "^3.6.7",
     "wouter": "^3.9.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "file:xlsx-0.20.2.tgz",
     "zod": "^3.25.76",
     "zxcvbn": "^4.4.2"
   },
