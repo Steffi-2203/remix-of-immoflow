@@ -141,6 +141,7 @@ const App = () => (
             <Route path="/preise" element={<Pricing />} />
             <Route path="/demo" element={<DemoRequest />} />
             <Route path="/demo-activate" element={<DemoActivate />} />
+            <Route path="/demo/activate" element={<DemoActivate />} />
             <Route path="/white-label" element={<WhiteLabelRequest />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/pricing" element={<Navigate to="/preise" replace />} />
