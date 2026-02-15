@@ -129,7 +129,7 @@ export function DataQualityWidget() {
             {/* Link zu Ausgaben */}
             {(withoutReceiptCount > 0 || withoutTransactionCount > 0) && (
               <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-                <Link to="/ausgaben">Ausgaben prüfen</Link>
+                <Link to="/buchhaltung">Ausgaben prüfen</Link>
               </Button>
             )}
           </div>
