@@ -55,7 +55,7 @@ export function DemoTimerBanner() {
           </p>
           <div className="space-y-3">
             <Button asChild className="w-full" data-testid="button-upgrade-now">
-              <Link to="/settings/subscription">
+              <Link to="/einstellungen">
                 <Zap className="w-4 h-4 mr-2" />
                 Jetzt upgraden
               </Link>
