@@ -47,17 +47,17 @@ export async function createSignatureRequest(
     try {
       await sendEmail({
         to: email,
-        subject: `Signaturanfrage: ${documentName} - ImmoflowMe`,
+        subject: `Signaturanfrage: ${documentName} - ImmoFlowMe`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a365d;">Signaturanfrage</h2>
             <p>Sie wurden gebeten, das folgende Dokument zu unterschreiben:</p>
             <p><strong>${documentName}</strong></p>
             <p>Signaturtyp: <strong>${signatureType === "simple" ? "Einfach" : signatureType === "advanced" ? "Fortgeschritten" : "Qualifiziert"}</strong></p>
-            <p>Bitte melden Sie sich bei ImmoflowMe an, um das Dokument zu unterschreiben.</p>
+            <p>Bitte melden Sie sich bei ImmoFlowMe an, um das Dokument zu unterschreiben.</p>
             <p style="color: #666; font-size: 14px;">Verifizierungscode: ${verificationCode}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-            <p style="color: #999; font-size: 12px;">ImmoflowMe - Elektronische Signatur</p>
+            <p style="color: #999; font-size: 12px;">ImmoFlowMe - Elektronische Signatur</p>
           </div>
         `,
       });

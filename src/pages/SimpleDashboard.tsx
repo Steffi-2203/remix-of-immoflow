@@ -228,7 +228,7 @@ export default function SimpleDashboard() {
 
       <div className="max-w-4xl" data-tour="dashboard">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h1 className="text-2xl font-bold">ImmoflowMe</h1>
+          <h1 className="text-2xl font-bold">ImmoFlowMe</h1>
           <div className="flex gap-2">
             {hasCompletedTour && (
               <Button variant="outline" size="sm" onClick={startTour}>

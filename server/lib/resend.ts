@@ -90,10 +90,10 @@ export async function sendInviteEmail(options: {
 
   return sendEmail({
     to: options.to,
-    subject: `Einladung zu ${options.organizationName} - ImmoflowMe`,
+    subject: `Einladung zu ${options.organizationName} - ImmoFlowMe`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #1a365d;">Einladung zu ImmoflowMe</h1>
+        <h1 style="color: #1a365d;">Einladung zu ImmoFlowMe</h1>
         <p>Hallo,</p>
         <p><strong>${options.inviterName}</strong> hat Sie eingeladen, der Organisation <strong>${options.organizationName}</strong> als <strong>${roleLabel}</strong> beizutreten.</p>
         <p style="margin: 30px 0;">
@@ -106,7 +106,7 @@ export async function sendInviteEmail(options: {
         </p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
         <p style="color: #999; font-size: 12px;">
-          ImmoflowMe - Professionelle Hausverwaltung
+          ImmoFlowMe - Professionelle Hausverwaltung
         </p>
       </div>
     `,

@@ -118,7 +118,7 @@ export function registerPushRoutes(app: Router) {
       }
 
       const payload = JSON.stringify({
-        title: title || 'ImmoflowMe',
+        title: title || 'ImmoFlowMe',
         body: body || 'Neue Benachrichtigung',
         icon: '/icons/icon-192.png',
         url: url || '/dashboard',

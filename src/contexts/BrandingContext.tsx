@@ -10,7 +10,7 @@ interface BrandingConfig {
 }
 
 const DEFAULT_BRANDING: BrandingConfig = {
-  brandName: 'ImmoflowMe',
+  brandName: 'ImmoFlowMe',
   logoUrl: null,
   primaryColor: '#1e40af',
   supportEmail: 'kontakt@immoflowme.at',

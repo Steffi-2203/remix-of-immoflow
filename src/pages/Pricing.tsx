@@ -67,7 +67,7 @@ const features: PlanFeature[] = [
   { name: 'ESG-Energiemonitoring', category: 'Zusatzmodule', trial: false, starter: false, pro: true, enterprise: true },
   { name: 'PWA (Smartphone-App)', trial: true, starter: true, pro: true, enterprise: true },
   { name: 'Push-Benachrichtigungen', trial: false, starter: true, pro: true, enterprise: true },
-  { name: 'KI-Autopilot', trial: false, starter: false, pro: '+€49/M', enterprise: 'Inkludiert' },
+  { name: 'KI-Autopilot', trial: false, starter: false, pro: '+€39/M', enterprise: 'Inkludiert' },
 
   { name: 'E-Mail-Support', category: 'Support', trial: true, starter: true, pro: true, enterprise: true },
   { name: 'Prioritäts-Support', trial: false, starter: false, pro: true, enterprise: true },
@@ -92,13 +92,13 @@ const plans: PricingPlan[] = [
     name: 'Testversion',
     price: 'Kostenlos',
     priceDetail: '14 Tage',
-    description: 'Lernen Sie ImmoflowMe unverbindlich kennen.',
+    description: 'Lernen Sie ImmoFlowMe unverbindlich kennen.',
     icon: Zap,
   },
   {
     id: 'starter',
     name: 'Starter',
-    price: '€49',
+    price: '€39',
     priceDetail: 'pro Monat',
     description: 'Für kleine Verwaltungen und Einsteiger.',
     icon: Sparkles,
@@ -106,7 +106,7 @@ const plans: PricingPlan[] = [
   {
     id: 'pro',
     name: 'Professional',
-    price: '€149',
+    price: '€299',
     priceDetail: 'pro Monat',
     description: 'Für wachsende Hausverwaltungen mit Automatisierung.',
     icon: Crown,
@@ -116,7 +116,7 @@ const plans: PricingPlan[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: '€299',
+    price: '€399',
     priceDetail: 'pro Monat',
     description: 'Für große Verwaltungen mit vollem Funktionsumfang.',
     icon: Building2,
@@ -158,9 +158,9 @@ export default function Pricing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-[999]">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4 flex-wrap">
           <Link to="/" className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-10 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-10 w-auto" />
             <div className="flex flex-col">
-              <span className="font-bold text-lg leading-tight">ImmoflowMe</span>
+              <span className="font-bold text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-muted-foreground">by ImmoPepper</span>
             </div>
           </Link>
@@ -247,7 +247,7 @@ export default function Pricing() {
               </div>
               <CardTitle className="text-xl">KI-Autopilot Add-on</CardTitle>
               <div className="mt-2">
-                <span className="text-3xl font-bold">€49</span>
+                <span className="text-3xl font-bold">€39</span>
                 <span className="text-muted-foreground ml-1 text-sm">pro Monat</span>
               </div>
               <CardDescription className="mt-2">
@@ -329,7 +329,7 @@ export default function Pricing() {
               </div>
               <h3 className="text-xl font-bold mb-2">White Label — auf Anfrage</h3>
               <p className="text-muted-foreground mb-6">
-                Sie möchten ImmoflowMe unter Ihrer eigenen Marke betreiben?
+                Sie möchten ImmoFlowMe unter Ihrer eigenen Marke betreiben?
                 Wir bieten White-Label-Lösungen mit individuellem Branding, eigener Domain und angepasstem Design für größere Verwaltungen und Franchisepartner.
               </p>
               <Button variant="outline" asChild>

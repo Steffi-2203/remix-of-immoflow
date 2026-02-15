@@ -13,7 +13,7 @@ interface FeatureLockPopupProps {
 }
 
 const tierLabels: Record<string, string> = {
-  starter: 'Starter (€149/Monat)',
+  starter: 'Starter (€39/Monat)',
   pro: 'Pro (€299/Monat)',
 };
 

@@ -7,7 +7,7 @@ async function seedProducts() {
 
   // Check if products already exist
   const existingProducts = await stripe.products.search({ 
-    query: "name:'ImmoflowMe Starter'" 
+    query: "name:'ImmoFlowMe Starter'" 
   });
   
   if (existingProducts.data.length > 0) {
@@ -23,7 +23,7 @@ async function seedProducts() {
 
   // Create Starter Plan
   const starterProduct = await stripe.products.create({
-    name: 'ImmoflowMe Starter',
+    name: 'ImmoFlowMe Starter',
     description: 'Für kleine bis mittlere Hausverwaltungen. Bis zu 50 Immobilien, unbegrenzte Mieter.',
     metadata: {
       tier: 'starter',
@@ -34,7 +34,7 @@ async function seedProducts() {
 
   const starterPrice = await stripe.prices.create({
     product: starterProduct.id,
-    unit_amount: 14900, // €149.00
+    unit_amount: 3900, // €39.00
     currency: 'eur',
     recurring: { interval: 'month' },
     metadata: { tier: 'starter' },
@@ -43,7 +43,7 @@ async function seedProducts() {
 
   // Create Pro Plan
   const proProduct = await stripe.products.create({
-    name: 'ImmoflowMe Pro',
+    name: 'ImmoFlowMe Pro',
     description: 'Für professionelle Hausverwaltungen mit Automatisierung. Unbegrenzte Immobilien und Mieter.',
     metadata: {
       tier: 'pro',
@@ -63,7 +63,7 @@ async function seedProducts() {
 
   // Create Enterprise Plan (for organizations)
   const enterpriseProduct = await stripe.products.create({
-    name: 'ImmoflowMe Enterprise',
+    name: 'ImmoFlowMe Enterprise',
     description: 'Enterprise-Lösung mit API-Zugang und Priority Support.',
     metadata: {
       tier: 'enterprise',
@@ -74,7 +74,7 @@ async function seedProducts() {
 
   const enterprisePrice = await stripe.prices.create({
     product: enterpriseProduct.id,
-    unit_amount: 49900, // €499.00
+    unit_amount: 39900, // €399.00
     currency: 'eur',
     recurring: { interval: 'month' },
     metadata: { tier: 'enterprise' },

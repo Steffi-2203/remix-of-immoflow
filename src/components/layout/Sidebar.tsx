@@ -245,9 +245,9 @@ export function Sidebar() {
         >
           <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
             <div className="flex items-center gap-3">
-              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" />
               <div className="flex flex-col">
-                <span className="font-bold text-white text-lg leading-tight">ImmoflowMe</span>
+                <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
                 <span className="text-xs text-white/60">by ImmoPepper</span>
               </div>
             </div>
@@ -327,7 +327,7 @@ export function Sidebar() {
 
           <div className="shrink-0 p-4 border-t border-sidebar-border">
             <div className="rounded-lg bg-sidebar-accent p-3">
-              <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
+              <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoFlowMe by ImmoPepper</p>
             </div>
           </div>
         </aside>
@@ -346,15 +346,15 @@ export function Sidebar() {
       <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" />
+            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" />
             <div className="flex flex-col">
-              <span className="font-bold text-white text-lg leading-tight">ImmoflowMe</span>
+              <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-white/60">by ImmoPepper</span>
             </div>
           </div>
         )}
         {collapsed && (
-          <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-10 w-10 object-contain" />
+          <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-10 w-10 object-contain" />
         )}
         <Button 
           variant="ghost" 
@@ -442,7 +442,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="shrink-0 p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent p-3">
-            <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoflowMe by ImmoPepper</p>
+            <p className="text-xs text-sidebar-foreground/50">© 2026 ImmoFlowMe by ImmoPepper</p>
           </div>
         </div>
       )}

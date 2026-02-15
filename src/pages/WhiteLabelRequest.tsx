@@ -63,7 +63,7 @@ export default function WhiteLabelRequestPage() {
             </div>
             <CardTitle className="text-2xl">Anfrage erhalten!</CardTitle>
             <CardDescription className="text-base">
-              Vielen Dank für Ihr Interesse an ImmoflowMe White Label.
+              Vielen Dank für Ihr Interesse an ImmoFlowMe White Label.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -90,7 +90,7 @@ export default function WhiteLabelRequestPage() {
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Building2 className="w-10 h-10 text-indigo-600" />
-            <h1 className="text-3xl font-bold">ImmoflowMe White Label</h1>
+            <h1 className="text-3xl font-bold">ImmoFlowMe White Label</h1>
           </div>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Ihre eigene Hausverwaltungssoftware - mit Ihrem Logo, Ihren Farben, Ihrem Namen
@@ -108,9 +108,9 @@ export default function WhiteLabelRequestPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  Mit ImmoflowMe White Label erhalten Sie eine vollständig gebrandete 
+                  Mit ImmoFlowMe White Label erhalten Sie eine vollständig gebrandete 
                   Hausverwaltungssoftware, die unter Ihrem eigenen Namen läuft. Ihre 
-                  Kunden sehen nur Ihre Marke - ImmoflowMe bleibt im Hintergrund.
+                  Kunden sehen nur Ihre Marke - ImmoFlowMe bleibt im Hintergrund.
                 </p>
               </CardContent>
             </Card>

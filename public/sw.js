@@ -13,7 +13,7 @@ const OFFLINE_PAGE = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ImmoflowMe - Offline</title>
+  <title>ImmoFlowMe - Offline</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #1a1a2e; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
@@ -29,7 +29,7 @@ const OFFLINE_PAGE = `<!DOCTYPE html>
   <div class="container">
     <div class="icon">&#x1F4F6;</div>
     <h1>Keine Verbindung</h1>
-    <p>ImmoflowMe ist derzeit nicht erreichbar. Bitte pr&uuml;fen Sie Ihre Internetverbindung und versuchen Sie es erneut.</p>
+    <p>ImmoFlowMe ist derzeit nicht erreichbar. Bitte pr&uuml;fen Sie Ihre Internetverbindung und versuchen Sie es erneut.</p>
     <button onclick="location.reload()">Erneut versuchen</button>
   </div>
 </body>
@@ -129,7 +129,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'ImmoflowMe', body: 'Neue Benachrichtigung', icon: '/icons/icon-192.png' };
+  let data = { title: 'ImmoFlowMe', body: 'Neue Benachrichtigung', icon: '/icons/icon-192.png' };
 
   if (event.data) {
     try {

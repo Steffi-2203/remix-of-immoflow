@@ -198,7 +198,7 @@ export default function Login() {
           <Card className="w-full max-w-md">
             <CardHeader className="text-center space-y-4">
               <div className="flex justify-center">
-                <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
+                <img src={immoflowLogo} alt="ImmoFlowMe" className="h-16 w-auto" />
               </div>
               <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
                 <ShieldCheck className="h-6 w-6" />
@@ -324,7 +324,7 @@ export default function Login() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
+              <img src={immoflowLogo} alt="ImmoFlowMe" className="h-16 w-auto" />
             </div>
             <CardTitle className="text-2xl font-bold">
               Anmelden

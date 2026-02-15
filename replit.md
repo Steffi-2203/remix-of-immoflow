@@ -1,7 +1,7 @@
-# ImmoflowMe - Austrian Property Management System
+# ImmoFlowMe - Austrian Property Management System
 
 ## Overview
-ImmoflowMe is an Austrian property management (Hausverwaltung) application designed for MRG (Mietrechtsgesetz) compliance. It streamlines property and tenant management, automates financial processes, and ensures regulatory adherence within the Austrian market. Key capabilities include automated invoice generation with Austrian VAT rates, OCR-based document processing, SEPA payment export, comprehensive operating cost settlements (HeizKG, WEG), and specialized tools for professional accountants. The project aims to provide a robust, compliant, and efficient solution for Austrian property managers.
+ImmoFlowMe is an Austrian property management (Hausverwaltung) application designed for MRG (Mietrechtsgesetz) compliance. It streamlines property and tenant management, automates financial processes, and ensures regulatory adherence within the Austrian market. Key capabilities include automated invoice generation with Austrian VAT rates, OCR-based document processing, SEPA payment export, comprehensive operating cost settlements (HeizKG, WEG), and specialized tools for professional accountants. The project aims to provide a robust, compliant, and efficient solution for Austrian property managers.
 
 ## User Preferences
 - Language: German (Austrian German)

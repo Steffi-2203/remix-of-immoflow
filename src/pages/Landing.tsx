@@ -89,9 +89,9 @@ export default function Landing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-[999]">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-12 w-auto" data-testid="img-logo" />
+            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" data-testid="img-logo" />
             <div className="flex flex-col">
-              <span className="font-bold text-lg leading-tight">ImmoflowMe</span>
+              <span className="font-bold text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-muted-foreground">by ImmoPepper</span>
             </div>
           </div>
@@ -160,7 +160,7 @@ export default function Landing() {
               Für Hausverwaltungen jeder Größe
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Ob Sie 10 oder 2.000 Einheiten verwalten — ImmoflowMe wächst mit Ihnen und automatisiert Ihre Prozesse.
+              Ob Sie 10 oder 2.000 Einheiten verwalten — ImmoFlowMe wächst mit Ihnen und automatisiert Ihre Prozesse.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
@@ -211,10 +211,10 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="text-3xl md:text-4xl font-bold mb-6" data-testid="text-benefits-title">
-                Warum ImmoflowMe?
+                Warum ImmoFlowMe?
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                ImmoflowMe wurde speziell für den österreichischen Markt entwickelt.
+                ImmoFlowMe wurde speziell für den österreichischen Markt entwickelt.
                 Automatisieren Sie wiederkehrende Aufgaben und konzentrieren Sie sich auf das, was zählt — Ihre Liegenschaften und Mieter.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -261,7 +261,7 @@ export default function Landing() {
             Bereit, Ihre Hausverwaltung zu digitalisieren?
           </h2>
           <p className="text-lg opacity-90 mb-8 max-w-2xl mx-auto">
-            Testen Sie ImmoflowMe 14 Tage kostenlos — ohne Kreditkarte, ohne Verpflichtung.
+            Testen Sie ImmoFlowMe 14 Tage kostenlos — ohne Kreditkarte, ohne Verpflichtung.
             Ob 5 oder 2.000 Einheiten — wir haben den richtigen Plan für Sie.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
@@ -284,14 +284,14 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <img src={immoflowLogo} alt="ImmoflowMe Logo" className="h-8 w-auto" />
+              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-8 w-auto" />
               <div className="flex flex-col">
-                <span className="font-semibold text-sm">ImmoflowMe</span>
+                <span className="font-semibold text-sm">ImmoFlowMe</span>
                 <span className="text-xs text-muted-foreground">by ImmoPepper</span>
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ImmoflowMe by ImmoPepper. Alle Rechte vorbehalten.
+              © {new Date().getFullYear()} ImmoFlowMe by ImmoPepper. Alle Rechte vorbehalten.
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground flex-wrap">
               <Link to="/datenschutz" className="hover:text-foreground transition-colors">Datenschutz</Link>

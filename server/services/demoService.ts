@@ -20,10 +20,10 @@ async function sendDemoEmail(email: string, demoUrl: string): Promise<void> {
   
   const emailResult = await sendEmail({
     to: email,
-    subject: 'Ihr Demo-Zugang zu ImmoflowMe',
+    subject: 'Ihr Demo-Zugang zu ImmoFlowMe',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #1a365d;">Willkommen bei ImmoflowMe!</h1>
+        <h1 style="color: #1a365d;">Willkommen bei ImmoFlowMe!</h1>
         <p>Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.</p>
         <p>Klicken Sie auf den Button unten, um Ihren <strong>30-Minuten Demo-Zugang</strong> zu aktivieren:</p>
         <p style="margin: 30px 0;">
@@ -44,12 +44,12 @@ async function sendDemoEmail(email: string, demoUrl: string): Promise<void> {
         </p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
         <p style="color: #999; font-size: 12px;">
-          ImmoflowMe - Professionelle Hausverwaltung für Österreich
+          ImmoFlowMe - Professionelle Hausverwaltung für Österreich
         </p>
       </div>
     `,
     text: `
-Willkommen bei ImmoflowMe!
+Willkommen bei ImmoFlowMe!
 
 Vielen Dank für Ihr Interesse an unserer Hausverwaltungssoftware.
 

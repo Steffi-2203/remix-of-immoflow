@@ -218,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const emailResult = await sendInviteEmail({
           to: email,
           inviterName: profile.fullName || profile.email,
-          organizationName: org?.name || 'ImmoflowMe',
+          organizationName: org?.name || 'ImmoFlowMe',
           role,
           inviteUrl,
         });
@@ -2122,7 +2122,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
           const resend = new Resend(resendApiKey);
 
           await resend.emails.send({
-            from: 'ImmoflowMe <no-reply@immoflowme.at>',
+            from: 'ImmoFlowMe <no-reply@immoflowme.at>',
             to: 'office@immoflowme.at',
             subject: `Neue White-Label Anfrage: ${escapeHtml(companyName)}`,
             html: `

@@ -14,7 +14,7 @@ interface OnboardingWizardProps {
 const steps = [
   {
     id: 'welcome',
-    title: 'Willkommen bei ImmoflowMe',
+    title: 'Willkommen bei ImmoFlowMe',
     description: 'Ihre professionelle Hausverwaltungs-Software für Österreich',
   },
   {
@@ -124,7 +124,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               </div>
 
               <div className="text-sm text-muted-foreground">
-                <p className="mb-2">ImmoflowMe bietet Ihnen:</p>
+                <p className="mb-2">ImmoFlowMe bietet Ihnen:</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>MRG-konforme Betriebskostenabrechnungen</li>
                   <li>Automatisches Zahlungs-Matching</li>

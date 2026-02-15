@@ -51,7 +51,7 @@ export function DemoTimerBanner() {
           </div>
           <h2 className="text-2xl font-bold mb-2">Demo abgelaufen</h2>
           <p className="text-muted-foreground mb-6">
-            Ihre 30-Minuten Demo ist beendet. Wir hoffen, ImmoflowMe hat Ihnen gefallen!
+            Ihre 30-Minuten Demo ist beendet. Wir hoffen, ImmoFlowMe hat Ihnen gefallen!
           </p>
           <div className="space-y-3">
             <Button asChild className="w-full" data-testid="button-upgrade-now">

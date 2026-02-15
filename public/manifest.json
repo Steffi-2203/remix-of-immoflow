@@ -1,6 +1,6 @@
 {
-  "name": "ImmoflowMe - Hausverwaltung",
-  "short_name": "ImmoflowMe",
+  "name": "ImmoFlowMe - Hausverwaltung",
+  "short_name": "ImmoFlowMe",
   "description": "Österreichische Immobilienverwaltung - MRG & WEG konform",
   "start_url": "/dashboard",
   "display": "standalone",
