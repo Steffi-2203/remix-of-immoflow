@@ -89,6 +89,7 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Richtwertmietzins = lazy(() => import("./pages/Richtwertmietzins"));
 const Aktivitaeten = lazy(() => import("./pages/Aktivitaeten"));
 const DemoRequest = lazy(() => import("./pages/demo-request"));
+const WhiteLabelRequest = lazy(() => import("./pages/WhiteLabelRequest"));
 
 const queryClient = new QueryClient();
 
@@ -137,6 +138,7 @@ const App = () => (
             <Route path="/loeschkonzept" element={<Loeschkonzept />} />
             <Route path="/preise" element={<Pricing />} />
             <Route path="/demo" element={<DemoRequest />} />
+            <Route path="/white-label" element={<WhiteLabelRequest />} />
             <Route path="/mieter-login" element={<TenantLogin />} />
             <Route path="/mieter-portal" element={<TenantPortalStandalone />} />
             <Route path="/eigentuemer-login" element={<OwnerLogin />} />
