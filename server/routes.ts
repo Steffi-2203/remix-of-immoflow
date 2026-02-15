@@ -28,6 +28,7 @@ import heatBillingRoutes from "./routes/heatBillingRoutes";
 import richtwertRoutes from "./routes/richtwertRoutes";
 import activityRoutes from "./routes/activityRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
+import * as demoService from "./services/demoService";
 import { registerScheduledReportRoutes } from "./routes/scheduledReportRoutes";
 import { registerDocumentRoutes } from "./routes/documentRoutes";
 import { registerAutomationRoutes } from "./routes/automationRoutes";
