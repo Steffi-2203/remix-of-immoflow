@@ -1,0 +1,46 @@
+Bitte analysiere meine gesamte Datei server/seed.ts vollständig und korrigiere sie so, dass sie in Produktion (Neon PostgreSQL) garantiert funktioniert.
+
+Wichtige Fakten zur Produktions-DB:
+- profiles.subscription_tier ist vom Enum-Typ user_subscription_tier
+  Erlaubte Werte: trial, inactive, starter, pro, enterprise
+- organizations.subscription_tier ist vom Enum-Typ subscription_tier
+  Erlaubte Werte: starter, professional, enterprise
+- organizations.subscription_status ist vom Enum-Typ subscription_status
+  Erlaubte Werte: trial, active, cancelled, expired
+- user_roles.role ist vom Enum-Typ app_role
+  Erlaubte Werte: admin, property_manager, finance, viewer, tester
+
+Kritische Fehler, die du beheben musst:
+1. Der Wert 'professional' existiert NICHT im Enum user_subscription_tier → dort muss 'pro' verwendet werden.
+2. Alle ENUM-Werte müssen explizit gecastet werden:
+   - 'pro'::user_subscription_tier
+   - 'professional'::subscription_tier
+   - 'active'::subscription_status
+   - 'admin'::app_role
+3. Der Seed darf niemals still scheitern. Fehler müssen sichtbar geloggt werden.
+4. Der Seed muss idempotent sein:
+   - Organization prüfen oder erstellen
+   - Profile prüfen oder erstellen
+   - Rolle prüfen oder erstellen
+   - Mitgliedschaft prüfen oder erstellen
+5. ON CONFLICT nur dort verwenden, wo es UNIQUE Constraints gibt:
+   - profiles(email) → OK
+   - user_organizations(user_id, organization_id) → OK
+   - organizations.name → KEIN unique index → check-then-insert verwenden
+   - user_roles(user_id, role) → KEIN unique index → check-then-insert verwenden
+6. Der Seed wird im Startup-Flow mit await runSeed() ausgeführt. Stelle sicher, dass:
+   - keine Fire-and-Forget-Calls existieren
+   - alle DB-Operationen awaited werden
+   - der Seed vollständig durchläuft, bevor der Server startet
+
+Bitte liefere:
+- Eine vollständige, korrigierte Version von server/seed.ts
+- Mit allen korrekten ENUM-Casts
+- Mit robuster Idempotenz
+- Mit ON CONFLICT wo möglich
+- Mit sauberer Fehlerbehandlung
+- Mit klaren Logs, damit ich in Replit sehen kann, ob der Seed erfolgreich war
+- Garantiert kompatibel mit Neon PostgreSQL in Produktion
+
+Ziel:
+Nach dem nächsten Deployment muss der Admin-Account in der Produktions-DB existieren und der Login funktionieren.
