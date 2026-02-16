@@ -19,7 +19,7 @@ async function ensureAdminSeeded(): Promise<void> {
       orgId = crypto.randomUUID();
       await db.execute(sql`
         INSERT INTO organizations (id, name, subscription_tier, subscription_status)
-        VALUES (${orgId}, ${ADMIN_ORG_NAME}, 'professional', 'active')
+        VALUES (${orgId}, ${ADMIN_ORG_NAME}, 'professional'::subscription_tier, 'active'::subscription_status)
       `);
       console.log("[SEED] Organisation erstellt");
     }
@@ -45,7 +45,7 @@ async function ensureAdminSeeded(): Promise<void> {
 
       await db.execute(sql`
         INSERT INTO profiles (id, email, password_hash, full_name, organization_id, subscription_tier)
-        VALUES (${userId}, ${ADMIN_EMAIL}, ${passwordHash}, ${ADMIN_NAME}, ${orgId}, 'professional')
+        VALUES (${userId}, ${ADMIN_EMAIL}, ${passwordHash}, ${ADMIN_NAME}, ${orgId}, 'professional'::user_subscription_tier)
       `);
       console.log("[SEED] Admin-Profil erstellt");
     }
