@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Loader2, LogIn, Eye, EyeOff, ShieldCheck, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { setAuthToken, getAuthToken } from '@/lib/queryClient';
+import { setAuthToken, getAuthToken, clearAuthToken } from '@/lib/queryClient';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function Login() {
@@ -27,6 +27,12 @@ export default function Login() {
   const [showBackupInput, setShowBackupInput] = useState(false);
   const [backupCode, setBackupCode] = useState('');
   const twoFAInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      clearAuthToken();
+    }
+  }, [loading, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -59,6 +65,8 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
+      clearAuthToken();
+
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -80,7 +88,12 @@ export default function Login() {
         throw new Error(errorMsg);
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        throw new Error("Server-Antwort konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.");
+      }
 
       if (result.requires2FA) {
         setRequires2FA(true);
@@ -92,27 +105,27 @@ export default function Login() {
         setAuthToken(result.token);
       }
 
-      const token = result.token || getAuthToken();
-      const verifyHeaders: Record<string, string> = {};
-      if (token) {
-        verifyHeaders['Authorization'] = `Bearer ${token}`;
-      }
-      const verifyResponse = await fetch("/api/auth/user", {
-        headers: verifyHeaders,
-        credentials: 'include',
+      queryClient.setQueryData(["/api/auth/user"], {
+        id: result.id,
+        email: result.email,
+        fullName: result.fullName,
+        organizationId: result.organizationId,
+        roles: result.roles,
       });
 
-      if (verifyResponse.ok) {
-        const verifiedUser = await verifyResponse.json();
-        queryClient.setQueryData(["/api/auth/user"], verifiedUser);
-      } else {
-        queryClient.setQueryData(["/api/auth/user"], {
-          id: result.id,
-          email: result.email,
-          fullName: result.fullName,
-          organizationId: result.organizationId,
-          roles: result.roles,
-        });
+      try {
+        const token = result.token || getAuthToken();
+        if (token) {
+          const verifyResponse = await fetch("/api/auth/user", {
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include',
+          });
+          if (verifyResponse.ok) {
+            const verifiedUser = await verifyResponse.json();
+            queryClient.setQueryData(["/api/auth/user"], verifiedUser);
+          }
+        }
+      } catch {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
