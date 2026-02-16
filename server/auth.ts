@@ -416,16 +416,7 @@ export function setupAuth(app: Express) {
       }
 
       const lockout = await checkAccountLockout(email);
-      console.log(`[AUTH] Lockout check for ${email.substring(0, 3)}***: locked=${lockout.locked}, remainingMinutes=${lockout.remainingMinutes}`);
       if (lockout.locked) {
-        const failedCount = await db.select()
-          .from(schema.loginAttempts)
-          .where(and(
-            eq(schema.loginAttempts.email, email.toLowerCase()),
-            eq(schema.loginAttempts.success, false),
-            gte(schema.loginAttempts.attemptedAt, new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000))
-          ));
-        console.log(`[AUTH] Account locked - failed attempts found: ${failedCount.length}, IPs: ${failedCount.map(a => a.ipAddress).join(', ')}`);
         await logAuthEvent(req, 'login_failed', email.toLowerCase(), null, false, { reason: 'account_locked' });
         return res.status(429).json({ 
           error: `Konto vorübergehend gesperrt. Bitte versuchen Sie es in ${lockout.remainingMinutes} Minute(n) erneut.`,

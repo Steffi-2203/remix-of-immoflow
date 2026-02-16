@@ -45,3 +45,6 @@ externalPort = 80
 
 [userenv.shared]
 RESEND_FROM_EMAIL = "noreply@immoflowme.at"
+
+[userenv.production]
+ADMIN_INITIAL_PASSWORD = "ImmoFlow2026!"
