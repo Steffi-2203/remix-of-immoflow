@@ -151,6 +151,24 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      (function(){
+        var key = 'immoflow_cache_v10';
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              names.forEach(function(name) { caches.delete(name); });
+            });
+          }
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(reg) { reg.unregister(); });
+            });
+          }
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
