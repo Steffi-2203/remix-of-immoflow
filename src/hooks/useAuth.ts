@@ -110,7 +110,10 @@ export const useAuth = () => {
 
   const registerMutation = useMutation({
     mutationFn: registerFn,
-    onSuccess: (userData) => {
+    onSuccess: (userData: any) => {
+      if (userData.token) {
+        setAuthToken(userData.token);
+      }
       queryClient.setQueryData(["/api/auth/user"], userData);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
     },

@@ -19,6 +19,33 @@ function addAuthHeaders(headers: Record<string, string>) {
   }
 }
 
+const originalFetch = window.fetch.bind(window);
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+  let isApiRequest = false;
+  if (url.startsWith('/api/')) {
+    isApiRequest = true;
+  } else {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      if (parsed.origin === window.location.origin && parsed.pathname.startsWith('/api/')) {
+        isApiRequest = true;
+      }
+    } catch {}
+  }
+  if (isApiRequest) {
+    const token = getAuthToken();
+    if (token) {
+      const existingHeaders = new Headers(init?.headers);
+      if (!existingHeaders.has('Authorization')) {
+        existingHeaders.set('Authorization', `Bearer ${token}`);
+      }
+      init = { ...init, headers: existingHeaders };
+    }
+  }
+  return originalFetch(input, init);
+};
+
 export async function apiRequest(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
