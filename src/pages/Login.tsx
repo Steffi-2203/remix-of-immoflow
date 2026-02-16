@@ -92,20 +92,30 @@ export default function Login() {
         setAuthToken(result.token);
       }
 
-      queryClient.setQueryData(["/api/auth/user"], result);
-      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-
+      const token = result.token || getAuthToken();
+      const verifyHeaders: Record<string, string> = {};
+      if (token) {
+        verifyHeaders['Authorization'] = `Bearer ${token}`;
+      }
       const verifyResponse = await fetch("/api/auth/user", {
-        headers: {
-          ...(result.token ? { 'Authorization': `Bearer ${result.token}` } : {}),
-        },
+        headers: verifyHeaders,
         credentials: 'include',
       });
 
       if (verifyResponse.ok) {
         const verifiedUser = await verifyResponse.json();
         queryClient.setQueryData(["/api/auth/user"], verifiedUser);
+      } else {
+        queryClient.setQueryData(["/api/auth/user"], {
+          id: result.id,
+          email: result.email,
+          fullName: result.fullName,
+          organizationId: result.organizationId,
+          roles: result.roles,
+        });
       }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
 
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
@@ -151,6 +161,9 @@ export default function Login() {
       }
 
       const userData = await response.json();
+      if (userData.token) {
+        setAuthToken(userData.token);
+      }
       queryClient.setQueryData(["/api/auth/user"], userData);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
 
@@ -194,6 +207,9 @@ export default function Login() {
       }
 
       const userData = await response.json();
+      if (userData.token) {
+        setAuthToken(userData.token);
+      }
       queryClient.setQueryData(["/api/auth/user"], userData);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
 

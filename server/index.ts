@@ -165,6 +165,33 @@ app.use(session({
   },
 }));
 
+app.use(async (req: Request, _res: Response, next: NextFunction) => {
+  if (req.session?.userId) return next();
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return next();
+  const token = authHeader.slice(7);
+  if (!token) return next();
+  try {
+    const result = await pool.query(
+      'SELECT user_id FROM auth_tokens WHERE token = $1 AND expires_at > NOW() LIMIT 1',
+      [token]
+    );
+    if (result.rows.length > 0) {
+      (req.session as any).userId = result.rows[0].user_id;
+      const profileResult = await pool.query(
+        'SELECT email FROM profiles WHERE id = $1 LIMIT 1',
+        [result.rows[0].user_id]
+      );
+      if (profileResult.rows.length > 0) {
+        (req.session as any).email = profileResult.rows[0].email;
+      }
+    }
+  } catch (e) {
+    console.error("[TokenAuth] Error resolving token:", e);
+  }
+  next();
+});
+
 // Stricter rate limit for Stripe webhooks
 const webhookLimiter = rateLimit({
   windowMs: 60000, // 1 minute

@@ -1,6 +1,7 @@
 import { Express, Request, Response } from "express";
+import crypto from "crypto";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { isAuthenticated } from "./helpers";
 import {
@@ -11,6 +12,16 @@ import {
   verifyBackupCode,
 } from "../services/twoFactorService";
 import bcrypt from "bcrypt";
+
+async function createAuthToken(userId: string): Promise<string> {
+  const authToken = crypto.randomBytes(48).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.execute(sql`
+    INSERT INTO auth_tokens (user_id, token, expires_at)
+    VALUES (${userId}, ${authToken}, ${expiresAt})
+  `);
+  return authToken;
+}
 
 function is2FASessionValid(req: Request): boolean {
   return !!(req.session as any)?.pending2FAUserId;
@@ -170,10 +181,11 @@ export function registerTwoFactorRoutes(app: Express) {
       req.session.email = profile[0]?.email || "";
       delete (req.session as any).pending2FAUserId;
 
+      const authToken = await createAuthToken(pendingUserId);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
         }
         res.json({
           id: profile[0]?.id,
@@ -181,6 +193,7 @@ export function registerTwoFactorRoutes(app: Express) {
           fullName: profile[0]?.fullName,
           organizationId: profile[0]?.organizationId,
           roles: roles.map((r) => r.role),
+          token: authToken,
         });
       });
     } catch (error) {
@@ -234,10 +247,11 @@ export function registerTwoFactorRoutes(app: Express) {
       req.session.email = profile[0]?.email || "";
       delete (req.session as any).pending2FAUserId;
 
+      const authToken = await createAuthToken(pendingUserId);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
         }
         res.json({
           id: profile[0]?.id,
@@ -245,6 +259,7 @@ export function registerTwoFactorRoutes(app: Express) {
           fullName: profile[0]?.fullName,
           organizationId: profile[0]?.organizationId,
           roles: roles.map((r) => r.role),
+          token: authToken,
           backupCodesRemaining: remainingCodes.length,
         });
       });
