@@ -94,6 +94,19 @@ export default function Login() {
 
       queryClient.setQueryData(["/api/auth/user"], result);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+
+      const verifyResponse = await fetch("/api/auth/user", {
+        headers: {
+          ...(result.token ? { 'Authorization': `Bearer ${result.token}` } : {}),
+        },
+        credentials: 'include',
+      });
+
+      if (verifyResponse.ok) {
+        const verifiedUser = await verifyResponse.json();
+        queryClient.setQueryData(["/api/auth/user"], verifiedUser);
+      }
+
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error: any) {

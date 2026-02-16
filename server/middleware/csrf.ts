@@ -13,6 +13,8 @@ const EXEMPT_PATHS = [
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
   "/api/auth/csrf-token",
+  "/api/2fa/verify",
+  "/api/2fa/backup-verify",
   "/api/demo/request",
   "/api/demo/validate",
   "/api/demo/activate",
