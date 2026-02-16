@@ -78,10 +78,10 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 8) {
+    if (password.length < 12) {
       toast({
         title: "Fehler",
-        description: "Das Passwort muss mindestens 8 Zeichen lang sein",
+        description: "Das Passwort muss mindestens 12 Zeichen lang sein",
         variant: "destructive",
       });
       return;
@@ -178,7 +178,7 @@ export default function ResetPassword() {
           <form onSubmit={handleResetPassword}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">Neues Passwort (min. 8 Zeichen)</Label>
+                <Label htmlFor="password">Neues Passwort (min. 12 Zeichen)</Label>
                 <div className="relative">
                   <Input
                     id="password"

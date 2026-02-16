@@ -583,6 +583,57 @@ export function setupAuth(app: Express) {
     }
   });
 
+  app.get("/api/auth/magic-login", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+      
+      if (!token || typeof token !== 'string') {
+        return res.redirect('/login?error=invalid_token');
+      }
+
+      const resetTokenResult = await db.select().from(schema.passwordResetTokens)
+        .where(eq(schema.passwordResetTokens.token, token)).limit(1);
+      
+      const resetToken = resetTokenResult[0];
+      
+      if (!resetToken || resetToken.usedAt || new Date(resetToken.expiresAt) < new Date()) {
+        return res.redirect('/login?error=expired_token');
+      }
+
+      await db.update(schema.passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(schema.passwordResetTokens.id, resetToken.id));
+
+      const profile = await getProfileById(resetToken.userId);
+      
+      if (!profile) {
+        return res.redirect('/login?error=user_not_found');
+      }
+
+      const authToken = crypto.randomBytes(48).toString('hex');
+      const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.execute(sql`
+        INSERT INTO auth_tokens (user_id, token, expires_at)
+        VALUES (${profile.id}, ${authToken}, ${tokenExpiresAt})
+      `);
+
+      req.session.userId = profile.id;
+      req.session.email = profile.email;
+      req.session.save(() => {
+        res.send(`<!DOCTYPE html>
+<html><head><title>Anmeldung...</title></head>
+<body><script>
+localStorage.setItem('auth_token', '${authToken}');
+window.location.href = '/dashboard';
+</script><p>Anmeldung laeuft... Falls nichts passiert, <a href="/dashboard">hier klicken</a>.</p>
+</body></html>`);
+      });
+    } catch (error) {
+      console.error("Magic login error:", error);
+      res.redirect('/login?error=server_error');
+    }
+  });
+
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
     try {
       const { email } = req.body;
