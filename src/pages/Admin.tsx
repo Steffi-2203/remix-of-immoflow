@@ -59,6 +59,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { DemoInviteManager } from '@/components/admin/DemoInviteManager';
 import { WhiteLabelInquiryManager } from '@/components/admin/WhiteLabelInquiryManager';
 import { WhiteLabelLicenseManager } from '@/components/admin/WhiteLabelLicenseManager';
+import { MarketingManager } from '@/components/admin/MarketingManager';
 
 export default function Admin() {
   const { data: organizations, isLoading, refetch } = useAdminOrganizations();
@@ -360,6 +361,9 @@ export default function Admin() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Marketing & Kundengewinnung */}
+        <MarketingManager />
 
         {/* Demo Invitations */}
         <DemoInviteManager />
