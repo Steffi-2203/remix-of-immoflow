@@ -7,13 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { setAuthToken, clearAuthToken } from '@/lib/queryClient';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, loading, signIn } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,15 +45,45 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const { error } = await signIn(email, password);
-      if (error) {
+      clearAuthToken();
+
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        let errorMsg = "Ungültige E-Mail oder Passwort";
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch {}
         toast({
           title: "Anmeldung fehlgeschlagen",
-          description: error.message || "Ungültige E-Mail oder Passwort",
+          description: errorMsg,
           variant: "destructive",
         });
         return;
       }
+
+      const result = await response.json();
+
+      if (result.token) {
+        setAuthToken(result.token);
+      }
+
+      queryClient.setQueryData(["/api/auth/user"], {
+        id: result.id,
+        email: result.email,
+        fullName: result.fullName,
+        organizationId: result.organizationId,
+        roles: result.roles,
+      });
+
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
     } catch (error: any) {
       toast({
         title: "Anmeldung fehlgeschlagen",

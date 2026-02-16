@@ -603,7 +603,12 @@ export function setupAuth(app: Express) {
           expiresAt,
         });
 
-        const resetUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : 'http://localhost:5000'}/reset-password?token=${token}`;
+        const baseUrl = process.env.NODE_ENV === 'production' 
+          ? 'https://www.immoflowme.at'
+          : process.env.REPLIT_DEV_DOMAIN 
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+            : 'http://localhost:5000';
+        const resetUrl = `${baseUrl}/reset-password?token=${token}`;
         
         await sendEmail({
           to: profile.email,
