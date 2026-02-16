@@ -1,0 +1,132 @@
+import { db } from "./db";
+import { sql, eq, and } from "drizzle-orm";
+import {
+  organizations,
+  profiles,
+  userRoles,
+  userOrganizations,
+} from "../shared/schema";
+
+export async function runSeed(): Promise<void> {
+  console.log("🔵 [SEED] Starte Seed-Prozess…");
+
+  try {
+    await db.transaction(async (tx) => {
+      // ---------------------------------------------------------
+      // 1. ORGANIZATION
+      // ---------------------------------------------------------
+      const orgName = "ImmoFlowMe";
+
+      const existingOrg = await tx.query.organizations.findFirst({
+        where: eq(organizations.name, orgName),
+      });
+
+      let orgId: string;
+
+      if (existingOrg) {
+        console.log("✔️ [SEED] Organisation existiert bereits:", existingOrg.id);
+        orgId = existingOrg.id;
+      } else {
+        console.log("🟡 [SEED] Erstelle Organisation…");
+
+        const inserted = await tx
+          .insert(organizations)
+          .values({
+            name: orgName,
+            subscriptionTier: sql`'professional'::subscription_tier`,
+            subscriptionStatus: sql`'active'::subscription_status`,
+          })
+          .returning();
+
+        orgId = inserted[0].id;
+        console.log("✔️ [SEED] Organisation erstellt:", orgId);
+      }
+
+      // ---------------------------------------------------------
+      // 2. PROFILE (ADMIN)
+      // ---------------------------------------------------------
+      const adminEmail = "admin@immoflowme.at";
+
+      const existingProfile = await tx.query.profiles.findFirst({
+        where: eq(profiles.email, adminEmail),
+      });
+
+      let adminId: string;
+
+      if (existingProfile) {
+        console.log("✔️ [SEED] Admin-Profil existiert bereits:", existingProfile.id);
+        adminId = existingProfile.id;
+      } else {
+        console.log("🟡 [SEED] Erstelle Admin-Profil…");
+
+        const inserted = await tx
+          .insert(profiles)
+          .values({
+            email: adminEmail,
+            fullName: "System Administrator",
+            subscriptionTier: sql`'pro'::user_subscription_tier`, // WICHTIG!
+          })
+          .onConflictDoNothing()
+          .returning();
+
+        if (inserted.length === 0) {
+          throw new Error("❌ [SEED] Admin-Profil konnte nicht erstellt werden.");
+        }
+
+        adminId = inserted[0].id;
+        console.log("✔️ [SEED] Admin-Profil erstellt:", adminId);
+      }
+
+      // ---------------------------------------------------------
+      // 3. ROLE (ADMIN)
+      // ---------------------------------------------------------
+      const existingRole = await tx.query.userRoles.findFirst({
+        where: and(eq(userRoles.userId, adminId), eq(userRoles.role, "admin")),
+      });
+
+      if (existingRole) {
+        console.log("✔️ [SEED] Admin-Rolle existiert bereits.");
+      } else {
+        console.log("🟡 [SEED] Erstelle Admin-Rolle…");
+
+        await tx.insert(userRoles).values({
+          userId: adminId,
+          role: sql`'admin'::app_role`,
+        });
+
+        console.log("✔️ [SEED] Admin-Rolle erstellt.");
+      }
+
+      // ---------------------------------------------------------
+      // 4. MEMBERSHIP (ADMIN ↔ ORG)
+      // ---------------------------------------------------------
+      const existingMembership = await tx.query.userOrganizations.findFirst({
+        where: and(
+          eq(userOrganizations.userId, adminId),
+          eq(userOrganizations.organizationId, orgId)
+        ),
+      });
+
+      if (existingMembership) {
+        console.log("✔️ [SEED] Mitgliedschaft existiert bereits.");
+      } else {
+        console.log("🟡 [SEED] Erstelle Mitgliedschaft…");
+
+        await tx
+          .insert(userOrganizations)
+          .values({
+            userId: adminId,
+            organizationId: orgId,
+          })
+          .onConflictDoNothing();
+
+        console.log("✔️ [SEED] Mitgliedschaft erstellt.");
+      }
+    });
+
+    console.log("🟢 [SEED] Seed-Prozess erfolgreich abgeschlossen.");
+  } catch (err) {
+    console.error("❌ [SEED] Fehler im Seed-Prozess:", err);
+    throw err; // Server darf NICHT starten, wenn Seed scheitert
+  }
+}
