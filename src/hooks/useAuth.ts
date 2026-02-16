@@ -141,7 +141,14 @@ export const useAuth = () => {
     return registerMutation.mutateAsync(data);
   };
 
-  const signIn = login;
+  const signIn = async (email: string, password: string) => {
+    try {
+      const result = await loginMutation.mutateAsync({ email, password });
+      return { error: null, data: result };
+    } catch (err: any) {
+      return { error: { message: err.message || "Anmeldung fehlgeschlagen" }, data: null };
+    }
+  };
   const signUp = async (
     email: string, 
     password: string, 
