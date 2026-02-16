@@ -49,7 +49,10 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password;
+    
+    if (!trimmedEmail || !trimmedPassword) {
       toast({
         title: "Fehler",
         description: "Bitte E-Mail und Passwort eingeben",
@@ -61,23 +64,56 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const result = await signIn(email, password);
-      if (result && typeof result === 'object' && 'requires2FA' in result) {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const csrf = getCsrfToken();
+      if (csrf) headers["x-csrf-token"] = csrf;
+
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
+      });
+
+      if (!response.ok) {
+        let errorMsg = "Anmeldung fehlgeschlagen";
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+          if (errorData.remainingAttempts) {
+            errorMsg += ` (Noch ${errorData.remainingAttempts} Versuch(e))`;
+          }
+        } catch {
+          errorMsg = `Server-Fehler (${response.status})`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const result = await response.json();
+
+      if (result.requires2FA) {
         setRequires2FA(true);
         setIsSubmitting(false);
         return;
       }
-      if (result && typeof result === 'object' && 'token' in result && (result as any).token) {
-        setAuthToken((result as any).token);
+
+      if (result.token) {
+        setAuthToken(result.token);
       }
+
       queryClient.setQueryData(["/api/auth/user"], result);
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error: any) {
       console.error("Login error:", error);
+      let description = error.message || "Ein unbekannter Fehler ist aufgetreten";
+      if (error.message === "Failed to fetch" || error.name === "TypeError") {
+        description = "Verbindung zum Server fehlgeschlagen. Bitte laden Sie die Seite neu (Strg+Shift+R).";
+      }
       toast({
         title: "Anmeldung fehlgeschlagen",
-        description: error.message || "Ungültige E-Mail oder Passwort",
+        description,
         variant: "destructive",
       });
     } finally {
