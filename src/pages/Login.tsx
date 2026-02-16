@@ -22,6 +22,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -43,6 +44,7 @@ export default function Login() {
     }
 
     setIsSubmitting(true);
+    setDebugInfo('Sende Anfrage...');
     
     try {
       clearAuthToken();
@@ -54,12 +56,15 @@ export default function Login() {
         credentials: 'include',
       });
 
+      setDebugInfo(`Status: ${response.status}`);
+
       if (!response.ok) {
         let errorMsg = "Ungültige E-Mail oder Passwort";
         try {
           const errorData = await response.json();
           errorMsg = errorData.error || errorMsg;
         } catch {}
+        setDebugInfo(`Fehler: ${errorMsg}`);
         toast({
           title: "Anmeldung fehlgeschlagen",
           description: errorMsg,
@@ -69,6 +74,7 @@ export default function Login() {
       }
 
       const result = await response.json();
+      setDebugInfo('Login erfolgreich, weiterleiten...');
 
       if (result.token) {
         setAuthToken(result.token);
@@ -83,8 +89,9 @@ export default function Login() {
       });
 
       const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+      window.location.href = from;
     } catch (error: any) {
+      setDebugInfo(`Exception: ${error.message}`);
       toast({
         title: "Anmeldung fehlgeschlagen",
         description: error.message || "Ungültige E-Mail oder Passwort",
@@ -183,6 +190,11 @@ export default function Login() {
                 )}
                 Anmelden
               </Button>
+              {debugInfo && (
+                <p className="text-xs text-center text-muted-foreground" data-testid="text-debug-info">
+                  {debugInfo}
+                </p>
+              )}
             </CardContent>
           </form>
           <CardFooter className="flex flex-col gap-4 text-center text-sm text-muted-foreground">
