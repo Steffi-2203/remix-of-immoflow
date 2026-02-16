@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Loader2, LogIn, Eye, EyeOff, ShieldCheck, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { setAuthToken, getAuthToken } from '@/lib/queryClient';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
 function getCsrfToken(): string | null {
@@ -60,44 +61,23 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      const csrf = getCsrfToken();
-      if (csrf) headers["x-csrf-token"] = csrf;
-
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast({
-          title: "Anmeldung fehlgeschlagen",
-          description: data.error || "Ungültige E-Mail oder Passwort",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (data.requires2FA) {
+      const result = await signIn(email, password);
+      if (result && typeof result === 'object' && 'requires2FA' in result) {
         setRequires2FA(true);
         setIsSubmitting(false);
         return;
       }
-
-      queryClient.setQueryData(["/api/auth/user"], data);
-      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      if (result && typeof result === 'object' && 'token' in result && (result as any).token) {
+        setAuthToken((result as any).token);
+      }
+      queryClient.setQueryData(["/api/auth/user"], result);
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error: any) {
       console.error("Login error:", error);
       toast({
         title: "Anmeldung fehlgeschlagen",
-        description: "Netzwerkfehler. Bitte versuchen Sie es erneut.",
+        description: error.message || "Ungültige E-Mail oder Passwort",
         variant: "destructive",
       });
     } finally {
