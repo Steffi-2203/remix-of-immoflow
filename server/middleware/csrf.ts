@@ -28,8 +28,8 @@ export function csrfTokenMiddleware(req: Request, res: Response, next: NextFunct
     const token = crypto.randomBytes(32).toString("hex");
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: true,
+      sameSite: "none" as const,
       path: "/",
       maxAge: 24 * 60 * 60 * 1000,
     });
@@ -65,8 +65,8 @@ export function getCsrfToken(req: Request, res: Response) {
   if (!req.cookies?.[CSRF_COOKIE_NAME]) {
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: true,
+      sameSite: "none" as const,
       path: "/",
       maxAge: 24 * 60 * 60 * 1000,
     });
