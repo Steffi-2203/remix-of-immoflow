@@ -2445,3 +2445,47 @@ export const activities = pgTable("activities", {
 export const insertActivitySchema = createInsertSchema(activities).omit({ id: true, createdAt: true });
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
 export type Activity = typeof activities.$inferSelect;
+
+// ====== PROMO CODES ======
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  discountPercent: integer("discount_percent"),
+  discountMonths: integer("discount_months"),
+  trialDays: integer("trial_days"),
+  targetTier: subscriptionTierEnum("target_tier"),
+  maxUses: integer("max_uses"),
+  currentUses: integer("current_uses").default(0),
+  validFrom: timestamp("valid_from", { withTimezone: true }).defaultNow(),
+  validUntil: timestamp("valid_until", { withTimezone: true }),
+  isActive: boolean("is_active").default(true),
+  createdBy: uuid("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, createdAt: true, currentUses: true });
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type PromoCode = typeof promoCodes.$inferSelect;
+
+// ====== BROADCAST MESSAGES ======
+export const broadcastStatusEnum = pgEnum('broadcast_status', ['draft', 'sent', 'failed']);
+
+export const broadcastMessages = pgTable("broadcast_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  subject: text("subject").notNull(),
+  htmlContent: text("html_content").notNull(),
+  textContent: text("text_content"),
+  targetFilter: text("target_filter").default('all'),
+  recipientCount: integer("recipient_count").default(0),
+  sentCount: integer("sent_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  status: broadcastStatusEnum("status").default('draft'),
+  sentBy: uuid("sent_by").references(() => profiles.id),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertBroadcastMessageSchema = createInsertSchema(broadcastMessages).omit({ id: true, createdAt: true, recipientCount: true, sentCount: true, failedCount: true, sentAt: true });
+export type InsertBroadcastMessage = z.infer<typeof insertBroadcastMessageSchema>;
+export type BroadcastMessage = typeof broadcastMessages.$inferSelect;
