@@ -97,10 +97,10 @@ const apiLimiter = rateLimit({
 });
 app.use(apiLimiter);
 
-// Security: Strict rate limiting for auth routes (20 req / min per IP)
+// Security: Rate limiting for auth routes (50 req / min per IP)
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 20,
+  max: 50,
   message: { error: 'Zu viele Anmeldeversuche. Bitte warten Sie eine Minute.' },
   standardHeaders: true,
   legacyHeaders: false,
