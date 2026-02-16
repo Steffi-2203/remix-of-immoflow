@@ -583,6 +583,57 @@ export function setupAuth(app: Express) {
     }
   });
 
+  app.post("/api/auth/magic-login-api", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: "Token fehlt" });
+      }
+
+      const resetTokenResult = await db.select().from(schema.passwordResetTokens)
+        .where(eq(schema.passwordResetTokens.token, token)).limit(1);
+      
+      const resetToken = resetTokenResult[0];
+      
+      if (!resetToken || resetToken.usedAt || new Date(resetToken.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Token ungueltig oder abgelaufen" });
+      }
+
+      await db.update(schema.passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(schema.passwordResetTokens.id, resetToken.id));
+
+      const profile = await getProfileById(resetToken.userId);
+      if (!profile) {
+        return res.status(400).json({ error: "Benutzer nicht gefunden" });
+      }
+
+      const roles = await getUserRoles(profile.id);
+      const authToken = crypto.randomBytes(48).toString('hex');
+      const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.execute(sql`
+        INSERT INTO auth_tokens (user_id, token, expires_at)
+        VALUES (${profile.id}, ${authToken}, ${tokenExpiresAt})
+      `);
+
+      req.session.userId = profile.id;
+      req.session.email = profile.email;
+      
+      res.json({
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.fullName,
+        organizationId: profile.organizationId,
+        roles: roles.map((r: any) => r.role),
+        token: authToken,
+      });
+    } catch (error) {
+      console.error("Magic login API error:", error);
+      res.status(500).json({ error: "Server-Fehler" });
+    }
+  });
+
   app.get("/api/auth/magic-login", async (req: Request, res: Response) => {
     try {
       const { token } = req.query;

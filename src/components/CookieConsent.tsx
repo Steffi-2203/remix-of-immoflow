@@ -110,8 +110,8 @@ export function CookieConsent() {
   if (!showBanner) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-end sm:items-center justify-center p-4" data-testid="cookie-consent-banner">
-      <Card className="w-full max-w-lg animate-in slide-in-from-bottom-4">
+    <div className="fixed bottom-0 left-0 right-0 z-[9999] flex justify-center p-4" data-testid="cookie-consent-banner">
+      <Card className="w-full max-w-lg animate-in slide-in-from-bottom-4 shadow-lg border">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2">
             <Cookie className="h-5 w-5" />

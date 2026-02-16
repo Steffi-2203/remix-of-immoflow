@@ -21,6 +21,7 @@ const EXEMPT_PATHS = [
   "/api/demo/activate",
   "/api/invites/",
   "/api/white-label/inquiry",
+  "/api/auth/magic-login",
 ];
 
 function isExempt(path: string): boolean {

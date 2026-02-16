@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import immoflowLogo from '@/assets/immoflowme-logo.png';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, loading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -23,6 +24,42 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
+
+  useEffect(() => {
+    const magicToken = searchParams.get('magic');
+    if (magicToken && !isSubmitting) {
+      setIsSubmitting(true);
+      setDebugInfo('Auto-Login...');
+      fetch('/api/auth/magic-login-api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: magicToken }),
+        credentials: 'include',
+      })
+        .then(res => res.json())
+        .then(result => {
+          if (result.token) {
+            setAuthToken(result.token);
+            queryClient.setQueryData(["/api/auth/user"], {
+              id: result.id,
+              email: result.email,
+              fullName: result.fullName,
+              organizationId: result.organizationId,
+              roles: result.roles,
+            });
+            setDebugInfo('Erfolgreich! Weiterleitung...');
+            window.location.href = '/dashboard';
+          } else {
+            setDebugInfo('Fehler: ' + (result.error || 'Unbekannt'));
+            setIsSubmitting(false);
+          }
+        })
+        .catch(err => {
+          setDebugInfo('Fehler: ' + err.message);
+          setIsSubmitting(false);
+        });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
