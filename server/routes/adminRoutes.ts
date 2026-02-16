@@ -8,6 +8,17 @@ import crypto from "crypto";
 
 const router = Router();
 
+async function requireAdmin(req: Request, res: Response): Promise<string | null> {
+  const userId = (req.session as any)?.userId;
+  if (!userId) { res.status(401).json({ error: 'Nicht authentifiziert' }); return null; }
+  const [userRole] = await db.select()
+    .from(schema.userRoles)
+    .where(eq(schema.userRoles.userId, userId))
+    .limit(1);
+  if (!userRole || userRole.role !== 'admin') { res.status(403).json({ error: 'Nur Administratoren haben Zugriff' }); return null; }
+  return userId;
+}
+
 // ====== INSURANCE POLICIES ======
 
 router.get("/api/insurance/policies", async (req: Request, res: Response) => {
@@ -888,6 +899,406 @@ router.get("/api/admin/stats", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching admin stats:", error);
     res.status(500).json({ error: "Fehler beim Laden der Statistiken" });
+  }
+});
+
+// ====== MARKETING: TRIAL MANAGEMENT ======
+
+router.get("/api/admin/marketing/trials", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const orgs = await db.select({
+      id: schema.organizations.id,
+      name: schema.organizations.name,
+      email: schema.organizations.email,
+      subscriptionStatus: schema.organizations.subscriptionStatus,
+      subscriptionTier: schema.organizations.subscriptionTier,
+      trialEndsAt: schema.organizations.trialEndsAt,
+      createdAt: schema.organizations.createdAt,
+    })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.subscriptionStatus, 'trial'))
+      .orderBy(schema.organizations.trialEndsAt);
+
+    const enriched = await Promise.all(orgs.map(async (org) => {
+      const [ownerProfile] = await db.select({ email: schema.profiles.email, fullName: schema.profiles.fullName })
+        .from(schema.profiles)
+        .where(eq(schema.profiles.organizationId, org.id))
+        .limit(1);
+
+      const daysLeft = org.trialEndsAt
+        ? Math.max(0, Math.ceil((new Date(org.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+        : null;
+
+      return {
+        ...org,
+        ownerEmail: ownerProfile?.email || org.email,
+        ownerName: ownerProfile?.fullName || null,
+        daysLeft,
+        isExpired: daysLeft !== null && daysLeft <= 0,
+      };
+    }));
+
+    res.json(objectToSnakeCase(enriched));
+  } catch (error) {
+    console.error("Error fetching trials:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Trial-Daten" });
+  }
+});
+
+router.post("/api/admin/marketing/trials/:id/extend", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const body = objectToCamelCase(req.body);
+    const days = parseInt(body.days) || 14;
+
+    const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, req.params.id));
+    if (!org) return res.status(404).json({ error: "Organisation nicht gefunden" });
+
+    const currentEnd = org.trialEndsAt ? new Date(org.trialEndsAt) : new Date();
+    const newEnd = new Date(Math.max(currentEnd.getTime(), Date.now()));
+    newEnd.setDate(newEnd.getDate() + days);
+
+    const [updated] = await db.update(schema.organizations)
+      .set({ trialEndsAt: newEnd, subscriptionStatus: 'trial', updatedAt: new Date() })
+      .where(eq(schema.organizations.id, req.params.id))
+      .returning();
+
+    res.json({
+      success: true,
+      message: `Trial um ${days} Tage verlängert bis ${newEnd.toLocaleDateString('de-AT')}`,
+      organization: objectToSnakeCase(updated),
+    });
+  } catch (error) {
+    console.error("Error extending trial:", error);
+    res.status(500).json({ error: "Fehler beim Verlängern des Trials" });
+  }
+});
+
+router.post("/api/admin/marketing/trials/:id/end", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const [updated] = await db.update(schema.organizations)
+      .set({ subscriptionStatus: 'expired', trialEndsAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.organizations.id, req.params.id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Organisation nicht gefunden" });
+
+    res.json({
+      success: true,
+      message: `Trial für "${updated.name}" wurde beendet`,
+      organization: objectToSnakeCase(updated),
+    });
+  } catch (error) {
+    console.error("Error ending trial:", error);
+    res.status(500).json({ error: "Fehler beim Beenden des Trials" });
+  }
+});
+
+// ====== MARKETING: PROMO CODES ======
+
+router.post("/api/admin/marketing/promo-codes", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const body = objectToCamelCase(req.body);
+    const { code, description, discountPercent, discountMonths, trialDays, targetTier, maxUses, validUntil } = body;
+
+    if (!code || typeof code !== 'string' || code.trim().length < 3) {
+      return res.status(400).json({ error: 'Promo-Code muss mindestens 3 Zeichen haben' });
+    }
+
+    const existing = await db.select().from(schema.promoCodes).where(eq(schema.promoCodes.code, code.toUpperCase().trim()));
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Dieser Promo-Code existiert bereits' });
+    }
+
+    const [created] = await db.insert(schema.promoCodes).values({
+      code: code.toUpperCase().trim(),
+      description: description || null,
+      discountPercent: discountPercent ? parseInt(discountPercent) : null,
+      discountMonths: discountMonths ? parseInt(discountMonths) : null,
+      trialDays: trialDays ? parseInt(trialDays) : null,
+      targetTier: targetTier || null,
+      maxUses: maxUses ? parseInt(maxUses) : null,
+      validUntil: validUntil ? new Date(validUntil) : null,
+      isActive: true,
+      createdBy: adminId,
+    }).returning();
+
+    res.json({ success: true, promo_code: objectToSnakeCase(created) });
+  } catch (error) {
+    console.error("Error creating promo code:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen des Promo-Codes" });
+  }
+});
+
+router.get("/api/admin/marketing/promo-codes", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const codes = await db.select().from(schema.promoCodes).orderBy(desc(schema.promoCodes.createdAt));
+    res.json(objectToSnakeCase(codes));
+  } catch (error) {
+    console.error("Error fetching promo codes:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Promo-Codes" });
+  }
+});
+
+// ====== MARKETING: BROADCAST ======
+
+router.post("/api/admin/marketing/broadcast", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const body = objectToCamelCase(req.body);
+    const { subject, htmlContent, textContent, targetFilter } = body;
+
+    if (!subject || !htmlContent) {
+      return res.status(400).json({ error: 'Betreff und Inhalt sind erforderlich' });
+    }
+
+    const filter = targetFilter || 'all';
+    let recipientQuery = db.select({ email: schema.profiles.email, fullName: schema.profiles.fullName })
+      .from(schema.profiles);
+
+    if (filter === 'trial') {
+      recipientQuery = recipientQuery.innerJoin(schema.organizations, eq(schema.profiles.organizationId, schema.organizations.id))
+        .where(eq(schema.organizations.subscriptionStatus, 'trial')) as any;
+    } else if (filter === 'active') {
+      recipientQuery = recipientQuery.innerJoin(schema.organizations, eq(schema.profiles.organizationId, schema.organizations.id))
+        .where(eq(schema.organizations.subscriptionStatus, 'active')) as any;
+    }
+
+    const recipients = await recipientQuery;
+    const uniqueRecipients = recipients.filter((r, i, self) => r.email && self.findIndex(s => s.email === r.email) === i);
+
+    const [broadcast] = await db.insert(schema.broadcastMessages).values({
+      subject,
+      htmlContent,
+      textContent: textContent || null,
+      targetFilter: filter,
+      recipientCount: uniqueRecipients.length,
+      status: 'draft',
+      sentBy: adminId,
+    }).returning();
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const recipient of uniqueRecipients) {
+      try {
+        await sendEmail({
+          to: recipient.email,
+          subject,
+          html: htmlContent,
+          text: textContent || undefined,
+        });
+        sentCount++;
+      } catch (err) {
+        console.error(`[Broadcast] Failed to send to ${recipient.email}:`, err);
+        failedCount++;
+      }
+    }
+
+    const finalStatus = failedCount === uniqueRecipients.length ? 'failed' : 'sent';
+    await db.update(schema.broadcastMessages)
+      .set({ sentCount, failedCount, status: finalStatus, sentAt: new Date() })
+      .where(eq(schema.broadcastMessages.id, broadcast.id));
+
+    res.json({
+      success: true,
+      message: `Broadcast an ${sentCount} Empfänger gesendet (${failedCount} fehlgeschlagen)`,
+      broadcast_id: broadcast.id,
+      recipient_count: uniqueRecipients.length,
+      sent_count: sentCount,
+      failed_count: failedCount,
+    });
+  } catch (error) {
+    console.error("Error sending broadcast:", error);
+    res.status(500).json({ error: "Fehler beim Senden der Broadcast-Nachricht" });
+  }
+});
+
+router.get("/api/admin/marketing/broadcast/history", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const history = await db.select().from(schema.broadcastMessages).orderBy(desc(schema.broadcastMessages.createdAt)).limit(50);
+    res.json(objectToSnakeCase(history));
+  } catch (error) {
+    console.error("Error fetching broadcast history:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Broadcast-Historie" });
+  }
+});
+
+// ====== MARKETING: ONBOARDING TRACKING ======
+
+router.get("/api/admin/marketing/onboarding", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const recentOrgs = await db.select({
+      id: schema.organizations.id,
+      name: schema.organizations.name,
+      email: schema.organizations.email,
+      subscriptionStatus: schema.organizations.subscriptionStatus,
+      subscriptionTier: schema.organizations.subscriptionTier,
+      createdAt: schema.organizations.createdAt,
+      trialEndsAt: schema.organizations.trialEndsAt,
+    })
+      .from(schema.organizations)
+      .orderBy(desc(schema.organizations.createdAt))
+      .limit(50);
+
+    const enriched = await Promise.all(recentOrgs.map(async (org) => {
+      const [propertyCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.properties)
+        .where(and(eq(schema.properties.organizationId, org.id), isNull(schema.properties.deletedAt)));
+
+      const [unitCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.units)
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(eq(schema.properties.organizationId, org.id), isNull(schema.units.deletedAt)));
+
+      const [tenantCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.tenants)
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(eq(schema.properties.organizationId, org.id), isNull(schema.tenants.deletedAt)));
+
+      const [userCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.userOrganizations)
+        .where(eq(schema.userOrganizations.organizationId, org.id));
+
+      const hasProperties = (propertyCount?.count || 0) > 0;
+      const hasUnits = (unitCount?.count || 0) > 0;
+      const hasTenants = (tenantCount?.count || 0) > 0;
+
+      let onboardingStep = 'registered';
+      if (hasProperties) onboardingStep = 'properties_added';
+      if (hasProperties && hasUnits) onboardingStep = 'units_added';
+      if (hasProperties && hasUnits && hasTenants) onboardingStep = 'tenants_added';
+      if (org.subscriptionStatus === 'active') onboardingStep = 'subscribed';
+
+      const daysSinceCreation = org.createdAt
+        ? Math.floor((Date.now() - new Date(org.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      return {
+        ...org,
+        propertyCount: propertyCount?.count || 0,
+        unitCount: unitCount?.count || 0,
+        tenantCount: tenantCount?.count || 0,
+        userCount: userCount?.count || 0,
+        onboardingStep,
+        daysSinceCreation,
+      };
+    }));
+
+    res.json(objectToSnakeCase(enriched));
+  } catch (error) {
+    console.error("Error fetching onboarding data:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Onboarding-Daten" });
+  }
+});
+
+// ====== MARKETING: INVITATIONS ======
+
+router.post("/api/admin/marketing/invitations", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const body = objectToCamelCase(req.body);
+    const { email, name, message: customMessage, promoCode } = body;
+
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'Gültige E-Mail-Adresse erforderlich' });
+    }
+
+    const existingProfile = await db.select().from(schema.profiles).where(eq(schema.profiles.email, email)).limit(1);
+    if (existingProfile.length > 0) {
+      return res.status(400).json({ error: 'Diese E-Mail-Adresse ist bereits registriert' });
+    }
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 14);
+
+    await db.insert(schema.demoInvites).values({
+      email,
+      token,
+      status: 'pending',
+      expiresAt,
+    });
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+      : process.env.REPL_SLUG 
+        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : 'https://www.immoflowme.at';
+    const registrationUrl = `${baseUrl}/register?token=${token}&email=${encodeURIComponent(email)}${promoCode ? `&promo=${encodeURIComponent(promoCode)}` : ''}`;
+
+    let emailSent = false;
+    try {
+      const result = await sendEmail({
+        to: email,
+        subject: 'Einladung zu ImmoFlowMe - Ihre professionelle Hausverwaltung',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a365d;">Willkommen bei ImmoFlowMe</h1>
+            <p>Hallo${name ? ` ${name}` : ''},</p>
+            <p>Sie wurden persönlich eingeladen, <strong>ImmoFlowMe</strong> zu testen - die professionelle Hausverwaltungssoftware für Österreich.</p>
+            ${customMessage ? `<p style="padding: 12px; background: #f0f9ff; border-left: 4px solid #2563eb; border-radius: 4px;">${customMessage}</p>` : ''}
+            ${promoCode ? `<p style="padding: 12px; background: #f0fdf4; border-radius: 6px;">Ihr Aktionscode: <strong style="font-size: 18px; color: #16a34a;">${promoCode}</strong></p>` : ''}
+            <p style="margin: 30px 0;">
+              <a href="${registrationUrl}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                Jetzt kostenlos testen
+              </a>
+            </p>
+            <ul style="color: #666; font-size: 14px;">
+              <li>MRG-konforme Hausverwaltung</li>
+              <li>Automatische Rechnungsstellung & SEPA-Export</li>
+              <li>Mieter- und Eigentümerportale</li>
+              <li>14 Tage kostenlos testen</li>
+            </ul>
+            <p style="color: #666; font-size: 14px;">Dieser Einladungslink ist 14 Tage gültig.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+            <p style="color: #999; font-size: 12px;">ImmoFlowMe - Professionelle Hausverwaltung für Österreich<br/>www.immoflowme.at</p>
+          </div>
+        `,
+        text: `Einladung zu ImmoFlowMe\n\nHallo${name ? ` ${name}` : ''},\n\nSie wurden eingeladen, ImmoFlowMe zu testen.\n${promoCode ? `\nIhr Aktionscode: ${promoCode}\n` : ''}\nRegistrieren Sie sich hier: ${registrationUrl}\n\nDieser Link ist 14 Tage gültig.`
+      });
+      if (result && !(result as any).error) emailSent = true;
+    } catch (err: any) {
+      console.error('[Marketing] Email send failed:', err);
+    }
+
+    res.json({
+      success: true,
+      message: emailSent 
+        ? `Marketing-Einladung an ${email} versendet`
+        : `Einladung erstellt, E-Mail-Versand fehlgeschlagen. Link steht bereit.`,
+      email_sent: emailSent,
+      registration_url: registrationUrl,
+      token,
+    });
+  } catch (error) {
+    console.error("Error creating marketing invitation:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen der Marketing-Einladung" });
   }
 });
 
