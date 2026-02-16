@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -43,7 +44,13 @@ import {
   CheckCircle,
   AlertTriangle,
   FileText,
-  UserCog
+  UserCog,
+  ShieldCheck,
+  ShieldX,
+  Mail,
+  Send,
+  Copy,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -63,6 +70,12 @@ export default function Admin() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editTier, setEditTier] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [togglingOrgId, setTogglingOrgId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [inviteRegistrationUrl, setInviteRegistrationUrl] = useState<string | null>(null);
 
   const filteredOrgs = organizations?.filter(org => 
     org.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -98,8 +111,7 @@ export default function Admin() {
     setIsUpdating(true);
     try {
       await apiRequest('PATCH', `/api/admin/organizations/${selectedOrg.id}`, { 
-        subscription_tier: editTier,
-        updated_at: new Date().toISOString()
+        subscription_tier: editTier
       });
       
       toast.success('Plan wurde aktualisiert');
@@ -118,8 +130,7 @@ export default function Admin() {
 
     try {
       await apiRequest('PATCH', `/api/admin/organizations/${org.id}`, { 
-        subscription_status: 'cancelled',
-        updated_at: new Date().toISOString()
+        subscription_status: 'cancelled'
       });
       
       toast.success('Abo wurde gekündigt');
@@ -128,6 +139,60 @@ export default function Admin() {
       console.error('Error cancelling subscription:', error);
       toast.error('Fehler beim Kündigen des Abos');
     }
+  };
+
+  const handleToggleStatus = async (org: AdminOrganization) => {
+    const newStatus = org.subscription_status === 'active' ? 'cancelled' : 'active';
+    const actionLabel = newStatus === 'active' ? 'aktiviert' : 'suspendiert';
+    
+    setTogglingOrgId(org.id);
+    try {
+      await apiRequest('PATCH', `/api/admin/organizations/${org.id}`, { 
+        subscription_status: newStatus
+      });
+      
+      toast.success(`Organisation "${org.name}" wurde ${actionLabel}`);
+      refetch();
+    } catch (error) {
+      console.error('Error toggling status:', error);
+      toast.error(`Fehler beim ${newStatus === 'active' ? 'Aktivieren' : 'Suspendieren'} der Organisation`);
+    } finally {
+      setTogglingOrgId(null);
+    }
+  };
+
+  const handleSendInvitation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+
+    setIsSendingInvite(true);
+    setInviteRegistrationUrl(null);
+    try {
+      const response = await apiRequest('POST', '/api/admin/invitations', {
+        email: inviteEmail,
+        name: inviteName || undefined,
+        message: inviteMessage || undefined,
+      });
+      const data = await response.json();
+      
+      toast.success(data.message || 'Einladung wurde erfolgreich gesendet');
+      if (data.registration_url) {
+        setInviteRegistrationUrl(data.registration_url);
+      }
+      setInviteEmail('');
+      setInviteName('');
+      setInviteMessage('');
+    } catch (error: any) {
+      console.error('Error sending invitation:', error);
+      toast.error(error.message || 'Fehler beim Senden der Einladung');
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  const handleCopyUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast.success('URL wurde in die Zwischenablage kopiert');
   };
 
   if (isLoading) {
@@ -165,11 +230,11 @@ export default function Admin() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>MRR</CardDescription>
-              <CardTitle className="text-2xl flex items-center gap-2">
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-mrr">
                 <TrendingUp className="h-5 w-5 text-green-500" />
                 €{stats.monthlyRecurringRevenue}
               </CardTitle>
@@ -178,7 +243,7 @@ export default function Admin() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Aktive Abos</CardDescription>
-              <CardTitle className="text-2xl flex items-center gap-2">
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-active-subscriptions">
                 <CreditCard className="h-5 w-5 text-primary" />
                 {stats.activeSubscriptions}
               </CardTitle>
@@ -187,7 +252,7 @@ export default function Admin() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Trial-User</CardDescription>
-              <CardTitle className="text-2xl flex items-center gap-2">
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-trial-users">
                 <Clock className="h-5 w-5 text-yellow-500" />
                 {stats.trialUsers}
               </CardTitle>
@@ -196,7 +261,7 @@ export default function Admin() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Gekündigt</CardDescription>
-              <CardTitle className="text-2xl flex items-center gap-2">
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-cancelled">
                 <XCircle className="h-5 w-5 text-red-500" />
                 {stats.cancelledSubscriptions}
               </CardTitle>
@@ -205,13 +270,96 @@ export default function Admin() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Gesamt Organisationen</CardDescription>
-              <CardTitle className="text-2xl flex items-center gap-2">
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-total-orgs">
                 <Users className="h-5 w-5 text-muted-foreground" />
                 {stats.totalOrganizations}
               </CardTitle>
             </CardHeader>
           </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Liegenschaften</CardDescription>
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-total-properties">
+                <Building2 className="h-5 w-5 text-primary" />
+                {stats.totalProperties}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Benutzer</CardDescription>
+              <CardTitle className="text-2xl flex items-center gap-2" data-testid="stat-total-users">
+                <Users className="h-5 w-5 text-primary" />
+                {stats.totalUsers}
+              </CardTitle>
+            </CardHeader>
+          </Card>
         </div>
+
+        {/* Customer Invitation */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Kunden einladen
+            </CardTitle>
+            <CardDescription>Senden Sie Einladungen an potenzielle Kunden</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSendInvitation} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  type="email"
+                  placeholder="E-Mail-Adresse *"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  required
+                  data-testid="input-invite-email"
+                />
+                <Input
+                  type="text"
+                  placeholder="Name (optional)"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  data-testid="input-invite-name"
+                />
+              </div>
+              <Textarea
+                placeholder="Persönliche Nachricht..."
+                value={inviteMessage}
+                onChange={(e) => setInviteMessage(e.target.value)}
+                className="resize-none"
+                rows={3}
+                data-testid="input-invite-message"
+              />
+              <div className="flex flex-wrap items-center gap-4">
+                <Button type="submit" disabled={isSendingInvite || !inviteEmail} data-testid="button-send-invite">
+                  {isSendingInvite ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {isSendingInvite ? 'Wird gesendet...' : 'Einladung senden'}
+                </Button>
+              </div>
+              {inviteRegistrationUrl && (
+                <div className="flex items-center gap-2 rounded-md border p-3">
+                  <span className="text-sm text-muted-foreground flex-shrink-0">Registrierungs-URL:</span>
+                  <code className="text-sm flex-1 truncate" data-testid="text-registration-url">{inviteRegistrationUrl}</code>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleCopyUrl(inviteRegistrationUrl)}
+                    data-testid="button-copy-registration-url"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </form>
+          </CardContent>
+        </Card>
 
         {/* Demo Invitations */}
         <DemoInviteManager />
@@ -285,10 +433,27 @@ export default function Admin() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => handleToggleStatus(org)}
+                              disabled={togglingOrgId === org.id}
+                              data-testid={`button-toggle-status-${org.id}`}
+                              title={org.subscription_status === 'active' ? 'Suspendieren' : 'Aktivieren'}
+                            >
+                              {togglingOrgId === org.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : org.subscription_status === 'active' ? (
+                                <ShieldCheck className="h-4 w-4 text-green-500" />
+                              ) : (
+                                <ShieldX className="h-4 w-4 text-red-500" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => {
                                 setSelectedOrg(org);
                                 setShowDetailsDialog(true);
                               }}
+                              data-testid={`button-view-org-${org.id}`}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -300,6 +465,7 @@ export default function Admin() {
                                 setEditTier(org.subscription_tier);
                                 setShowEditDialog(true);
                               }}
+                              data-testid={`button-edit-org-${org.id}`}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -308,6 +474,7 @@ export default function Admin() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleCancelSubscription(org)}
+                                data-testid={`button-cancel-org-${org.id}`}
                               >
                                 <XCircle className="h-4 w-4 text-destructive" />
                               </Button>
