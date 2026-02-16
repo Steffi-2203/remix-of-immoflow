@@ -159,11 +159,42 @@ declare module "express-session" {
   }
 }
 
+async function resolveTokenAuth(req: Request): Promise<boolean> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return false;
+  const token = authHeader.slice(7);
+  if (!token) return false;
+  try {
+    const result = await db.execute(sql`
+      SELECT user_id FROM auth_tokens 
+      WHERE token = ${token} AND expires_at > NOW()
+      LIMIT 1
+    `);
+    const rows = result.rows as any[];
+    if (rows.length > 0) {
+      req.session.userId = rows[0].user_id;
+      const profile = await getProfileById(rows[0].user_id);
+      if (profile) {
+        req.session.email = profile.email;
+      }
+      return true;
+    }
+  } catch (e) {
+    console.error("Token auth error:", e);
+  }
+  return false;
+}
+
 export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
     return next();
   }
-  return res.status(401).json({ message: "Unauthorized" });
+  resolveTokenAuth(req).then(ok => {
+    if (ok) return next();
+    return res.status(401).json({ message: "Unauthorized" });
+  }).catch(() => {
+    return res.status(401).json({ message: "Unauthorized" });
+  });
 }
 
 async function getProfileByEmail(email: string) {
@@ -412,10 +443,16 @@ export function setupAuth(app: Express) {
       
       await logAuthEvent(req, 'login', profile.email, profile.id, true);
 
+      const authToken = crypto.randomBytes(48).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.execute(sql`
+        INSERT INTO auth_tokens (user_id, token, expires_at)
+        VALUES (${profile.id}, ${authToken}, ${expiresAt})
+      `);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
         }
         
         res.json({
@@ -424,6 +461,7 @@ export function setupAuth(app: Express) {
           fullName: profile.fullName,
           organizationId: profile.organizationId,
           roles: roles.map(r => r.role),
+          token: authToken,
         });
       });
     } catch (error) {
@@ -433,8 +471,30 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/auth/logout", async (req: Request, res: Response) => {
-    const userId = req.session?.userId || null;
+    let userId = req.session?.userId || null;
     const email = req.session?.email || 'unknown';
+
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      try {
+        if (!userId) {
+          const result = await db.execute(sql`SELECT user_id FROM auth_tokens WHERE token = ${token} LIMIT 1`);
+          const rows = result.rows as any[];
+          if (rows.length > 0) userId = rows[0].user_id;
+        }
+        await db.execute(sql`DELETE FROM auth_tokens WHERE token = ${token}`);
+      } catch (e) {
+        console.error("Token cleanup error:", e);
+      }
+    }
+    if (userId) {
+      try {
+        await db.execute(sql`DELETE FROM auth_tokens WHERE user_id = ${userId}`);
+      } catch (e) {
+        console.error("Token cleanup error:", e);
+      }
+    }
     
     await logAuthEvent(req, 'logout', email, userId, true);
     
@@ -456,7 +516,10 @@ export function setupAuth(app: Express) {
 
   app.get("/api/auth/user", async (req: Request, res: Response) => {
     if (!req.session?.userId) {
-      return res.status(401).json({ message: "Unauthorized" });
+      const resolved = await resolveTokenAuth(req);
+      if (!resolved) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
     }
 
     try {

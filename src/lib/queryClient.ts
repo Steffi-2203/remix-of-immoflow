@@ -1,17 +1,27 @@
 import { QueryClient } from '@tanstack/react-query';
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+export function getAuthToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem('auth_token', token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('auth_token');
+}
 
 function getCsrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function addAuthHeaders(headers: Record<string, string>) {
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 }
 
 export async function apiRequest(
@@ -29,6 +39,7 @@ export async function apiRequest(
       headers['x-csrf-token'] = csrfToken;
     }
   }
+  addAuthHeaders(headers);
 
   const response = await fetch(url, {
     method,
@@ -44,3 +55,27 @@ export async function apiRequest(
 
   return response;
 }
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false,
+      queryFn: async ({ queryKey }) => {
+        const url = queryKey[0] as string;
+        if (!url.startsWith('/')) return undefined;
+        const headers: Record<string, string> = {};
+        addAuthHeaders(headers);
+        const response = await fetch(url, { 
+          credentials: 'include',
+          headers,
+        });
+        if (response.status === 401) return null;
+        if (!response.ok) {
+          throw new Error(`${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      },
+    },
+  },
+});

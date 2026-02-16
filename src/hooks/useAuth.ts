@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getAuthToken, setAuthToken, clearAuthToken } from "@/lib/queryClient";
 
 interface User {
   id: string;
@@ -13,9 +14,19 @@ function getCsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
+    headers: getAuthHeaders(),
   });
 
   if (response.status === 401) {
@@ -29,10 +40,12 @@ async function fetchUser(): Promise<User | null> {
   return response.json();
 }
 
-async function loginFn(email: string, password: string): Promise<User | { requires2FA: true }> {
+async function loginFn(email: string, password: string): Promise<User & { token?: string } | { requires2FA: true }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const csrf = getCsrfToken();
   if (csrf) headers["x-csrf-token"] = csrf;
+  const authToken = getAuthToken();
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
   const response = await fetch("/api/auth/login", {
     method: "POST",
@@ -78,12 +91,15 @@ async function logoutFn(): Promise<void> {
   const headers: Record<string, string> = {};
   const csrf = getCsrfToken();
   if (csrf) headers["x-csrf-token"] = csrf;
+  const authToken = getAuthToken();
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
 
   await fetch("/api/auth/logout", {
     method: "POST",
     headers,
     credentials: "include",
   });
+  clearAuthToken();
 }
 
 export const useAuth = () => {
@@ -101,6 +117,9 @@ export const useAuth = () => {
       loginFn(data.email, data.password),
     onSuccess: (userData) => {
       if ('requires2FA' in userData) return;
+      if ('token' in userData && userData.token) {
+        setAuthToken(userData.token);
+      }
       queryClient.setQueryData(["/api/auth/user"], userData);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
     },
