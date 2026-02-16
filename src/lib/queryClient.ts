@@ -34,6 +34,7 @@ export async function apiRequest(
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -56,6 +57,7 @@ export const queryClient = new QueryClient({
         addAuthHeaders(headers);
         const response = await fetch(url, { 
           headers,
+          credentials: 'include',
         });
         if (response.status === 401) return null;
         if (!response.ok) {

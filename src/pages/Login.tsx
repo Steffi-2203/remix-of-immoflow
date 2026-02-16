@@ -63,6 +63,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -128,6 +129,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: twoFACode }),
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -170,6 +172,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: backupCode.trim() }),
+        credentials: 'include',
       });
 
       if (!response.ok) {

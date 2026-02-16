@@ -21,6 +21,7 @@ function getAuthHeaders(): Record<string, string> {
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
     headers: getAuthHeaders(),
+    credentials: 'include',
   });
 
   if (response.status === 401) {
@@ -39,6 +40,7 @@ async function loginFn(email: string, password: string): Promise<User & { token?
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -59,6 +61,7 @@ async function registerFn(data: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -77,6 +80,7 @@ async function logoutFn(): Promise<void> {
   await fetch("/api/auth/logout", {
     method: "POST",
     headers,
+    credentials: 'include',
   });
   clearAuthToken();
 }
