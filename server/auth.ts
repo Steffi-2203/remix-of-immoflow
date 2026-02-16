@@ -379,7 +379,10 @@ export function setupAuth(app: Express) {
       const { email, password } = req.body;
       const { ipAddress } = getClientInfo(req);
       
+      console.log(`[AUTH] Login attempt for: ${email ? email.substring(0, 3) + '***' : 'EMPTY'}, password length: ${password ? password.length : 0}, IP: ${ipAddress}`);
+      
       if (!email || !password) {
+        console.log('[AUTH] Login rejected: missing email or password');
         return res.status(400).json({ error: "E-Mail und Passwort sind erforderlich" });
       }
 
@@ -395,6 +398,7 @@ export function setupAuth(app: Express) {
       const profile = await getProfileByEmail(email.toLowerCase());
       
       if (!profile || !profile.passwordHash) {
+        console.log(`[AUTH] Login failed: profile not found or no password for ${email.toLowerCase()}`);
         await recordLoginAttempt(email, ipAddress, false);
         await logAuthEvent(req, 'login_failed', email.toLowerCase(), null, false, { reason: 'unknown_email' });
         return res.status(401).json({ error: "Ungültige E-Mail oder Passwort" });
@@ -403,6 +407,7 @@ export function setupAuth(app: Express) {
       const isValid = await bcrypt.compare(password, profile.passwordHash);
       
       if (!isValid) {
+        console.log(`[AUTH] Login failed: wrong password for ${email.toLowerCase()}, hash prefix: ${profile.passwordHash.substring(0, 7)}`);
         await recordLoginAttempt(email, ipAddress, false);
         await logAuthEvent(req, 'login_failed', email.toLowerCase(), profile.id, false, { reason: 'wrong_password' });
 
