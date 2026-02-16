@@ -11,11 +11,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { setAuthToken, getAuthToken } from '@/lib/queryClient';
 import immoflowLogo from '@/assets/immoflowme-logo.png';
 
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,14 +59,9 @@ export default function Login() {
     setIsSubmitting(true);
     
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      const csrf = getCsrfToken();
-      if (csrf) headers["x-csrf-token"] = csrf;
-
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers,
-        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
       });
 
@@ -134,14 +124,9 @@ export default function Login() {
 
     setIsSubmitting(true);
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      const csrf = getCsrfToken();
-      if (csrf) headers["x-csrf-token"] = csrf;
-
       const response = await fetch("/api/2fa/verify", {
         method: "POST",
-        headers,
-        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: twoFACode }),
       });
 
@@ -181,14 +166,9 @@ export default function Login() {
 
     setIsSubmitting(true);
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      const csrf = getCsrfToken();
-      if (csrf) headers["x-csrf-token"] = csrf;
-
       const response = await fetch("/api/2fa/backup-verify", {
         method: "POST",
-        headers,
-        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: backupCode.trim() }),
       });
 

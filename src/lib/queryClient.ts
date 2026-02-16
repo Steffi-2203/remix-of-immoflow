@@ -12,11 +12,6 @@ export function clearAuthToken() {
   localStorage.removeItem('auth_token');
 }
 
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
 function addAuthHeaders(headers: Record<string, string>) {
   const token = getAuthToken();
   if (token) {
@@ -33,19 +28,12 @@ export async function apiRequest(
   if (body) {
     headers['Content-Type'] = 'application/json';
   }
-  if (method !== 'GET') {
-    const csrfToken = getCsrfToken();
-    if (csrfToken) {
-      headers['x-csrf-token'] = csrfToken;
-    }
-  }
   addAuthHeaders(headers);
 
   const response = await fetch(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -67,7 +55,6 @@ export const queryClient = new QueryClient({
         const headers: Record<string, string> = {};
         addAuthHeaders(headers);
         const response = await fetch(url, { 
-          credentials: 'include',
           headers,
         });
         if (response.status === 401) return null;
