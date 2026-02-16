@@ -13,6 +13,7 @@ const EXEMPT_PATHS = [
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
   "/api/auth/csrf-token",
+  "/api/auth/logout",
   "/api/2fa/verify",
   "/api/2fa/backup-verify",
   "/api/demo/request",
@@ -24,6 +25,38 @@ const EXEMPT_PATHS = [
 
 function isExempt(path: string): boolean {
   return EXEMPT_PATHS.some(p => path.startsWith(p));
+}
+
+function buildAllowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  const replitDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (replitDomain) {
+    origins.add(`https://${replitDomain}`);
+  }
+  const replitSlug = process.env.REPL_SLUG;
+  const replitOwner = process.env.REPL_OWNER;
+  if (replitSlug && replitOwner) {
+    origins.add(`https://${replitSlug}.${replitOwner}.repl.co`);
+  }
+  origins.add('https://www.immoflowme.at');
+  origins.add('https://immoflowme.at');
+  return origins;
+}
+
+function isStrictSameOrigin(req: Request): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return false;
+
+  const host = req.headers.host;
+  if (host) {
+    try {
+      const originUrl = new URL(origin);
+      if (originUrl.host === host) return true;
+    } catch {}
+  }
+
+  const allowed = buildAllowedOrigins();
+  return allowed.has(origin);
 }
 
 export function csrfTokenMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -54,14 +87,23 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     return next();
   }
 
+  if (isStrictSameOrigin(req)) {
+    return next();
+  }
+
   const cookieToken = req.cookies?.[CSRF_COOKIE_NAME];
   const headerToken = req.headers[CSRF_HEADER_NAME] as string;
 
   if (!cookieToken || !headerToken) {
+    console.warn(`[CSRF] Token missing for ${req.method} ${req.path} - origin: ${req.headers.origin}`);
     return res.status(403).json({ error: "CSRF-Token fehlt" });
   }
 
-  if (!crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+      return res.status(403).json({ error: "CSRF-Token ungültig" });
+    }
+  } catch {
     return res.status(403).json({ error: "CSRF-Token ungültig" });
   }
 
