@@ -58,8 +58,25 @@ export function useAdminOrganizations() {
   });
 }
 
+interface AdminStatsResponse {
+  total_properties?: number;
+  total_units?: number;
+  total_users?: number;
+}
+
 export function useAdminStats() {
   const { data: organizations } = useAdminOrganizations();
+  const { data: isAdmin } = useIsAdmin();
+
+  const { data: serverStats } = useQuery<AdminStatsResponse>({
+    queryKey: ['/api/admin/stats'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/stats', { credentials: 'include' });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: isAdmin === true,
+  });
 
   if (!organizations) {
     return {
@@ -69,6 +86,8 @@ export function useAdminStats() {
       cancelledSubscriptions: 0,
       expiredSubscriptions: 0,
       monthlyRecurringRevenue: 0,
+      totalProperties: 0,
+      totalUsers: 0,
     };
   }
 
@@ -88,6 +107,9 @@ export function useAdminStats() {
     .filter(o => o.subscription_status === 'active')
     .reduce((sum, org) => sum + (TIER_PRICES[org.subscription_tier] || 0), 0);
 
+  const totalProperties = serverStats?.total_properties ?? organizations.reduce((sum, o) => sum + (o.property_count || 0), 0);
+  const totalUsers = serverStats?.total_users ?? organizations.reduce((sum, o) => sum + (o.user_count || 0), 0);
+
   return {
     totalOrganizations: organizations.length,
     activeSubscriptions,
@@ -95,5 +117,7 @@ export function useAdminStats() {
     cancelledSubscriptions,
     expiredSubscriptions,
     monthlyRecurringRevenue,
+    totalProperties,
+    totalUsers,
   };
 }

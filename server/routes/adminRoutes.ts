@@ -3,6 +3,8 @@ import { db } from "../db";
 import { eq, and, desc, gte, lte, sql, isNull, or } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { getAuthContext, checkMutationPermission, objectToSnakeCase, objectToCamelCase } from "./helpers";
+import { sendEmail } from "../lib/resend";
+import crypto from "crypto";
 
 const router = Router();
 
@@ -647,6 +649,245 @@ router.get("/api/audit-chain/verify", async (req: Request, res: Response) => {
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ====== ADMIN DASHBOARD ENDPOINTS ======
+
+router.get("/api/admin/organizations", async (req: Request, res: Response) => {
+  try {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ error: 'Nicht authentifiziert' });
+
+    const [userRole] = await db.select()
+      .from(schema.userRoles)
+      .where(eq(schema.userRoles.userId, userId))
+      .limit(1);
+
+    if (!userRole || userRole.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const orgs = await db.select().from(schema.organizations).orderBy(desc(schema.organizations.createdAt));
+
+    const enriched = await Promise.all(orgs.map(async (org) => {
+      const [userCountResult] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.userOrganizations)
+        .where(eq(schema.userOrganizations.organizationId, org.id));
+
+      const [propertyCountResult] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.properties)
+        .where(and(eq(schema.properties.organizationId, org.id), isNull(schema.properties.deletedAt)));
+
+      const [unitCountResult] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(schema.units)
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(eq(schema.properties.organizationId, org.id), isNull(schema.units.deletedAt)));
+
+      const [profileWithStripe] = await db.select({
+        stripeCustomerId: schema.profiles.stripeCustomerId,
+        stripeSubscriptionId: schema.profiles.stripeSubscriptionId,
+      })
+        .from(schema.profiles)
+        .where(eq(schema.profiles.organizationId, org.id))
+        .limit(1);
+
+      return {
+        ...org,
+        stripeCustomerId: profileWithStripe?.stripeCustomerId || null,
+        stripeSubscriptionId: profileWithStripe?.stripeSubscriptionId || null,
+        userCount: userCountResult?.count || 0,
+        propertyCount: propertyCountResult?.count || 0,
+        unitCount: unitCountResult?.count || 0,
+      };
+    }));
+
+    res.json(objectToSnakeCase(enriched));
+  } catch (error) {
+    console.error("Error fetching admin organizations:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Organisationen" });
+  }
+});
+
+router.patch("/api/admin/organizations/:id", async (req: Request, res: Response) => {
+  try {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ error: 'Nicht authentifiziert' });
+
+    const [userRole] = await db.select()
+      .from(schema.userRoles)
+      .where(eq(schema.userRoles.userId, userId))
+      .limit(1);
+
+    if (!userRole || userRole.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const body = objectToCamelCase(req.body);
+    const allowedFields: Record<string, any> = {};
+    const allowed = ['subscriptionTier', 'subscriptionStatus', 'trialEndsAt', 'name', 'email', 'phone', 'address', 'city', 'postalCode'];
+    for (const key of allowed) {
+      if (body[key] !== undefined) {
+        allowedFields[key] = body[key];
+      }
+    }
+
+    if (Object.keys(allowedFields).length === 0) {
+      return res.status(400).json({ error: 'Keine gültigen Felder zum Aktualisieren' });
+    }
+
+    allowedFields.updatedAt = new Date();
+
+    const [updated] = await db.update(schema.organizations)
+      .set(allowedFields)
+      .where(eq(schema.organizations.id, req.params.id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Organisation nicht gefunden" });
+
+    res.json(objectToSnakeCase(updated));
+  } catch (error) {
+    console.error("Error updating admin organization:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren der Organisation" });
+  }
+});
+
+router.post("/api/admin/invitations", async (req: Request, res: Response) => {
+  try {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ error: 'Nicht authentifiziert' });
+
+    const [userRole] = await db.select()
+      .from(schema.userRoles)
+      .where(eq(schema.userRoles.userId, userId))
+      .limit(1);
+
+    if (!userRole || userRole.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const body = objectToCamelCase(req.body);
+    const { email, name, message: customMessage } = body;
+
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ error: 'Gültige E-Mail-Adresse erforderlich' });
+    }
+
+    const existingProfile = await db.select().from(schema.profiles).where(eq(schema.profiles.email, email)).limit(1);
+    if (existingProfile.length > 0) {
+      return res.status(400).json({ error: 'Diese E-Mail-Adresse ist bereits registriert' });
+    }
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await db.insert(schema.demoInvites).values({
+      email,
+      token,
+      status: 'pending',
+      expiresAt,
+    });
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+      : process.env.REPL_SLUG 
+        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : 'https://www.immoflowme.at';
+    const registrationUrl = `${baseUrl}/register?token=${token}&email=${encodeURIComponent(email)}`;
+
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      const emailResult = await sendEmail({
+        to: email,
+        subject: 'Einladung zu ImmoFlowMe - Professionelle Hausverwaltung',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a365d;">Einladung zu ImmoFlowMe</h1>
+            <p>Hallo${name ? ` ${name}` : ''},</p>
+            <p>Sie wurden eingeladen, <strong>ImmoFlowMe</strong> zu nutzen - die professionelle Hausverwaltungssoftware für Österreich.</p>
+            ${customMessage ? `<p style="padding: 12px; background: #f3f4f6; border-radius: 6px; font-style: italic;">${customMessage}</p>` : ''}
+            <p style="margin: 30px 0;">
+              <a href="${registrationUrl}" style="background-color: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+                Jetzt registrieren
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">
+              <strong>Was Sie erwartet:</strong>
+            </p>
+            <ul style="color: #666; font-size: 14px;">
+              <li>MRG-konforme Hausverwaltung</li>
+              <li>Automatische Rechnungsstellung</li>
+              <li>SEPA-Export und Buchhaltung</li>
+              <li>Mieter- und Eigentümerportale</li>
+            </ul>
+            <p style="color: #666; font-size: 14px;">Dieser Link ist 7 Tage gültig.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+            <p style="color: #999; font-size: 12px;">ImmoFlowMe - Professionelle Hausverwaltung für Österreich</p>
+          </div>
+        `,
+        text: `Einladung zu ImmoFlowMe\n\nHallo${name ? ` ${name}` : ''},\n\nSie wurden eingeladen, ImmoFlowMe zu nutzen.\n\nRegistrieren Sie sich hier: ${registrationUrl}\n\nDieser Link ist 7 Tage gültig.`
+      });
+      if (emailResult && !(emailResult as any).error) {
+        emailSent = true;
+      } else {
+        emailError = (emailResult as any)?.error?.message || 'E-Mail-Versand fehlgeschlagen';
+      }
+    } catch (err: any) {
+      console.error('[Admin] Email send failed:', err);
+      emailError = err.message || 'E-Mail-Versand fehlgeschlagen';
+    }
+
+    res.json({
+      success: true,
+      message: emailSent 
+        ? `Einladung an ${email} wurde per E-Mail versendet`
+        : `Einladung erstellt, aber E-Mail konnte nicht gesendet werden: ${emailError}. Registrierungslink steht bereit.`,
+      email_sent: emailSent,
+      registration_url: registrationUrl,
+      token,
+    });
+  } catch (error) {
+    console.error("Error creating admin invitation:", error);
+    res.status(500).json({ error: "Fehler beim Erstellen der Einladung" });
+  }
+});
+
+router.get("/api/admin/stats", async (req: Request, res: Response) => {
+  try {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ error: 'Nicht authentifiziert' });
+
+    const [userRole] = await db.select()
+      .from(schema.userRoles)
+      .where(eq(schema.userRoles.userId, userId))
+      .limit(1);
+
+    if (!userRole || userRole.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const [totalOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.organizations);
+    const [activeOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.organizations).where(eq(schema.organizations.subscriptionStatus, 'active'));
+    const [trialOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.organizations).where(eq(schema.organizations.subscriptionStatus, 'trial'));
+    const [cancelledOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.organizations).where(eq(schema.organizations.subscriptionStatus, 'cancelled'));
+    const [totalProps] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.properties).where(isNull(schema.properties.deletedAt));
+    const [totalUnitsResult] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.units).where(isNull(schema.units.deletedAt));
+    const [totalUsers] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.profiles);
+
+    res.json({
+      total_organizations: totalOrgs?.count || 0,
+      active_subscriptions: activeOrgs?.count || 0,
+      trial_users: trialOrgs?.count || 0,
+      cancelled: cancelledOrgs?.count || 0,
+      total_properties: totalProps?.count || 0,
+      total_units: totalUnitsResult?.count || 0,
+      total_users: totalUsers?.count || 0,
+    });
+  } catch (error) {
+    console.error("Error fetching admin stats:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Statistiken" });
   }
 });
 
