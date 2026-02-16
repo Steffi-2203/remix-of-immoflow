@@ -79,4 +79,6 @@ async function ensureAdminSeeded(): Promise<void> {
   }
 }
 
-ensureAdminSeeded();
+export async function runSeed() {
+  await ensureAdminSeeded();
+}

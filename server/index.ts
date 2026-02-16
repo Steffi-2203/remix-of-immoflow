@@ -25,7 +25,7 @@ import { WebhookHandlers } from './webhookHandlers';
 import { setupAuth } from "./auth";
 import { pool } from "./db";
 import { seedDistributionKeys } from "./seedDistributionKeys";
-import "./seed";
+import { runSeed } from "./seed";
 import SESSION_SECRET from "./config/session";
 import { csrfTokenMiddleware, csrfProtection, getCsrfToken } from "./middleware/csrf";
 import { inputSanitizer } from "./middleware/sanitize";
@@ -395,6 +395,7 @@ async function initStripe() {
 
 (async () => {
   await initStripe();
+  await runSeed();
   await seedDistributionKeys();
   await ensureIndexes();
   await setupRLS();
