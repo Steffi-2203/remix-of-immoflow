@@ -158,9 +158,9 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,
+    secure: true,
     httpOnly: true,
-    sameSite: isProduction ? 'none' : 'lax',
+    sameSite: 'none' as const,
     maxAge: 1000 * 60 * 60 * 24, // 24 hours
   },
 }));

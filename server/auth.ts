@@ -447,8 +447,8 @@ export function setupAuth(app: Express) {
       res.clearCookie(cookieName, {
         path: '/',
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
+        secure: true,
+        sameSite: 'none' as const,
       });
       res.json({ message: "Erfolgreich abgemeldet" });
     });
