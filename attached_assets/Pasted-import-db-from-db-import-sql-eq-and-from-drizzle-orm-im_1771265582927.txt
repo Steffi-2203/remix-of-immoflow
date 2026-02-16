@@ -1,0 +1,65 @@
+import { db } from "./db";
+import { sql, eq, and } from "drizzle-orm";
+import {
+  organizations,
+  profiles,
+  userRoles,
+  userOrganizations,
+} from "../shared/schema";
+
+export async function runSeed() {
+  console.log("🔵 [SEED] Starte Seed-Prozess…");
+
+  try {
+    // ---------------------------------------------------------
+    // 1. ORGANIZATION
+    // ---------------------------------------------------------
+    const orgName = "ImmoFlowMe";
+    const existingOrg = await db.query.organizations.findFirst({
+      where: eq(organizations.name, orgName),
+    });
+
+    let orgId: string;
+
+    if (existingOrg) {
+      console.log("✔️ [SEED] Organisation existiert bereits:", existingOrg.id);
+      orgId = existingOrg.id;
+    } else {
+      console.log("🟡 [SEED] Erstelle Organisation…");
+
+      const inserted = await db
+        .insert(organizations)
+        .values({
+          name: orgName,
+          subscriptionTier: sql`'professional'::subscription_tier`,
+          subscriptionStatus: sql`'active'::subscription_status`,
+        })
+        .returning();
+
+      orgId = inserted[0].id;
+      console.log("✔️ [SEED] Organisation erstellt:", orgId);
+    }
+
+    // ---------------------------------------------------------
+    // 2. PROFILE (ADMIN)
+    // ---------------------------------------------------------
+    const adminEmail = "admin@immoflowme.at";
+
+    const existingProfile = await db.query.profiles.findFirst({
+      where: eq(profiles.email, adminEmail),
+    });
+
+    let adminId: string;
+
+    if (existingProfile) {
+      console.log("✔️ [SEED] Admin-Profil existiert bereits:", existingProfile.id);
+      adminId = existingProfile.id;
+    } else {
+      console.log("🟡 [SEED] Erstelle Admin-Profil…");
+
+      const inserted = await db
+        .insert(profiles)
+        .values({
+          email: adminEmail,
+          fullName: "System Administrator",
+          subscriptionTier: sql`'pro'::user_subscription
