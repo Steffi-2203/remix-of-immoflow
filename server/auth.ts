@@ -327,6 +327,17 @@ export function setupAuth(app: Express) {
             role: 'admin',
           });
         }
+
+        const existingMembership = await db.select().from(schema.userOrganizations)
+          .where(and(eq(schema.userOrganizations.userId, profile.id), eq(schema.userOrganizations.organizationId, adminOrg[0].id))).limit(1);
+        if (!existingMembership[0]) {
+          await db.insert(schema.userOrganizations).values({
+            userId: profile.id,
+            organizationId: adminOrg[0].id,
+            role: 'admin',
+            isDefault: true,
+          });
+        }
       } else if (invite) {
         await db.update(schema.profiles)
           .set({ organizationId: invite.organizationId })
@@ -339,6 +350,17 @@ export function setupAuth(app: Express) {
           await db.insert(schema.userRoles).values({
             userId: profile.id,
             role: invite.role,
+          });
+        }
+
+        const existingMembership = await db.select().from(schema.userOrganizations)
+          .where(and(eq(schema.userOrganizations.userId, profile.id), eq(schema.userOrganizations.organizationId, invite.organizationId))).limit(1);
+        if (!existingMembership[0]) {
+          await db.insert(schema.userOrganizations).values({
+            userId: profile.id,
+            organizationId: invite.organizationId,
+            role: invite.role,
+            isDefault: true,
           });
         }
         
@@ -354,10 +376,16 @@ export function setupAuth(app: Express) {
       
       await logAuthEvent(req, 'register', emailLower, profile.id, true);
 
+      const authToken = crypto.randomBytes(48).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.execute(sql`
+        INSERT INTO auth_tokens (user_id, token, expires_at)
+        VALUES (${profile.id}, ${authToken}, ${expiresAt})
+      `);
+
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
-          return res.status(500).json({ error: "Session konnte nicht gespeichert werden" });
         }
         
         res.json({
@@ -366,6 +394,7 @@ export function setupAuth(app: Express) {
           fullName: profile.fullName,
           organizationId: profile.organizationId,
           roles: roles.map(r => r.role),
+          token: authToken,
         });
       });
     } catch (error) {

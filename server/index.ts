@@ -185,6 +185,10 @@ app.use(async (req: Request, _res: Response, next: NextFunction) => {
       if (profileResult.rows.length > 0) {
         (req.session as any).email = profileResult.rows[0].email;
       }
+      pool.query(
+        'UPDATE auth_tokens SET expires_at = NOW() + INTERVAL \'24 hours\' WHERE token = $1',
+        [token]
+      ).catch(() => {});
     }
   } catch (e) {
     console.error("[TokenAuth] Error resolving token:", e);
