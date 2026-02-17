@@ -3,7 +3,7 @@ import { db } from "../db";
 import { eq, and, desc, gte, lte, sql, isNull, or } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { getAuthContext, checkMutationPermission, objectToSnakeCase, objectToCamelCase } from "./helpers";
-import { sendEmail } from "../lib/resend";
+import { enqueueEmail, enqueueEmails, getQueueStats } from "../lib/emailQueue";
 import crypto from "crypto";
 
 const router = Router();
@@ -810,7 +810,7 @@ router.post("/api/admin/invitations", async (req: Request, res: Response) => {
     let emailSent = false;
     let emailError: string | null = null;
     try {
-      const emailResult = await sendEmail({
+      const jobId = await enqueueEmail({
         to: email,
         subject: 'Einladung zu ImmoFlowMe - Professionelle Hausverwaltung',
         html: `
@@ -838,15 +838,12 @@ router.post("/api/admin/invitations", async (req: Request, res: Response) => {
             <p style="color: #999; font-size: 12px;">ImmoFlowMe - Professionelle Hausverwaltung für Österreich</p>
           </div>
         `,
-        text: `Einladung zu ImmoFlowMe\n\nHallo${name ? ` ${name}` : ''},\n\nSie wurden eingeladen, ImmoFlowMe zu nutzen.\n\nRegistrieren Sie sich hier: ${registrationUrl}\n\nDieser Link ist 7 Tage gültig.`
+        metadata: { type: 'invitation', invitationId: invitation.id },
       });
-      if (emailResult && !(emailResult as any).error) {
-        emailSent = true;
-      } else {
-        emailError = (emailResult as any)?.error?.message || 'E-Mail-Versand fehlgeschlagen';
-      }
+      emailSent = true;
+      console.log(`[Admin] Invitation email enqueued jobId=${jobId} to=${email}`);
     } catch (err: any) {
-      console.error('[Admin] Email send failed:', err);
+      console.error('[Admin] Email enqueue failed:', err);
       emailError = err.message || 'E-Mail-Versand fehlgeschlagen';
     }
 
@@ -1221,37 +1218,29 @@ router.post("/api/admin/marketing/broadcast", async (req: Request, res: Response
     });
 
     (async () => {
-      let sentCount = 0;
-      let failedCount = 0;
+      try {
+        const emailItems = uniqueRecipients.map((r) => ({
+          to: r.email,
+          subject,
+          html: htmlContent,
+          text: textContent || undefined,
+          metadata: { type: 'broadcast', broadcastId: broadcast.id },
+        }));
+        await enqueueEmails(emailItems);
 
-      for (const recipient of uniqueRecipients) {
-        try {
-          await sendEmail({
-            to: recipient.email,
-            subject,
-            html: htmlContent,
-            text: textContent || undefined,
-          });
-          sentCount++;
-        } catch (err) {
-          console.error(`[Broadcast] Failed to send to ${recipient.email}:`, err);
-          failedCount++;
-        }
+        await db.update(schema.broadcastMessages)
+          .set({ sentCount: uniqueRecipients.length, failedCount: 0, status: 'sent', sentAt: new Date() })
+          .where(eq(schema.broadcastMessages.id, broadcast.id));
+
+        console.log(`[Broadcast] ${broadcast.id}: ${uniqueRecipients.length} emails enqueued`);
+      } catch (err) {
+        console.error(`[Broadcast] Enqueue error for ${broadcast.id}:`, err);
+        await db.update(schema.broadcastMessages)
+          .set({ status: 'failed' })
+          .where(eq(schema.broadcastMessages.id, broadcast.id))
+          .catch(() => {});
       }
-
-      const finalStatus = failedCount === uniqueRecipients.length ? 'failed' : 'sent';
-      await db.update(schema.broadcastMessages)
-        .set({ sentCount, failedCount, status: finalStatus, sentAt: new Date() })
-        .where(eq(schema.broadcastMessages.id, broadcast.id));
-
-      console.log(`[Broadcast] ${broadcast.id}: ${sentCount} sent, ${failedCount} failed`);
-    })().catch((err) => {
-      console.error(`[Broadcast] Background send error for ${broadcast.id}:`, err);
-      db.update(schema.broadcastMessages)
-        .set({ status: 'failed' })
-        .where(eq(schema.broadcastMessages.id, broadcast.id))
-        .catch(() => {});
-    });
+    })();
   } catch (error) {
     console.error("Error sending broadcast:", error);
     res.status(500).json({ error: "Fehler beim Senden der Broadcast-Nachricht" });
@@ -1401,7 +1390,7 @@ router.post("/api/admin/marketing/invitations", async (req: Request, res: Respon
 
     let emailSent = false;
     try {
-      const result = await sendEmail({
+      await enqueueEmail({
         to: email,
         subject: 'Einladung zu ImmoFlowMe - Ihre professionelle Hausverwaltung',
         html: `
@@ -1427,11 +1416,12 @@ router.post("/api/admin/marketing/invitations", async (req: Request, res: Respon
             <p style="color: #999; font-size: 12px;">ImmoFlowMe - Professionelle Hausverwaltung für Österreich<br/>www.immoflowme.at</p>
           </div>
         `,
-        text: `Einladung zu ImmoFlowMe\n\nHallo${name ? ` ${name}` : ''},\n\nSie wurden eingeladen, ImmoFlowMe zu testen.\n${promoCode ? `\nIhr Aktionscode: ${promoCode}\n` : ''}\nRegistrieren Sie sich hier: ${registrationUrl}\n\nDieser Link ist 14 Tage gültig.`
+        metadata: { type: 'marketing-invitation', invitationId: invitation.id },
       });
-      if (result && !(result as any).error) emailSent = true;
+      emailSent = true;
+      console.log(`[Marketing] Invitation email enqueued to=${email}`);
     } catch (err: any) {
-      console.error('[Marketing] Email send failed:', err);
+      console.error('[Marketing] Email enqueue failed:', err);
     }
 
     res.json({
@@ -1469,6 +1459,8 @@ router.get("/api/admin/health", async (req: Request, res: Response) => {
       .from(schema.marketingInvitations)
       .where(eq(schema.marketingInvitations.status, 'pending'));
 
+    const queueStats = await getQueueStats();
+
     res.json({
       status: "ok",
       uptime_seconds: Math.round(process.uptime()),
@@ -1484,6 +1476,7 @@ router.get("/api/admin/health", async (req: Request, res: Response) => {
         active_trials: Number(trialCount.count),
         pending_invitations: Number(inviteCount.count),
       },
+      email_queue: queueStats,
       node_version: process.version,
       timestamp: new Date().toISOString(),
     });

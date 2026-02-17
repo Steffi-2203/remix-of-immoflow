@@ -68,12 +68,15 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **SEO**: robots.txt, dynamic sitemap.xml, JSON-LD structured data (Organization, SoftwareApplication, BreadcrumbList), Open Graph, Twitter Cards, canonical tags
 - **Performance**: gzip/brotli compression via `compression` middleware, immutable 1-year cache for static assets, no-cache for HTML
 - **Auth Architecture**: ActiveOrganizationProvider only wraps protected routes via `ProtectedWithOrg` wrapper; public routes render without auth context
-- **Service Worker**: v5, network-first for HTML/JS/CSS, cache-first for images/fonts
+- **Service Worker**: v11, network-first for HTML/JS/CSS, cache-first for images/fonts
+- **Email Queue**: BullMQ + Redis (optional, fallback to inline Resend). server/lib/emailQueue.ts with enqueueEmail/enqueueEmails, 5 retries, exponential backoff 2s base, concurrency 3, rate limit 10/s. Worker starts on server boot. Queue stats in /api/admin/health.
+- **Migration Runner**: migrations/runner.ts — transactional up/down with _migrations tracking table. Run: `npx tsx migrations/<name>.ts` (--down for rollback).
 
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service with pg_trgm extension and RLS.
 - **Replit Auth**: Authentication service.
-- **Resend**: Email API.
+- **Resend**: Email API (via BullMQ queue or inline fallback).
+- **BullMQ/Redis**: Optional email queue backend (set REDIS_URL secret to enable).
 - **Stripe**: Payment processing.
 - **OpenAI's GPT-5.2 (via Replit AI Integrations)**: For OCR and AI features.
 - **Tailwind CSS**: Utility-first CSS framework.
