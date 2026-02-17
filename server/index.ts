@@ -158,7 +158,7 @@ app.use(session({
 }));
 
 app.use(async (req: Request, _res: Response, next: NextFunction) => {
-  if (req.session?.userId) return next();
+  if ((req.session as any)?.userId) return next();
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) return next();
   const token = authHeader.slice(7);
@@ -169,14 +169,27 @@ app.use(async (req: Request, _res: Response, next: NextFunction) => {
       [token]
     );
     if (result.rows.length > 0) {
-      (req.session as any).userId = result.rows[0].user_id;
+      const userId = result.rows[0].user_id;
+      (req as any).tokenUserId = userId;
+      (req.session as any).userId = userId;
       const profileResult = await pool.query(
-        'SELECT email FROM profiles WHERE id = $1 LIMIT 1',
-        [result.rows[0].user_id]
+        'SELECT email, organization_id FROM profiles WHERE id = $1 LIMIT 1',
+        [userId]
       );
       if (profileResult.rows.length > 0) {
         (req.session as any).email = profileResult.rows[0].email;
+        if (profileResult.rows[0].organization_id) {
+          (req.session as any).organizationId = profileResult.rows[0].organization_id;
+        }
       }
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) {
+            console.error("[TokenAuth] Session save error:", err);
+          }
+          resolve();
+        });
+      });
       pool.query(
         'UPDATE auth_tokens SET expires_at = NOW() + INTERVAL \'24 hours\' WHERE token = $1',
         [token]
