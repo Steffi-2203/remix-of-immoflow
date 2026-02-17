@@ -7,7 +7,7 @@ vi.mock('../../server/db', () => ({
 }));
 
 import { pool } from '../../server/db';
-import { tokenAuthMiddleware } from '../../server/middleware/tokenAuth';
+import { tokenAuthMiddleware, verifyTokenAndGetPayload } from '../../server/middleware/tokenAuth';
 
 const mockQuery = pool.query as ReturnType<typeof vi.fn>;
 
@@ -24,6 +24,42 @@ function createMockReq(overrides: Record<string, any> = {}) {
 function createMockRes() {
   return {};
 }
+
+describe('verifyTokenAndGetPayload', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns { userId } for a valid, non-expired token', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ user_id: 'abc-123' }] });
+
+    const result = await verifyTokenAndGetPayload('good-token');
+
+    expect(result).toEqual({ userId: 'abc-123' });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('auth_tokens'),
+      ['good-token']
+    );
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('expires_at > NOW()'),
+      ['good-token']
+    );
+  });
+
+  it('returns null for an expired or non-existent token', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const result = await verifyTokenAndGetPayload('expired-token');
+
+    expect(result).toBeNull();
+  });
+
+  it('throws on database error (not caught internally)', async () => {
+    mockQuery.mockRejectedValueOnce(new Error('connection refused'));
+
+    await expect(verifyTokenAndGetPayload('any-token')).rejects.toThrow('connection refused');
+  });
+});
 
 describe('tokenAuthMiddleware', () => {
   let next: ReturnType<typeof vi.fn>;
@@ -161,5 +197,71 @@ describe('tokenAuthMiddleware', () => {
     );
 
     consoleSpy.mockRestore();
+  });
+
+  it('calls session.save exactly once per valid token request', async () => {
+    const userId = '55555555-5555-5555-5555-555555555555';
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ user_id: userId }] })
+      .mockResolvedValueOnce({ rows: [{ email: 'x@y.com', organization_id: 'org-1' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const saveFn = vi.fn((cb: (err?: any) => void) => cb());
+    const req = createMockReq({
+      headers: { authorization: 'Bearer once-token' },
+      session: { save: saveFn },
+    });
+
+    await tokenAuthMiddleware(req as any, createMockRes() as any, next);
+
+    expect(saveFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call session.save when token is invalid', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const saveFn = vi.fn((cb: (err?: any) => void) => cb());
+    const req = createMockReq({
+      headers: { authorization: 'Bearer bad-token' },
+      session: { save: saveFn },
+    });
+
+    await tokenAuthMiddleware(req as any, createMockRes() as any, next);
+
+    expect(saveFn).not.toHaveBeenCalled();
+  });
+
+  it('fires token refresh UPDATE after successful auth', async () => {
+    const userId = '66666666-6666-6666-6666-666666666666';
+
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ user_id: userId }] })
+      .mockResolvedValueOnce({ rows: [{ email: 'z@z.com', organization_id: null }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const req = createMockReq({ headers: { authorization: 'Bearer refresh-token' } });
+    await tokenAuthMiddleware(req as any, createMockRes() as any, next);
+
+    expect(mockQuery).toHaveBeenCalledTimes(3);
+    expect(mockQuery).toHaveBeenNthCalledWith(3,
+      expect.stringContaining("UPDATE auth_tokens SET expires_at"),
+      ['refresh-token']
+    );
+  });
+
+  it('handles empty Bearer value gracefully', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const req = createMockReq({ headers: { authorization: 'Bearer ' } });
+    await tokenAuthMiddleware(req as any, createMockRes() as any, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Empty Bearer token'),
+      expect.any(Object)
+    );
+
+    warnSpy.mockRestore();
   });
 });
