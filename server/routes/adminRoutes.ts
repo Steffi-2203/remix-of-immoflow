@@ -959,7 +959,7 @@ router.post("/api/admin/marketing/trials/:id/extend", async (req: Request, res: 
     if (!adminId) return;
 
     const body = objectToCamelCase(req.body);
-    const days = parseInt(body.days) || 14;
+    const days = Math.min(90, Math.max(1, parseInt(body.days) || 14));
 
     const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, req.params.id));
     if (!org) return res.status(404).json({ error: "Organisation nicht gefunden" });
