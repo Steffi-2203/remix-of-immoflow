@@ -87,26 +87,17 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Security: Rate limiting - general API (500 req / 15 min per IP)
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 500,
-  message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => !req.path.startsWith('/api'),
-});
-app.use(apiLimiter);
-
-// Security: Rate limiting for auth routes (50 req / min per IP)
+// Security: Brute-Force-Schutz nur für Login-Endpunkte (20 Versuche / Minute)
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 50,
+  max: 20,
   message: { error: 'Zu viele Anmeldeversuche. Bitte warten Sie eine Minute.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api/auth', authLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/tenant-auth/login', authLimiter);
+app.use('/api/owner-auth/login', authLimiter);
 
 app.use(gracefulDegradation);
 
