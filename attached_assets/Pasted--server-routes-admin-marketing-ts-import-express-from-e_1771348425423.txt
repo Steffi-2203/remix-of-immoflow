@@ -1,0 +1,125 @@
+// server/routes/admin/marketing.ts
+import express from "express";
+import { requireAdmin } from "../middleware/requireAdmin";
+import { db } from "../db"; // Drizzle client
+import { organizations, promo_codes, marketing_invitations } from "../db/schema";
+import crypto from "crypto";
+import { sendEmail } from "../services/email"; // implementiere Resend/Provider wrapper
+
+const router = express.Router();
+
+/**
+ * GET /api/admin/marketing/trials
+ * Liefert alle Organisationen, die aktuell im Trial sind.
+ */
+router.get("/api/admin/marketing/trials", requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.select().from(organizations).where(organizations.is_trial.eq(true));
+    return res.json(rows);
+  } catch (err) {
+    console.error("GET /trials error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * POST /api/admin/marketing/trials/:id/extend
+ * Verlängert das Trial um eine Anzahl Tage (body.days).
+ */
+router.post("/api/admin/marketing/trials/:id/extend", requireAdmin, async (req, res) => {
+  try {
+    const orgId = Number(req.params.id);
+    const days = Math.min(90, Number(req.body.days || 7)); // Limit: max 90 Tage
+
+    const [org] = await db.select().from(organizations).where(organizations.id.eq(orgId)).limit(1);
+    if (!org) return res.status(404).json({ error: "Organization not found" });
+
+    const base = org.trial_ends_at ? new Date(org.trial_ends_at) : new Date();
+    const newEnd = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+
+    await db.update(organizations).set({ trial_ends_at: newEnd }).where(organizations.id.eq(orgId));
+    return res.json({ success: true, trialEndsAt: newEnd.toISOString() });
+  } catch (err) {
+    console.error("POST /trials/:id/extend error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * POST /api/admin/marketing/promo-codes
+ * Erstellt einen Promo-Code.
+ */
+router.post("/api/admin/marketing/promo-codes", requireAdmin, async (req, res) => {
+  try {
+    const { code, description, discountType, discountValue, maxUses, expiresAt } = req.body;
+    if (!code || !discountType || typeof discountValue === "undefined") {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    await db.insert(promo_codes).values({
+      code,
+      description,
+      discount_type: discountType,
+      discount_value: Number(discountValue),
+      max_uses: maxUses ? Number(maxUses) : null,
+      used_count: 0,
+      expires_at: expiresAt ? new Date(expiresAt) : null,
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("POST /promo-codes error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * GET /api/admin/marketing/promo-codes
+ * Listet Promo-Codes auf.
+ */
+router.get("/api/admin/marketing/promo-codes", requireAdmin, async (_req, res) => {
+  try {
+    const rows = await db.select().from(promo_codes);
+    return res.json(rows);
+  } catch (err) {
+    console.error("GET /promo-codes error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * POST /api/admin/marketing/invitations
+ * Legt eine Einladung an und sendet E-Mail (synchroner skeleton; in Prod: Queue).
+ */
+router.post("/api/admin/marketing/invitations", requireAdmin, async (req, res) => {
+  try {
+    const { email, organizationId } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.insert(marketing_invitations).values({
+      email,
+      token,
+      status: "PENDING",
+      expires_at: expiresAt,
+      organization_id: organizationId ? Number(organizationId) : null,
+    });
+
+    // Sende E-Mail (in Prod: push to queue, rate-limit, retry)
+    await sendEmail({
+      to: email,
+      from: "stephania.pfeffer@outlook.de",
+      subject: "Einladung zu ImmoFlowMe",
+      html: `<p>Sie wurden eingeladen. <a href="https://www.immoflowme.at/register?invite=${token}">Jetzt registrieren</a></p>`,
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("POST /invitations error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+export default router;
