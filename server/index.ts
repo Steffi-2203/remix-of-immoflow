@@ -96,14 +96,6 @@ app.use('/api/', (_req, res, next) => {
   next();
 });
 
-app.use('/api/admin/', (_req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('X-Admin-Cache', 'disabled');
-  next();
-});
 
 // Security: Brute-Force-Schutz nur für Login-Endpunkte (20 Versuche / Minute)
 const authLimiter = rateLimit({
