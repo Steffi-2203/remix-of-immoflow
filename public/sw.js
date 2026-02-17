@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'immoflow-v10';
+const CACHE_VERSION = 'immoflow-v11';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
