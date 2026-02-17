@@ -1212,36 +1212,45 @@ router.post("/api/admin/marketing/broadcast", async (req: Request, res: Response
       sentBy: adminId,
     }).returning();
 
-    let sentCount = 0;
-    let failedCount = 0;
-
-    for (const recipient of uniqueRecipients) {
-      try {
-        await sendEmail({
-          to: recipient.email,
-          subject,
-          html: htmlContent,
-          text: textContent || undefined,
-        });
-        sentCount++;
-      } catch (err) {
-        console.error(`[Broadcast] Failed to send to ${recipient.email}:`, err);
-        failedCount++;
-      }
-    }
-
-    const finalStatus = failedCount === uniqueRecipients.length ? 'failed' : 'sent';
-    await db.update(schema.broadcastMessages)
-      .set({ sentCount, failedCount, status: finalStatus, sentAt: new Date() })
-      .where(eq(schema.broadcastMessages.id, broadcast.id));
-
-    res.json({
+    res.status(202).json({
       success: true,
-      message: `Broadcast an ${sentCount} Empfänger gesendet (${failedCount} fehlgeschlagen)`,
+      message: `Broadcast wird an ${uniqueRecipients.length} Empfänger gesendet`,
       broadcast_id: broadcast.id,
       recipient_count: uniqueRecipients.length,
-      sent_count: sentCount,
-      failed_count: failedCount,
+      status: 'sending',
+    });
+
+    (async () => {
+      let sentCount = 0;
+      let failedCount = 0;
+
+      for (const recipient of uniqueRecipients) {
+        try {
+          await sendEmail({
+            to: recipient.email,
+            subject,
+            html: htmlContent,
+            text: textContent || undefined,
+          });
+          sentCount++;
+        } catch (err) {
+          console.error(`[Broadcast] Failed to send to ${recipient.email}:`, err);
+          failedCount++;
+        }
+      }
+
+      const finalStatus = failedCount === uniqueRecipients.length ? 'failed' : 'sent';
+      await db.update(schema.broadcastMessages)
+        .set({ sentCount, failedCount, status: finalStatus, sentAt: new Date() })
+        .where(eq(schema.broadcastMessages.id, broadcast.id));
+
+      console.log(`[Broadcast] ${broadcast.id}: ${sentCount} sent, ${failedCount} failed`);
+    })().catch((err) => {
+      console.error(`[Broadcast] Background send error for ${broadcast.id}:`, err);
+      db.update(schema.broadcastMessages)
+        .set({ status: 'failed' })
+        .where(eq(schema.broadcastMessages.id, broadcast.id))
+        .catch(() => {});
     });
   } catch (error) {
     console.error("Error sending broadcast:", error);
@@ -1484,4 +1493,21 @@ router.get("/api/admin/health", async (req: Request, res: Response) => {
   }
 });
 
+async function recoverStuckBroadcasts() {
+  try {
+    const stuck = await db.update(schema.broadcastMessages)
+      .set({ status: 'failed' })
+      .where(eq(schema.broadcastMessages.status, 'draft'))
+      .returning({ id: schema.broadcastMessages.id });
+    if (stuck.length > 0) {
+      console.log(`[Broadcast] Recovered ${stuck.length} stuck broadcast(s) on startup`);
+    }
+  } catch (err) {
+    console.error('[Broadcast] Recovery check failed:', err);
+  }
+}
+
+recoverStuckBroadcasts();
+
+export { requireAdmin };
 export default router;
