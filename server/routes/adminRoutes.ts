@@ -1015,31 +1015,72 @@ router.post("/api/admin/marketing/promo-codes", async (req: Request, res: Respon
     if (!adminId) return;
 
     const body = objectToCamelCase(req.body);
-    const { code, description, discountPercent, discountMonths, trialDays, targetTier, maxUses, validUntil } = body;
+    const { code, description, discountType, discountValue, trialDays, targetTier, maxUses, validUntil } = body;
 
     if (!code || typeof code !== 'string' || code.trim().length < 3) {
       return res.status(400).json({ error: 'Promo-Code muss mindestens 3 Zeichen haben' });
     }
 
-    const existing = await db.select().from(schema.promoCodes).where(eq(schema.promoCodes.code, code.toUpperCase().trim()));
-    if (existing.length > 0) {
-      return res.status(400).json({ error: 'Dieser Promo-Code existiert bereits' });
+    const normalizedCode = code.toUpperCase().trim();
+    if (!/^[A-Z0-9_-]{3,50}$/.test(normalizedCode)) {
+      return res.status(400).json({ error: 'Promo-Code darf nur Großbuchstaben, Zahlen, - und _ enthalten (3-50 Zeichen)' });
     }
 
-    const [created] = await db.insert(schema.promoCodes).values({
-      code: code.toUpperCase().trim(),
-      description: description || null,
-      discountPercent: discountPercent ? parseInt(discountPercent) : null,
-      discountMonths: discountMonths ? parseInt(discountMonths) : null,
-      trialDays: trialDays ? parseInt(trialDays) : null,
-      targetTier: targetTier || null,
-      maxUses: maxUses ? parseInt(maxUses) : null,
-      validUntil: validUntil ? new Date(validUntil) : null,
-      isActive: true,
-      createdBy: adminId,
-    }).returning();
+    let discountPercent: number | null = null;
+    let discountMonths: number | null = null;
 
-    res.json({ success: true, promo_code: objectToSnakeCase(created) });
+    if (discountType && (body.discountPercent || body.discountMonths)) {
+      return res.status(400).json({ error: 'Bitte entweder discountType/discountValue ODER discountPercent/discountMonths verwenden, nicht beides' });
+    }
+
+    if (discountType) {
+      if (!['percent', 'months'].includes(discountType)) {
+        return res.status(400).json({ error: 'discountType muss "percent" oder "months" sein' });
+      }
+      const parsedValue = parseInt(discountValue);
+      if (!discountValue || isNaN(parsedValue) || parsedValue < 1) {
+        return res.status(400).json({ error: 'discountValue muss eine positive Ganzzahl sein' });
+      }
+      if (discountType === 'percent') {
+        if (parsedValue > 100) {
+          return res.status(400).json({ error: 'Rabatt in Prozent darf nicht über 100 liegen' });
+        }
+        discountPercent = parsedValue;
+      } else {
+        if (parsedValue > 36) {
+          return res.status(400).json({ error: 'Gratis-Monate dürfen 36 nicht überschreiten' });
+        }
+        discountMonths = parsedValue;
+      }
+    } else if (body.discountPercent || body.discountMonths) {
+      discountPercent = body.discountPercent ? Math.min(100, Math.max(1, parseInt(body.discountPercent))) : null;
+      discountMonths = body.discountMonths ? Math.min(36, Math.max(1, parseInt(body.discountMonths))) : null;
+    }
+
+    const parsedTrialDays = trialDays ? Math.min(365, Math.max(1, parseInt(trialDays))) : null;
+    const parsedMaxUses = maxUses ? Math.max(1, parseInt(maxUses)) : null;
+
+    try {
+      const [created] = await db.insert(schema.promoCodes).values({
+        code: normalizedCode,
+        description: description || null,
+        discountPercent,
+        discountMonths,
+        trialDays: parsedTrialDays,
+        targetTier: targetTier || null,
+        maxUses: parsedMaxUses,
+        validUntil: validUntil ? new Date(validUntil) : null,
+        isActive: true,
+        createdBy: adminId,
+      }).returning();
+
+      res.status(201).json({ success: true, promo_code: objectToSnakeCase(created) });
+    } catch (insertError: any) {
+      if (insertError.code === '23505') {
+        return res.status(409).json({ error: 'Dieser Promo-Code existiert bereits' });
+      }
+      throw insertError;
+    }
   } catch (error) {
     console.error("Error creating promo code:", error);
     res.status(500).json({ error: "Fehler beim Erstellen des Promo-Codes" });
@@ -1082,6 +1123,53 @@ router.patch("/api/admin/marketing/promo-codes/:id", async (req: Request, res: R
   } catch (error) {
     console.error("Error updating promo code:", error);
     res.status(500).json({ error: "Fehler beim Aktualisieren des Promo-Codes" });
+  }
+});
+
+// ====== MARKETING: PROMO REDEMPTION (atomic) ======
+
+router.post("/api/admin/marketing/promo-codes/:code/redeem", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const code = req.params.code?.toUpperCase().trim();
+    if (!code) {
+      return res.status(400).json({ error: "Promo-Code ist erforderlich" });
+    }
+
+    const updated = await db.execute(sql`
+      UPDATE promo_codes
+      SET current_uses = current_uses + 1
+      WHERE UPPER(code) = ${code}
+        AND is_active = true
+        AND (valid_until IS NULL OR valid_until > NOW())
+        AND (max_uses IS NULL OR current_uses < max_uses)
+      RETURNING *
+    `);
+
+    if (updated.rows.length === 0) {
+      const existing = await db.select().from(schema.promoCodes).where(eq(schema.promoCodes.code, code));
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "Promo-Code nicht gefunden" });
+      }
+      const pc = existing[0];
+      if (!pc.isActive) {
+        return res.status(410).json({ error: "Promo-Code ist deaktiviert" });
+      }
+      if (pc.validUntil && new Date(pc.validUntil) <= new Date()) {
+        return res.status(410).json({ error: "Promo-Code ist abgelaufen" });
+      }
+      if (pc.maxUses && (pc.currentUses ?? 0) >= pc.maxUses) {
+        return res.status(409).json({ error: "Promo-Code hat maximale Einlösungen erreicht" });
+      }
+      return res.status(400).json({ error: "Promo-Code konnte nicht eingelöst werden" });
+    }
+
+    res.json({ success: true, promo_code: objectToSnakeCase(updated.rows[0]) });
+  } catch (error) {
+    console.error("Error redeeming promo code:", error);
+    res.status(500).json({ error: "Fehler beim Einlösen des Promo-Codes" });
   }
 });
 
