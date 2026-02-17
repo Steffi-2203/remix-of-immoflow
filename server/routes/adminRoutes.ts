@@ -915,11 +915,16 @@ router.get("/api/admin/marketing/trials", async (req: Request, res: Response) =>
       email: schema.organizations.email,
       subscriptionStatus: schema.organizations.subscriptionStatus,
       subscriptionTier: schema.organizations.subscriptionTier,
+      isTrial: schema.organizations.isTrial,
       trialEndsAt: schema.organizations.trialEndsAt,
+      convertedAt: schema.organizations.convertedAt,
       createdAt: schema.organizations.createdAt,
     })
       .from(schema.organizations)
-      .where(eq(schema.organizations.subscriptionStatus, 'trial'))
+      .where(or(
+        eq(schema.organizations.subscriptionStatus, 'trial'),
+        and(eq(schema.organizations.isTrial, true), sql`${schema.organizations.subscriptionStatus} != 'active'`)
+      ))
       .orderBy(schema.organizations.trialEndsAt);
 
     const enriched = await Promise.all(orgs.map(async (org) => {
@@ -964,7 +969,7 @@ router.post("/api/admin/marketing/trials/:id/extend", async (req: Request, res: 
     newEnd.setDate(newEnd.getDate() + days);
 
     const [updated] = await db.update(schema.organizations)
-      .set({ trialEndsAt: newEnd, subscriptionStatus: 'trial', updatedAt: new Date() })
+      .set({ trialEndsAt: newEnd, subscriptionStatus: 'trial', isTrial: true, updatedAt: new Date() })
       .where(eq(schema.organizations.id, req.params.id))
       .returning();
 
@@ -985,7 +990,7 @@ router.post("/api/admin/marketing/trials/:id/end", async (req: Request, res: Res
     if (!adminId) return;
 
     const [updated] = await db.update(schema.organizations)
-      .set({ subscriptionStatus: 'expired', trialEndsAt: new Date(), updatedAt: new Date() })
+      .set({ subscriptionStatus: 'expired', isTrial: false, trialEndsAt: new Date(), updatedAt: new Date() })
       .where(eq(schema.organizations.id, req.params.id))
       .returning();
 
@@ -1051,6 +1056,32 @@ router.get("/api/admin/marketing/promo-codes", async (req: Request, res: Respons
   } catch (error) {
     console.error("Error fetching promo codes:", error);
     res.status(500).json({ error: "Fehler beim Laden der Promo-Codes" });
+  }
+});
+
+router.patch("/api/admin/marketing/promo-codes/:id", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const body = objectToCamelCase(req.body);
+    const updateData: Record<string, any> = {};
+    if (body.isActive !== undefined) updateData.isActive = body.isActive;
+    if (body.maxUses !== undefined) updateData.maxUses = body.maxUses ? parseInt(body.maxUses) : null;
+    if (body.validUntil !== undefined) updateData.validUntil = body.validUntil ? new Date(body.validUntil) : null;
+    if (body.description !== undefined) updateData.description = body.description;
+
+    const [updated] = await db.update(schema.promoCodes)
+      .set(updateData)
+      .where(eq(schema.promoCodes.id, req.params.id))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Promo-Code nicht gefunden" });
+
+    res.json({ success: true, promo_code: objectToSnakeCase(updated) });
+  } catch (error) {
+    console.error("Error updating promo code:", error);
+    res.status(500).json({ error: "Fehler beim Aktualisieren des Promo-Codes" });
   }
 });
 
@@ -1156,8 +1187,10 @@ router.get("/api/admin/marketing/onboarding", async (req: Request, res: Response
       email: schema.organizations.email,
       subscriptionStatus: schema.organizations.subscriptionStatus,
       subscriptionTier: schema.organizations.subscriptionTier,
+      isTrial: schema.organizations.isTrial,
       createdAt: schema.organizations.createdAt,
       trialEndsAt: schema.organizations.trialEndsAt,
+      convertedAt: schema.organizations.convertedAt,
     })
       .from(schema.organizations)
       .orderBy(desc(schema.organizations.createdAt))
@@ -1217,6 +1250,23 @@ router.get("/api/admin/marketing/onboarding", async (req: Request, res: Response
 
 // ====== MARKETING: INVITATIONS ======
 
+router.get("/api/admin/marketing/invitations", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const invitations = await db.select()
+      .from(schema.marketingInvitations)
+      .orderBy(desc(schema.marketingInvitations.createdAt))
+      .limit(100);
+
+    res.json(objectToSnakeCase(invitations));
+  } catch (error) {
+    console.error("Error fetching marketing invitations:", error);
+    res.status(500).json({ error: "Fehler beim Laden der Marketing-Einladungen" });
+  }
+});
+
 router.post("/api/admin/marketing/invitations", async (req: Request, res: Response) => {
   try {
     const adminId = await requireAdmin(req, res);
@@ -1238,12 +1288,12 @@ router.post("/api/admin/marketing/invitations", async (req: Request, res: Respon
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14);
 
-    await db.insert(schema.demoInvites).values({
+    const [invitation] = await db.insert(schema.marketingInvitations).values({
       email,
       token,
       status: 'pending',
       expiresAt,
-    });
+    }).returning();
 
     const baseUrl = process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
@@ -1294,7 +1344,7 @@ router.post("/api/admin/marketing/invitations", async (req: Request, res: Respon
         : `Einladung erstellt, E-Mail-Versand fehlgeschlagen. Link steht bereit.`,
       email_sent: emailSent,
       registration_url: registrationUrl,
-      token,
+      invitation: objectToSnakeCase(invitation),
     });
   } catch (error) {
     console.error("Error creating marketing invitation:", error);

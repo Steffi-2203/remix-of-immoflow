@@ -41,7 +41,9 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   subscriptionTier: subscriptionTierEnum("subscription_tier").default('starter'),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").default('trial'),
+  isTrial: boolean("is_trial").default(true),
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
   iban: text("iban"),
   bic: text("bic"),
   address: text("address"),
@@ -2489,3 +2491,20 @@ export const broadcastMessages = pgTable("broadcast_messages", {
 export const insertBroadcastMessageSchema = createInsertSchema(broadcastMessages).omit({ id: true, createdAt: true, recipientCount: true, sentCount: true, failedCount: true, sentAt: true });
 export type InsertBroadcastMessage = z.infer<typeof insertBroadcastMessageSchema>;
 export type BroadcastMessage = typeof broadcastMessages.$inferSelect;
+
+// ====== MARKETING INVITATIONS ======
+export const marketingInvitationStatusEnum = pgEnum('marketing_invitation_status', ['pending', 'accepted', 'expired']);
+
+export const marketingInvitations = pgTable("marketing_invitations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  status: marketingInvitationStatusEnum("status").default('pending'),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const insertMarketingInvitationSchema = createInsertSchema(marketingInvitations).omit({ id: true, createdAt: true });
+export type InsertMarketingInvitation = z.infer<typeof insertMarketingInvitationSchema>;
+export type MarketingInvitation = typeof marketingInvitations.$inferSelect;
