@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../db";
 
+const LOG_PREFIX = "[TokenAuth]";
+
 export async function tokenAuthMiddleware(req: Request, _res: Response, next: NextFunction) {
   if ((req.session as any)?.userId) return next();
 
@@ -8,7 +10,10 @@ export async function tokenAuthMiddleware(req: Request, _res: Response, next: Ne
   if (!authHeader?.startsWith('Bearer ')) return next();
 
   const token = authHeader.slice(7);
-  if (!token) return next();
+  if (!token) {
+    console.warn(`${LOG_PREFIX} Empty Bearer token received`, { path: req.path });
+    return next();
+  }
 
   try {
     const result = await pool.query(
@@ -31,12 +36,14 @@ export async function tokenAuthMiddleware(req: Request, _res: Response, next: Ne
         if (profileResult.rows[0].organization_id) {
           (req.session as any).organizationId = profileResult.rows[0].organization_id;
         }
+      } else {
+        console.warn(`${LOG_PREFIX} No profile found for userId=${userId}`);
       }
 
       await new Promise<void>((resolve) => {
         req.session.save((err) => {
           if (err) {
-            console.error("[TokenAuth] Session save error:", err);
+            console.error(`${LOG_PREFIX} Session save error:`, err);
           }
           resolve();
         });
@@ -45,10 +52,14 @@ export async function tokenAuthMiddleware(req: Request, _res: Response, next: Ne
       pool.query(
         "UPDATE auth_tokens SET expires_at = NOW() + INTERVAL '24 hours' WHERE token = $1",
         [token]
-      ).catch(() => {});
+      ).catch((err) => {
+        console.warn(`${LOG_PREFIX} Token refresh failed:`, err.message);
+      });
+    } else {
+      console.warn(`${LOG_PREFIX} Invalid or expired token used`, { path: req.path });
     }
   } catch (e) {
-    console.error("[TokenAuth] Error resolving token:", e);
+    console.error(`${LOG_PREFIX} Error resolving token:`, e);
   }
 
   next();

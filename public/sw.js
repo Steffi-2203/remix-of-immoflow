@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'immoflow-v9';
+const CACHE_VERSION = 'immoflow-v10';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
@@ -67,16 +67,15 @@ self.addEventListener('fetch', (event) => {
           if (response.ok) {
             const clone = response.clone();
             caches.open(API_CACHE).then((cache) => cache.put(event.request, clone));
+          } else if (response.status === 429 || response.status >= 500) {
+            caches.open(API_CACHE).then((cache) => cache.delete(event.request));
           }
           return response;
         })
         .catch(() =>
-          caches.match(event.request).then((cached) => {
-            if (cached) return cached;
-            return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' }
-            });
+          new Response(JSON.stringify({ error: 'Offline', offline: true }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
           })
         )
     );

@@ -1352,4 +1352,48 @@ router.post("/api/admin/marketing/invitations", async (req: Request, res: Respon
   }
 });
 
+// ====== ADMIN HEALTH CHECK ======
+
+router.get("/api/admin/health", async (req: Request, res: Response) => {
+  try {
+    const adminId = await requireAdmin(req, res);
+    if (!adminId) return;
+
+    const memUsage = process.memoryUsage();
+    const dbStart = Date.now();
+    await db.execute(sql`SELECT 1`);
+    const dbLatencyMs = Date.now() - dbStart;
+
+    const [orgCount] = await db.select({ count: sql<number>`count(*)` }).from(schema.organizations);
+    const [trialCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.isTrial, true));
+    const [inviteCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(schema.marketingInvitations)
+      .where(eq(schema.marketingInvitations.status, 'pending'));
+
+    res.json({
+      status: "ok",
+      uptime_seconds: Math.round(process.uptime()),
+      db_latency_ms: dbLatencyMs,
+      memory: {
+        heap_used_mb: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heap_total_mb: Math.round(memUsage.heapTotal / 1024 / 1024),
+        rss_mb: Math.round(memUsage.rss / 1024 / 1024),
+        heap_used_percent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
+      },
+      counts: {
+        organizations: Number(orgCount.count),
+        active_trials: Number(trialCount.count),
+        pending_invitations: Number(inviteCount.count),
+      },
+      node_version: process.version,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Admin health check error:", error);
+    res.status(500).json({ status: "error", error: "Health-Check fehlgeschlagen" });
+  }
+});
+
 export default router;
