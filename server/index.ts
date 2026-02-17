@@ -87,10 +87,10 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Security: Rate limiting - general API (100 req / 15 min per IP)
+// Security: Rate limiting - general API (500 req / 15 min per IP)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   message: { error: 'Zu viele Anfragen. Bitte versuchen Sie es später erneut.' },
   standardHeaders: true,
   legacyHeaders: false,
