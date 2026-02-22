@@ -99,7 +99,7 @@ export default function Register() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+              <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
             </div>
             <CardTitle className="text-2xl font-bold">
               {inviteToken ? 'Einladung annehmen' : 'Registrieren'}

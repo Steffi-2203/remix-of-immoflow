@@ -134,7 +134,7 @@ export default function ResetPassword() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+              <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
             </div>
             <div className="flex justify-center">
               <CheckCircle className="h-16 w-16 text-green-500" />
@@ -166,7 +166,7 @@ export default function ResetPassword() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+              <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
             </div>
             <CardTitle className="text-2xl font-bold">
               Neues Passwort festlegen
@@ -247,7 +247,7 @@ export default function ResetPassword() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+              <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
             </div>
             <div className="flex justify-center">
               <Mail className="h-16 w-16 text-primary" />
@@ -281,7 +281,7 @@ export default function ResetPassword() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+            <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
           </div>
           <CardTitle className="text-2xl font-bold">
             Passwort vergessen

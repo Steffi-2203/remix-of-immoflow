@@ -245,7 +245,7 @@ export function Sidebar() {
         >
           <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
             <div className="flex items-center gap-2">
-              <ImmoFlowIcon className="h-10 w-10 text-white" />
+              <ImmoFlowIcon className="h-12 w-12 text-white" />
               <div className="flex flex-col">
                 <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
                 <span className="text-xs text-white/60">by ImmoPepper</span>
@@ -346,7 +346,7 @@ export function Sidebar() {
       <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <ImmoFlowIcon className="h-10 w-10 text-white" />
+            <ImmoFlowIcon className="h-12 w-12 text-white" />
             <div className="flex flex-col">
               <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-white/60">by ImmoPepper</span>
@@ -354,7 +354,7 @@ export function Sidebar() {
           </div>
         )}
         {collapsed && (
-          <ImmoFlowIcon className="h-10 w-10 text-white" />
+          <ImmoFlowIcon className="h-12 w-12 text-white" />
         )}
         <Button 
           variant="ghost" 
