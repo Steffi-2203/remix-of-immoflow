@@ -7,7 +7,7 @@ import {
   Scale, BookOpen, Bot, Landmark, FileSignature, Thermometer,
   Users, TrendingUp, Zap
 } from 'lucide-react';
-import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { ImmoFlowIcon } from '@/components/ImmoFlowLogo';
 
 const features = [
   {
@@ -89,7 +89,7 @@ export default function Landing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-[999]">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" data-testid="img-logo" />
+            <ImmoFlowIcon className="h-10 w-10 text-foreground" data-testid="img-logo" />
             <div className="flex flex-col">
               <span className="font-bold text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-muted-foreground">by ImmoPepper</span>
@@ -284,7 +284,7 @@ export default function Landing() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
-              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-8 w-auto" />
+              <ImmoFlowIcon className="h-8 w-8 text-foreground" />
               <div className="flex flex-col">
                 <span className="font-semibold text-sm">ImmoFlowMe</span>
                 <span className="text-xs text-muted-foreground">by ImmoPepper</span>

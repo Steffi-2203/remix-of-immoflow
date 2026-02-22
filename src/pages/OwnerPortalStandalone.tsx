@@ -14,7 +14,7 @@ import {
   Home, Euro, FileText, Building2, Shield, LogOut,
   Calendar, Download, FolderOpen, Users, PieChart, Landmark
 } from 'lucide-react';
-import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { ImmoFlowIcon } from '@/components/ImmoFlowLogo';
 
 function formatCurrency(amount: number | string | null | undefined) {
   const num = typeof amount === 'string' ? parseFloat(amount) : (amount || 0);
@@ -112,7 +112,7 @@ export default function OwnerPortalStandalone() {
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
+            <ImmoFlowIcon className="h-8 w-8 text-foreground" />
             <Skeleton className="h-9 w-24" />
           </div>
         </header>
@@ -135,7 +135,7 @@ export default function OwnerPortalStandalone() {
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
+            <ImmoFlowIcon className="h-8 w-8 text-foreground" />
             <Button variant="outline" onClick={handleLogout} data-testid="button-owner-logout">
               <LogOut className="h-4 w-4 mr-2" /> Abmelden
             </Button>
@@ -161,7 +161,7 @@ export default function OwnerPortalStandalone() {
       <header className="border-b bg-card sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoFlowMe" className="h-8 w-auto" />
+            <ImmoFlowIcon className="h-8 w-8 text-foreground" />
             <span className="text-sm text-muted-foreground hidden sm:inline">Eigentümerportal</span>
           </div>
           <div className="flex items-center gap-3">

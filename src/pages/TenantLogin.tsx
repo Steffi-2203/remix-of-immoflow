@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Loader2, LogIn, Eye, EyeOff, KeyRound, CheckCircle, Building2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { ImmoFlowLogo } from '@/components/ImmoFlowLogo';
 
 export default function TenantLogin() {
   const navigate = useNavigate();
@@ -193,7 +193,7 @@ export default function TenantLogin() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <img src={immoflowLogo} alt="ImmoFlowMe" className="h-16 w-auto" />
+              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
             </div>
             {mode === 'login' ? (
               <>

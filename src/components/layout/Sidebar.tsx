@@ -45,7 +45,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useIsTester } from '@/hooks/useUserRole';
 import { useSidebarBadges } from '@/hooks/useSidebarBadges';
 import { useKiAutopilot } from '@/hooks/useKiAutopilot';
-import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { ImmoFlowIcon } from '@/components/ImmoFlowLogo';
 
 interface NavItem {
   label: string;
@@ -244,8 +244,8 @@ export function Sidebar() {
           )}
         >
           <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
-            <div className="flex items-center gap-3">
-              <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" />
+            <div className="flex items-center gap-2">
+              <ImmoFlowIcon className="h-10 w-10 text-white" />
               <div className="flex flex-col">
                 <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
                 <span className="text-xs text-white/60">by ImmoPepper</span>
@@ -345,8 +345,8 @@ export function Sidebar() {
     >
       <div className="flex h-20 items-center justify-between px-4 border-b border-sidebar-border shrink-0">
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-12 w-auto" />
+          <div className="flex items-center gap-2">
+            <ImmoFlowIcon className="h-10 w-10 text-white" />
             <div className="flex flex-col">
               <span className="font-bold text-white text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-white/60">by ImmoPepper</span>
@@ -354,7 +354,7 @@ export function Sidebar() {
           </div>
         )}
         {collapsed && (
-          <img src={immoflowLogo} alt="ImmoFlowMe Logo" className="h-10 w-10 object-contain" />
+          <ImmoFlowIcon className="h-10 w-10 text-white" />
         )}
         <Button 
           variant="ghost" 

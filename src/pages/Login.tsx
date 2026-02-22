@@ -9,7 +9,7 @@ import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { setAuthToken, clearAuthToken } from '@/lib/queryClient';
-import immoflowLogo from '@/assets/immoflowme-logo.png';
+import { ImmoFlowLogo } from '@/components/ImmoFlowLogo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -119,7 +119,7 @@ export default function Login() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <img src={immoflowLogo} alt="ImmoflowMe" className="h-16 w-auto" />
+              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
             </div>
             <CardTitle className="text-2xl font-bold">
               Anmelden
