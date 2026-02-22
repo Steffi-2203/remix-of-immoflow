@@ -158,7 +158,7 @@ export default function Pricing() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-[999]">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4 flex-wrap">
           <Link to="/" className="flex items-center gap-3">
-            <ImmoFlowIcon className="h-10 w-10 text-foreground" />
+            <ImmoFlowIcon className="h-12 w-12 text-foreground" />
             <div className="flex flex-col">
               <span className="font-bold text-lg leading-tight">ImmoFlowMe</span>
               <span className="text-xs text-muted-foreground">by ImmoPepper</span>

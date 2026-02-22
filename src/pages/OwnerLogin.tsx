@@ -193,7 +193,7 @@ export default function OwnerLogin() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <ImmoFlowLogo className="w-48 text-foreground" data-testid="img-logo" />
+              <ImmoFlowLogo className="w-64 text-foreground" data-testid="img-logo" />
             </div>
             {mode === 'login' ? (
               <>
