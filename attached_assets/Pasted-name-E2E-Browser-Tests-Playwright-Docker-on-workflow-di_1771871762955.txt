@@ -1,0 +1,91 @@
+name: E2E Browser Tests (Playwright Docker)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *' # nightly full run
+
+jobs:
+  e2e-browser:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:focal
+    timeout-minutes: 60
+    env:
+      NODE_ENV: test
+      API_BASE: ${{ secrets.API_BASE }}
+      DATABASE_URL: ${{ secrets.STAGING_DB_URL }}
+      STRIPE_MOCK_URL: http://localhost:12111
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Restore DB snapshot (if provided)
+        if: ${{ secrets.SNAPSHOT_URL != '' }}
+        run: |
+          echo "Downloading snapshot..."
+          curl -sS -o /tmp/snapshot.sql "${{ secrets.SNAPSHOT_URL }}"
+          psql "${{ secrets.STAGING_DB_URL }}" -f /tmp/snapshot.sql
+
+      - name: Seed deterministic fixtures
+        run: |
+          node scripts/test-db-helper.js --seed fixtures/e2e
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DB_URL }}
+
+      - name: Start stripe-mock (container)
+        run: |
+          docker run -d --name stripe-mock -p 12111:12111 stripe/stripe-mock:latest
+        # optional: use STRIPE_MOCK_IMAGE secret if custom image required
+
+      - name: Build and start app (background)
+        run: |
+          npm run build
+          nohup npm run start:prod &> e2e-app.log &
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DB_URL }}
+          STRIPE_MOCK_URL: http://localhost:12111
+
+      - name: Wait for app to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -sSf "${{ env.API_BASE }}/health" >/dev/null; then
+              echo "app ready"; break
+            fi
+            echo "waiting for app... ($i)"
+            sleep 2
+          done
+
+      - name: Run Playwright tests (smoke)
+        run: |
+          npx playwright test tests/e2e --project=chromium --grep @browser --reporter=list
+        continue-on-error: false
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results
+            playwright-report
+            e2e-app.log
+
+      - name: Stop stripe-mock
+        if: always()
+        run: docker rm -f stripe-mock || true
