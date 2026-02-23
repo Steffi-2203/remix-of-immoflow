@@ -4,6 +4,7 @@ import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { isAuthenticated } from "./auth";
+import type { AuthenticatedRequest } from "./routes/helpers";
 
 const PRICE_IDS: Record<string, { monthly: string; yearly: string }> = {
   starter: {
@@ -45,7 +46,7 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  app.post("/api/stripe/create-checkout-session", isAuthenticated, async (req: any, res) => {
+  app.post("/api/stripe/create-checkout-session", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const { tier, interval = 'monthly' } = req.body;
       const userId = req.session.userId;
@@ -101,7 +102,7 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  app.post("/api/stripe/checkout", isAuthenticated, async (req: any, res) => {
+  app.post("/api/stripe/checkout", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const { planId } = req.body;
       const userId = req.session.userId;
@@ -160,7 +161,7 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  app.post("/api/stripe/ki-autopilot-checkout", isAuthenticated, async (req: any, res) => {
+  app.post("/api/stripe/ki-autopilot-checkout", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.session.userId;
       const profile = await getProfileById(userId);
@@ -203,7 +204,7 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  app.post("/api/stripe/create-portal-session", isAuthenticated, async (req: any, res) => {
+  app.post("/api/stripe/create-portal-session", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.session.userId;
       const profile = await getProfileById(userId);
@@ -243,7 +244,7 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  app.get("/api/subscription/status", isAuthenticated, async (req: any, res) => {
+  app.get("/api/subscription/status", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.session.userId;
       const profile = await getProfileById(userId);
