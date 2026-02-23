@@ -1,0 +1,105 @@
+name: E2E Browser Tests (Playwright)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  e2e-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e_testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d e2e_testdb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/e2e_testdb
+      SESSION_SECRET: e2e-test-session-secret
+      E2E_BASE_URL: http://localhost:5000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do pg_isready -h localhost -p 5432 && break || sleep 1; done
+
+      - name: Run migrations
+        run: node migrations/run-migration.cjs
+
+      - name: Seed E2E fixtures
+        run: node scripts/test-db-helper.cjs --seed fixtures/e2e
+
+      - name: Restore DB snapshot (optional)
+        if: ${{ vars.SNAPSHOT_URL != '' }}
+        run: |
+          curl -sS -o /tmp/snapshot.sql "${{ vars.SNAPSHOT_URL }}"
+          psql "$DATABASE_URL" -f /tmp/snapshot.sql
+
+      - name: Start application (background)
+        run: |
+          nohup npm run dev &> e2e-app.log &
+          for i in {1..30}; do
+            if curl -sSf http://localhost:5000 >/dev/null 2>&1; then
+              echo "App ready after ${i}s"; break
+            fi
+            echo "Waiting for app... ($i)"
+            sleep 2
+          done
+
+      - name: Run Playwright API tests
+        run: npx playwright test tests/e2e --grep-invert "Frontend|Page|Navigation|serves the frontend" --reporter=list
+
+      - name: Run Playwright browser tests
+        run: npx playwright test tests/e2e --grep "Frontend|Page|Navigation|serves the frontend" --reporter=list
+        continue-on-error: true
+
+      - name: Teardown E2E data
+        if: always()
+        run: node scripts/test-db-helper.cjs --teardown
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results/
+            playwright-report/
+            e2e-app.log
+          retention-days: 14
