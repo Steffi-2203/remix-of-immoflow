@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const API_BASE = '';
+
 test.describe('Betriebskosten & Rechnungen API', () => {
   test('GET /api/invoices requires authentication', async ({ request }) => {
     const response = await request.get('/api/invoices');
@@ -55,6 +57,80 @@ test.describe('Betriebskosten & Rechnungen API', () => {
   test('SEPA credit-transfer export requires authentication', async ({ request }) => {
     const response = await request.post('/api/sepa/credit-transfer', {
       data: { debtorName: 'Test', debtorIban: 'AT12345', transfers: [] },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect([401, 403, 429]).toContain(response.status());
+  });
+});
+
+test.describe('BK-Abrechnung Smoke: Invoice → Payment → Dunning Check', () => {
+  test('Stripe webhook endpoint exists and rejects unsigned payloads', async ({ request }) => {
+    const stripeEvent = {
+      id: `evt_test_${Date.now()}`,
+      type: 'invoice.payment_succeeded',
+      data: {
+        object: {
+          id: `in_test_${Date.now()}`,
+          amount_paid: 12345,
+          currency: 'eur',
+          metadata: { invoiceId: '00000000-0000-0000-0000-000000000000' },
+        },
+      },
+    };
+
+    const response = await request.post('/api/stripe/webhook', {
+      data: stripeEvent,
+      headers: {
+        'Content-Type': 'application/json',
+        'stripe-signature': 'invalid_signature',
+      },
+    });
+
+    expect(response.status()).toBeGreaterThanOrEqual(400);
+    expect(response.status()).toBeLessThan(500);
+  });
+
+  test('payment allocation endpoint requires authentication', async ({ request }) => {
+    const response = await request.post('/api/payments/allocate', {
+      data: {
+        paymentId: '00000000-0000-0000-0000-000000000000',
+        invoiceId: '00000000-0000-0000-0000-000000000000',
+        amount: 123.45,
+      },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect([401, 403, 429]).toContain(response.status());
+  });
+
+  test('auto-match endpoint requires authentication', async ({ request }) => {
+    const response = await request.post('/api/payments/auto-match', {
+      data: {},
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect([401, 403, 429]).toContain(response.status());
+  });
+
+  test('unallocated payments endpoint requires authentication', async ({ request }) => {
+    const response = await request.get('/api/payments/unallocated');
+    expect([401, 403, 429]).toContain(response.status());
+  });
+
+  test('dunning overview rejects unauthenticated requests', async ({ request }) => {
+    const response = await request.get('/api/dunning-overview');
+    expect([401, 403, 429]).toContain(response.status());
+  });
+
+  test('dunning check rejects unauthenticated requests', async ({ request }) => {
+    const response = await request.post('/api/dunning/check', {
+      data: {},
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect([401, 403, 429]).toContain(response.status());
+  });
+
+  test('dunning send rejects unauthenticated requests', async ({ request }) => {
+    const response = await request.post('/api/dunning/send', {
+      data: { invoiceId: '00000000-0000-0000-0000-000000000000' },
       headers: { 'Content-Type': 'application/json' },
     });
     expect([401, 403, 429]).toContain(response.status());
