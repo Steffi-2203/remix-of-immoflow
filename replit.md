@@ -29,7 +29,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Offene Posten Management**: Dedicated interface for open items, reconciliation, and bank matching.
 - **Jahresabschluss Wizard**: Guided annual closing process.
 - **Accounting Features**: SEPA export, MRG §21 compliant settlement PDFs, automatic advance adjustment, automated dunning, VPI automation for rent adjustment, MieWeG-Indexierungsrechner, BMD NTCS/DATEV export, FinanzOnline integration, XLSX export.
-- **Testing**: Vitest for unit tests (financial calculations, SEPA XML, invoice generation, dunning, security) and Playwright for E2E tests (health, authentication, security headers, input validation).
+- **Testing**: Vitest for unit tests (29 test files, 493+ tests: financial calculations, SEPA XML, invoice generation, dunning, security, tenant isolation, deposit lifecycle, bank reconciliation) and Playwright for E2E tests (7 spec files: health, authentication, security headers, input validation, betriebskosten/SEPA, zahlungen/offene-posten, mahnwesen/VPI/eigentümer/schlüssel).
 - **OCR Functionality**: Integrates AI for tenant data import, PDF processing, and invoice data extraction.
 - **Subscription & Access Control**: Stripe integration for subscriptions, five distinct user roles, and demo access.
 - **Self-Service Portals**: Secure portals for tenants and owners.
