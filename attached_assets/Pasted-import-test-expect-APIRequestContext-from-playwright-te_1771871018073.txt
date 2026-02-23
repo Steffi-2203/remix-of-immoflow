@@ -1,0 +1,88 @@
+import { test, expect, APIRequestContext } from '@playwright/test';
+
+const API_BASE = process.env.API_BASE_URL ?? 'http://localhost:3000';
+const STRIPE_MOCK = process.env.STRIPE_MOCK_URL ?? 'http://localhost:12111';
+const DB_SNAPSHOT = process.env.DB_SNAPSHOT ?? ''; // optional: restore before run
+
+test.describe('BK Abrechnung smoke', () => {
+  let api: APIRequestContext;
+  let tenantId: string;
+  let invoiceId: string;
+
+  test.beforeAll(async ({ request }) => {
+    api = request;
+    // Optional: restore DB snapshot in CI/staging before tests (not executed here)
+    // await request.post(`${API_BASE}/internal/test-utils/restore-snapshot`, { data: { snapshot: DB_SNAPSHOT } });
+  });
+
+  test('create invoice -> simulate payment webhook -> verify paid_amount and no dunning', async () => {
+    // 1) Create a tenant (isolated test data)
+    const tenantResp = await api.post(`${API_BASE}/api/tenants`, {
+      data: { name: `e2e-tenant-${Date.now()}`, billingCycle: 'monthly' },
+    });
+    expect(tenantResp.ok()).toBeTruthy();
+    const tenant = await tenantResp.json();
+    tenantId = tenant.id;
+
+    // 2) Create an invoice for that tenant (BK Abrechnung)
+    const invoiceResp = await api.post(`${API_BASE}/api/invoices`, {
+      data: {
+        tenantId,
+        periodStart: '2026-02-01',
+        periodEnd: '2026-02-28',
+        items: [{ description: 'Betriebskosten', amount: '123.45' }],
+      },
+    });
+    expect(invoiceResp.ok()).toBeTruthy();
+    const invoice = await invoiceResp.json();
+    invoiceId = invoice.id;
+    expect(invoice.total).toBeDefined();
+
+    // 3) Ensure invoice initially unpaid
+    const getBefore = await api.get(`${API_BASE}/api/invoices/${invoiceId}`);
+    expect(getBefore.ok()).toBeTruthy();
+    const invoiceBefore = await getBefore.json();
+    expect(invoiceBefore.paid_amount ?? 0).toBe(0);
+
+    // 4) Simulate payment via Stripe mock webhook (charge succeeded)
+    // The exact payload depends on your webhook handler; adapt as needed.
+    const stripeEvent = {
+      id: `evt_test_${Date.now()}`,
+      type: 'charge.succeeded',
+      data: {
+        object: {
+          id: `ch_test_${Date.now()}`,
+          amount: Math.round(parseFloat(invoice.total) * 100),
+          currency: 'eur',
+          metadata: { invoiceId },
+        },
+      },
+    };
+    const webhookResp = await api.post(`${STRIPE_MOCK}/webhook`, { data: stripeEvent });
+    expect(webhookResp.ok()).toBeTruthy();
+
+    // 5) Poll invoice status until paid_amount updated (retry loop)
+    const maxAttempts = 10;
+    let paidAmount = 0;
+    for (let i = 0; i < maxAttempts; i++) {
+      const r = await api.get(`${API_BASE}/api/invoices/${invoiceId}`);
+      expect(r.ok()).toBeTruthy();
+      const j = await r.json();
+      paidAmount = parseFloat(j.paid_amount ?? 0);
+      if (paidAmount > 0) break;
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    expect(paidAmount).toBeGreaterThan(0);
+
+    // 6) Verify no dunning entry created for this invoice
+    const dunningList = await api.get(`${API_BASE}/api/dunning?invoiceId=${invoiceId}`);
+    expect(dunningList.ok()).toBeTruthy();
+    const dunnings = await dunningList.json();
+    expect(Array.isArray(dunnings)).toBeTruthy();
+    expect(dunnings.length).toBe(0);
+
+    // 7) Cleanup (optional): delete test invoice/tenant if API supports it
+    // await api.delete(`${API_BASE}/api/invoices/${invoiceId}`);
+    // await api.delete(`${API_BASE}/api/tenants/${tenantId}`);
+  });
+});
