@@ -1,0 +1,38 @@
+Backfill‑Verifikation — Führe stichprobenartige Reconciliation‑Queries auf Staging durch und dokumentiere Abweichungen; sign‑off durch Finance erforderlich.
+
+CI‑Run prüfen — Trigger einen PR‑Run der neuen Workflow‑Pipeline; prüfe Postgres‑Restore, Seed, Health‑Check, API‑E2E‑Ergebnis und hochgeladene Artefakte.
+
+Test‑Fixtures stabilisieren — Stelle sicher, dass fixtures/e2e idempotent ist (ON CONFLICT) und test-db-helper.cjs zuverlässig teardown/seed ausführt.
+
+LSP‑Cache bereinigen — Team‑Anweisung: TS‑Server neu starten; tsconfig.node.json‑exclude bestätigen, damit die 92 LSP‑Artefakte nicht Entwickler‑Noise erzeugen.
+
+Kommunikation — Kurzinfo an Ops/Finance: welche Spalten hinzugefügt wurden, wann Backfill lief, und dass Reconciliation grün ist oder welche Abweichungen bestehen.
+
+Kurzfristig (1–2 Sprints) — hohe Priorität
+Finalize Migrations PRs — Merge Migrationen + Backfill + Drizzle‑Schema; PR‑Body mit Runbook, Rollback‑Schritten und Testchecklist.
+
+Positive Webhook Tests — Ergänze API‑only Tests, die gültige, signierte Stripe‑Webhooks simulieren; deckt realen Pfad ab, den ihr aktuell ablehnt.
+
+CI Mocks — Stripe‑Mock und AI‑Mock (msw) in CI‑Umgebung einführen; deterministische Antworten für E2E.
+
+Monitoring & Alerts — Dashboards für: Zahlungen pro Stunde, Dunning‑Fehler, SEPA‑Job‑Fehler; Alerts bei Anomalien definieren (z. B. >1% Abweichung).
+
+Feature‑Flag Rollout — Nutze Flags, um neuen Spaltengebrauch schrittweise zu aktivieren; ermöglicht schnelles Rollback.
+
+Mittelfristig (nächste 3 Monate) — Stabilität & Qualität
+Browser‑E2E in CI — Vollständige Playwright‑Runs in separatem Job/Container (Playwright Docker) mit Traces und Retry‑Policy; nightly full suite.
+
+Parallel‑safe Test‑DB — Schema‑per‑run oder transient DB‑container pro Job, damit parallele PRs nicht interferieren.
+
+Type‑Hygiene Sprint — Entferne verbleibende any‑Usages, konsolidiere Drizzle‑Helper für eq() Overloads, und bereinige shared/schema.ts‑Noise dauerhaft.
+
+Security Review — Secrets handling, dependency audit, input validation und audit logging prüfen; fixe kritische Findings vor Prod‑Rollout.
+
+Langfristig (6–12 Monate) — Operative Reife
+Observability Maturity — Domain‑events instrumentieren (invoice.created, payment.succeeded, dunning.sent) mit SLOs und runbooks.
+
+Automatisierte Reconciliation — Nightly job mit Alerting und automated report an Finance; historical drift tracking.
+
+Disaster Recovery — dokumentierte RTO/RPO für DB, automatisierte backup/restore‑Tests, und Playbook für Backfill‑Rollback.
+
+Governance — Release calendar, migration windows, and cross‑team sign‑off process (Dev, Ops, Finance).
