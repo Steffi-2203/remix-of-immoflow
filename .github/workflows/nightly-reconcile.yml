@@ -27,7 +27,7 @@ jobs:
             SELECT COUNT(*)
             FROM monthly_invoices mi
             LEFT JOIN (
-              SELECT invoice_id, SUM(amount::numeric) AS alloc_total
+              SELECT invoice_id, SUM(applied_amount::numeric) AS alloc_total
               FROM payment_allocations GROUP BY invoice_id
             ) pa ON pa.invoice_id = mi.id
             WHERE ABS(mi.paid_amount - COALESCE(pa.alloc_total, 0)) > 0.01
