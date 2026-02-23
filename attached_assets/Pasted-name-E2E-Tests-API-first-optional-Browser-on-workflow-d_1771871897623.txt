@@ -1,0 +1,79 @@
+name: E2E Tests (API first, optional Browser)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d testdb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+      API_BASE: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            echo "waiting for postgres..."
+            sleep 2
+          done
+
+      - name: Run migrations
+        run: |
+          # adapt to your migration runner; example using psql + SQL files or drizzle-kit
+          # psql $DATABASE_URL -f migrations/initial.sql
+          npm run migrate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Restore snapshot (optional)
+        if: ${{ secrets.SNAPSHOT_URL != '' }}
+        run: |
+          curl -sS -o /tmp/snapshot.sql "${{ secrets.SNAPSHOT_URL }}"
+          psql "${{ env.DATABASE_URL }}" -f /tmp/snapshot.sql
+
+      - name: Seed deterministic fixtures
+        run: |
+          node scripts/test-db-helper.cjs --seed fixtures/e2e
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Start app (dev
