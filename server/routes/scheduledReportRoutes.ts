@@ -3,16 +3,16 @@ import type { Express } from "express";
 import { db } from "../db";
 import { reportSchedules, properties } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { isAuthenticated, getProfileFromSession } from "./helpers";
+import { isAuthenticated, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 import { generateScheduledReport, sendScheduledReport, parseNextRun } from "../services/scheduledReportsService";
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.session?.organizationId || null;
 }
 
-async function getOrgIdFromProfile(req: any): Promise<string | null> {
+async function getOrgIdFromProfile(req: AuthenticatedRequest): Promise<string | null> {
   const profile = await getProfileFromSession(req);
   return profile?.organizationId || null;
 }

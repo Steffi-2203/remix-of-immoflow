@@ -2,12 +2,12 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, sql, inArray, gte, lte } from "drizzle-orm";
 import * as schema from "../../shared/schema";
-import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, objectToSnakeCase } from "./helpers";
+import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, objectToSnakeCase , type AuthenticatedRequest } from "./helpers";
 import { storage } from "../storage";
 
 const router = Router();
 
-router.post("/api/bulk/invoices/preview", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res: Response) => {
+router.post("/api/bulk/invoices/preview", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -66,7 +66,7 @@ router.post("/api/bulk/invoices/preview", isAuthenticated, requireRole("property
   }
 });
 
-router.post("/api/bulk/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res: Response) => {
+router.post("/api/bulk/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -160,7 +160,7 @@ router.post("/api/bulk/invoices", isAuthenticated, requireRole("property_manager
   }
 });
 
-router.post("/api/bulk/notifications", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res: Response) => {
+router.post("/api/bulk/notifications", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -223,7 +223,7 @@ router.post("/api/bulk/notifications", isAuthenticated, requireRole("property_ma
   }
 });
 
-router.post("/api/bulk/notifications/preview", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res: Response) => {
+router.post("/api/bulk/notifications/preview", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -254,7 +254,7 @@ router.post("/api/bulk/notifications/preview", isAuthenticated, requireRole("pro
   }
 });
 
-router.post("/api/bulk/export", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res: Response) => {
+router.post("/api/bulk/export", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {

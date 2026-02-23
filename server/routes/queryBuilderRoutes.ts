@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { db } from "../db";
 import { savedReports } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { isAuthenticated, getProfileFromSession } from "./helpers";
+import { isAuthenticated, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 import { getAvailableEntities, getFieldMetadata, executeQuery, type QueryConfig } from "../services/queryBuilderService";
 
 export function registerQueryBuilderRoutes(app: Express) {
@@ -23,7 +23,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.post("/api/reports/preview", isAuthenticated, async (req: any, res) => {
+  app.post("/api/reports/preview", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -45,7 +45,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.post("/api/reports/export", isAuthenticated, async (req: any, res) => {
+  app.post("/api/reports/export", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -87,7 +87,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.get("/api/reports/saved", isAuthenticated, async (req: any, res) => {
+  app.get("/api/reports/saved", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -104,7 +104,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.post("/api/reports/saved", isAuthenticated, async (req: any, res) => {
+  app.post("/api/reports/saved", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -132,7 +132,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.patch("/api/reports/saved/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/reports/saved/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -165,7 +165,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/reports/saved/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/reports/saved/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -190,7 +190,7 @@ export function registerQueryBuilderRoutes(app: Express) {
     }
   });
 
-  app.post("/api/reports/saved/:id/run", isAuthenticated, async (req: any, res) => {
+  app.post("/api/reports/saved/:id/run", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {

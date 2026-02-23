@@ -1,12 +1,12 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 import { sepaExportService } from "../services/sepaExportService";
 import { settlementPdfService } from "../services/settlementPdfService";
 
 const router = Router();
 
-router.post("/api/sepa/direct-debit", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/sepa/direct-debit", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -30,7 +30,7 @@ router.post("/api/sepa/direct-debit", isAuthenticated, requireRole("property_man
   }
 });
 
-router.post("/api/sepa/credit-transfer", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/sepa/credit-transfer", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -53,7 +53,7 @@ router.post("/api/sepa/credit-transfer", isAuthenticated, requireRole("property_
   }
 });
 
-router.get("/api/settlements/:id/pdf", isAuthenticated, async (req: any, res) => {
+router.get("/api/settlements/:id/pdf", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const data = await settlementPdfService.getSettlementData(req.params.id);
     if (!data) {

@@ -2,11 +2,11 @@ import { Router } from "express";
 import { db } from "../db";
 import * as schema from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { isAuthenticated, requireRole, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 
 const router = Router();
 
-router.post("/api/mieweg-calculate", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/mieweg-calculate", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const body = snakeToCamel(req.body);
     const { miewegIndexationService } = await import('../services/miewegIndexationService');
@@ -27,7 +27,7 @@ router.post("/api/mieweg-calculate", isAuthenticated, requireRole("property_mana
   }
 });
 
-router.get("/api/budgets", isAuthenticated, async (req: any, res) => {
+router.get("/api/budgets", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = req.session.organizationId;
     const { property_id, year } = req.query;
@@ -80,7 +80,7 @@ router.get("/api/budgets", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/budgets/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const orgId = req.session.organizationId;
@@ -118,7 +118,7 @@ router.get("/api/budgets/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/budgets", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/budgets", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = req.session.organizationId;
     const body = snakeToCamel(req.body);
@@ -159,7 +159,7 @@ router.post("/api/budgets", isAuthenticated, requireRole("property_manager", "fi
   }
 });
 
-router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const body = snakeToCamel(req.body);
@@ -194,7 +194,7 @@ router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager"
   }
 });
 
-router.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const orgId = req.session.organizationId;
@@ -225,7 +225,7 @@ router.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_m
   }
 });
 
-router.delete("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.delete("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const orgId = req.session.organizationId;
@@ -237,7 +237,7 @@ router.delete("/api/budgets/:id", isAuthenticated, requireRole("property_manager
   }
 });
 
-router.get("/api/budgets/expenses", isAuthenticated, async (req: any, res) => {
+router.get("/api/budgets/expenses", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { property_id, year } = req.query;
     
@@ -265,7 +265,7 @@ router.get("/api/budgets/expenses", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/budgets/expenses-all", isAuthenticated, async (req: any, res) => {
+router.get("/api/budgets/expenses-all", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { property_id, year } = req.query;
     

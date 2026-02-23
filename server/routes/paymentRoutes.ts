@@ -4,7 +4,7 @@ import { eq, sql, and, inArray, desc, isNull, count } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { insertPaymentSchema, insertTransactionSchema, insertMonthlyInvoiceSchema } from "@shared/schema";
 import { storage } from "../storage";
-import { isAuthenticated, requireRole, requireMutationAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, parsePagination } from "./helpers";
+import { isAuthenticated, requireRole, requireMutationAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, parsePagination , type AuthenticatedRequest } from "./helpers";
 import { verifyTransactionOwnership, verifyInvoiceOwnership, verifyPaymentOwnership, verifyTenantOwnership, verifyUnitOwnership, verifyCategoryOwnership, verifyPropertyOwnership } from "../lib/ownershipCheck";
 import { paymentService } from "../services/paymentService";
 import { idempotencyMiddleware } from "../middleware/idempotency";
@@ -16,7 +16,7 @@ const router = Router();
 
 // ===== Payments CRUD =====
 
-router.get("/api/payments", isAuthenticated, async (req: any, res) => {
+router.get("/api/payments", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -55,7 +55,7 @@ router.get("/api/payments", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/payments", isAuthenticated, requireRole('property_manager', 'finance'), idempotencyMiddleware, async (req: any, res) => {
+router.post("/api/payments", isAuthenticated, requireRole('property_manager', 'finance'), idempotencyMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const normalizedBody = snakeToCamel(req.body);
@@ -117,7 +117,7 @@ router.post("/api/payments", isAuthenticated, requireRole('property_manager', 'f
   }
 });
 
-router.patch("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+router.patch("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const existingPayment = await storage.getPayment(req.params.id);
@@ -157,7 +157,7 @@ router.delete("/api/payments/:id", isAuthenticated, requireRole('property_manage
   }
 });
 
-router.get("/api/payments/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/payments/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const payment = await storage.getPayment(req.params.id);
@@ -183,7 +183,7 @@ router.get("/api/payments/:id", isAuthenticated, async (req: any, res) => {
 
 // ===== Transactions CRUD =====
 
-router.get("/api/transactions", isAuthenticated, async (req: any, res) => {
+router.get("/api/transactions", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -223,7 +223,7 @@ router.get("/api/transactions", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/transactions", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+router.post("/api/transactions", isAuthenticated, requireRole('property_manager', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const normalizedBody = snakeToCamel(req.body);
@@ -245,7 +245,7 @@ router.post("/api/transactions", isAuthenticated, requireRole('property_manager'
   }
 });
 
-router.get("/api/transactions/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/transactions/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const transaction = await storage.getTransaction(req.params.id);
@@ -278,7 +278,7 @@ router.delete("/api/transactions/:id", isAuthenticated, requireRole('property_ma
 
 // ===== Transaction Auto-Match =====
 
-router.post("/api/transactions/auto-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+router.post("/api/transactions/auto-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -535,7 +535,7 @@ router.post("/api/transactions/auto-match", isAuthenticated, requireRole('proper
   }
 });
 
-router.post("/api/transactions/apply-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: any, res) => {
+router.post("/api/transactions/apply-match", isAuthenticated, requireRole('property_manager', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -601,7 +601,7 @@ router.post("/api/transactions/apply-match", isAuthenticated, requireRole('prope
 
 // ====== PAYMENT ALLOCATIONS (Zahlungszuordnungen) ======
 
-router.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: any, res) => {
+router.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -615,7 +615,7 @@ router.get("/api/payments/:paymentId/allocations", isAuthenticated, async (req: 
   }
 });
 
-router.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: any, res) => {
+router.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -629,7 +629,7 @@ router.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: 
   }
 });
 
-router.post("/api/payment-allocations", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/payment-allocations", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const validatedData = schema.insertPaymentAllocationSchema.parse(req.body);
     const allocation = await storage.createPaymentAllocation(validatedData);
@@ -643,7 +643,7 @@ router.post("/api/payment-allocations", isAuthenticated, requireRole("property_m
   }
 });
 
-router.delete("/api/payment-allocations/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.delete("/api/payment-allocations/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     await storage.deletePaymentAllocation(req.params.id);
     res.status(204).send();
@@ -655,7 +655,7 @@ router.delete("/api/payment-allocations/:id", isAuthenticated, requireRole("prop
 
 // ===== Invoices CRUD =====
 
-router.get("/api/invoices", isAuthenticated, async (req: any, res) => {
+router.get("/api/invoices", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -696,7 +696,7 @@ router.get("/api/invoices", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/invoices/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const invoice = await storage.getInvoice(req.params.id);
@@ -717,7 +717,7 @@ router.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/invoices/:id/pdf", isAuthenticated, async (req: any, res) => {
+router.get("/api/invoices/:id/pdf", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const invoice = await storage.getInvoice(req.params.id);
@@ -843,7 +843,7 @@ router.get("/api/invoices/:id/pdf", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const normalizedBody = snakeToCamel(req.body);
@@ -891,7 +891,7 @@ router.post("/api/invoices", isAuthenticated, requireRole("property_manager", "f
   }
 });
 
-router.patch("/api/invoices/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.patch("/api/invoices/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const existingInvoice = await storage.getInvoice(req.params.id);
@@ -931,7 +931,7 @@ router.delete("/api/invoices/:id", isAuthenticated, requireRole("property_manage
   }
 });
 
-router.post("/api/invoices/dry-run", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/invoices/dry-run", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -1015,7 +1015,7 @@ router.post("/api/invoices/dry-run", isAuthenticated, requireRole("property_mana
 
 // ===== Generate Monthly Invoices =====
 
-router.post("/api/functions/generate-monthly-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/functions/generate-monthly-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -1232,7 +1232,7 @@ router.post("/api/functions/generate-monthly-invoices", isAuthenticated, require
 
 // ===== Billing Generate =====
 
-router.post("/api/billing/generate", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/billing/generate", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -1269,7 +1269,7 @@ router.post("/api/billing/generate", isAuthenticated, requireRole("property_mana
 
 // ===== Invoice Payments =====
 
-router.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any, res) => {
+router.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -1285,7 +1285,7 @@ router.get("/api/invoices/:invoiceId/payments", isAuthenticated, async (req: any
 
 // ===== Bank Accounts CRUD =====
 
-router.get("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
+router.get("/api/bank-accounts", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const accounts = await storage.getBankAccountsByOrganization(profile?.organizationId);
@@ -1296,7 +1296,7 @@ router.get("/api/bank-accounts", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/bank-accounts/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const account = await storage.getBankAccount(req.params.id);
     if (!account) return res.status(404).json({ error: "Bank account not found" });
@@ -1306,7 +1306,7 @@ router.get("/api/bank-accounts/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/bank-accounts", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/bank-accounts", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -1330,7 +1330,7 @@ router.post("/api/bank-accounts", isAuthenticated, requireRole("property_manager
   }
 });
 
-router.patch("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.patch("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const account = await storage.getBankAccount(req.params.id);
@@ -1358,7 +1358,7 @@ router.patch("/api/bank-accounts/:id", isAuthenticated, requireRole("property_ma
   }
 });
 
-router.delete("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.delete("/api/bank-accounts/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const account = await storage.getBankAccount(req.params.id);
@@ -1375,7 +1375,7 @@ router.delete("/api/bank-accounts/:id", isAuthenticated, requireRole("property_m
   }
 });
 
-router.get("/api/bank-accounts/:id/balance", isAuthenticated, async (req: any, res) => {
+router.get("/api/bank-accounts/:id/balance", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const account = await storage.getBankAccount(req.params.id);
@@ -1393,7 +1393,7 @@ router.get("/api/bank-accounts/:id/balance", isAuthenticated, async (req: any, r
   }
 });
 
-router.get("/api/bank-accounts/:id/transactions", isAuthenticated, async (req: any, res) => {
+router.get("/api/bank-accounts/:id/transactions", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const transactions = await storage.getTransactionsByBankAccount(req.params.id);
     const roles = await getUserRoles(req);
@@ -1403,7 +1403,7 @@ router.get("/api/bank-accounts/:id/transactions", isAuthenticated, async (req: a
   }
 });
 
-router.get("/api/bank-accounts/:id/plausibility-report", isAuthenticated, async (req: any, res) => {
+router.get("/api/bank-accounts/:id/plausibility-report", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const account = await storage.getBankAccount(req.params.id);
@@ -1478,7 +1478,7 @@ router.get("/api/bank-accounts/:id/plausibility-report", isAuthenticated, async 
   }
 });
 
-router.post("/api/bank-accounts/:id/carry-over", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/bank-accounts/:id/carry-over", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const account = await storage.getBankAccount(req.params.id);
@@ -1532,7 +1532,7 @@ router.post("/api/bank-accounts/:id/carry-over", isAuthenticated, requireRole("p
 
 // ====== BANK RECONCILIATION (Bank-Abgleich) ======
 
-router.post("/api/bank-reconciliation/match", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/bank-reconciliation/match", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -1672,7 +1672,7 @@ router.post("/api/bank-reconciliation/match", isAuthenticated, requireRole("prop
   }
 });
 
-router.post("/api/bank-reconciliation/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/bank-reconciliation/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -1772,7 +1772,7 @@ router.post("/api/bank-reconciliation/apply", isAuthenticated, requireRole("prop
   }
 });
 
-router.get("/api/bank-reconciliation/stats", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.get("/api/bank-reconciliation/stats", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -1802,7 +1802,7 @@ router.get("/api/bank-reconciliation/stats", isAuthenticated, requireRole("prope
 
 // ===== Bank Import (CAMT.053) =====
 
-router.post("/api/bank-import/camt053", isAuthenticated, async (req: any, res) => {
+router.post("/api/bank-import/camt053", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const xmlContent = typeof req.body === 'string' ? req.body : req.body?.xml || req.body?.content;
     if (!xmlContent || typeof xmlContent !== 'string') {
@@ -1816,7 +1816,7 @@ router.post("/api/bank-import/camt053", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.post("/api/bank-import/camt053/apply", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+router.post("/api/bank-import/camt053/apply", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const orgId = profile?.organizationId;
@@ -1883,7 +1883,7 @@ router.post("/api/bank-import/camt053/apply", isAuthenticated, requireMutationAc
 
 // ===== Banking Sync - Transactions to Payments =====
 
-router.post("/api/sync/transactions-to-payments", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/sync/transactions-to-payments", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = req.session.organizationId;
     
@@ -1995,7 +1995,7 @@ router.post("/api/sync/transactions-to-payments", isAuthenticated, requireRole("
   }
 });
 
-router.post("/api/sync/payments-to-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/sync/payments-to-invoices", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = req.session.organizationId;
     
@@ -2070,7 +2070,7 @@ router.post("/api/sync/payments-to-invoices", isAuthenticated, requireRole("prop
 
 // ===== Integrity Check =====
 
-router.get("/api/integrity/payment-allocations", isAuthenticated, requireRole('admin', 'finance'), async (req: any, res) => {
+router.get("/api/integrity/payment-allocations", isAuthenticated, requireRole('admin', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation" });

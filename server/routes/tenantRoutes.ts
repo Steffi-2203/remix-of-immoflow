@@ -4,14 +4,14 @@ import { eq, and, desc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { insertTenantSchema, insertRentHistorySchema } from "@shared/schema";
 import { storage } from "../storage";
-import { isAuthenticated, requireRole, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, parsePagination, paginateArray } from "./helpers";
+import { isAuthenticated, requireRole, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, parsePagination, paginateArray , type AuthenticatedRequest } from "./helpers";
 import { verifyTenantOwnership, verifyUnitOwnership } from "../lib/ownershipCheck";
 
 const router = Router();
 
 // ===== Tenants CRUD =====
 
-router.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) => {
+router.get("/api/units/:unitId/tenants", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -32,7 +32,7 @@ router.get("/api/units/:unitId/tenants", isAuthenticated, async (req: any, res) 
   }
 });
 
-router.get("/api/tenants", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const tenants = await storage.getTenantsByOrganization(profile?.organizationId);
@@ -46,7 +46,7 @@ router.get("/api/tenants", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const tenant = await storage.getTenant(req.params.id);
@@ -67,7 +67,7 @@ router.get("/api/tenants/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.delete("/api/tenants/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/tenants/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const tenant = await storage.getTenant(req.params.id);
@@ -88,7 +88,7 @@ router.delete("/api/tenants/:id", isAuthenticated, requireRole("property_manager
   }
 });
 
-router.post("/api/tenants", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/tenants", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const body = snakeToCamel(req.body);
@@ -147,7 +147,7 @@ router.post("/api/tenants", isAuthenticated, requireRole("property_manager"), as
 
 // ===== Tenant Rent History =====
 
-router.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -172,7 +172,7 @@ router.get("/api/tenants/:tenantId/rent-history", isAuthenticated, async (req: a
   }
 });
 
-router.post("/api/tenants/:tenantId/rent-history", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/tenants/:tenantId/rent-history", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -208,7 +208,7 @@ router.post("/api/tenants/:tenantId/rent-history", isAuthenticated, requireRole(
 
 // ====== LEASES (Mietverträge) ======
 
-router.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -222,7 +222,7 @@ router.get("/api/tenants/:tenantId/leases", isAuthenticated, async (req: any, re
   }
 });
 
-router.get("/api/units/:unitId/leases", isAuthenticated, async (req: any, res) => {
+router.get("/api/units/:unitId/leases", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -236,7 +236,7 @@ router.get("/api/units/:unitId/leases", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.get("/api/leases/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/leases/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const lease = await storage.getLease(req.params.id);
     if (!lease) {
@@ -249,7 +249,7 @@ router.get("/api/leases/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/leases", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/leases", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const validatedData = schema.insertLeaseSchema.parse(req.body);
     const lease = await storage.createLease(validatedData);
@@ -263,7 +263,7 @@ router.post("/api/leases", isAuthenticated, requireRole("property_manager"), asy
   }
 });
 
-router.patch("/api/leases/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.patch("/api/leases/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const lease = await storage.updateLease(req.params.id, req.body);
     if (!lease) {
@@ -278,7 +278,7 @@ router.patch("/api/leases/:id", isAuthenticated, requireRole("property_manager")
 
 // ===== Tenant Invoices & Payments =====
 
-router.get("/api/tenants/:tenantId/invoices", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:tenantId/invoices", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -292,7 +292,7 @@ router.get("/api/tenants/:tenantId/invoices", isAuthenticated, async (req: any, 
   }
 });
 
-router.get("/api/tenants/:tenantId/payments", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:tenantId/payments", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -308,7 +308,7 @@ router.get("/api/tenants/:tenantId/payments", isAuthenticated, async (req: any, 
 
 // ===== Tenant Documents =====
 
-router.get("/api/tenant-documents", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenant-documents", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = req.session.organizationId;
     const documents = await db.select()
@@ -331,7 +331,7 @@ router.get("/api/tenant-documents", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any, res) => {
+router.get("/api/tenants/:tenantId/documents", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -358,7 +358,7 @@ router.get("/api/tenants/:tenantId/documents", isAuthenticated, async (req: any,
   }
 });
 
-router.post("/api/tenants/:tenantId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/tenants/:tenantId/documents", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -401,7 +401,7 @@ router.post("/api/tenants/:tenantId/documents", isAuthenticated, requireRole("pr
   }
 });
 
-router.delete("/api/tenant-documents/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/tenant-documents/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const orgId = req.session.organizationId;
@@ -583,7 +583,7 @@ router.get("/api/lease-templates", isAuthenticated, async (_req, res) => {
   res.json(leaseTemplates);
 });
 
-router.post("/api/lease-contracts/generate", isAuthenticated, async (req: any, res) => {
+router.post("/api/lease-contracts/generate", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { templateId, tenantId, unitId, propertyId, leaseStart, leaseEnd, monthlyRent, operatingCosts, deposit, selectedClauses, customNotes } = req.body;
 
@@ -667,7 +667,7 @@ router.post("/api/lease-contracts/generate", isAuthenticated, async (req: any, r
   }
 });
 
-router.post("/api/lease-contracts/generate-pdf", isAuthenticated, async (req: any, res) => {
+router.post("/api/lease-contracts/generate-pdf", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { templateId, tenantId, unitId, propertyId, leaseStart, leaseEnd, monthlyRent, operatingCosts, deposit, selectedClauses, customNotes } = req.body;
 
@@ -874,7 +874,7 @@ router.post("/api/lease-contracts/generate-pdf", isAuthenticated, async (req: an
   }
 });
 
-router.get("/api/lease-contracts", isAuthenticated, async (req: any, res) => {
+router.get("/api/lease-contracts", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.json([]);

@@ -1,13 +1,13 @@
 import { Router, Request, Response } from "express";
 import { ebicsService } from "../services/ebicsService";
-import { isAuthenticated } from "./helpers";
+import { isAuthenticated , type AuthenticatedRequest } from "./helpers";
 import { db } from "../db";
 import { ebicsConnections, ebicsPaymentBatches } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.session?.organizationId || null;
 }
 

@@ -3,7 +3,7 @@ import { db } from "../db";
 import * as schema from "@shared/schema";
 import { insertOwnerSchema } from "@shared/schema";
 import { eq, and, asc, count } from "drizzle-orm";
-import { isAuthenticated, requireRole, requireMutationAccess, getProfileFromSession, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, requireMutationAccess, getProfileFromSession, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 import { ownerReportingService } from "../services/ownerReportingService";
 import { bmdDatevExportService } from "../services/bmdDatevExportService";
 import { finanzOnlineService } from "../services/finanzOnlineService";
@@ -13,7 +13,7 @@ import { vpiAutomationService } from "../services/vpiAutomationService";
 
 const router = Router();
 
-router.get("/api/owners", isAuthenticated, async (req: any, res) => {
+router.get("/api/owners", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -31,7 +31,7 @@ router.get("/api/owners", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/owners", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+router.post("/api/owners", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -64,7 +64,7 @@ router.post("/api/owners", isAuthenticated, requireMutationAccess(), async (req:
   }
 });
 
-router.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+router.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -119,7 +119,7 @@ router.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async 
   }
 });
 
-router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -160,7 +160,7 @@ router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async
   }
 });
 
-router.get("/api/owners/:ownerId/report", isAuthenticated, async (req: any, res) => {
+router.get("/api/owners/:ownerId/report", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -182,7 +182,7 @@ router.get("/api/owners/:ownerId/report", isAuthenticated, async (req: any, res)
   }
 });
 
-router.get("/api/owners/:ownerId/report/html", isAuthenticated, async (req: any, res) => {
+router.get("/api/owners/:ownerId/report/html", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -206,7 +206,7 @@ router.get("/api/owners/:ownerId/report/html", isAuthenticated, async (req: any,
   }
 });
 
-router.get("/api/export/datev", isAuthenticated, async (req: any, res) => {
+router.get("/api/export/datev", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -226,7 +226,7 @@ router.get("/api/export/datev", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/export/bmd", isAuthenticated, async (req: any, res) => {
+router.get("/api/export/bmd", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -246,7 +246,7 @@ router.get("/api/export/bmd", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/finanzonline/ust-summary", isAuthenticated, async (req: any, res) => {
+router.get("/api/finanzonline/ust-summary", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -264,7 +264,7 @@ router.get("/api/finanzonline/ust-summary", isAuthenticated, async (req: any, re
   }
 });
 
-router.get("/api/finanzonline/ust-xml", isAuthenticated, async (req: any, res) => {
+router.get("/api/finanzonline/ust-xml", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -285,13 +285,13 @@ router.get("/api/finanzonline/ust-xml", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.get("/api/finanzonline/periods", isAuthenticated, async (req: any, res) => {
+router.get("/api/finanzonline/periods", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   const { year } = req.query;
   const periods = finanzOnlineService.getAvailablePeriods(parseInt(year as string) || new Date().getFullYear());
   res.json({ periods });
 });
 
-router.get("/api/accountant/dashboard", isAuthenticated, async (req: any, res) => {
+router.get("/api/accountant/dashboard", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {

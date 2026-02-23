@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, desc, max } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import { isAuthenticated, getProfileFromSession } from "./helpers";
+import { isAuthenticated, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 import multer from "multer";
 import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 
@@ -14,7 +14,7 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-async function getOrgId(req: any, res: Response): Promise<string | null> {
+async function getOrgId(req: AuthenticatedRequest, res: Response): Promise<string | null> {
   const profile = await getProfileFromSession(req);
   if (!profile?.organizationId) {
     res.status(400).json({ error: "Keine Organisation gefunden" });
@@ -23,7 +23,7 @@ async function getOrgId(req: any, res: Response): Promise<string | null> {
   return profile.organizationId;
 }
 
-router.get("/api/documents/versions/:documentId", isAuthenticated, async (req: any, res) => {
+router.get("/api/documents/versions/:documentId", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -56,7 +56,7 @@ router.get("/api/documents/versions/:documentId", isAuthenticated, async (req: a
   }
 });
 
-router.post("/api/documents/versions", isAuthenticated, upload.single("file"), async (req: any, res) => {
+router.post("/api/documents/versions", isAuthenticated, upload.single("file"), async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -105,7 +105,7 @@ router.post("/api/documents/versions", isAuthenticated, upload.single("file"), a
   }
 });
 
-router.get("/api/documents/tags", isAuthenticated, async (req: any, res) => {
+router.get("/api/documents/tags", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -122,7 +122,7 @@ router.get("/api/documents/tags", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/documents/tags", isAuthenticated, async (req: any, res) => {
+router.post("/api/documents/tags", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -145,7 +145,7 @@ router.post("/api/documents/tags", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.patch("/api/documents/tags/:id", isAuthenticated, async (req: any, res) => {
+router.patch("/api/documents/tags/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -174,7 +174,7 @@ router.patch("/api/documents/tags/:id", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.delete("/api/documents/tags/:id", isAuthenticated, async (req: any, res) => {
+router.delete("/api/documents/tags/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -200,7 +200,7 @@ router.delete("/api/documents/tags/:id", isAuthenticated, async (req: any, res) 
   }
 });
 
-router.post("/api/documents/:documentId/tags", isAuthenticated, async (req: any, res) => {
+router.post("/api/documents/:documentId/tags", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -238,7 +238,7 @@ router.post("/api/documents/:documentId/tags", isAuthenticated, async (req: any,
   }
 });
 
-router.delete("/api/documents/:documentId/tags/:tagId", isAuthenticated, async (req: any, res) => {
+router.delete("/api/documents/:documentId/tags/:tagId", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;
@@ -270,7 +270,7 @@ router.delete("/api/documents/:documentId/tags/:tagId", isAuthenticated, async (
   }
 });
 
-router.get("/api/documents/:documentId/tags", isAuthenticated, async (req: any, res) => {
+router.get("/api/documents/:documentId/tags", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const orgId = await getOrgId(req, res);
     if (!orgId) return;

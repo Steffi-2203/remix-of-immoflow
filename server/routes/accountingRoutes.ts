@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences, properties } from "@shared/schema";
 import { eq, and, sql, desc, between, gte, lte, asc, or, isNull } from "drizzle-orm";
-import { isAuthenticated } from "./helpers";
+import { isAuthenticated , type AuthenticatedRequest } from "./helpers";
 import { exportSaldenliste, exportBilanz, exportGuV } from "../services/xlsxExportService";
 import {
   validateTrialBalance,
@@ -20,7 +20,7 @@ import {
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.session?.organizationId || null;
 }
 
