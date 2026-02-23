@@ -1,0 +1,67 @@
+import { test, expect } from '@playwright/test';
+import fetch from 'node-fetch';
+
+test.describe('BK Abrechnung E2E', () => {
+  test('erstellt Rechnung, verarbeitet Zahlung und ordnet zu', async ({ request }) => {
+    // 1) Preconditions: create test user and booking via API
+    const userRes = await request.post(process.env.API_BASE + '/test/setup-user', {
+      data: { email: 'e2e-bk@example.com', name: 'E2E Tester' }
+    });
+    expect(userRes.ok()).toBeTruthy();
+    const user = await userRes.json();
+
+    const bookingRes = await request.post(process.env.API_BASE + '/test/create-booking', {
+      data: { userId: user.id, amount: 199.00, description: 'BK Test' }
+    });
+    expect(bookingRes.ok()).toBeTruthy();
+    const booking = await bookingRes.json();
+
+    // 2) Trigger invoice creation (API or internal job)
+    const invoiceRes = await request.post(process.env.API_BASE + `/invoices`, {
+      data: { bookingId: booking.id }
+    });
+    expect(invoiceRes.ok()).toBeTruthy();
+    const invoice = await invoiceRes.json();
+    expect(invoice.status).toBe('pending');
+
+    // 3) Simulate payment via payment provider sandbox (Stripe mock)
+    const paymentIntentRes = await request.post(process.env.PAYMENT_API + '/create-payment-intent', {
+      data: { amount: Math.round(invoice.amount * 100), currency: 'eur', metadata: { invoiceId: invoice.id } }
+    });
+    expect(paymentIntentRes.ok()).toBeTruthy();
+    const paymentIntent = await paymentIntentRes.json();
+
+    // Use test card to confirm payment (provider-specific)
+    const confirmRes = await request.post(process.env.PAYMENT_API + `/confirm-payment/${paymentIntent.id}`, {
+      data: { card: '4242424242424242', exp_month: '12', exp_year: '2030', cvc: '123' }
+    });
+    expect(confirmRes.ok()).toBeTruthy();
+    const payment = await confirmRes.json();
+    expect(payment.status).toBe('succeeded');
+
+    // 4) Simulate webhook delivery to our app (idempotency: send twice)
+    const webhookPayload = { type: 'payment_intent.succeeded', data: { object: payment } };
+    const webhookRes1 = await request.post(process.env.API_BASE + '/webhooks/payment', { data: webhookPayload });
+    expect(webhookRes1.ok()).toBeTruthy();
+
+    const webhookRes2 = await request.post(process.env.API_BASE + '/webhooks/payment', { data: webhookPayload });
+    expect(webhookRes2.ok()).toBeTruthy();
+
+    // 5) Verify DB state via test API endpoints
+    const invoiceCheck = await request.get(process.env.API_BASE + `/test/invoice/${invoice.id}`);
+    expect(invoiceCheck.ok()).toBeTruthy();
+    const invoiceFinal = await invoiceCheck.json();
+    expect(invoiceFinal.status).toBe('paid');
+
+    const paymentCheck = await request.get(process.env.API_BASE + `/test/payments?invoiceId=${invoice.id}`);
+    expect(paymentCheck.ok()).toBeTruthy();
+    const payments = await paymentCheck.json();
+    expect(payments.length).toBeGreaterThan(0);
+    expect(payments[0].status).toBe('succeeded');
+
+    const bookingCheck = await request.get(process.env.API_BASE + `/test/booking/${booking.id}`);
+    expect(bookingCheck.ok()).toBeTruthy();
+    const bookingFinal = await bookingCheck.json();
+    expect(bookingFinal.status).toBe('paid');
+  }, 120000); // timeout 2min
+});
