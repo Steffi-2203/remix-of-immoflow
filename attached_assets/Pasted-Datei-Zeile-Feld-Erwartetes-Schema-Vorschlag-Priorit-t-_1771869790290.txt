@@ -1,0 +1,33 @@
+Datei,Zeile,Feld,Erwartetes Schema,Vorschlag,Priorität
+server/routes/invoices.ts,120,paidAmount,number column paid_amount in invoices,Add paid_amount column or map to amount_paid,P0
+server/controllers/invoiceController.ts,87,mahnstufe,enum dunning_level on monthly_invoices,Rename to dunning_level or migrate values,P0
+server/services/paymentService.ts,45,date,Date column payment_date on payments,Use payment_date or add alias,P0
+server/routes/payments.ts,210,amount,integer amount_cents on payments,Convert to cents or add virtual field,P0
+server/controllers/settlement.ts,33,address,json address on tenants,Add address column or use tenant_address relation,P1
+server/routes/tenants.ts,142,organizationId,FK organization_id on tenants,Add FK or adjust code to use org_id,P1
+server/controllers/dunning.ts,201,mahnstufe,see above,Consolidate dunning field names,P0
+server/services/sepa.ts,58,creditorId,creditor_id in sepa_accounts,Add column or map existing field,P1
+server/controllers/booking.ts,310,paidAmount,see invoices,Align invoice/payment fields,P0
+server/routes/owner.ts,98,address,see above,Use owner_address relation or add column,P1
+server/controllers/tenantSync.ts,76,organizationId,see above,Map to org_id or migrate,P1
+server/services/billing.ts,412,amount,see payments,Standardize on cents,P0
+server/routes/finance.ts,55,date,see payments,Use created_at or payment_date,P0
+server/controllers/notification.ts,29,mahnstufe,see dunning,Use dunning_level,P0
+server/services/exportService.ts,134,paidAmount,see invoices,Use amount_paid,P0
+server/routes/ownerRoutes.ts,220,organizationId,see tenants,Use organization_id,P1
+server/controllers/addressBook.ts,66,address,see above,Migrate address shape,P1
+server/services/reporting.ts,301,amount,see payments,Normalize to cents,P0
+server/routes/settlementRoutes.ts,88,date,see payments,Use settlement_date,P0
+server/controllers/tenantController.ts,190,organizationId,see above,Add FK or map,P1
+server/services/notification.ts,47,mahnstufe,see dunning,Map to new enum,P0
+server/routes/invoiceRoutes.ts,260,paidAmount,see invoices,Align naming,P0
+server/controllers/paymentWebhook.ts,112,amount,see payments,Use amount_cents,P0
+server/services/tenantImport.ts,73,address,see tenants,Update import mapping,P1
+server/routes/billingRoutes.ts,145,date,see payments,Use canonical date field,P0
+server/controllers/ownerController.ts,54,organizationId,see owners,Map to organization_id,P1
+server/services/collection.ts,88,mahnstufe,see dunning,Use dunning_level,P0
+server/routes/financialReports.ts,199,amount,see payments,Normalize currency handling,P0
+server/controllers/settlementPdf.ts,41,paidAmount,see invoices,Use amount_paid,P0
+server/services/addressNormalization.ts,22,address,see tenants,Add normalization step,P1
+server/routes/tenantApi.ts,310,organizationId,see tenants,Map or migrate,P1
+server/controllers/legacySync.ts,12,paidAmount,legacy field mismatch,Add compatibility layer,P2

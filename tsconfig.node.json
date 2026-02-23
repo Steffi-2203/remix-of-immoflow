@@ -24,5 +24,6 @@
       "@assets/*": ["./attached_assets/*"]
     }
   },
-  "include": ["vite.config.ts", "server/**/*.ts", "shared/**/*.ts"]
+  "include": ["vite.config.ts", "server/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["server/replit_integrations/**"]
 }
