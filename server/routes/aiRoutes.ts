@@ -704,7 +704,9 @@ router.post("/api/ki/generate-email", isAuthenticated, async (req: Authenticated
 
     if (tenantId) {
       const tenant = await db.select().from(schema.tenants)
-        .where(and(eq(schema.tenants.id, tenantId), eq(schema.tenants.organizationId, profile.organizationId))).limit(1);
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(eq(schema.tenants.id, tenantId), eq(schema.properties.organizationId, profile.organizationId))).limit(1);
       if (!tenant[0]) {
         return res.status(403).json({ error: 'Keine Berechtigung für diesen Mieter' });
       }
@@ -720,9 +722,17 @@ router.post("/api/ki/generate-email", isAuthenticated, async (req: Authenticated
 
     let tenantInfo = '';
     if (tenantId) {
-      const tenant = await db.select().from(schema.tenants).where(eq(schema.tenants.id, tenantId)).limit(1);
-      if (tenant[0]) {
-        tenantInfo = `Mieter: ${tenant[0].firstName} ${tenant[0].lastName}, Adresse: ${tenant[0].address || 'k.A.'}`;
+      const tenantWithUnit = await db.select({
+        tenant: schema.tenants,
+        unit: schema.units,
+        property: schema.properties,
+      }).from(schema.tenants)
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(eq(schema.tenants.id, tenantId)).limit(1);
+      if (tenantWithUnit[0]) {
+        const t = tenantWithUnit[0];
+        tenantInfo = `Mieter: ${t.tenant.firstName} ${t.tenant.lastName}, Adresse: ${t.property.address || 'k.A.'}`;
       }
     }
 
@@ -792,9 +802,11 @@ router.post("/api/ki/send-email", isAuthenticated, async (req: AuthenticatedRequ
     const { to, subject, body, tenantId } = req.body;
     if (!to || !subject || !body) return res.status(400).json({ error: "Empfänger, Betreff und Text erforderlich" });
 
-    if (tenantId) {
+    if (tenantId && profile?.organizationId) {
       const tenant = await db.select().from(schema.tenants)
-        .where(and(eq(schema.tenants.id, tenantId), eq(schema.tenants.organizationId, profile?.organizationId))).limit(1);
+        .innerJoin(schema.units, eq(schema.tenants.unitId, schema.units.id))
+        .innerJoin(schema.properties, eq(schema.units.propertyId, schema.properties.id))
+        .where(and(eq(schema.tenants.id, tenantId), eq(schema.properties.organizationId, profile.organizationId))).limit(1);
       if (!tenant[0]) {
         return res.status(403).json({ error: 'Keine Berechtigung für diesen Mieter' });
       }

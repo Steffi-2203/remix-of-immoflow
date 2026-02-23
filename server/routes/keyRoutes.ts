@@ -11,7 +11,7 @@ router.get("/api/key-inventory", isAuthenticated, async (req: AuthenticatedReque
     const organizationId = req.session?.organizationId;
     const propertyId = req.query.property_id;
     
-    let query = db.select({
+    const baseQuery = db.select({
       key: schema.keyInventory,
       property: schema.properties,
       unit: schema.units,
@@ -20,11 +20,9 @@ router.get("/api/key-inventory", isAuthenticated, async (req: AuthenticatedReque
     .leftJoin(schema.properties, eq(schema.keyInventory.propertyId, schema.properties.id))
     .leftJoin(schema.units, eq(schema.keyInventory.unitId, schema.units.id));
     
-    if (organizationId) {
-      query = query.where(eq(schema.properties.organizationId, organizationId));
-    }
-    
-    const results = await query;
+    const results = organizationId
+      ? await baseQuery.where(eq(schema.properties.organizationId, organizationId))
+      : await baseQuery;
     
     const keys = results
       .filter(r => !propertyId || r.key.propertyId === propertyId)
@@ -51,7 +49,7 @@ router.get("/api/key-inventory", isAuthenticated, async (req: AuthenticatedReque
 
 router.get("/api/key-inventory/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const result = await db.select({
       key: schema.keyInventory,
       property: schema.properties,
@@ -60,7 +58,7 @@ router.get("/api/key-inventory/:id", isAuthenticated, async (req: AuthenticatedR
     .from(schema.keyInventory)
     .leftJoin(schema.properties, eq(schema.keyInventory.propertyId, schema.properties.id))
     .leftJoin(schema.units, eq(schema.keyInventory.unitId, schema.units.id))
-    .where(eq(schema.keyInventory.id, id))
+    .where(eq(schema.keyInventory.id, id as string))
     .limit(1);
     
     if (!result.length) {
@@ -123,7 +121,7 @@ router.post("/api/key-inventory", isAuthenticated, requireRole("property_manager
 
 router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const body = snakeToCamel(req.body);
     
     const updates: any = { updatedAt: new Date() };
@@ -138,7 +136,7 @@ router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_ma
     
     const result = await db.update(schema.keyInventory)
       .set(updates)
-      .where(eq(schema.keyInventory.id, id))
+      .where(eq(schema.keyInventory.id, id as string))
       .returning();
     
     if (!result.length) {
@@ -165,8 +163,8 @@ router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_ma
 
 router.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
-    await db.delete(schema.keyInventory).where(eq(schema.keyInventory.id, id));
+    const id = req.params.id as string;
+    await db.delete(schema.keyInventory).where(eq(schema.keyInventory.id, id as string));
     res.json({ success: true });
   } catch (error) {
     console.error('Key inventory delete error:', error);
@@ -176,7 +174,7 @@ router.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_m
 
 router.get("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
-    const { keyInventoryId } = req.params;
+    const keyInventoryId = req.params.keyInventoryId as string;
     const results = await db.select({
       handover: schema.keyHandovers,
       tenant: schema.tenants,
@@ -210,7 +208,7 @@ router.get("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, asyn
 
 router.post("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { keyInventoryId } = req.params;
+    const keyInventoryId = req.params.keyInventoryId as string;
     const body = snakeToCamel(req.body);
     
     const result = await db.insert(schema.keyHandovers).values({
