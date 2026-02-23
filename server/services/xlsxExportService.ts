@@ -171,7 +171,7 @@ export function exportOPListe(data: any[], orgName: string): Buffer {
   const rows = data.map((r) => {
     const dueDate = r.faelligAm || r.faellig_am || r.dueDate;
     let overdueDays = 0;
-    let status = r.status || "offen";
+    const status = r.status || "offen";
 
     if (dueDate) {
       const due = new Date(dueDate);

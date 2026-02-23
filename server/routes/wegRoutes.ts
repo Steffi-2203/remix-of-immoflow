@@ -15,7 +15,7 @@ router.get("/api/weg/assemblies", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegAssemblies.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegAssemblies.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegAssemblies.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegAssemblies).where(where).orderBy(desc(schema.wegAssemblies.assemblyDate));
@@ -101,7 +101,7 @@ router.get("/api/weg/reserve-fund", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegReserveFund.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegReserveFund.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegReserveFund.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegReserveFund).where(where).orderBy(desc(schema.wegReserveFund.createdAt));
@@ -135,7 +135,7 @@ router.get("/api/weg/unit-owners", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegUnitOwners.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegUnitOwners.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegUnitOwners.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegUnitOwners).where(where).orderBy(schema.wegUnitOwners.createdAt);
@@ -308,7 +308,7 @@ router.get("/api/weg/budget-plans", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegBudgetPlans.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegBudgetPlans.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegBudgetPlans.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegBudgetPlans).where(where).orderBy(desc(schema.wegBudgetPlans.year));
@@ -697,7 +697,7 @@ router.get("/api/weg/special-assessments", async (req: Request, res: Response) =
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegSpecialAssessments.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegSpecialAssessments.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegSpecialAssessments.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegSpecialAssessments).where(where).orderBy(desc(schema.wegSpecialAssessments.createdAt));
@@ -747,7 +747,7 @@ router.get("/api/weg/maintenance", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegMaintenanceItems.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegMaintenanceItems.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegMaintenanceItems.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegMaintenanceItems).where(where).orderBy(desc(schema.wegMaintenanceItems.createdAt));
@@ -812,7 +812,7 @@ router.get("/api/weg/owner-changes", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.wegOwnerChanges.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegOwnerChanges.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegOwnerChanges.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.wegOwnerChanges).where(where).orderBy(desc(schema.wegOwnerChanges.createdAt));
@@ -1328,7 +1328,7 @@ router.get("/api/weg/vorschreibungen", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const { propertyId, year, month } = req.query;
-    let conditions: any[] = [eq(schema.wegVorschreibungen.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.wegVorschreibungen.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.wegVorschreibungen.propertyId, propertyId as string));
     if (year) conditions.push(eq(schema.wegVorschreibungen.year, parseInt(year as string)));
     if (month) conditions.push(eq(schema.wegVorschreibungen.month, parseInt(month as string)));

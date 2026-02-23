@@ -67,7 +67,7 @@ export function generateSerialLetterPdf(
     doc.setFont('helvetica', 'normal');
     
     // Replace placeholders
-    let personalizedBody = letter.body
+    const personalizedBody = letter.body
       .replace(/\{\{name\}\}/g, recipient.name)
       .replace(/\{\{einheit\}\}/g, recipient.unit)
       .replace(/\{\{datum\}\}/g, format(new Date(letter.date), 'dd.MM.yyyy'));

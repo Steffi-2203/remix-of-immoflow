@@ -299,7 +299,7 @@ router.post("/api/bulk/export", isAuthenticated, requireRole("property_manager",
     }
 
     if (types.includes('zahlungen')) {
-      let conditions: any[] = [];
+      const conditions: any[] = [];
       const allTenants = await storage.getTenantsByOrganization(profile.organizationId);
       const tenantIds = allTenants.map(t => t.id);
       if (!tenantIds.length) {

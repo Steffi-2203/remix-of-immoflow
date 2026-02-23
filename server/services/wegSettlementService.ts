@@ -248,7 +248,7 @@ export async function calculateOwnerSettlement(
     const allocKey = allocationKeyMap.get(catLower) || "mea";
     const roundedTotal = roundMoney(totalCost);
 
-    let shares: { id: string; ratio: number }[] = [];
+    const shares: { id: string; ratio: number }[] = [];
 
     if (allocKey === "nutzflaeche" && totalNutzflaeche > 0) {
       for (const [key, ownerData] of ownerMap) {

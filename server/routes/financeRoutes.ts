@@ -14,7 +14,7 @@ router.get("/api/heating-cost-readings", async (req: Request, res: Response) => 
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.heatingCostReadings.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.heatingCostReadings.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.heatingCostReadings.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.heatingCostReadings).where(where).orderBy(desc(schema.heatingCostReadings.periodFrom));
@@ -83,7 +83,7 @@ router.get("/api/owner-payouts", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.ownerPayouts.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.ownerPayouts.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.ownerPayouts.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.ownerPayouts).where(where).orderBy(desc(schema.ownerPayouts.createdAt));
@@ -237,7 +237,7 @@ router.get("/api/property-owners", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.property_id as string;
-    let conditions: any[] = [eq(schema.properties.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.properties.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.propertyOwners.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db

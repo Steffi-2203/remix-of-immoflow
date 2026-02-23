@@ -163,7 +163,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async getMonthlyInvoices(year?: number, month?: number): Promise<schema.MonthlyInvoice[]> {
-    let query = db.select().from(schema.monthlyInvoices);
+    const query = db.select().from(schema.monthlyInvoices);
     if (year && month) {
       return query.where(and(
         eq(schema.monthlyInvoices.year, year),
@@ -798,7 +798,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async getExpenses(year?: number, month?: number): Promise<schema.Expense[]> {
-    let query = db.select().from(schema.expenses);
+    const query = db.select().from(schema.expenses);
     if (year && month) {
       return query.where(and(
         eq(schema.expenses.year, year),

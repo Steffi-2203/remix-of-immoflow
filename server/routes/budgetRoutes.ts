@@ -32,7 +32,7 @@ router.get("/api/budgets", isAuthenticated, async (req: AuthenticatedRequest, re
     const orgId = req.session.organizationId!;
     const { property_id, year } = req.query;
     
-    let query = db.select({
+    const query = db.select({
       budget: schema.propertyBudgets,
       property: {
         name: schema.properties.name,

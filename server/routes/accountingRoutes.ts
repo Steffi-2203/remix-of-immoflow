@@ -107,7 +107,7 @@ router.get("/api/journal-entries", isAuthenticated, async (req: Request, res: Re
       return res.status(403).json({ error: "Kein Zugriff auf diese Liegenschaft" });
     }
 
-    let conditions: any[] = [];
+    const conditions: any[] = [];
 
     if (orgId) conditions.push(eq(journalEntries.organizationId, orgId));
 

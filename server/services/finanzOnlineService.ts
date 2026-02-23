@@ -97,7 +97,7 @@ export class FinanzOnlineService {
       .where(eq(properties.organizationId, organizationId));
     const propertyIds = orgProperties.map(p => p.id);
 
-    let einnahmen = {
+    const einnahmen = {
       mieteinnahmenWohnen: 0,
       mieteinnahmenGewerbe: 0,
       betriebskostenWohnen: 0,

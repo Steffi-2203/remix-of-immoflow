@@ -137,7 +137,7 @@ export class PaymentService {
         `);
       }
 
-      let unapplied = remaining;
+      const unapplied = remaining;
       if (unapplied > 0) {
         await tx.execute(sql`
           INSERT INTO transactions (id, organization_id, bank_account_id, amount, transaction_date, booking_text, created_at)

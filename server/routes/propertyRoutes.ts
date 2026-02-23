@@ -56,7 +56,7 @@ router.get("/api/properties", isAuthenticated, async (req: AuthenticatedRequest,
         .where(whereCondition),
     ]);
 
-    let maskedProps = isTester(roles) ? maskPersonalData(props) : props;
+    const maskedProps = isTester(roles) ? maskPersonalData(props) : props;
 
     const allUnits = await storage.getUnitsByOrganization(orgId);
     const allTenants = await storage.getTenantsByOrganization(orgId);

@@ -92,7 +92,7 @@ export async function splitPaymentByPriority(
       { key: "wk", amount: wk },
     ];
 
-    let paidProportion = alreadyPaid > 0 ? alreadyPaid / total : 0;
+    const paidProportion = alreadyPaid > 0 ? alreadyPaid / total : 0;
 
     for (const item of priorityItems) {
       if (remaining <= 0) break;
