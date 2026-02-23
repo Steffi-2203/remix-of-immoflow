@@ -74,6 +74,9 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Migration Runner**: migrations/runner.ts — transactional up/down with _migrations tracking table. Run: `npx tsx migrations/<name>.ts` (--down for rollback).
 - **E2E Test Infrastructure**: Deterministic test data with fixed UUIDs (prefix `e2e00000-`). CLI tool `scripts/test-db-helper.cjs` supports `--seed`, `--teardown`, `--restore`. SQL fixtures in `fixtures/e2e/seed.sql` and `fixtures/e2e/teardown.sql`. Idempotent seed (ON CONFLICT DO NOTHING).
 - **CI Workflows**: `.github/workflows/ci.yml` (unit tests + Postgres service), `.github/workflows/e2e-browser.yml` (Playwright E2E with seed/teardown, nightly schedule, PR trigger), `.github/workflows/dryrun-persist-ci.yml`.
+- **Nightly Reconciliation**: `.github/workflows/nightly-reconcile.yml` — vergleicht `paid_amount` mit `payment_allocations`, alertiert via Slack/PagerDuty bei Abweichungen >0.01 EUR. Report: `scripts/reconcile_paid_amounts.sql`. Runbook: `ops/runbooks/reconciliation.md`.
+- **Backfill Migration**: `migrations/2026-02-23-backfill-paid_amount-and-mahnstufe.sql` — setzt `paid_amount` aus `payment_allocations`, berechnet `mahnstufe` nach Fälligkeitsdauer, korrigiert Status-Inkonsistenzen.
+- **Stripe Webhook Tests**: `tests/e2e/webhooks/stripe-signed.spec.ts` — signierte Webhook-Tests (benötigt `TEST_STRIPE_WEBHOOK_SECRET`). Helper: `tests/helpers/stripe.ts`.
 
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service with pg_trgm extension and RLS.
