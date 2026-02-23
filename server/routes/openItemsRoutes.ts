@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { isAuthenticated } from "./helpers";
+import { isAuthenticated , type AuthenticatedRequest } from "./helpers";
 import { db } from "../db";
 import { monthlyInvoices, units, tenants, properties, payments, paymentAllocations } from "@shared/schema";
 import { eq, ne, and, sql, gte, lte, desc, sum, isNull } from "drizzle-orm";
@@ -7,7 +7,7 @@ import { exportOPListe } from "../services/xlsxExportService";
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.user?.organizationId || req.session?.organizationId || null;
 }
 

@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { pool } from "../db";
-import { isAuthenticated, getProfileFromSession } from "./helpers";
+import { isAuthenticated, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 
 const router = Router();
 
@@ -12,7 +12,7 @@ interface SearchResult {
   score: number;
 }
 
-router.get("/api/search", isAuthenticated, async (req: any, res: Response) => {
+router.get("/api/search", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {

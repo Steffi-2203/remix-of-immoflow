@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import { isAuthenticated, getProfileFromSession } from "./helpers";
+import { isAuthenticated, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 import {
   createSignatureRequest,
   signDocument,
@@ -13,7 +13,7 @@ import {
 
 const router = Router();
 
-async function getOrgId(req: any, res: Response): Promise<string | null> {
+async function getOrgId(req: AuthenticatedRequest, res: Response): Promise<string | null> {
   const profile = await getProfileFromSession(req);
   if (!profile?.organizationId) {
     res.status(400).json({ error: "Keine Organisation gefunden" });
@@ -25,7 +25,7 @@ async function getOrgId(req: any, res: Response): Promise<string | null> {
 router.get(
   "/api/signatures/requests",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const orgId = await getOrgId(req, res);
       if (!orgId) return;
@@ -68,7 +68,7 @@ router.get(
 router.post(
   "/api/signatures/requests",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const orgId = await getOrgId(req, res);
       if (!orgId) return;
@@ -105,7 +105,7 @@ router.post(
 router.get(
   "/api/signatures/requests/:id",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const orgId = await getOrgId(req, res);
       if (!orgId) return;
@@ -155,7 +155,7 @@ router.get(
 router.post(
   "/api/signatures/sign/:requestId",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const { signerName, signerEmail, signatureData } = req.body;
@@ -195,7 +195,7 @@ router.post(
 router.post(
   "/api/signatures/decline/:requestId",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const { signerEmail } = req.body;
@@ -232,7 +232,7 @@ router.get("/api/signatures/verify/:code", async (req: Request, res: Response) =
 router.get(
   "/api/signatures/audit/:requestId",
   isAuthenticated,
-  async (req: any, res) => {
+  async (req: AuthenticatedRequest, res) => {
     try {
       const orgId = await getOrgId(req, res);
       if (!orgId) return;

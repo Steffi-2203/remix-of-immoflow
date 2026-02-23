@@ -50,8 +50,9 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Modular Structure**: Clear separation of `server/`, `shared/`, and `src/` directories.
 - **Drizzle ORM**: Type-safe database interactions.
 - **Dedicated Tables**: For leases, payment allocations, financial audit logs, idempotency keys, push subscriptions, document versions/tags, automation rules/logs, 2FA, signatures, saved reports, report schedules.
-- **Feature Routes Architecture**: Modular route structure organized by domain with consistent naming and organization-scoped access control.
+- **Feature Routes Architecture**: 47 modular route files in `server/routes/` organized by domain. Core orchestrator `server/routes.ts` (958 lines) registers all route modules. Key domain modules: `authProfileRoutes.ts` (auth/profile/invitations), `aiRoutes.ts` (KI-Autopilot/OCR/chat), `dunningRoutes.ts` (Mahnwesen/VPI/maintenance), `sepaRoutes.ts` (SEPA export/settlement PDF), `keyRoutes.ts` (Schlüsselübergabe), `budgetRoutes.ts` (Budgets/MieWeG), `ownerRoutes.ts` (Eigentümer/BMD/DATEV/FinanzOnline). All route handlers use `AuthenticatedRequest` typed interface (defined in `server/routes/helpers.ts`) instead of `req: any` for session type safety.
 - **Defense in Depth**: App-level organization checks + Postgres RLS policies + property ownership validation.
+- **Type Safety**: `AuthenticatedRequest` interface extends Express `Request` with typed session (`userId`, `organizationId`). Exported from `server/routes/helpers.ts` and used across all route files.
 
 ## Legal Pages (Public Routes)
 - **/impressum**: Impressum nach § 5 ECG, Aufsichtsbehörde (DSB), Platzhalter für Adresse/UID

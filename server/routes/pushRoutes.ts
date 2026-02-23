@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import { isAuthenticated, requireAdminAccess, getProfileFromSession } from "./helpers";
+import { isAuthenticated, requireAdminAccess, getProfileFromSession , type AuthenticatedRequest } from "./helpers";
 import webPush from "web-push";
 
 const vapidKeys = {
@@ -28,7 +28,7 @@ export function registerPushRoutes(app: Router) {
     res.json({ publicKey: vapidKeys.publicKey });
   });
 
-  app.post("/api/push/subscribe", isAuthenticated, async (req: any, res) => {
+  app.post("/api/push/subscribe", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile) {
@@ -70,7 +70,7 @@ export function registerPushRoutes(app: Router) {
     }
   });
 
-  app.delete("/api/push/unsubscribe", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/push/unsubscribe", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile) {
@@ -95,7 +95,7 @@ export function registerPushRoutes(app: Router) {
     }
   });
 
-  app.post("/api/push/send", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
+  app.post("/api/push/send", isAuthenticated, requireAdminAccess(), async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile) {

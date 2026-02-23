@@ -4,6 +4,16 @@ import { eq } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { storage } from "../storage";
 
+export interface AuthenticatedSession {
+  userId: string;
+  organizationId?: string;
+  [key: string]: any;
+}
+
+export interface AuthenticatedRequest extends Request {
+  session: AuthenticatedSession & Request["session"];
+}
+
 export function snakeToCamel(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(snakeToCamel);
@@ -92,9 +102,9 @@ export function isAuthenticated(req: Request, res: Response, next: NextFunction)
   return res.status(401).json({ message: "Unauthorized" });
 }
 
-export async function getUserRoles(req: any): Promise<string[]> {
+export async function getUserRoles(req: Request): Promise<string[]> {
   try {
-    const userId = req.session?.userId;
+    const userId = (req as AuthenticatedRequest).session?.userId;
     if (!userId) return [];
     const roles = await storage.getUserRoles(userId);
     return roles.map((r: any) => r.role);
@@ -104,7 +114,7 @@ export async function getUserRoles(req: any): Promise<string[]> {
 }
 
 export function requireRole(...allowedRoles: string[]) {
-  return async (req: any, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const roles = await getUserRoles(req);
     if (roles.includes('admin')) return next();
     if (allowedRoles.some(r => roles.includes(r))) return next();
@@ -113,7 +123,7 @@ export function requireRole(...allowedRoles: string[]) {
 }
 
 export function requireMutationAccess() {
-  return async (req: any, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const roles = await getUserRoles(req);
     if (roles.includes('admin')) return next();
     if (roles.includes('viewer') || roles.includes('tester')) {
@@ -124,7 +134,7 @@ export function requireMutationAccess() {
 }
 
 export function requireFinanceAccess() {
-  return async (req: any, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const roles = await getUserRoles(req);
     if (roles.includes('admin') || roles.includes('finance')) return next();
     return res.status(403).json({ error: "Keine Berechtigung für Finanzoperationen" });
@@ -132,15 +142,15 @@ export function requireFinanceAccess() {
 }
 
 export function requireAdminAccess() {
-  return async (req: any, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const roles = await getUserRoles(req);
     if (roles.includes('admin')) return next();
     return res.status(403).json({ error: "Nur Administratoren haben Zugriff" });
   };
 }
 
-export async function getProfileFromSession(req: any) {
-  const userId = req.session?.userId;
+export async function getProfileFromSession(req: Request) {
+  const userId = (req as AuthenticatedRequest).session?.userId;
   if (!userId) return null;
   return storage.getProfileById(userId);
 }

@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { eq, and, sql, desc, asc, count, or, isNull, gte, lte, inArray, ne, ilike } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import { isAuthenticated, requireRole, requireMutationAccess, requireFinanceAccess, requireAdminAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData } from "./routes/helpers";
+import { isAuthenticated, requireRole, requireMutationAccess, requireFinanceAccess, requireAdminAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, type AuthenticatedRequest } from "./routes/helpers";
 import { registerFunctionRoutes } from "./functions";
 import { registerStripeRoutes } from "./stripeRoutes";
 import { jobQueueService } from "./services/jobQueueService";
@@ -116,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerQueryBuilderRoutes(app);
 
   // ===== Storage Endpoints =====
-  app.post("/api/storage/signed-url", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+  app.post("/api/storage/signed-url", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
     try {
       const normalizedBody = snakeToCamel(req.body);
       const { bucket, filePath, expiresIn } = normalizedBody;
@@ -130,7 +130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/storage/upload", isAuthenticated, requireMutationAccess(), async (req: any, res) => {
+  app.post("/api/storage/upload", isAuthenticated, requireMutationAccess(), async (req: AuthenticatedRequest, res) => {
     try {
       const { ObjectStorageService } = await import("./replit_integrations/object_storage");
       const oss = new ObjectStorageService();
@@ -870,7 +870,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   });
 
   // ===== Job Queue Routes =====
-  app.post("/api/jobs", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+  app.post("/api/jobs", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const { type, payload } = req.body;
@@ -883,7 +883,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
-  app.get("/api/jobs", isAuthenticated, async (req: any, res) => {
+  app.get("/api/jobs", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const jobs = await jobQueueService.getJobsByOrganization(profile?.organizationId);
@@ -893,7 +893,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
-  app.get("/api/jobs/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/jobs/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       const job = await jobQueueService.getJobStatus(req.params.id);
@@ -908,7 +908,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
   });
 
   // ===== DSGVO / GDPR Routes =====
-  app.get("/api/gdpr/export/:tenantId", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+  app.get("/api/gdpr/export/:tenantId", isAuthenticated, requireRole("admin"), async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {
@@ -924,7 +924,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`;
     }
   });
 
-  app.post("/api/gdpr/anonymize/:tenantId", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+  app.post("/api/gdpr/anonymize/:tenantId", isAuthenticated, requireRole("admin"), async (req: AuthenticatedRequest, res) => {
     try {
       const profile = await getProfileFromSession(req);
       if (!profile?.organizationId) {

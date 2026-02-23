@@ -5,7 +5,7 @@ import { eq, and, sql, desc, asc, isNull, count } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { insertPropertySchema } from "@shared/schema";
 import { storage } from "../storage";
-import { isAuthenticated, requireRole, requireMutationAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData } from "./helpers";
+import { isAuthenticated, requireRole, requireMutationAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, type AuthenticatedRequest } from "./helpers";
 import { verifyPropertyOwnership, verifyUnitOwnership } from "../lib/ownershipCheck";
 
 const router = Router();
@@ -32,7 +32,7 @@ function parsePagination(req: Request) {
 
 // ===== Properties CRUD =====
 
-router.get("/api/properties", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const roles = await getUserRoles(req);
@@ -86,7 +86,7 @@ router.get("/api/properties", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/properties/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const property = await storage.getProperty(req.params.id);
@@ -102,7 +102,7 @@ router.get("/api/properties/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/units", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -136,7 +136,7 @@ router.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any
   }
 });
 
-router.post("/api/properties", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
+router.post("/api/properties", isAuthenticated, requireRole('property_manager'), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -195,7 +195,7 @@ router.post("/api/properties", isAuthenticated, requireRole('property_manager'),
   }
 });
 
-router.patch("/api/properties/:id", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
+router.patch("/api/properties/:id", isAuthenticated, requireRole('property_manager'), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const existingProperty = await storage.getProperty(req.params.id);
@@ -228,7 +228,7 @@ router.delete("/api/properties/:id", isAuthenticated, requireRole('property_mana
 
 // ===== Property Managers =====
 
-router.post("/api/property-managers", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
+router.post("/api/property-managers", isAuthenticated, requireRole('property_manager'), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -248,7 +248,7 @@ router.post("/api/property-managers", isAuthenticated, requireRole('property_man
   }
 });
 
-router.delete("/api/property-managers/:propertyId", isAuthenticated, requireRole('property_manager'), async (req: any, res) => {
+router.delete("/api/property-managers/:propertyId", isAuthenticated, requireRole('property_manager'), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -269,7 +269,7 @@ router.delete("/api/property-managers/:propertyId", isAuthenticated, requireRole
 
 // ===== Property Settlements =====
 
-router.get("/api/properties/:propertyId/settlements", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/settlements", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -288,7 +288,7 @@ router.get("/api/properties/:propertyId/settlements", isAuthenticated, async (re
 
 // ===== Property Maintenance Contracts =====
 
-router.get("/api/properties/:propertyId/maintenance-contracts", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/maintenance-contracts", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -307,7 +307,7 @@ router.get("/api/properties/:propertyId/maintenance-contracts", isAuthenticated,
 
 // ===== Maintenance Tasks & Contractors =====
 
-router.get("/api/maintenance-tasks", isAuthenticated, async (req: any, res) => {
+router.get("/api/maintenance-tasks", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const { status } = req.query;
@@ -318,7 +318,7 @@ router.get("/api/maintenance-tasks", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/contractors", isAuthenticated, async (req: any, res) => {
+router.get("/api/contractors", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     const contractors = await storage.getContractorsByOrganization(profile?.organizationId);
@@ -330,7 +330,7 @@ router.get("/api/contractors", isAuthenticated, async (req: any, res) => {
 
 // ===== Distribution Keys =====
 
-router.get("/api/distribution-keys", isAuthenticated, async (req: any, res) => {
+router.get("/api/distribution-keys", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const keys = await storage.getDistributionKeys();
     res.json(keys);
@@ -339,7 +339,7 @@ router.get("/api/distribution-keys", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -370,7 +370,7 @@ router.post("/api/distribution-keys", isAuthenticated, requireRole("property_man
   }
 });
 
-router.patch("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.patch("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -386,7 +386,7 @@ router.patch("/api/distribution-keys/:id", isAuthenticated, requireRole("propert
   }
 });
 
-router.delete("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/distribution-keys/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "No organization" });
@@ -414,7 +414,7 @@ router.delete("/api/distribution-keys/:id", isAuthenticated, requireRole("proper
 
 // ===== Property-specific Distribution Keys =====
 
-router.get("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/distribution-keys", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -431,7 +431,7 @@ router.get("/api/properties/:propertyId/distribution-keys", isAuthenticated, asy
   }
 });
 
-router.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -469,7 +469,7 @@ router.post("/api/properties/:propertyId/distribution-keys", isAuthenticated, re
 
 // ===== Distribution Values =====
 
-router.get("/api/units/:unitId/distribution-values", isAuthenticated, async (req: any, res) => {
+router.get("/api/units/:unitId/distribution-values", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -488,7 +488,7 @@ router.get("/api/units/:unitId/distribution-values", isAuthenticated, async (req
   }
 });
 
-router.get("/api/properties/:propertyId/distribution-values", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/distribution-values", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -505,7 +505,7 @@ router.get("/api/properties/:propertyId/distribution-values", isAuthenticated, a
   }
 });
 
-router.post("/api/units/:unitId/distribution-values", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/units/:unitId/distribution-values", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -536,7 +536,7 @@ router.post("/api/units/:unitId/distribution-values", isAuthenticated, requireRo
   }
 });
 
-router.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -557,7 +557,7 @@ router.delete("/api/units/:unitId/distribution-values/:keyId", isAuthenticated, 
 
 // ===== Property Documents =====
 
-router.get("/api/properties/:propertyId/documents", isAuthenticated, async (req: any, res) => {
+router.get("/api/properties/:propertyId/documents", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -585,7 +585,7 @@ router.get("/api/properties/:propertyId/documents", isAuthenticated, async (req:
   }
 });
 
-router.post("/api/properties/:propertyId/documents", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/properties/:propertyId/documents", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -619,7 +619,7 @@ router.post("/api/properties/:propertyId/documents", isAuthenticated, requireRol
   }
 });
 
-router.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/properties/:propertyId/documents/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });

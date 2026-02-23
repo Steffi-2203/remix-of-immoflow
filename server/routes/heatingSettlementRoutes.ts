@@ -2,11 +2,11 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { heatingSettlements, heatingSettlementDetails, units, tenants, properties } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { isAuthenticated, requireMutationAccess } from "./helpers";
+import { isAuthenticated, requireMutationAccess , type AuthenticatedRequest } from "./helpers";
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.session?.organizationId || null;
 }
 

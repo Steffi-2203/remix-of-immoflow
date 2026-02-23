@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import * as schema from "@shared/schema";
-import { isAuthenticated, requireAdminAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireAdminAccess, getUserRoles, getProfileFromSession, isTester, maskPersonalData, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 import { eq, and, desc, count } from "drizzle-orm";
 import * as demoService from "../services/demoService";
 import { runSimulation } from "../seed-2025-simulation";
@@ -12,7 +12,7 @@ const router = Router();
 
 const ADMIN_EMAIL = "stephania.pfeffer@outlook.de";
 
-router.get("/api/profile", isAuthenticated, async (req: any, res) => {
+router.get("/api/profile", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -33,7 +33,7 @@ router.get("/api/profile", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/user/subscription", isAuthenticated, async (req: any, res) => {
+router.get("/api/user/subscription", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -72,7 +72,7 @@ router.get("/api/user/subscription", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/profile/organization", isAuthenticated, async (req: any, res) => {
+router.get("/api/profile/organization", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.session?.userId;
     const profile = await storage.getProfileById(userId);
@@ -88,7 +88,7 @@ router.get("/api/profile/organization", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.post("/api/invites", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
+router.post("/api/invites", isAuthenticated, requireAdminAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -146,7 +146,7 @@ router.post("/api/invites", isAuthenticated, requireAdminAccess(), async (req: a
   }
 });
 
-router.get("/api/invites", isAuthenticated, async (req: any, res) => {
+router.get("/api/invites", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -185,7 +185,7 @@ router.get("/api/invites/:token", async (req, res) => {
   }
 });
 
-router.post("/api/invites/:token/accept", isAuthenticated, async (req: any, res) => {
+router.post("/api/invites/:token/accept", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const invite = await storage.getInviteByToken(req.params.token);
@@ -229,7 +229,7 @@ router.post("/api/invites/:token/accept", isAuthenticated, async (req: any, res)
   }
 });
 
-router.delete("/api/invites/:id", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
+router.delete("/api/invites/:id", isAuthenticated, requireAdminAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -274,7 +274,7 @@ router.get("/api/invites/token/:token", async (req, res) => {
   }
 });
 
-router.get("/api/organization/members", isAuthenticated, async (req: any, res) => {
+router.get("/api/organization/members", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);
@@ -299,7 +299,7 @@ router.get("/api/organization/members", isAuthenticated, async (req: any, res) =
   }
 });
 
-router.post("/api/organization/members/:memberId/roles", isAuthenticated, requireAdminAccess(), async (req: any, res) => {
+router.post("/api/organization/members/:memberId/roles", isAuthenticated, requireAdminAccess(), async (req: AuthenticatedRequest, res) => {
   try {
     const userEmail = req.session?.email;
     const profile = await storage.getProfileByEmail(userEmail);

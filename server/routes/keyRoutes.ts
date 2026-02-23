@@ -2,11 +2,11 @@ import { Router } from "express";
 import { db } from "../db";
 import * as schema from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
-import { isAuthenticated, requireRole, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 
 const router = Router();
 
-router.get("/api/key-inventory", isAuthenticated, async (req: any, res) => {
+router.get("/api/key-inventory", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const organizationId = req.session?.organizationId;
     const propertyId = req.query.property_id;
@@ -49,7 +49,7 @@ router.get("/api/key-inventory", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.get("/api/key-inventory/:id", isAuthenticated, async (req: any, res) => {
+router.get("/api/key-inventory/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const result = await db.select({
@@ -89,7 +89,7 @@ router.get("/api/key-inventory/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/key-inventory", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/key-inventory", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const body = snakeToCamel(req.body);
     const result = await db.insert(schema.keyInventory).values({
@@ -121,7 +121,7 @@ router.post("/api/key-inventory", isAuthenticated, requireRole("property_manager
   }
 });
 
-router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     const body = snakeToCamel(req.body);
@@ -163,7 +163,7 @@ router.patch("/api/key-inventory/:id", isAuthenticated, requireRole("property_ma
   }
 });
 
-router.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     await db.delete(schema.keyInventory).where(eq(schema.keyInventory.id, id));
@@ -174,7 +174,7 @@ router.delete("/api/key-inventory/:id", isAuthenticated, requireRole("property_m
   }
 });
 
-router.get("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, async (req: any, res) => {
+router.get("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const { keyInventoryId } = req.params;
     const results = await db.select({
@@ -208,7 +208,7 @@ router.get("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, asyn
   }
 });
 
-router.post("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/key-inventory/:keyInventoryId/handovers", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const { keyInventoryId } = req.params;
     const body = snakeToCamel(req.body);

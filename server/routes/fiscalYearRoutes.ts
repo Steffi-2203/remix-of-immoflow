@@ -1,12 +1,12 @@
 import { Router, Request, Response } from "express";
-import { isAuthenticated } from "./helpers";
+import { isAuthenticated , type AuthenticatedRequest } from "./helpers";
 import { db } from "../db";
 import { fiscalPeriods, depreciationAssets, chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences } from "@shared/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 
 const router = Router();
 
-function getOrgId(req: any): string | null {
+function getOrgId(req: AuthenticatedRequest): string | null {
   return req.user?.organizationId || req.session?.organizationId || null;
 }
 

@@ -3,11 +3,11 @@ import { db } from "../db";
 import { eq, and, desc, sql, count } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { insertActivitySchema } from "@shared/schema";
-import { isAuthenticated, getProfileFromSession, snakeToCamel, parsePagination } from "./helpers";
+import { isAuthenticated, getProfileFromSession, snakeToCamel, parsePagination , type AuthenticatedRequest } from "./helpers";
 
 const router = Router();
 
-router.get("/api/activities/stats", isAuthenticated, async (req: any, res: Response) => {
+router.get("/api/activities/stats", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -51,7 +51,7 @@ router.get("/api/activities/stats", isAuthenticated, async (req: any, res: Respo
   }
 });
 
-router.get("/api/activities", isAuthenticated, async (req: any, res: Response) => {
+router.get("/api/activities", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -100,7 +100,7 @@ router.get("/api/activities", isAuthenticated, async (req: any, res: Response) =
   }
 });
 
-router.post("/api/activities", isAuthenticated, async (req: any, res: Response) => {
+router.post("/api/activities", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -124,7 +124,7 @@ router.post("/api/activities", isAuthenticated, async (req: any, res: Response) 
   }
 });
 
-router.patch("/api/activities/:id", isAuthenticated, async (req: any, res: Response) => {
+router.patch("/api/activities/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });
@@ -157,7 +157,7 @@ router.patch("/api/activities/:id", isAuthenticated, async (req: any, res: Respo
   }
 });
 
-router.delete("/api/activities/:id", isAuthenticated, async (req: any, res: Response) => {
+router.delete("/api/activities/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) return res.status(403).json({ error: "Keine Organisation zugeordnet" });

@@ -2,14 +2,14 @@ import { Router, type Request, type Response } from "express";
 import { db } from "../db";
 import { eq, and, or, sql, desc, count, isNull, lt } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 import { storage } from "../storage";
 import OpenAI from "openai";
 import multer from "multer";
 
 const router = Router();
 
-async function requireKiAutopilot(req: any, res: Response): Promise<boolean> {
+async function requireKiAutopilot(req: AuthenticatedRequest, res: Response): Promise<boolean> {
   const profile = await getProfileFromSession(req);
   if (!profile) {
     res.status(401).json({ error: "Nicht authentifiziert" });
@@ -36,7 +36,7 @@ const kiOcrUpload = multer({
   },
 });
 
-router.get("/api/user/ki-autopilot-status", isAuthenticated, async (req: any, res) => {
+router.get("/api/user/ki-autopilot-status", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -54,7 +54,7 @@ router.get("/api/user/ki-autopilot-status", isAuthenticated, async (req: any, re
   }
 });
 
-router.post("/api/ki/chat", isAuthenticated, async (req: any, res) => {
+router.post("/api/ki/chat", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -122,7 +122,7 @@ Antworte hilfreich, präzise und in österreichischem Deutsch.`
   }
 });
 
-router.get("/api/automation/settings", isAuthenticated, async (req: any, res) => {
+router.get("/api/automation/settings", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -138,7 +138,7 @@ router.get("/api/automation/settings", isAuthenticated, async (req: any, res) =>
   }
 });
 
-router.put("/api/automation/settings", isAuthenticated, async (req: any, res) => {
+router.put("/api/automation/settings", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -178,7 +178,7 @@ router.put("/api/automation/settings", isAuthenticated, async (req: any, res) =>
   }
 });
 
-router.get("/api/automation/log", isAuthenticated, async (req: any, res) => {
+router.get("/api/automation/log", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -196,7 +196,7 @@ router.get("/api/automation/log", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/automation/run-invoicing", isAuthenticated, async (req: any, res) => {
+router.post("/api/automation/run-invoicing", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -326,7 +326,7 @@ router.post("/api/automation/run-invoicing", isAuthenticated, async (req: any, r
   }
 });
 
-router.post("/api/automation/run-dunning", isAuthenticated, async (req: any, res) => {
+router.post("/api/automation/run-dunning", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -446,7 +446,7 @@ router.post("/api/ki/invoice-ocr", isAuthenticated, (req: Request, res: Response
     if (err) return res.status(400).json({ error: err.message || 'Upload fehlgeschlagen' });
     next();
   });
-}, async (req: any, res) => {
+}, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -509,7 +509,7 @@ Antworte NUR mit dem JSON-Objekt, ohne zusätzlichen Text.`
   }
 });
 
-router.post("/api/ki/invoice-ocr/confirm", isAuthenticated, async (req: any, res) => {
+router.post("/api/ki/invoice-ocr/confirm", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -548,7 +548,7 @@ router.post("/api/ki/invoice-ocr/confirm", isAuthenticated, async (req: any, res
   }
 });
 
-router.get("/api/ki/insights", isAuthenticated, async (req: any, res) => {
+router.get("/api/ki/insights", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -692,7 +692,7 @@ router.get("/api/ki/insights", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/ki/generate-email", isAuthenticated, async (req: any, res) => {
+router.post("/api/ki/generate-email", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 
@@ -784,7 +784,7 @@ Antworte im JSON-Format: { "subject": "Betreff", "body": "E-Mail-Text" }`
   }
 });
 
-router.post("/api/ki/send-email", isAuthenticated, async (req: any, res) => {
+router.post("/api/ki/send-email", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     if (!(await requireKiAutopilot(req, res))) return;
 

@@ -3,14 +3,14 @@ import type { Request, Response } from "express";
 import { db } from "../db";
 import * as schema from "@shared/schema";
 import { eq, and, or, sql, lt } from "drizzle-orm";
-import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel } from "./helpers";
+import { isAuthenticated, requireRole, getProfileFromSession, snakeToCamel, type AuthenticatedRequest } from "./helpers";
 import { automatedDunningService } from "../services/automatedDunningService";
 import { vpiAutomationService } from "../services/vpiAutomationService";
 import { maintenanceReminderService } from "../services/maintenanceReminderService";
 
 const router = Router();
 
-router.get("/api/dunning-overview", isAuthenticated, async (req: any, res) => {
+router.get("/api/dunning-overview", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -94,7 +94,7 @@ router.get("/api/dunning-overview", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/dunning/send", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/dunning/send", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -156,7 +156,7 @@ router.post("/api/dunning/send", isAuthenticated, requireRole("property_manager"
   }
 });
 
-router.get("/api/dunning/check", isAuthenticated, async (req: any, res) => {
+router.get("/api/dunning/check", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -169,7 +169,7 @@ router.get("/api/dunning/check", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/dunning/process", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/dunning/process", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -187,7 +187,7 @@ router.post("/api/dunning/process", isAuthenticated, requireRole("property_manag
   }
 });
 
-router.get("/api/vpi/values", isAuthenticated, async (req: any, res) => {
+router.get("/api/vpi/values", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const result = await db.execute(sql`
       SELECT id, year, month, value, source, created_at, updated_at
@@ -200,7 +200,7 @@ router.get("/api/vpi/values", isAuthenticated, async (req: any, res) => {
   }
 });
 
-router.post("/api/vpi/values", isAuthenticated, requireRole("admin", "finance"), async (req: any, res) => {
+router.post("/api/vpi/values", isAuthenticated, requireRole("admin", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const { year, month, value, source } = req.body;
     if (!year || !month || value === undefined) {
@@ -219,7 +219,7 @@ router.post("/api/vpi/values", isAuthenticated, requireRole("admin", "finance"),
   }
 });
 
-router.delete("/api/vpi/values/:id", isAuthenticated, requireRole("admin"), async (req: any, res) => {
+router.delete("/api/vpi/values/:id", isAuthenticated, requireRole("admin"), async (req: AuthenticatedRequest, res) => {
   try {
     await db.execute(sql`DELETE FROM vpi_values WHERE id = ${req.params.id}::uuid`);
     res.json({ success: true });
@@ -229,7 +229,7 @@ router.delete("/api/vpi/values/:id", isAuthenticated, requireRole("admin"), asyn
   }
 });
 
-router.get("/api/vpi/check-adjustments", isAuthenticated, async (req: any, res) => {
+router.get("/api/vpi/check-adjustments", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -242,7 +242,7 @@ router.get("/api/vpi/check-adjustments", isAuthenticated, async (req: any, res) 
   }
 });
 
-router.post("/api/vpi/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: any, res) => {
+router.post("/api/vpi/apply", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -263,7 +263,7 @@ router.post("/api/vpi/apply", isAuthenticated, requireRole("property_manager", "
   }
 });
 
-router.get("/api/maintenance/reminders", isAuthenticated, async (req: any, res) => {
+router.get("/api/maintenance/reminders", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
@@ -276,7 +276,7 @@ router.get("/api/maintenance/reminders", isAuthenticated, async (req: any, res) 
   }
 });
 
-router.post("/api/maintenance/send-reminders", isAuthenticated, requireRole("property_manager"), async (req: any, res) => {
+router.post("/api/maintenance/send-reminders", isAuthenticated, requireRole("property_manager"), async (req: AuthenticatedRequest, res) => {
   try {
     const profile = await getProfileFromSession(req);
     if (!profile?.organizationId) {
