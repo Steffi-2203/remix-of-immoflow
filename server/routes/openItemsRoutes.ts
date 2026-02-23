@@ -17,7 +17,7 @@ router.get("/api/open-items", isAuthenticated, async (req: Request, res: Respons
     if (!orgId) return res.status(400).json({ error: "Keine Organisation zugeordnet" });
     const { propertyId, tenantId, from, to } = req.query;
 
-    let conditions: any[] = [ne(monthlyInvoices.status, 'bezahlt'), eq(properties.organizationId, orgId)];
+    const conditions: any[] = [ne(monthlyInvoices.status, 'bezahlt'), eq(properties.organizationId, orgId)];
 
     if (propertyId) {
       conditions.push(eq(units.propertyId, propertyId as string));
@@ -300,7 +300,7 @@ router.get("/api/accounting/export/op-liste", isAuthenticated, async (req: Reque
     if (!orgId) return res.status(400).json({ error: "Keine Organisation zugeordnet" });
     const { propertyId } = req.query;
 
-    let conditions: any[] = [ne(monthlyInvoices.status, 'bezahlt'), eq(properties.organizationId, orgId)];
+    const conditions: any[] = [ne(monthlyInvoices.status, 'bezahlt'), eq(properties.organizationId, orgId)];
 
     if (propertyId) {
       conditions.push(eq(units.propertyId, propertyId as string));

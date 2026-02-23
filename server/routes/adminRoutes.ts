@@ -27,7 +27,7 @@ router.get("/api/insurance/policies", async (req: Request, res: Response) => {
     if (!ctx) return;
     if (!ctx.orgId) return res.status(403).json({ error: 'Keine Organisation zugewiesen' });
     const propertyId = req.query.propertyId as string;
-    let conditions: any[] = [eq(schema.insurancePolicies.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.insurancePolicies.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.insurancePolicies.propertyId, propertyId));
     const where = conditions.length > 1 ? and(...conditions) : conditions[0];
     const data = await db.select().from(schema.insurancePolicies).where(where).orderBy(schema.insurancePolicies.endDate);
@@ -123,7 +123,7 @@ router.get("/api/deadlines", async (req: Request, res: Response) => {
     const propertyId = req.query.propertyId as string;
     const status = req.query.status as string;
     const category = req.query.category as string;
-    let conditions: any[] = [eq(schema.deadlines.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.deadlines.organizationId, ctx.orgId)];
     if (propertyId) conditions.push(eq(schema.deadlines.propertyId, propertyId));
     if (status) conditions.push(eq(schema.deadlines.status, status));
     if (category) conditions.push(eq(schema.deadlines.category, category));
@@ -375,7 +375,7 @@ router.get("/api/audit-logs", async (req: Request, res: Response) => {
     const startDate = req.query.start_date as string;
     const endDate = req.query.end_date as string;
     const limit = parseInt(req.query.limit as string) || 100;
-    let conditions: any[] = [];
+    const conditions: any[] = [];
     if (tableName) conditions.push(eq(schema.auditLogs.tableName, tableName));
     if (action) conditions.push(eq(schema.auditLogs.action, action));
     if (startDate) conditions.push(gte(schema.auditLogs.createdAt, new Date(startDate)));

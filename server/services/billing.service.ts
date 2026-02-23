@@ -230,7 +230,7 @@ export class BillingService {
         }
 
         const allLines: any[] = [];
-        let skippedLines: { type: string; reason: string }[] = [];
+        const skippedLines: { type: string; reason: string }[] = [];
         
         const vacancyTenantOverrides = new Map<string, typeof tenants.$inferSelect>();
         for (const vt of vacancyTenants) {

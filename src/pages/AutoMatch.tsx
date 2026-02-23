@@ -23,7 +23,7 @@ function formatDate(dateStr: string): string {
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
-  let variant: 'default' | 'secondary' | 'destructive' | 'outline' = 'secondary';
+  const variant: 'default' | 'secondary' | 'destructive' | 'outline' = 'secondary';
   let className = '';
   if (confidence > 80) {
     className = 'bg-green-600 dark:bg-green-700 text-white';

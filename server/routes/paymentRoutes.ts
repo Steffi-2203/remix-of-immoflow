@@ -947,7 +947,7 @@ router.post("/api/invoices/dry-run", isAuthenticated, requireRole("property_mana
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr, 10);
 
-    let tenants = await storage.getTenantsByOrganization(profile.organizationId);
+    const tenants = await storage.getTenantsByOrganization(profile.organizationId);
     const activeTenants = tenants.filter(t => t.status === "aktiv");
 
     const filteredTenants = unitIds && Array.isArray(unitIds) && unitIds.length > 0

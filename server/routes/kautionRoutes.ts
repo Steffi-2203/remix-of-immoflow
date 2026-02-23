@@ -46,7 +46,7 @@ router.get("/api/kautionen", async (req: Request, res: Response) => {
     const unitId = req.query.unitId as string;
     const status = req.query.status as string;
 
-    let conditions: any[] = [eq(schema.kautionen.organizationId, ctx.orgId)];
+    const conditions: any[] = [eq(schema.kautionen.organizationId, ctx.orgId)];
     if (tenantId) conditions.push(eq(schema.kautionen.tenantId, tenantId));
     if (unitId) conditions.push(eq(schema.kautionen.unitId, unitId));
     if (status) conditions.push(eq(schema.kautionen.status, status));

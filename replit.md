@@ -72,6 +72,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Service Worker**: v11, network-first for HTML/JS/CSS, cache-first for images/fonts
 - **Email Queue**: BullMQ + Redis (optional, fallback to inline Resend). server/lib/emailQueue.ts with enqueueEmail/enqueueEmails, 5 retries, exponential backoff 2s base, concurrency 3, rate limit 10/s. Worker starts on server boot. Queue stats in /api/admin/health.
 - **Migration Runner**: migrations/runner.ts — transactional up/down with _migrations tracking table. Run: `npx tsx migrations/<name>.ts` (--down for rollback).
+- **E2E Test Infrastructure**: Deterministic test data with fixed UUIDs (prefix `e2e00000-`). CLI tool `scripts/test-db-helper.cjs` supports `--seed`, `--teardown`, `--restore`. SQL fixtures in `fixtures/e2e/seed.sql` and `fixtures/e2e/teardown.sql`. Idempotent seed (ON CONFLICT DO NOTHING).
 
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service with pg_trgm extension and RLS.
