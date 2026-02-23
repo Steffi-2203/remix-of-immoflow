@@ -1,0 +1,97 @@
+name: Nightly Reconciliation
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_DB_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run reconciliation queries
+        id: reconcile
+        run: |
+          echo "Running reconciliation at $(date -u +%Y-%m-%dT%H:%M:%SZ)..."
+          psql "$DATABASE_URL" -f scripts/reconcile_paid_amounts.sql -o /tmp/reconciliation-report.txt 2>&1
+          cat /tmp/reconciliation-report.txt
+
+          VARIANCE_COUNT=$(psql "$DATABASE_URL" -t -c "
+            SELECT COUNT(*)
+            FROM monthly_invoices mi
+            LEFT JOIN (
+              SELECT invoice_id, SUM(amount::numeric) AS alloc_total
+              FROM payment_allocations GROUP BY invoice_id
+            ) pa ON pa.invoice_id = mi.id
+            WHERE ABS(mi.paid_amount - COALESCE(pa.alloc_total, 0)) > 0.01
+          " | tr -d ' ')
+
+          echo "variance_count=${VARIANCE_COUNT}" >> $GITHUB_OUTPUT
+
+          if [ "$VARIANCE_COUNT" -gt "0" ]; then
+            echo "WARNING: ${VARIANCE_COUNT} invoices with variance > 0.01 EUR"
+            echo "has_variance=true" >> $GITHUB_OUTPUT
+          else
+            echo "All invoices reconciled — no variance detected."
+            echo "has_variance=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload reconciliation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-report-${{ github.run_number }}
+          path: /tmp/reconciliation-report.txt
+          retention-days: 90
+
+      - name: Alert on variance (Slack)
+        if: steps.reconcile.outputs.has_variance == 'true' && vars.SLACK_WEBHOOK_URL != ''
+        run: |
+          VARIANCE_COUNT="${{ steps.reconcile.outputs.variance_count }}"
+          curl -sS -X POST "${{ vars.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"text\": \":warning: ImmoFlowMe Reconciliation Alert\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":warning: *Nightly Reconciliation: ${VARIANCE_COUNT} Abweichungen gefunden*\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>\nZeit: $(date -u +%Y-%m-%d %H:%M UTC)\"
+                  }
+                }
+              ]
+            }"
+
+      - name: Alert on variance (PagerDuty)
+        if: steps.reconcile.outputs.has_variance == 'true' && vars.PAGERDUTY_KEY != ''
+        run: |
+          curl -sS -X POST https://events.pagerduty.com/v2/enqueue \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"routing_key\": \"${{ vars.PAGERDUTY_KEY }}\",
+              \"event_action\": \"trigger\",
+              \"payload\": {
+                \"summary\": \"ImmoFlowMe: ${{ steps.reconcile.outputs.variance_count }} invoice reconciliation variances detected\",
+                \"severity\": \"warning\",
+                \"source\": \"github-actions\",
+                \"component\": \"billing-reconciliation\",
+                \"custom_details\": {
+                  \"variance_count\": ${{ steps.reconcile.outputs.variance_count }},
+                  \"run_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                }
+              }
+            }"
+
+      - name: Fail if critical variance
+        if: steps.reconcile.outputs.variance_count > 10
+        run: |
+          echo "CRITICAL: More than 10 invoices with reconciliation variance!"
+          exit 1
