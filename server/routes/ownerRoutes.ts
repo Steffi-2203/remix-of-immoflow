@@ -54,7 +54,7 @@ router.post("/api/owners", isAuthenticated, requireMutationAccess(), async (req:
     };
 
     const [owner] = await db.insert(schema.owners)
-      .values(ownerData)
+      .values(ownerData as any)
       .returning();
 
     res.status(201).json(owner);
@@ -74,7 +74,7 @@ router.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async 
     const { id } = req.params;
 
     const [existingOwner] = await db.select().from(schema.owners)
-      .where(eq(schema.owners.id, id))
+      .where(eq(schema.owners.id, id as string))
       .limit(1);
 
     if (!existingOwner) {
@@ -109,7 +109,7 @@ router.patch("/api/owners/:id", isAuthenticated, requireMutationAccess(), async 
         ...updateData,
         updatedAt: new Date(),
       })
-      .where(eq(schema.owners.id, id))
+      .where(eq(schema.owners.id, id as string))
       .returning();
 
     res.json(updatedOwner);
@@ -129,7 +129,7 @@ router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async
     const { id } = req.params;
 
     const [existingOwner] = await db.select().from(schema.owners)
-      .where(eq(schema.owners.id, id))
+      .where(eq(schema.owners.id, id as string))
       .limit(1);
 
     if (!existingOwner) {
@@ -141,7 +141,7 @@ router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async
     }
 
     const [referencedCount] = await db.select({ count: count() }).from(schema.wegUnitOwners)
-      .where(eq(schema.wegUnitOwners.ownerId, id));
+      .where(eq(schema.wegUnitOwners.ownerId, id as string));
 
     if (referencedCount && referencedCount.count > 0) {
       return res.status(409).json({ 
@@ -151,7 +151,7 @@ router.delete("/api/owners/:id", isAuthenticated, requireMutationAccess(), async
     }
 
     await db.delete(schema.owners)
-      .where(eq(schema.owners.id, id));
+      .where(eq(schema.owners.id, id as string));
 
     res.json({ success: true });
   } catch (error) {
@@ -167,9 +167,10 @@ router.get("/api/owners/:ownerId/report", isAuthenticated, async (req: Authentic
       return res.status(400).json({ error: "No organization" });
     }
     const { period, date } = req.query;
+    const ownerId = req.params.ownerId as string;
     const report = await ownerReportingService.generateOwnerReport(
       profile.organizationId,
-      req.params.ownerId,
+      ownerId,
       period as any || 'month',
       date ? new Date(date as string) : new Date()
     );
@@ -189,9 +190,10 @@ router.get("/api/owners/:ownerId/report/html", isAuthenticated, async (req: Auth
       return res.status(400).json({ error: "No organization" });
     }
     const { period, date } = req.query;
+    const ownerId = req.params.ownerId as string;
     const report = await ownerReportingService.generateOwnerReport(
       profile.organizationId,
-      req.params.ownerId,
+      ownerId,
       period as any || 'month',
       date ? new Date(date as string) : new Date()
     );

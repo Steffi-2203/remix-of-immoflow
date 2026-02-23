@@ -29,7 +29,7 @@ router.post("/api/mieweg-calculate", isAuthenticated, requireRole("property_mana
 
 router.get("/api/budgets", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
-    const orgId = req.session.organizationId;
+    const orgId = req.session.organizationId!;
     const { property_id, year } = req.query;
     
     let query = db.select({
@@ -82,8 +82,8 @@ router.get("/api/budgets", isAuthenticated, async (req: AuthenticatedRequest, re
 
 router.get("/api/budgets/:id", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
-    const orgId = req.session.organizationId;
+    const id = req.params.id as string;
+    const orgId = req.session.organizationId!;
     const result = await db.select()
       .from(schema.propertyBudgets)
       .where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)));
@@ -120,7 +120,7 @@ router.get("/api/budgets/:id", isAuthenticated, async (req: AuthenticatedRequest
 
 router.post("/api/budgets", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
-    const orgId = req.session.organizationId;
+    const orgId = req.session.organizationId!;
     const body = snakeToCamel(req.body);
     
     const propertyId = body.propertyId || body.property_id;
@@ -161,7 +161,7 @@ router.post("/api/budgets", isAuthenticated, requireRole("property_manager", "fi
 
 router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const body = snakeToCamel(req.body);
     
     const updateData: any = { updatedAt: new Date() };
@@ -178,7 +178,7 @@ router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager"
     if (body.position5Amount !== undefined || body.position_5_amount !== undefined) updateData.position5Amount = String(body.position5Amount ?? body.position_5_amount ?? 0);
     if (body.notes !== undefined) updateData.notes = body.notes;
     
-    const orgId = req.session.organizationId;
+    const orgId = req.session.organizationId!;
     const result = await db.update(schema.propertyBudgets)
       .set(updateData)
       .where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)))
@@ -196,8 +196,8 @@ router.patch("/api/budgets/:id", isAuthenticated, requireRole("property_manager"
 
 router.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
-    const orgId = req.session.organizationId;
+    const id = req.params.id as string;
+    const orgId = req.session.organizationId!;
     const { status, approved_by } = req.body;
     
     const updateData: any = { 
@@ -227,8 +227,8 @@ router.patch("/api/budgets/:id/status", isAuthenticated, requireRole("property_m
 
 router.delete("/api/budgets/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = req.params;
-    const orgId = req.session.organizationId;
+    const id = req.params.id as string;
+    const orgId = req.session.organizationId!;
     await db.delete(schema.propertyBudgets).where(and(eq(schema.propertyBudgets.id, id), eq(schema.propertyBudgets.organizationId, orgId)));
     res.json({ success: true });
   } catch (error) {
@@ -251,10 +251,10 @@ router.get("/api/budgets/expenses", isAuthenticated, async (req: AuthenticatedRe
     
     const byPosition: Record<number, number> = {};
     expenses.forEach(e => {
-      const expenseDate = new Date(e.date);
+      const expenseDate = new Date(e.datum);
       if (expenseDate.getFullYear() === parseInt(year as string)) {
         const position = expenseDate.getMonth() + 1;
-        byPosition[position] = (byPosition[position] || 0) + parseFloat(e.amount || '0');
+        byPosition[position] = (byPosition[position] || 0) + parseFloat(e.betrag || '0');
       }
     });
     
@@ -280,9 +280,9 @@ router.get("/api/budgets/expenses-all", isAuthenticated, async (req: Authenticat
     const byPosition: Record<number, number> = {};
     let total = 0;
     expenses.forEach(e => {
-      const expenseDate = new Date(e.date);
+      const expenseDate = new Date(e.datum);
       if (expenseDate.getFullYear() === parseInt(year as string)) {
-        total += parseFloat(e.amount || '0');
+        total += parseFloat(e.betrag || '0');
       }
     });
     

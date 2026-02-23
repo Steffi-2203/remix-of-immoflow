@@ -325,6 +325,8 @@ export const monthlyInvoices = pgTable("monthly_invoices", {
   gesamtbetrag: numeric("gesamtbetrag", { precision: 10, scale: 2 }).default('0'),
   status: invoiceStatusEnum("status").default('offen'),
   faelligAm: date("faellig_am"),
+  paidAmount: numeric("paid_amount", { precision: 10, scale: 2 }).default('0'),
+  mahnstufe: integer("mahnstufe").default(0),
   pdfUrl: text("pdf_url"),
   isVacancy: boolean("is_vacancy").default(false),
   wegBudgetPlanId: uuid("weg_budget_plan_id"),

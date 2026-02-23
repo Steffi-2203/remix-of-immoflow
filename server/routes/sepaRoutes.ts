@@ -55,7 +55,7 @@ router.post("/api/sepa/credit-transfer", isAuthenticated, requireRole("property_
 
 router.get("/api/settlements/:id/pdf", isAuthenticated, async (req: AuthenticatedRequest, res) => {
   try {
-    const data = await settlementPdfService.getSettlementData(req.params.id);
+    const data = await settlementPdfService.getSettlementData(req.params.id as string);
     if (!data) {
       return res.status(404).json({ error: "Settlement not found" });
     }
