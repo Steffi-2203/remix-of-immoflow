@@ -34,7 +34,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Subscription & Access Control**: Stripe integration for subscriptions, five distinct user roles, and demo access.
 - **Self-Service Portals**: Secure portals for tenants and owners.
 - **Automated Workflows**: Guided workflows for settlements, dunning, VPI adjustment, tenant move-in. Rules engine with dry-run capability for various trigger types.
-- **Financial Automation**: AI-based transaction matching for bank reconciliation, automatic bank synchronization with open invoices.
+- **Financial Automation**: AI-based transaction matching for bank reconciliation, automatic bank synchronization with open invoices. SoT: `payment_allocations` is the ledger (source of truth); `paid_amount` on `monthly_invoices` is a derived cache synced via `syncInvoicePaidAmount()` in `paymentSplittingService.ts`. All payment write paths (`paymentService.allocatePayment`, `splitPaymentByPriority`, `allocatePaymentToInvoice`) create `payment_allocations` first, then derive `paid_amount` from `SUM(applied_amount)`.
 - **Document Management**: DMS with version history, tag system, full-text search. MRG-compliant lease contract generator.
 - **Electronic Signatures**: eIDAS-conformant system with canvas signature pad, SHA-256 hashing, audit trail, public verification.
 - **KI-Autopilot Add-on**: Premium AI features including chat-based copilot, automated invoicing/dunning, AI invoice recognition, anomaly detection, and AI email drafting.

@@ -14,6 +14,7 @@ import { eq, and, gte, lte, desc, or, inArray, sql } from "drizzle-orm";
 import { roundMoney } from "@shared/utils";
 import { optimisticUpdate } from "../lib/optimisticLock";
 import { verifyTenantOwnership } from "../lib/ownershipCheck";
+import { syncInvoicePaidAmount } from "./paymentSplittingService";
 
 interface DunningLevel {
   level: 1 | 2 | 3;
@@ -94,42 +95,12 @@ export class PaymentService {
         remaining = roundMoney(remaining - apply);
         appliedTotal = roundMoney(appliedTotal + apply);
 
-        const invId = inv.id as string;
-        const selectSql = `SELECT id, gesamtbetrag, COALESCE(paid_amount,0) AS paid_amount, version FROM monthly_invoices WHERE id = $1`;
-        const updateSqlBuilder = (_newValues: any, oldVersion: number) => {
-          const status = newPaid >= total ? "bezahlt" : newPaid > 0 ? "teilbezahlt" : "offen";
-          return {
-            sql: `UPDATE monthly_invoices SET paid_amount = $1, status = $2, version = $3, updated_at = now() WHERE id = $4 AND version = $5`,
-            params: [newPaid, status, oldVersion + 1, invId, oldVersion]
-          };
-        };
-
-        const optRes = await optimisticUpdate({
-          tableName: "monthly_invoices",
-          id: inv.id as string,
-          selectSql,
-          updateSqlBuilder,
-          maxRetries: 5,
-          delayMs: 40,
-          tx
-        });
-
-        if (!optRes.success) {
-          await tx.execute(sql`
-            UPDATE monthly_invoices
-            SET paid_amount = ${newPaid},
-                status = CASE WHEN ${newPaid} >= ${total} THEN 'bezahlt' WHEN ${newPaid} > 0 THEN 'teilbezahlt' ELSE status END,
-                version = COALESCE(version, 1) + 1,
-                updated_at = now()
-            WHERE id = ${inv.id}
-          `);
-        }
-
-        // Record payment allocation in payment_allocations table
         await tx.execute(sql`
           INSERT INTO payment_allocations (id, payment_id, invoice_id, applied_amount, allocation_type, created_at)
           VALUES (gen_random_uuid(), ${paymentId}, ${inv.id}, ${apply}, 'auto', now())
         `);
+
+        await syncInvoicePaidAmount(inv.id as string, tx);
 
         await tx.execute(sql`
           INSERT INTO audit_logs (user_id, table_name, record_id, action, new_data, created_at)

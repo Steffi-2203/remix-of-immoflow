@@ -3,6 +3,34 @@ import { eq, and, sql, asc } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { roundMoney } from "@shared/utils";
 
+export async function syncInvoicePaidAmount(invoiceId: string, tx?: any): Promise<{ paidAmount: number; status: string }> {
+  const executor = tx || db;
+
+  const result = await executor.execute(sql`
+    SELECT COALESCE(SUM(applied_amount::numeric), 0) AS total_allocated
+    FROM payment_allocations
+    WHERE invoice_id = ${invoiceId}
+  `);
+  const totalAllocated = roundMoney(Number(((result.rows || result)[0] as any).total_allocated || 0));
+
+  const invoiceResult = await executor.execute(sql`
+    SELECT gesamtbetrag FROM monthly_invoices WHERE id = ${invoiceId}
+  `);
+  const gesamtbetrag = roundMoney(Number(((invoiceResult.rows || invoiceResult)[0] as any)?.gesamtbetrag || 0));
+
+  const status = totalAllocated >= gesamtbetrag ? "bezahlt" : totalAllocated > 0 ? "teilbezahlt" : "offen";
+
+  await executor.execute(sql`
+    UPDATE monthly_invoices
+    SET paid_amount = ${totalAllocated},
+        status = ${status},
+        updated_at = NOW()
+    WHERE id = ${invoiceId}
+  `);
+
+  return { paidAmount: totalAllocated, status };
+}
+
 interface ComponentAllocation {
   miete: number;
   bk: number;
@@ -40,10 +68,21 @@ interface AutoMatchResult {
 export async function splitPaymentByPriority(
   paymentAmount: number,
   tenantId: string,
-  orgId: string
+  orgId: string,
+  paymentId?: string
 ): Promise<SplitResult> {
   let remaining = roundMoney(paymentAmount);
   const allocations: InvoiceAllocation[] = [];
+
+  let effectivePaymentId = paymentId;
+  if (!effectivePaymentId) {
+    const payResult = await db.execute(sql`
+      INSERT INTO payments (tenant_id, betrag, buchungs_datum, payment_type, verwendungszweck, source)
+      VALUES (${tenantId}, ${remaining}, now()::date, 'ueberweisung', 'Automatische Zuordnung (Split)', 'auto')
+      RETURNING id
+    `);
+    effectivePaymentId = ((payResult.rows || payResult)[0] as any).id;
+  }
 
   const invoices = await db.execute(sql`
     SELECT mi.*
@@ -114,23 +153,19 @@ export async function splitPaymentByPriority(
     }
 
     if (invoiceAllocated > 0) {
-      const newTotalPaid = roundMoney(alreadyPaid + invoiceAllocated);
-      const newStatus = newTotalPaid >= total ? "bezahlt" : "teilbezahlt";
-
       await db.execute(sql`
-        UPDATE monthly_invoices
-        SET status = ${newStatus},
-            paid_amount = ${newTotalPaid},
-            updated_at = NOW()
-        WHERE id = ${inv.id}
+        INSERT INTO payment_allocations (id, payment_id, invoice_id, applied_amount, allocation_type, created_at)
+        VALUES (gen_random_uuid(), ${effectivePaymentId}, ${inv.id}, ${invoiceAllocated}, 'auto', now())
       `);
+
+      const synced = await syncInvoicePaidAmount(inv.id);
 
       allocations.push({
         invoiceId: inv.id,
         allocatedAmount: invoiceAllocated,
         components,
-        remaining: roundMoney(total - newTotalPaid),
-        status: newStatus,
+        remaining: roundMoney(total - synced.paidAmount),
+        status: synced.status,
       });
     }
   }
@@ -181,34 +216,7 @@ export async function allocatePaymentToInvoice(
     })
     .returning();
 
-  const totalAllocResult = await db.execute(sql`
-    SELECT COALESCE(SUM(applied_amount::numeric), 0) AS total_allocated
-    FROM payment_allocations
-    WHERE invoice_id = ${invoiceId}
-  `);
-
-  const totalAllocated = roundMoney(
-    Number(((totalAllocResult.rows || totalAllocResult)[0] as any).total_allocated || 0)
-  );
-
-  const [invoice] = await db
-    .select()
-    .from(schema.monthlyInvoices)
-    .where(eq(schema.monthlyInvoices.id, invoiceId))
-    .limit(1);
-
-  if (invoice) {
-    const total = roundMoney(Number(invoice.gesamtbetrag || 0));
-    const newStatus = totalAllocated >= total ? "bezahlt" : totalAllocated > 0 ? "teilbezahlt" : "offen";
-
-    await db.execute(sql`
-      UPDATE monthly_invoices
-      SET status = ${newStatus},
-          paid_amount = ${totalAllocated},
-          updated_at = NOW()
-      WHERE id = ${invoiceId}
-    `);
-  }
+  await syncInvoicePaidAmount(invoiceId);
 
   return allocation;
 }
