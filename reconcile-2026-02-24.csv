@@ -1,0 +1,76 @@
+section,total_invoices,invoices_with_payment,invoices_with_dunning,total_invoiced,total_paid,total_outstanding
+summary,998,499,0,570050.43,307914.03,262136.40
+section,invoice_id,schema_paid,allocation_total,variance
+variance_check,0f3bcf9c-7150-4a47-9ccd-317d34a22325,2207.74,0,2207.74
+variance_check,7a671bb5-1d34-4aff-9ab3-96f9d2edff8d,2089.37,0,2089.37
+variance_check,48196920-eeb7-46ec-9d43-92697705ad5a,2089.37,0,2089.37
+variance_check,4388be69-9c69-4381-9efa-8986d81b742b,2089.37,0,2089.37
+variance_check,8544a892-a77b-47bc-a221-9d386e0dd42c,2089.37,0,2089.37
+variance_check,6b69debe-884f-41c3-bada-282e6202e75f,2089.37,0,2089.37
+variance_check,b477a49e-5ff5-4c72-896c-6431c7f952ba,2089.37,0,2089.37
+variance_check,9da1e249-1142-4e96-a0e3-1c42fa722025,2089.37,0,2089.37
+variance_check,62f6e87d-679c-46ea-945a-fa4ba0eec5ae,2089.37,0,2089.37
+variance_check,e58c318b-2732-436a-884f-6d8659510be8,2089.37,0,2089.37
+variance_check,7fd3022a-77e8-4c21-a84b-307511d9186a,1640.77,0,1640.77
+variance_check,a8ea0555-aff9-4b78-9c68-f29234f122da,1532.70,0,1532.70
+variance_check,f49851a1-9505-473e-a8ae-9d37d2cd85b0,1532.70,0,1532.70
+variance_check,ac6c148f-5058-4b5b-9a74-4b218ec36557,1532.70,0,1532.70
+variance_check,fe2fca91-a6c8-46bc-9f21-4a6ff644c861,1532.70,0,1532.70
+variance_check,254e4bd4-6fc0-4795-98db-4eec56038e6a,1532.70,0,1532.70
+variance_check,13d98f15-f776-49fc-9297-cb456ba30f23,1532.70,0,1532.70
+variance_check,9453c59a-5ccc-431e-a87a-df9dc21294ea,1532.70,0,1532.70
+variance_check,1762c557-a674-42c7-888b-665494d7c303,1532.70,0,1532.70
+variance_check,b97fcd7e-21ed-44ab-a405-59866ad572f1,1532.70,0,1532.70
+variance_check,edf5d8c4-ce07-461d-9e9d-edd10181ca0f,1532.70,0,1532.70
+variance_check,17b7a74b-190d-4379-869c-501aa659c131,1532.70,0,1532.70
+variance_check,d2020795-2361-4535-9f29-8a4aee49b94b,1105.65,0,1105.65
+variance_check,a64d9cb9-8b87-4e44-8b02-08f627454367,1104.80,0,1104.80
+variance_check,c8006a6f-667f-4c2e-972b-1adbaf4b8dc1,1104.80,0,1104.80
+variance_check,b2bc1d48-e2c6-4b6d-b874-d83efc454d9d,1104.80,0,1104.80
+variance_check,9336ef5e-05b5-48b3-9ffb-f4c6f38de144,1104.80,0,1104.80
+variance_check,59a0fe82-7f52-4099-a79b-3837b6306db7,1104.80,0,1104.80
+variance_check,3feca953-12d8-4e8a-953b-57a199fc5015,1104.80,0,1104.80
+variance_check,e8f0f173-6e9c-431c-bcfc-3c93e6b817c7,1104.80,0,1104.80
+variance_check,9c5cd45f-33bd-4482-a179-210e477a4fa0,1104.80,0,1104.80
+variance_check,36f4ef83-2bc6-40af-a48c-1cf258f87a6d,1104.80,0,1104.80
+variance_check,1d4ffa47-f19f-486a-a364-5507d8127153,1104.80,0,1104.80
+variance_check,ef1ce8e0-14ab-4694-a496-1d6f6e76a193,950.67,0,950.67
+variance_check,ac1ca612-2024-4cd6-84f2-7c2b90cb4b43,950.67,0,950.67
+variance_check,e718ff67-fa18-4be6-b2a9-0a1a21cfdcbd,950.67,0,950.67
+variance_check,065596cd-49b2-4397-850d-e0b0c0ccdfff,950.67,0,950.67
+variance_check,5e62d222-2346-4561-8cee-31de5e693449,950.67,0,950.67
+variance_check,74f31bfb-ebec-4b96-ab33-3a16f6337306,950.67,0,950.67
+variance_check,1f795d81-923c-4009-bd4e-0fcdc9c05a69,950.67,0,950.67
+variance_check,69be4dc9-43e8-46d3-94d4-3085b59b30d5,950.67,0,950.67
+variance_check,a96339dd-95f5-4984-b70c-dc443c33dba5,950.67,0,950.67
+variance_check,0fd327dd-3f73-4fcf-9fac-85736fb5db03,950.67,0,950.67
+variance_check,2fb53179-a9a4-4b89-b69e-1e17c74d9a8c,943.00,0,943.00
+variance_check,1d840a02-a045-4a6b-88a7-e03a72e6aaa4,943.00,0,943.00
+variance_check,65c87278-c345-4885-9555-60ead10553b6,943.00,0,943.00
+variance_check,95b95171-1467-4670-93c2-416360bf90c3,943.00,0,943.00
+variance_check,d874a80d-035b-4ebc-b66a-b29defd495c8,943.00,0,943.00
+variance_check,c8a2142c-b01c-4b00-b9cc-1399947e14e6,920.62,0,920.62
+variance_check,5a69ce5c-f221-4cfa-8914-cdfe357b7524,920.62,0,920.62
+section,invoice_id,status,paid_amount,gesamtbetrag,check_result
+status_consistency,0aee521c-240b-4e96-88b5-da5a37c35eb3,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,16b22287-bfc9-43ef-8a69-4008ea3a9e3e,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,1b4af1c0-8951-4cca-aa37-8ea077e432f6,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,21577126-7e49-4d10-98e4-558912b61d6b,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,2c027a43-61b1-403e-93e4-9a52df878827,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,40328069-9633-4b4e-aa72-1939314e849b,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,50ce8a98-39d3-4bcc-8972-7e67caf64a7a,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,55e4c471-f917-471c-bf32-5e153f7ce5c2,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,5be73276-6f58-4b74-a4df-e2e434b02724,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,64e5a640-578d-428a-abd0-f8f69bbc45ab,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,654f8c70-8db6-4ac2-b959-953e24cf2cbe,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,67e5aacd-cb03-4c57-9a81-1fdd0b7b2692,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,6a0bd9a5-03ad-4705-819d-c6a795a676c1,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,77a7c78b-0c1b-4b37-94ef-4526652a7abd,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,89ae2f75-2f14-44e3-972b-47e81c5acc08,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,8b19a317-d76a-4f9c-9c4c-d79e91072330,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,9b6a1d91-6876-4a29-a01e-001cffee8fa0,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,ccd3da70-0f2f-4ab9-af5c-477cdcf72ed0,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,da845bab-e9b3-48af-a113-308e8984b7cf,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+status_consistency,f97058f7-3982-449f-98d3-971c57b58401,bezahlt,0.00,0.00,MISMATCH: bezahlt but no payment
+section,mahnstufe,count,outstanding_amount
+mahnstufe_distribution,0,481,262136.40
