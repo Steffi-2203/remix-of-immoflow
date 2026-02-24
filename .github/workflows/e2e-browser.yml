@@ -36,10 +36,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check optional secrets
+      - name: Validate required secrets
         run: |
           if [ -z "${{ secrets.TEST_STRIPE_WEBHOOK_SECRET }}" ]; then
-            echo "::warning::TEST_STRIPE_WEBHOOK_SECRET is not set — signed webhook tests will be skipped"
+            echo "::error::TEST_STRIPE_WEBHOOK_SECRET is not set — signed webhook tests cannot run"
+            echo "Please set TEST_STRIPE_WEBHOOK_SECRET in GitHub repository secrets (Settings → Secrets → Actions)"
+            exit 1
           fi
 
       - name: Setup Node

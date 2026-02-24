@@ -184,6 +184,18 @@ async function main() {
   console.log(`Leases: ${s.leases} | Payments: ${s.payments} | Banks: ${s.bank_accounts}`);
   console.log(`WEG Assemblies: ${s.assemblies} | Audit: ${s.audit_entries}`);
   console.log(`Invoices: ${s.paid_invoices} bezahlt, ${s.open_invoices} offen`);
+
+  const orphanCheck = await db.execute(sql`
+    SELECT COUNT(*) AS cnt FROM payments p
+    LEFT JOIN payment_allocations pa ON pa.payment_id = p.id
+    WHERE p.source = 'seed' AND p.invoice_id IS NOT NULL AND pa.id IS NULL
+  `);
+  const orphans = parseInt((orphanCheck.rows[0] as any).cnt, 10);
+  if (orphans > 0) {
+    console.warn(`\nWARNING: ${orphans} seed payments with invoice_id have no payment_allocation!`);
+  } else {
+    console.log(`\nVerification: All seed payments with invoice_id have matching allocations`);
+  }
 }
 
 main().then(() => { console.log("\nDone."); process.exit(0); }).catch(e => { console.error(e); process.exit(1); });

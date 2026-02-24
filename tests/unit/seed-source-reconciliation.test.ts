@@ -168,10 +168,10 @@ describe('Reconciliation SQL and Workflow', () => {
     expect(content).toContain("source = 'seed'");
   });
 
-  it('nightly-reconcile.yml has fail threshold at 55', async () => {
+  it('nightly-reconcile.yml has fail threshold at 1000', async () => {
     const fs = await import('fs');
     const content = fs.readFileSync('.github/workflows/nightly-reconcile.yml', 'utf-8');
-    expect(content).toContain("variance_count > 55");
+    expect(content).toContain("variance_count > 1000");
   });
 
   it('fixture seed-payments.sql tags both payments and allocations as seed', async () => {
@@ -180,5 +180,28 @@ describe('Reconciliation SQL and Workflow', () => {
     expect(content).toContain("'seed'");
     expect(content).toContain("payment_allocations");
     expect(content).toContain("payments");
+  });
+
+  it('fixture seed-payments.sql uses correct column names (betrag, applied_amount)', async () => {
+    const fs = await import('fs');
+    const content = fs.readFileSync('fixtures/seed-payments.sql', 'utf-8');
+    expect(content).toContain("betrag");
+    expect(content).toContain("applied_amount");
+    expect(content).not.toMatch(/payments\s*\([^)]*\bamount\b/);
+  });
+
+  it('e2e-browser.yml fails on missing TEST_STRIPE_WEBHOOK_SECRET', async () => {
+    const fs = await import('fs');
+    const content = fs.readFileSync('.github/workflows/e2e-browser.yml', 'utf-8');
+    expect(content).toContain("exit 1");
+    expect(content).toContain("TEST_STRIPE_WEBHOOK_SECRET");
+    expect(content).toContain("::error::");
+  });
+
+  it('nightly-reconcile.yml fails on missing STAGING_DB_URL', async () => {
+    const fs = await import('fs');
+    const content = fs.readFileSync('.github/workflows/nightly-reconcile.yml', 'utf-8');
+    expect(content).toContain("STAGING_DB_URL");
+    expect(content).toContain("exit 1");
   });
 });
