@@ -374,6 +374,7 @@ export const payments = pgTable("payments", {
   verwendungszweck: text("verwendungszweck"),
   transactionId: uuid("transaction_id"),
   notizen: text("notizen"),
+  source: text("source").default("manual"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
@@ -384,6 +385,7 @@ export const paymentAllocations = pgTable("payment_allocations", {
   invoiceId: uuid("invoice_id").references(() => monthlyInvoices.id).notNull(),
   appliedAmount: numeric("applied_amount", { precision: 10, scale: 2 }).notNull(),
   allocationType: text("allocation_type").default('miete'),
+  source: text("source").default("manual"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

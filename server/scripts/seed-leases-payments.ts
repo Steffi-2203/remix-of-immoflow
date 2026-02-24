@@ -67,11 +67,12 @@ async function seedLeasesAndPayments() {
 
     try {
       const payResult = await db.execute(sql`
-        INSERT INTO payments (tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck)
+        INSERT INTO payments (tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck, source)
         VALUES (
           ${inv.tenant_id}, ${inv.id}, ${inv.gesamtbetrag}, ${payDateStr},
           ${inv.iban ? 'ueberweisung' : 'bar'},
-          ${'Miete ' + inv.month + '/' + inv.year + ' ' + inv.first_name + ' ' + inv.last_name}
+          ${'Miete ' + inv.month + '/' + inv.year + ' ' + inv.first_name + ' ' + inv.last_name},
+          'seed'
         )
         RETURNING id
       `);
@@ -80,8 +81,8 @@ async function seedLeasesAndPayments() {
       const paymentId = (payResult.rows?.[0] as any)?.id;
       if (paymentId) {
         await db.execute(sql`
-          INSERT INTO payment_allocations (payment_id, invoice_id, applied_amount, allocation_type)
-          VALUES (${paymentId}, ${inv.id}, ${inv.gesamtbetrag}, 'auto')
+          INSERT INTO payment_allocations (payment_id, invoice_id, applied_amount, allocation_type, source)
+          VALUES (${paymentId}, ${inv.id}, ${inv.gesamtbetrag}, 'auto', 'seed')
         `);
       }
 
