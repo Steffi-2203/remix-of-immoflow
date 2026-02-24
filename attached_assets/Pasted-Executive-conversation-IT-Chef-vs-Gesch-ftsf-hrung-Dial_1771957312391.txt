@@ -1,0 +1,37 @@
+Executive conversation — IT‑Chef vs. Geschäftsführung (Dialog, fokussiert)
+IT‑Chef: Die Codebasis ist technisch sauber: TypeScript‑Strict, Playwright‑E2E, Drizzle‑Schema, CI‑Pipelines. Aber aus Sicht eines Immobilienunternehmens zählen drei Dinge zuerst: finanzielle Integrität, Betriebs‑Sicherheit und Auditierbarkeit. Aktuell gibt es 441 Varianzen zwischen paid_amount und payment_allocations (Seed‑Artefakte), fehlende CI‑Secrets und übersprungene Signatur‑Tests. Das sind keine kosmetischen Mängel — das sind Blocker für Buchhaltung und Compliance.
+
+Geschäftsführung: Wenn wir das Produkt kaufen, will ich, dass die Buchhaltung verlässliche Monatsabschlüsse aus dem System ziehen kann und dass wir bei einer Prüfung keine Überraschungen haben. Reicht es, die Seed‑Sachen zu fixen, oder ist das ein größeres Architekturproblem?
+
+IT‑Chef: Kurzfristig beheben wir die Seed‑Artefakte und erzwingen Secrets in CI — das reduziert False‑Positives sofort. Mittelfristig müssen wir eine SoT‑Entscheidung treffen: Entweder payment_allocations als Ledger (empfohlen) und paid_amount nur als abgeleiteter Cache, oder umgekehrt. Ohne SoT‑Konsolidierung bleibt das System riskant für Enterprise‑Einsatz.
+
+Detaillierte Bewertung nach Dimensionen
+1. Finanzielle Integrität (Buchhaltung)
+Problem: Duale Zahlungspfade → inkonsistente Salden; Nightly‑Reconcile liefert falsche Alarme.
+
+Konsequenz für Buchhaltung: Monats‑/Jahresabschlüsse aus dem System sind nicht audit‑sicher; externe Prüfung riskiert Beanstandungen.
+
+Technische Indikatoren: 441 Varianzen (Seed), 20 Nullrechnungen (paid_amount=0 & total=0), 481 offene Rechnungen ohne Mahnstufe.
+
+Erforderlich: SoT‑Festlegung; idempotenter Backfill; Reconciliation mit Finance‑Sign‑off; Audit‑Trail für jede Zahlung.
+
+2. Sicherheit & Test‑Enforcement
+Problem: TEST_STRIPE_WEBHOOK_SECRET fehlt → Signaturtests skipped → CI‑False‑Green. STAGING_DB_URL fehlt → Nightly nicht lauffähig.
+
+Konsequenz: Sicherheits‑Kontrollen werden nicht validiert; Produktions‑Webhook‑Pfad nicht verifiziert.
+
+Erforderlich: Secrets in GitHub (geschützt), CI‑Gate, signed webhook tests mandatory, secrets‑presence check in workflows.
+
+3. Operative Reife & Observability
+Problem: Nightly job konfiguriert, aber Threshold zu niedrig; artifacts/Logs nicht immer zugänglich; kein automatisierter DR‑Test nachgewiesen.
+
+Konsequenz: Alert‑Fatigue oder verpasste echte Incidents; kein getesteter Restore‑Prozess.
+
+Erforderlich: Artefakt‑Retention, SLOs für Zahlungs‑Jobs, DR‑Restore‑Tests, 72‑h Post‑Cutover Monitoring.
+
+4. Architektur & Codequalität
+Positiv: tsc --noEmit = 0 Fehler, Playwright vorhanden, migrations transactional.
+
+Risiken: Direkte Writes auf paid_amount an mehreren Stellen; fehlende single source of truth; LSP‑Noise (entwickler‑Ergonomie).
+
+Erforderlich: Code‑Audit (grep nach paid_amount writes), service‑layer paymentService als einzige Schreibstelle, CI‑check für regressions.
