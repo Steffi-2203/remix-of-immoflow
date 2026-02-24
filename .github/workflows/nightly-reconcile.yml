@@ -29,16 +29,21 @@ jobs:
             LEFT JOIN (
               SELECT invoice_id, SUM(applied_amount::numeric) AS alloc_total
               FROM payment_allocations
-              WHERE COALESCE(source, 'manual') != 'seed'
               GROUP BY invoice_id
             ) pa ON pa.invoice_id = mi.id
             WHERE ABS(mi.paid_amount - COALESCE(pa.alloc_total, 0)) > 0.01
           " | tr -d ' ')
 
+          SEED_COUNT=$(psql "$DATABASE_URL" -t -c "
+            SELECT COUNT(*) FROM payments WHERE source = 'seed'
+          " | tr -d ' ')
+
           echo "variance_count=${VARIANCE_COUNT}" >> $GITHUB_OUTPUT
+          echo "seed_count=${SEED_COUNT}" >> $GITHUB_OUTPUT
 
           if [ "$VARIANCE_COUNT" -gt "0" ]; then
-            echo "WARNING: ${VARIANCE_COUNT} invoices with variance > 0.01 EUR (excluding seed data)"
+            echo "WARNING: ${VARIANCE_COUNT} invoices with paid_amount/allocation variance > 0.01 EUR"
+            echo "Seed-tagged payments: ${SEED_COUNT}"
             echo "has_variance=true" >> $GITHUB_OUTPUT
           else
             echo "All invoices reconciled — no variance detected."
@@ -57,6 +62,7 @@ jobs:
         if: steps.reconcile.outputs.has_variance == 'true' && vars.SLACK_WEBHOOK_URL != ''
         run: |
           VARIANCE_COUNT="${{ steps.reconcile.outputs.variance_count }}"
+          SEED_COUNT="${{ steps.reconcile.outputs.seed_count }}"
           curl -sS -X POST "${{ vars.SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
             -d "{
@@ -66,7 +72,7 @@ jobs:
                   \"type\": \"section\",
                   \"text\": {
                     \"type\": \"mrkdwn\",
-                    \"text\": \":warning: *Nightly Reconciliation: ${VARIANCE_COUNT} Abweichungen gefunden*\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>\nZeit: $(date -u +%Y-%m-%d %H:%M UTC)\"
+                    \"text\": \":warning: *Nightly Reconciliation: ${VARIANCE_COUNT} Abweichungen gefunden*\nSeed-Payments: ${SEED_COUNT}\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>\nZeit: $(date -u +%Y-%m-%d %H:%M UTC)\"
                   }
                 }
               ]
@@ -81,12 +87,13 @@ jobs:
               \"routing_key\": \"${{ vars.PAGERDUTY_KEY }}\",
               \"event_action\": \"trigger\",
               \"payload\": {
-                \"summary\": \"ImmoFlowMe: ${{ steps.reconcile.outputs.variance_count }} invoice reconciliation variances detected (excl. seed)\",
+                \"summary\": \"ImmoFlowMe: ${{ steps.reconcile.outputs.variance_count }} invoice reconciliation variances detected\",
                 \"severity\": \"warning\",
                 \"source\": \"github-actions\",
                 \"component\": \"billing-reconciliation\",
                 \"custom_details\": {
                   \"variance_count\": ${{ steps.reconcile.outputs.variance_count }},
+                  \"seed_payments\": ${{ steps.reconcile.outputs.seed_count }},
                   \"run_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
                 }
               }
@@ -95,6 +102,7 @@ jobs:
       - name: Fail if critical variance
         if: steps.reconcile.outputs.variance_count > 55
         run: |
-          echo "CRITICAL: More than 55 invoices with reconciliation variance (excluding seed data)!"
-          echo "If seed-tagged rows are excluded and you still see >55 variances, investigate immediately."
+          echo "CRITICAL: More than 55 invoices with reconciliation variance!"
+          echo "Seed-tagged payments in DB: ${{ steps.reconcile.outputs.seed_count }}"
+          echo "Investigate immediately — paid_amount does not match payment_allocations sum."
           exit 1
