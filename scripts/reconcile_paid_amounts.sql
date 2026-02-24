@@ -18,6 +18,7 @@ FROM monthly_invoices mi
 LEFT JOIN (
   SELECT invoice_id, SUM(applied_amount::numeric) AS alloc_total
   FROM payment_allocations
+  WHERE COALESCE(source, 'manual') != 'seed'
   GROUP BY invoice_id
 ) pa_sum ON pa_sum.invoice_id = mi.id
 WHERE ABS(mi.paid_amount - COALESCE(pa_sum.alloc_total, 0)) > 0.01
