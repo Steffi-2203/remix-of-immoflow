@@ -58,11 +58,19 @@ async function seedPayments() {
 
     const payDate = new Date(inv.year, inv.month - 1, Math.floor(Math.random() * 5) + 1);
     try {
-      await db.execute(sql`
+      const payResult = await db.execute(sql`
         INSERT INTO payments (tenant_id, invoice_id, betrag, buchungs_datum, payment_type, verwendungszweck)
         VALUES (${inv.tenant_id}, ${inv.id}, ${inv.gesamtbetrag}, ${payDate.toISOString().split('T')[0]},
           ${inv.iban ? 'ueberweisung' : 'bar'}, ${'Miete ' + inv.month + '/' + inv.year + ' ' + inv.first_name + ' ' + inv.last_name})
+        RETURNING id
       `);
+      const paymentId = (payResult.rows?.[0] as any)?.id;
+      if (paymentId) {
+        await db.execute(sql`
+          INSERT INTO payment_allocations (payment_id, invoice_id, applied_amount, allocation_type)
+          VALUES (${paymentId}, ${inv.id}, ${inv.gesamtbetrag}, 'auto')
+        `);
+      }
       await db.execute(sql`UPDATE monthly_invoices SET status = 'bezahlt', paid_amount = ${inv.gesamtbetrag} WHERE id = ${inv.id}`);
       paymentsMade++;
     } catch (e: any) {

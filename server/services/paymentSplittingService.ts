@@ -57,7 +57,7 @@ export async function splitPaymentByPriority(
     ORDER BY mi.faellig_am ASC NULLS LAST, mi.year ASC, mi.month ASC
   `);
 
-  const invoiceRows: any[] = invoices.rows || invoices;
+  const invoiceRows: any[] = (invoices.rows || invoices) as any[];
 
   for (const inv of invoiceRows) {
     if (remaining <= 0) break;
@@ -156,7 +156,7 @@ export async function allocatePaymentToInvoice(
       JOIN properties pr ON pr.id = p.property_id
       WHERE p.id = ${paymentId} AND pr.organization_id = ${orgId}
     `);
-    if (!(paymentCheck.rows || paymentCheck).length) {
+    if (!((paymentCheck.rows || paymentCheck) as any[]).length) {
       throw new Error("Zahlung nicht gefunden oder kein Zugriff");
     }
 
@@ -166,7 +166,7 @@ export async function allocatePaymentToInvoice(
       JOIN properties pr ON pr.id = u.property_id
       WHERE mi.id = ${invoiceId} AND pr.organization_id = ${orgId}
     `);
-    if (!(invoiceCheck.rows || invoiceCheck).length) {
+    if (!((invoiceCheck.rows || invoiceCheck) as any[]).length) {
       throw new Error("Rechnung nicht gefunden oder kein Zugriff");
     }
   }
@@ -244,7 +244,7 @@ export async function getUnallocatedPayments(
     ORDER BY p.buchungs_datum DESC
   `);
 
-  return result.rows || result;
+  return (result.rows || result) as any[];
 }
 
 export async function autoMatchPayments(orgId: string): Promise<AutoMatchResult> {
@@ -275,7 +275,7 @@ export async function autoMatchPayments(orgId: string): Promise<AutoMatchResult>
       ORDER BY mi.year ASC, mi.month ASC
     `);
 
-    const openInvoices: any[] = openInvoicesResult.rows || openInvoicesResult;
+    const openInvoices: any[] = (openInvoicesResult.rows || openInvoicesResult) as any[];
 
     let didMatch = false;
 
