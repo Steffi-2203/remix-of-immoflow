@@ -142,15 +142,52 @@ router.patch("/api/payments/:id", isAuthenticated, requireRole('property_manager
       return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
     }
     const payment = await storage.updatePayment(req.params.id, validationResult.data);
+
+    try {
+      const { createFinancialAuditEntry } = await import("../services/auditHashService");
+      await createFinancialAuditEntry({
+        action: "payment_updated",
+        entityType: "payment",
+        entityId: req.params.id,
+        organizationId: profile?.organizationId,
+        userId: profile?.userId,
+        data: {
+          previousAmount: existingPayment.betrag,
+          newAmount: payment.betrag,
+          changedFields: Object.keys(validationResult.data),
+        },
+      });
+    } catch {}
+
     res.json(payment);
   } catch (error) {
     res.status(500).json({ error: "Failed to update payment" });
   }
 });
 
-router.delete("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req, res) => {
+router.delete("/api/payments/:id", isAuthenticated, requireRole('property_manager', 'finance'), async (req: AuthenticatedRequest, res) => {
   try {
+    const profile = await getProfileFromSession(req);
+    const existingPayment = await storage.getPayment(req.params.id);
+
     await storage.deletePayment(req.params.id);
+
+    try {
+      const { createFinancialAuditEntry } = await import("../services/auditHashService");
+      await createFinancialAuditEntry({
+        action: "payment_deleted",
+        entityType: "payment",
+        entityId: req.params.id,
+        organizationId: profile?.organizationId || '',
+        userId: profile?.userId || '',
+        data: {
+          tenantId: existingPayment?.tenantId,
+          amount: existingPayment?.betrag,
+          invoiceId: existingPayment?.invoiceId,
+        },
+      });
+    } catch {}
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete payment" });
@@ -631,8 +668,27 @@ router.get("/api/invoices/:invoiceId/allocations", isAuthenticated, async (req: 
 
 router.post("/api/payment-allocations", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
+    const profile = await getProfileFromSession(req);
     const validatedData = schema.insertPaymentAllocationSchema.parse(req.body);
     const allocation = await storage.createPaymentAllocation(validatedData);
+
+    try {
+      const { createFinancialAuditEntry } = await import("../services/auditHashService");
+      await createFinancialAuditEntry({
+        action: "allocation_created",
+        entityType: "payment_allocation",
+        entityId: allocation.id,
+        organizationId: profile?.organizationId || '',
+        userId: profile?.userId || '',
+        data: {
+          paymentId: allocation.paymentId,
+          invoiceId: allocation.invoiceId,
+          appliedAmount: allocation.appliedAmount,
+          allocationType: allocation.allocationType,
+        },
+      });
+    } catch {}
+
     res.status(201).json(allocation);
   } catch (error: any) {
     console.error("Create payment allocation error:", error);
@@ -645,7 +701,27 @@ router.post("/api/payment-allocations", isAuthenticated, requireRole("property_m
 
 router.delete("/api/payment-allocations/:id", isAuthenticated, requireRole("property_manager", "finance"), async (req: AuthenticatedRequest, res) => {
   try {
+    const profile = await getProfileFromSession(req);
+    const existingAlloc = await storage.getPaymentAllocation(req.params.id);
+
     await storage.deletePaymentAllocation(req.params.id);
+
+    try {
+      const { createFinancialAuditEntry } = await import("../services/auditHashService");
+      await createFinancialAuditEntry({
+        action: "allocation_deleted",
+        entityType: "payment_allocation",
+        entityId: req.params.id,
+        organizationId: profile?.organizationId || '',
+        userId: profile?.userId || '',
+        data: {
+          paymentId: existingAlloc?.paymentId,
+          invoiceId: existingAlloc?.invoiceId,
+          appliedAmount: existingAlloc?.appliedAmount,
+        },
+      });
+    } catch {}
+
     res.status(204).send();
   } catch (error) {
     console.error("Delete payment allocation error:", error);

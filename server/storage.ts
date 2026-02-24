@@ -75,6 +75,7 @@ export interface IStorage {
   updateLease(id: string, data: Partial<schema.InsertLease>): Promise<schema.Lease | undefined>;
   
   // Payment Allocations
+  getPaymentAllocation(id: string): Promise<schema.PaymentAllocation | undefined>;
   getPaymentAllocationsByPayment(paymentId: string): Promise<schema.PaymentAllocation[]>;
   getPaymentAllocationsByInvoice(invoiceId: string): Promise<schema.PaymentAllocation[]>;
   createPaymentAllocation(data: schema.InsertPaymentAllocation): Promise<schema.PaymentAllocation>;
@@ -955,6 +956,12 @@ class DatabaseStorage implements IStorage {
   }
 
   // ====== PAYMENT ALLOCATIONS ======
+  async getPaymentAllocation(id: string): Promise<schema.PaymentAllocation | undefined> {
+    const [result] = await db.select().from(schema.paymentAllocations)
+      .where(eq(schema.paymentAllocations.id, id));
+    return result;
+  }
+
   async getPaymentAllocationsByPayment(paymentId: string): Promise<schema.PaymentAllocation[]> {
     return db.select().from(schema.paymentAllocations)
       .where(eq(schema.paymentAllocations.paymentId, paymentId));
