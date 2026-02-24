@@ -112,6 +112,18 @@ async function seedLeasesAndPayments() {
   const paymentCount = await db.execute(sql`SELECT COUNT(*) as cnt FROM payments`);
   console.log(`Total leases: ${(leaseCount.rows[0] as any).cnt}`);
   console.log(`Total payments: ${(paymentCount.rows[0] as any).cnt}`);
+
+  const orphanCheck = await db.execute(sql`
+    SELECT COUNT(*) AS cnt FROM payments p
+    LEFT JOIN payment_allocations pa ON pa.payment_id = p.id
+    WHERE p.source = 'seed' AND p.invoice_id IS NOT NULL AND pa.id IS NULL
+  `);
+  const orphans = parseInt((orphanCheck.rows[0] as any).cnt, 10);
+  if (orphans > 0) {
+    console.warn(`WARNING: ${orphans} seed payments with invoice_id have no payment_allocation!`);
+  } else {
+    console.log(`Verification: All seed payments with invoice_id have matching allocations`);
+  }
 }
 
 seedLeasesAndPayments()
