@@ -16,6 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate required secrets
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::STAGING_DB_URL secret is not set — cannot connect to database"
+            echo "Please set STAGING_DB_URL in GitHub repository secrets (Settings → Secrets → Actions)"
+            exit 1
+          fi
+
       - name: Run reconciliation queries
         id: reconcile
         run: |
