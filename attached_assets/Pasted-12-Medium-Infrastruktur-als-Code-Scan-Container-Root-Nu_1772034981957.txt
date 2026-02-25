@@ -1,0 +1,243 @@
+12
+Medium
+Infrastruktur als Code-Scan
+
+Container • Root-Nutzung nicht minimiert • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+13
+Medium
+Infrastruktur als Code-Scan
+
+Pod • Netzwerkrichtlinie nicht definiert • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+14
+Medium
+Geheimer/PII-Scan
+
+E-Mail-Adresse • Öffentliches Repo • Testcode
+
+Steffi-2203/Remix-of-immoflow
+
+Steffi-2203
+
+Vor 34 Minuten
+
+1
+15
+Medium
+Geheimer/PII-Scan
+
+E-Mail-Adresse • Öffentliches Repository • Git-Historie
+
+Steffi-2203/Remix-of-immoflow
+
+Steffi-2203
+
+Vor 34 Minuten
+
+8
+16
+Niedrig
+Open-Source-Sicherheit
+
+archiver@7.0.1 • 4 indirekte CVEs • EPSS-Tief
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+4
+17
+Niedrig
+Open-Source-Sicherheit
+
+recharts@2.15.4 • 1 indirekte CVE • EPSS Low • Kein öffentlicher Exploit
+
+Steffi-2203/Remix-of-immoflow
+
+Liebenswert
+
+Vor 34 Minuten
+
+1
+18
+Niedrig
+Open-Source-Sicherheit
+
+@capacitor/cli@8.0.0 • 6 indirekte CVEs • EPSS-Tief
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+6
+19
+Niedrig
+Open-Source-Sicherheit
+
+pdfjs-dist@4.4.168 • 5 indirekte CVEs • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+5
+20
+Niedrig
+Open-Source-Sicherheit
+
+express@5.2.1 • 1 indirekte CVE • EPSS-Tiefpunkt
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+21
+Niedrig
+Open-Source-Sicherheit
+
+@aws-SDK/Client-s3@3.985.0 • 2 indirekte CVEs • Nicht verwendet • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+2
+22
+Niedrig
+Open-Source-Sicherheit
+
+Drizzle-kit@0.31.8 • 1 indirekte CVE
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+23
+Niedrig
+Geheimer/PII-Scan
+
+PostgreSQL-Verbindungsstring • Öffentliches Repository • Git-Geschichte
+
+Steffi-2203/Remix-of-immoflow
+
+Steffi-2203
+
+Vor 34 Minuten
+
+1
+24
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • UID Too Low • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+3
+25
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Schreibgeschütztes Dateisystem nicht verwendet • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+26
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • NET_RAW Fähigkeit • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+27
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • SecurityContext nicht zugewiesen • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+28
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Secure Computing Mode nicht konfiguriert • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+29
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Nicht auf Standardfunktionen beschränkt • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+Vor 34 Minuten
+
+1
+30
+Niedrig
+Infrastruktur als Code-Scan
+
+Pod • Service Account Token automatisch montiert • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
