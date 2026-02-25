@@ -15,6 +15,7 @@ ImmoflowMe employs a modern full-stack architecture with a Node.js (Express.js) 
 The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsive user interface. UI components support subscription management and feature gating. The system features a timeline-style UI for activity logs and traffic-light indicators for overdue items.
 
 **Technical Implementations:**
+- **Runtime**: Node.js 22 (LTS).
 - **Backend**: Express.js, TypeScript.
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui.
 - **Database**: PostgreSQL (Neon), Drizzle ORM.
@@ -66,7 +67,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Tailwind CSS**: Utility-first CSS framework.
 - **shadcn/ui**: Reusable UI component library.
 - **TanStack Query**: Data fetching and state management.
-- **xlsx (SheetJS)**: Excel file generation.
+- **xlsx (SheetJS v0.18.5)**: Excel file generation.
 - **web-push**: Push notification delivery.
 - **otpauth**: TOTP generation and verification.
 - **qrcode**: QR code generation.
