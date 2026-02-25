@@ -1,0 +1,11 @@
+# CODEOWNERS
+
+# This file specifies the individuals or teams that are responsible for code in a repository.
+
+# All files in this repository are owned by the following users:
+* @Steffi-2203
+
+# Specific rules can be added as needed:
+# For instance, if you want to assign different owners to specific directories/files.
+#/docs/ @docs-team
+#/src/ @dev-team
