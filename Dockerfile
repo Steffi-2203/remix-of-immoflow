@@ -1,5 +1,5 @@
 FROM node:22-alpine AS base
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -g 10000 appgroup && adduser -u 10000 -G appgroup -S appuser
 WORKDIR /app
 
 FROM base AS deps
@@ -20,7 +20,8 @@ COPY --from=build /app/shared ./shared
 COPY --from=build /app/server ./server
 COPY --from=build /app/package.json ./
 COPY --from=build /app/migrations ./migrations
-USER appuser
+RUN chown -R appuser:appgroup /app
+USER 10000
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
