@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import { db } from "../db";
 import { chartOfAccounts, journalEntries, journalEntryLines, bookingNumberSequences, properties } from "@shared/schema";
 import { eq, and, sql, desc, between, gte, lte, asc, or, isNull } from "drizzle-orm";
@@ -38,7 +38,7 @@ function getNextBookingNumber(year: number, current: number): string {
 
 // ====== CHART OF ACCOUNTS ======
 
-router.get("/api/chart-of-accounts", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/chart-of-accounts", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const accounts = await db.select().from(chartOfAccounts)
@@ -53,7 +53,7 @@ router.get("/api/chart-of-accounts", isAuthenticated, async (req: Request, res: 
   }
 });
 
-router.post("/api/chart-of-accounts", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/chart-of-accounts", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const [account] = await db.insert(chartOfAccounts).values({ ...req.body, organizationId: orgId }).returning();
@@ -63,7 +63,7 @@ router.post("/api/chart-of-accounts", isAuthenticated, async (req: Request, res:
   }
 });
 
-router.patch("/api/chart-of-accounts/:id", isAuthenticated, async (req: Request, res: Response) => {
+router.patch("/api/chart-of-accounts/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const conditions = [eq(chartOfAccounts.id, req.params.id)];
@@ -80,7 +80,7 @@ router.patch("/api/chart-of-accounts/:id", isAuthenticated, async (req: Request,
   }
 });
 
-router.delete("/api/chart-of-accounts/:id", isAuthenticated, async (req: Request, res: Response) => {
+router.delete("/api/chart-of-accounts/:id", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const conditions: any[] = [eq(chartOfAccounts.id, req.params.id), eq(chartOfAccounts.isSystem, false)];
@@ -98,7 +98,7 @@ router.delete("/api/chart-of-accounts/:id", isAuthenticated, async (req: Request
 
 // ====== JOURNAL ENTRIES ======
 
-router.get("/api/journal-entries", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/journal-entries", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -157,7 +157,7 @@ router.get("/api/journal-entries", isAuthenticated, async (req: Request, res: Re
   }
 });
 
-router.post("/api/journal-entries", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/journal-entries", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { lines, ...entryData } = req.body;
@@ -227,7 +227,7 @@ router.post("/api/journal-entries", isAuthenticated, async (req: Request, res: R
   }
 });
 
-router.post("/api/journal-entries/:id/storno", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/journal-entries/:id/storno", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const conditions: any[] = [eq(journalEntries.id, req.params.id)];
@@ -293,7 +293,7 @@ router.post("/api/journal-entries/:id/storno", isAuthenticated, async (req: Requ
 
 // ====== SALDENLISTE (Trial Balance) ======
 
-router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/trial-balance", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -343,7 +343,7 @@ router.get("/api/accounting/trial-balance", isAuthenticated, async (req: Request
 
 // ====== BILANZ (Balance Sheet) ======
 
-router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { date, propertyId } = req.query;
@@ -399,7 +399,7 @@ router.get("/api/accounting/balance-sheet", isAuthenticated, async (req: Request
 
 // ====== GuV (Profit & Loss) ======
 
-router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/profit-loss", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -455,7 +455,7 @@ router.get("/api/accounting/profit-loss", isAuthenticated, async (req: Request, 
 
 // ====== UVA (Umsatzsteuervoranmeldung) ======
 
-router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/uva", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { month, year, propertyId } = req.query;
@@ -510,7 +510,7 @@ router.get("/api/accounting/uva", isAuthenticated, async (req: Request, res: Res
 
 // ====== KONTOBLATT (Account Ledger) ======
 
-router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -557,7 +557,7 @@ router.get("/api/accounting/account-ledger/:accountId", isAuthenticated, async (
 
 // ====== XLSX EXPORT ENDPOINTS ======
 
-router.get("/api/accounting/export/saldenliste", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/export/saldenliste", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -603,7 +603,7 @@ router.get("/api/accounting/export/saldenliste", isAuthenticated, async (req: Re
   }
 });
 
-router.get("/api/accounting/export/bilanz", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/export/bilanz", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { date, propertyId } = req.query;
@@ -654,7 +654,7 @@ router.get("/api/accounting/export/bilanz", isAuthenticated, async (req: Request
   }
 });
 
-router.get("/api/accounting/export/guv", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/export/guv", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     const { from, to, propertyId } = req.query;
@@ -712,7 +712,7 @@ router.get("/api/accounting/export/guv", isAuthenticated, async (req: Request, r
 
 // ====== TRIAL BALANCE VALIDATION SERVICE ROUTES ======
 
-router.get("/api/accounting/account-balances", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/account-balances", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -734,7 +734,7 @@ router.get("/api/accounting/account-balances", isAuthenticated, async (req: Requ
   }
 });
 
-router.get("/api/accounting/reconciliation-rate", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/accounting/reconciliation-rate", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -755,7 +755,7 @@ router.get("/api/accounting/reconciliation-rate", isAuthenticated, async (req: R
   }
 });
 
-router.post("/api/accounting/validate-settlement", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/accounting/validate-settlement", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -772,7 +772,7 @@ router.post("/api/accounting/validate-settlement", isAuthenticated, async (req: 
   }
 });
 
-router.post("/api/accounting/daily-checks", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/accounting/daily-checks", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -786,7 +786,7 @@ router.post("/api/accounting/daily-checks", isAuthenticated, async (req: Request
 
 // ====== PAYMENT SPLITTING SERVICE ROUTES ======
 
-router.post("/api/payments/split", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/payments/split", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -803,7 +803,7 @@ router.post("/api/payments/split", isAuthenticated, async (req: Request, res: Re
   }
 });
 
-router.post("/api/payments/allocate", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/payments/allocate", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -820,7 +820,7 @@ router.post("/api/payments/allocate", isAuthenticated, async (req: Request, res:
   }
 });
 
-router.get("/api/payments/unallocated", isAuthenticated, async (req: Request, res: Response) => {
+router.get("/api/payments/unallocated", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
@@ -833,7 +833,7 @@ router.get("/api/payments/unallocated", isAuthenticated, async (req: Request, re
   }
 });
 
-router.post("/api/payments/auto-match", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/api/payments/auto-match", isAuthenticated, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ error: "Nicht authentifiziert" });
