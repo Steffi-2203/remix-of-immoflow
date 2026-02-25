@@ -56,6 +56,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **Email Queue**: BullMQ + Redis for email queuing, with a fallback to inline Resend.
 - **Migration Runner**: Transactional up/down migrations using `migrations/runner.ts`.
 - **E2E Test Infrastructure**: Deterministic test data with fixed UUIDs for consistent testing environments.
+- **Container**: Multi-stage Dockerfile (node:22-alpine), non-root user, HEALTHCHECK, `.dockerignore`. K8s manifests in `k8s/deployment.yaml` with: dedicated namespace, `automountServiceAccountToken: false`, liveness/readiness probes, resource limits, read-only root filesystem, `imagePullPolicy: Always`, secrets via `secretRef` (not env vars).
 
 ## External Dependencies
 - **PostgreSQL (Neon)**: Cloud-native database service.

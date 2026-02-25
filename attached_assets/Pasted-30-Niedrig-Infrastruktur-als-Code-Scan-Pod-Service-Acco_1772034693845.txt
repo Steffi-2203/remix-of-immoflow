@@ -1,0 +1,185 @@
+30
+Niedrig
+Infrastruktur als Code-Scan
+
+Pod • Service Account Token automatisch montiert • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+31
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Image nicht vom Digest ausgewählt • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+32
+Niedrig
+Infrastruktur als Code-Scan
+
+Kubelet • Liveness Probe Not Configured • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+33
+Niedrig
+Infrastruktur als Code-Scan
+
+Kubelet • Readiness Probe Not Configured • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+34
+Niedrig
+Infrastruktur als Code-Scan
+
+Cluster • Standard-Namespace • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+35
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Geheimnisse, die als Umweltvariablen offengelegt wurden • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+36
+Niedrig
+Infrastruktur als Code-Scan
+
+Container • Letztes Bild nicht gezogen • Kubernetes
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+37
+Niedrig
+Open-Source-Sicherheit
+
+node@20-alpine Basisbild (Dockerfile) • 7 CVEs • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+38
+Niedrig
+Git-Haltung
+
+Unterschriebene Commits optional • Direkter Push erlaubt • PR-Überprüfung nicht erforderlich
+
+Steffi-2203/Remix-of-immoflow
+
+Steffi-2203
+
+39
+Informationen
+Open-Source-Sicherheit
+
+xlsx@0.18.5 • 2 direkte CVEs • Nicht importiert • Nicht verwendet
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+40
+Informationen
+Open-Source-Sicherheit
+
+vite@5.4.19 • 3 direkte + 1 indirekte CVE • Nur Entwicklung • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+Liebenswert
+
+41
+Informationen
+Open-Source-Sicherheit
+
+eslint@9.32.0 • 3 indirekte CVEs • Nur Entwicklung • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+Liebenswert
+
+42
+Informationen
+Open-Source-Sicherheit
+
+tailwindcss@3.4.17 • 2 indirekte CVEs • Nur Entwicklung • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+Liebenswert
+
+43
+Informationen
+Open-Source-Sicherheit
+
+jsdom@20.0.3 • 5 indirekte CVEs • Nicht importiert • Nicht verwendet
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+44
+Informationen
+Open-Source-Sicherheit
+
+supertest@7.2.2 • 1 indirekte CVE • Nur Entwicklung • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+45
+Informationen
+Open-Source-Sicherheit
+
+@aws-SDK/Credential-providers@3.985.0 • 2 indirekte CVEs • Nicht importiert • Nicht verwendet
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+46
+Informationen
+Open-Source-Sicherheit
+
+typescript-eslint@8.38.0 • 1 indirekte CVE • Nur Entwicklung • EPSS Low
+
+Steffi-2203/Remix-of-immoflow
+
+Liebenswert
+
+47
+Informationen
+Code-Sicherheit
+
+JSX-Element nicht internationalisiert • React
+
+Steffi-2203/Remix-of-immoflow
+
+gpt-engineer-app[bot]
+
+48
+Informationen
+Code-Sicherheit
+
+Props verbreiten • Reagieren
