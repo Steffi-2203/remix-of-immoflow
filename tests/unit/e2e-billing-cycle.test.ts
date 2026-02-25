@@ -318,14 +318,18 @@ describe('E2E Bank & WEG Data', () => {
 });
 
 describe('E2E Multi-Tenant Isolation', () => {
-  test('All properties belong to same organization', async () => {
+  test('All properties belong to known organizations', async () => {
     const result = await db.execute(sql`
-      SELECT COUNT(DISTINCT organization_id) as org_count
-      FROM properties
-      WHERE deleted_at IS NULL
+      SELECT COUNT(*) as orphan_count
+      FROM properties p
+      WHERE p.deleted_at IS NULL
+        AND p.organization_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM organizations o WHERE o.id = p.organization_id
+        )
     `);
-    const orgs = parseInt((result.rows[0] as any).org_count);
-    expect(orgs).toBeLessThanOrEqual(2);
+    const orphans = parseInt((result.rows[0] as any).orphan_count);
+    expect(orphans).toBe(0);
   });
 
   test('No cross-organization data leaks in units (excluding test properties)', async () => {

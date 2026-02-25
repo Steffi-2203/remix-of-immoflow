@@ -72,3 +72,7 @@ The frontend utilizes React 18, Vite, Tailwind CSS, and shadcn/ui for a responsi
 - **web-push**: Push notification delivery.
 - **otpauth**: TOTP generation and verification.
 - **qrcode**: QR code generation.
+
+## Removed Dependencies (2026-02-25)
+The following unused packages were removed to reduce attack surface and install size (−181 transitive packages):
+`@supabase/supabase-js`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, `@uppy/aws-s3`, `@uppy/core`, `@uppy/dashboard`, `@uppy/react`, `google-auth-library`, `memorystore`.
