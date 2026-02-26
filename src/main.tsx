@@ -23,3 +23,4 @@ if ('serviceWorker' in navigator) {
       .catch(() => {});
   });
 }
+git push origin replit-agent
