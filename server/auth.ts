@@ -705,11 +705,10 @@ window.location.href = '/dashboard';
           expiresAt,
         });
 
-        const baseUrl = process.env.NODE_ENV === 'production' 
-          ? 'https://www.immoflowme.at'
-          : process.env.REPLIT_DEV_DOMAIN 
-            ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-            : 'http://localhost:5000';
+        const baseUrl = process.env.APP_BASE_URL
+          || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+          || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+          || 'http://localhost:5000';
         const resetUrl = `${baseUrl}/reset-password?token=${token}`;
         
         await sendEmail({

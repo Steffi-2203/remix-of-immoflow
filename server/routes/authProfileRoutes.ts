@@ -122,7 +122,8 @@ router.post("/api/invites", isAuthenticated, requireAdminAccess(), async (req: A
     });
     
     const org = await storage.getOrganization(profile.organizationId);
-    const inviteUrl = `${req.protocol}://${req.get('host')}/register?invite=${token}`;
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const inviteUrl = `${baseUrl}/register?invite=${token}`;
     
     try {
       const { sendInviteEmail } = await import("../lib/resend");

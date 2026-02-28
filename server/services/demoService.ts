@@ -102,11 +102,10 @@ export async function requestDemoAccess(email: string, ipAddress?: string, userA
       .set({ token, expiresAt, ipAddress, userAgent })
       .where(eq(demoInvites.id, existingInvite[0].id));
     
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.REPLIT_DOMAINS 
-      ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-      : 'http://localhost:5000';
+    const baseUrl = process.env.APP_BASE_URL
+      || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+      || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+      || 'http://localhost:5000';
 
     const demoUrl = `${baseUrl}/demo/activate?token=${token}`;
     
@@ -135,11 +134,10 @@ export async function requestDemoAccess(email: string, ipAddress?: string, userA
     userAgent,
   });
 
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : process.env.REPLIT_DOMAINS 
-    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-    : 'http://localhost:5000';
+  const baseUrl = process.env.APP_BASE_URL
+    || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+    || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+    || 'http://localhost:5000';
 
   const demoUrl = `${baseUrl}/demo/activate?token=${token}`;
 
