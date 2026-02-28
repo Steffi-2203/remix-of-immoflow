@@ -39,3 +39,4 @@ missing_lines.csv
 
 # reconciliations/ wird BEWUSST versioniert (auditierbare Ergebnisse)
 # → reconciliations/<runId>/missing_lines.csv + summary.json
+.github/workflows/
