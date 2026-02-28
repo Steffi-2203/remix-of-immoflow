@@ -22,7 +22,10 @@ export function rlsMiddleware(req: Request, res: Response, next: NextFunction) {
     }).then(() => {
       req.dbClient = client;
 
+      let released = false;
       const cleanup = () => {
+        if (released) return;
+        released = true;
         client.query("COMMIT").catch(() => {}).finally(() => {
           client.release();
         });
