@@ -227,8 +227,10 @@ export function registerOwnerAuthRoutes(app: Express) {
         })
         .where(eq(schema.ownerPortalAccess.id, ownerPortalAccessId));
 
-      const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000';
-      const inviteUrl = `https://${domain}/eigentuemer-login?invite=${inviteToken}`;
+      const baseUrl = process.env.APP_BASE_URL
+        || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+        || 'https://localhost:5000';
+      const inviteUrl = `${baseUrl}/eigentuemer-login?invite=${inviteToken}`;
 
       const owner = await db
         .select()

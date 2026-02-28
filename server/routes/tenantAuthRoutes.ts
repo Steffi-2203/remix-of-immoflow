@@ -229,8 +229,10 @@ export function registerTenantAuthRoutes(app: Express) {
         })
         .where(eq(schema.tenantPortalAccess.id, tenantPortalAccessId));
 
-      const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000';
-      const inviteUrl = `https://${domain}/mieter-login?invite=${inviteToken}`;
+      const baseUrl = process.env.APP_BASE_URL
+        || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
+        || 'https://localhost:5000';
+      const inviteUrl = `${baseUrl}/mieter-login?invite=${inviteToken}`;
 
       const tenant = await db
         .select()
